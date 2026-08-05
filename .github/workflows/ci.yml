@@ -76,10 +76,33 @@ jobs:
           set -euo pipefail
           version=$(tr -d '[:space:]' < .nim-version)
           echo "The pin recorded in .nim-version is ${version}"
-          curl -fsSL https://nim-lang.org/choosenim/init.sh -o init.sh
-          sh init.sh -y
-          echo "${HOME}/.nimble/bin" >> "$GITHUB_PATH"
-          "${HOME}/.nimble/bin/choosenim" "${version}"
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            # choosenim's Windows binary fails on the hosted image with
+            # `could not find symbol: SSL_library_init`. The official release
+            # archive needs no TLS library of its own, and it is still selected
+            # by the pin this file reads rather than by a version written here.
+            curl -fsSL "https://nim-lang.org/download/nim-${version}_x64.zip" -o nim.zip
+            unzip -q nim.zip
+            echo "${PWD}/nim-${version}/bin" >> "$GITHUB_PATH"
+          else
+            curl -fsSL https://nim-lang.org/choosenim/init.sh -o init.sh
+            sh init.sh -y
+            export PATH="${HOME}/.nimble/bin:${PATH}"
+            choosenim "${version}"
+            echo "${HOME}/.nimble/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Confirm that the installed Nim matches the pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          want=$(tr -d '[:space:]' < .nim-version)
+          have=$(nim --version | head -1 | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          echo "pin=${want} installed=${have}"
+          if [ "${want}" != "${have}" ]; then
+            echo "FAILURE: the installed Nim ${have} does not match the pin ${want}."
+            exit 1
+          fi
 
       # The cross assembler runs on the Linux job ONLY, because that is the one
       # job that regenerates the conformance corpus. A DIFFERENT ASSEMBLER
