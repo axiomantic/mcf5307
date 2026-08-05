@@ -70,5 +70,17 @@ needs a ColdFire processor can use it alone.
 
 ## Licence
 
-The licence is not yet set. This repository carries no `LICENSE` file until the
-operator selects one.
+MIT. See `LICENSE`.
+
+The MIT licence is a deliberate choice, and it puts a rule on every
+contribution: **this repository is clean-room with respect to GPL and LGPL
+code.** Do not copy, port, translate or transliterate code from a GPL or LGPL
+source into this repository, and do not write a decoder or a peripheral model
+while reading one as a template.
+
+Facts stay usable. Register addresses, bit layouts, access widths and opcode
+encodings are facts about Motorola silicon, not the expression of any author,
+so a GPL document or source file is a legitimate place to *check* a fact. The
+authority to *implement* from is the Motorola manual set: the ColdFire Family
+Programmer's Reference Manual, the MCF5307 User's Manual, and this project's
+own measurements of the hardware.
