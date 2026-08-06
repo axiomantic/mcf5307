@@ -1,0 +1,27 @@
+# Generated output. Do not commit these directories.
+#
+# This project writes all of its output into a CMake build tree. That tree
+# holds the CMake cache, the Nim cache, the generated C files, the object
+# files, the static library and the CTest data. No build step writes into
+# the source directories.
+#
+# Each rule starts with a slash. The slash limits the rule to the top
+# directory of the repository, which is where CMake makes each tree.
+
+# The default build tree. The README section "How to build" gives this
+# command:
+#   cmake -S . -B build
+# The continuous integration job build-and-t0 uses the same name.
+# cmake/Nim.cmake puts the Nim cache in this tree. It sets the cache to
+# ${PROJECT_BINARY_DIR}/nimcache at configure time.
+/build/
+
+# The sanitizer build tree. The continuous integration job sanitizer-t0
+# makes a second tree with this command:
+#   cmake -S . -B build-asan
+# A contributor who runs that job on a local machine makes the same tree.
+/build-asan/
+
+# This file lists the output of this project only. Keep editor files,
+# operating system files and other personal files in your own global
+# excludes file. Do not add them here.
