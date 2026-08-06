@@ -39,5 +39,12 @@ enable_testing()
 add_custom_target(mcf5307_tests
     COMMENT "Building the mcf5307 T0 test set")
 
+# CMake drives Nim. Task CPU-1 adds this line and owns the file it includes.
+# The six integration steps of design section 20.1 run there, at configure
+# time, and they leave `mcf5307_nim_objs`, `mcf5307` and `mcf5307::mcf5307`
+# defined. THE INCLUDE COMES BEFORE THE TEST DIRECTORIES because a test that
+# links the core needs the target to exist when its own list is read.
+include(cmake/Nim.cmake)
+
 add_subdirectory(tests)
 add_subdirectory(conformance)
