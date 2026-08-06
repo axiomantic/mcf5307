@@ -91,17 +91,119 @@ set(MCF5307_NIM_ENTRY "${PROJECT_SOURCE_DIR}/src/mcf5307.nim")
 set(MCF5307_NIMCACHE "${PROJECT_BINARY_DIR}/nimcache")
 set(MCF5307_NIM_HEADER "mcf5307_nim.h")
 
-set(MCF5307_NIM_COMMAND
+# The flags that govern the generated code. They are held apart from the
+# command for two reasons. A second Nim project repeats them unchanged, and a
+# Nim TEST program must be compiled with the same set: a test compiled with a
+# different set proves nothing about the library the set governs.
+set(MCF5307_NIM_FLAGS --mm:arc --panics:on -d:release)
+
+# THE NIM ENTRY MODULES OF THIS PROJECT. Design section 5.5 keeps the
+# one-project convention and the list holds one name today. A second Nim
+# library appends its name here and writes its own command below, with its own
+# `--nimMainPrefix:` value. Step 2a reads this list.
+set(MCF5307_NIM_ENTRIES mcf5307)
+
+# EACH ENTRY MODULE'S COMMAND IS WRITTEN OUT AND IS NEVER DERIVED FROM THE
+# ENTRY NAME. A derived prefix cannot collide, so a derived prefix would make
+# the duplicate half of step 2a unable to fail, and a check that cannot fail is
+# worse than no check.
+set(MCF5307_NIM_COMMAND_mcf5307
     "${MCF5307_NIM_EXECUTABLE}" c
     --compileOnly
     --noMain
     "--nimcache:${MCF5307_NIMCACHE}"
-    --mm:arc
-    --panics:on
-    -d:release
+    ${MCF5307_NIM_FLAGS}
     --nimMainPrefix:mcf5307_
     "--header:${MCF5307_NIM_HEADER}"
     "${MCF5307_NIM_ENTRY}")
+
+# ---------------------------------------------------------------------------
+# Step 2a. The prefix check. Task CPU-2 adds this block.
+#
+# `--nimMainPrefix:` renames the Nim runtime entry point of one Nim project.
+# Two Nim projects in one binary that keep the default names collide on
+# `NimMain`, `NimMainInner` and `NimMainModule` at link. THE FLAG IS WHAT
+# PREVENTS THAT COLLISION AND NOTHING IN THIS FILE ENFORCED IT.
+#
+# WHY THE FAULT MUST BE CAUGHT HERE. With the flag deleted the configure step
+# succeeds, the build succeeds and the archive is written, all without one
+# diagnostic: a static archive tolerates an undefined symbol, so
+# `libmcf5307.a` then carries an undefined `mcf5307_NimMain` beside an
+# unprefixed `NimMain`, and nothing fails until a consumer's final link, in a
+# different repository, at a later time. The configure step is the last place
+# at which the fault is still local to this project.
+#
+# The check has three steps and only the second one is fatal.
+#
+#   1  count the entry modules
+#   2  assert that every entry module's command carries a `--nimMainPrefix:`
+#      and that no two prefixes are equal - FAILS THE CONFIGURE STEP
+#   3  when the count is above one, print one line that names the departure
+#      from the one-project convention and the build integration it costs -
+#      DOES NOT FAIL THE CONFIGURE STEP
+#
+# IT READS THE COMMANDS AND NOT A SEPARATE DECLARATION OF INTENT. The command
+# above is the text that runs, so a check that read anything else could pass
+# over a command that had lost the flag.
+
+# Check step 1. The count.
+list(LENGTH MCF5307_NIM_ENTRIES MCF5307_NIM_ENTRY_COUNT)
+if(MCF5307_NIM_ENTRY_COUNT EQUAL 0)
+    message(FATAL_ERROR
+        "mcf5307: step 2a failed: MCF5307_NIM_ENTRIES is empty. A build with "
+        "no entry module compiles no Nim code at all.")
+endif()
+
+# Check step 2. The flag, and the uniqueness of its value.
+set(MCF5307_NIM_SEEN_PREFIXES "")
+foreach(entry IN LISTS MCF5307_NIM_ENTRIES)
+    if(NOT DEFINED MCF5307_NIM_COMMAND_${entry})
+        message(FATAL_ERROR
+            "mcf5307: step 2a failed: the entry module `${entry}` is listed in "
+            "MCF5307_NIM_ENTRIES and MCF5307_NIM_COMMAND_${entry} is not set. "
+            "An entry module without a command compiles nothing.")
+    endif()
+    string(REPLACE ";" " " MCF5307_NIM_ENTRY_COMMAND_TEXT
+        "${MCF5307_NIM_COMMAND_${entry}}")
+    if(NOT MCF5307_NIM_ENTRY_COMMAND_TEXT MATCHES "--nimMainPrefix:([^ ]+)")
+        message(FATAL_ERROR
+            "mcf5307: step 2a failed: the compile command of the entry module "
+            "`${entry}` carries no --nimMainPrefix: flag.\n"
+            "  command : ${MCF5307_NIM_ENTRY_COMMAND_TEXT}\n"
+            "Without the flag the Nim runtime keeps its default entry-point "
+            "names, the archive still builds, and the fault surfaces at a "
+            "consumer's final link. That is why it is refused here.")
+    endif()
+    set(MCF5307_NIM_ENTRY_PREFIX "${CMAKE_MATCH_1}")
+    if(MCF5307_NIM_ENTRY_PREFIX IN_LIST MCF5307_NIM_SEEN_PREFIXES)
+        message(FATAL_ERROR
+            "mcf5307: step 2a failed: the entry module `${entry}` repeats the "
+            "--nimMainPrefix: value `${MCF5307_NIM_ENTRY_PREFIX}`, which an "
+            "earlier entry module in MCF5307_NIM_ENTRIES already uses. Two "
+            "equal prefixes rename the two runtimes to the SAME names, and "
+            "they then collide exactly as the default names do.")
+    endif()
+    list(APPEND MCF5307_NIM_SEEN_PREFIXES "${MCF5307_NIM_ENTRY_PREFIX}")
+    message(STATUS
+        "mcf5307: step 2a the entry module ${entry} carries "
+        "--nimMainPrefix:${MCF5307_NIM_ENTRY_PREFIX}")
+endforeach()
+
+# Check step 3. The one-project convention. IT IS A NOTE AND NOT A FAILURE.
+if(MCF5307_NIM_ENTRY_COUNT GREATER 1)
+    message(STATUS
+        "mcf5307: step 2a NOTE: this build declares ${MCF5307_NIM_ENTRY_COUNT} "
+        "Nim entry modules and design section 5.5 keeps one. Each entry module "
+        "beyond the first costs its own nimcache directory, its own "
+        "compile-unit list, its own object library and its own "
+        "`<component>_runtime_init` export. Steps 2 to 6 below build the first "
+        "entry module alone.")
+endif()
+
+# ---------------------------------------------------------------------------
+# Steps 2 to 6 build THE ONE LIBRARY of the one-project convention. The note of
+# check step 3 names the integration a second entry module would need.
+set(MCF5307_NIM_COMMAND ${MCF5307_NIM_COMMAND_mcf5307})
 
 # The command is printed in full, BEFORE it runs, so that a failing run leaves
 # the exact invocation in the log. The prefix and the two absent flags are then
