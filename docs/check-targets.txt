@@ -14,5 +14,10 @@
 # NO TASK THAT REGISTERS A CHECK TARGET IN THIS REPOSITORY IS COMPLETE YET.
 # CPU-26 creates the CMake skeleton and the later cpu tasks register
 # their own names.
-# The list below is therefore empty on purpose. It is not a placeholder and it
-# is not an oversight.
+
+test_cpp_abi
+test_decode
+test_registers
+test_exec
+test_mac
+test_isp1181
