@@ -42,11 +42,17 @@ namespace {
  *
  * Every entry has the EXACT function-pointer type the header declares, so
  * the address-of expression is well typed and the compiler does not warn.
- * The eighteen pointers are then collected into a single `void*` array
- * whose every element is referenced, so a linker that resolves some but
- * not all of them still has 18 unmangled references to satisfy. */
+ *
+ * The 18 pointers are stored in a `volatile` array of `void const*`. The
+ * `volatile` qualifier is what keeps the compiler honest: without it, the
+ * compiler can prove the array is read only through `abi_addr_all[0]`,
+ * elide the rest, and then elide the address-of expressions that fed
+ * them, and this test would pass against a library that defined none of
+ * the 17 functions the runtime does not yet implement. With `volatile`
+ * the compiler must materialise every store, and the linker must resolve
+ * every symbol. */
 #define MCF5307_ABI_FN(name)                                                   \
-    static auto const abi_addr_##name = &name
+    extern "C" auto const abi_addr_##name = &name
 
 MCF5307_ABI_FN(mcf5307_runtime_init);
 MCF5307_ABI_FN(mcf5307_create);
@@ -67,10 +73,10 @@ MCF5307_ABI_FN(isp1181_state_size);
 MCF5307_ABI_FN(isp1181_state_save);
 MCF5307_ABI_FN(isp1181_state_load);
 
-/* The 18 pointers as a single array of `void const*`, so the linker
- * cannot drop any of them under `-ffunction-sections --gc-sections` and
- * still satisfy the reference. */
-void const* const abi_addr_all[18] = {
+/* The 18 pointers as a single `volatile` array of `void const*`, so the
+ * linker cannot drop any of them under `-ffunction-sections --gc-sections`
+ * and still satisfy the reference. */
+volatile void const* const abi_addr_all[18] = {
     reinterpret_cast<void const*>(abi_addr_mcf5307_runtime_init),
     reinterpret_cast<void const*>(abi_addr_mcf5307_create),
     reinterpret_cast<void const*>(abi_addr_mcf5307_destroy),
@@ -104,10 +110,9 @@ int main() {
 
     /* The link assertion already passed above: any renamed or dropped
      * declaration produced an unresolved symbol and the linker refused
-     * the executable. The array reference here is what keeps the linker
-     * honest in the face of `-ffunction-sections` and `--gc-sections`:
-     * the array is `abi_addr_all[18]` and every entry is referenced, so
-     * an aggressive dead-code-elimination pass cannot drop the symbols
-     * the test was meant to verify. */
+     * the executable. The volatile read of `abi_addr_all[0]` is what
+     * keeps the compiler honest: the array is `volatile` so the read
+     * must occur, and the address is non-null so the expression is
+     * always false. */
     return abi_addr_all[0] == nullptr ? 1 : 0;
 }
