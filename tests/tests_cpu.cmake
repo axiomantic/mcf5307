@@ -140,3 +140,26 @@ add_test(NAME t0_abi_header
         "-DABI_SRC_DIR=${CMAKE_CURRENT_LIST_DIR}"
         "-DABI_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t0_abi_header_driver.cmake")
+
+# --------------------------------------------------------------------- CPU-3
+# The application binary interface SMOKE test `abi_smoke`.
+#
+# This is the test the CPU-3 task CHECK names. It tests the ABI surface the
+# task's closure produces, and it asserts NO CORE BEHAVIOUR. The test takes
+# the address of every function `include/mcf5307.h` declares, which is the
+# assertion that a renamed or dropped declaration is a link error. It calls
+# `mcf5307_runtime_init()` twice and asserts both calls return. C++ never
+# names `NimMain`; it calls `mcf5307_runtime_init()`, which is idempotent.
+add_executable(abi_smoke ${CMAKE_CURRENT_LIST_DIR}/abi_smoke.cpp)
+target_include_directories(abi_smoke PRIVATE
+    "${PROJECT_SOURCE_DIR}/include"
+    "${NIMCACHE_DIR}"
+    "${NIM_INCLUDE_DIR}"
+)
+target_link_libraries(abi_smoke PRIVATE mcf5307)
+target_compile_features(abi_smoke PRIVATE cxx_std_17)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    target_compile_options(abi_smoke PRIVATE -Wall -Wextra -pedantic -Werror)
+endif()
+add_dependencies(mcf5307_tests abi_smoke)
+add_test(NAME abi_smoke COMMAND abi_smoke)
