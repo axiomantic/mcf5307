@@ -294,13 +294,30 @@ set(MCF5307_NIM_BUILT_PREFIX "${MCF5307_NIM_PREFIX_${MCF5307_NIM_BUILT_ENTRY}}")
 mcf5307_render_command(MCF5307_NIM_COMMAND_TEXT ${MCF5307_NIM_COMMAND})
 message(STATUS "mcf5307: nim invocation: ${MCF5307_NIM_COMMAND_TEXT}")
 
-# Editing a Nim source must re-run the configure step. The unit list is read at
-# configure time, and a new module adds a unit to it.
+# The contract header. It is CPU-0's file, it is read here and it is never
+# written here. The name is set at this point because the line below has to
+# name it, and step 4a reads the same variable.
+set(MCF5307_ABI_CONTRACT_FILE "${PROJECT_SOURCE_DIR}/include/mcf5307.h")
+
+# Editing a configure-time INPUT must re-run the configure step. Three files
+# are inputs, and all three are listed.
+#
+#   `src/*.nim`        the unit list is read at configure time, and a new
+#                      module adds a unit to it.
+#   `.nim-version`     step 1 compares it against the compiler.
+#   `include/mcf5307.h` step 4a reads the published set out of it.
+#
+# THE CONTRACT HEADER WAS MISSING FROM THIS LIST. Measured before the repair:
+# an edit to `include/mcf5307.h` did not re-run the configure step, so step 4a
+# kept its verdict about a version of the contract that no longer existed, the
+# build exited 0, and no diagnostic named the stale read. An edit to
+# `src/mcf5307.nim` did re-run it, which is what made the gap hard to see.
 file(GLOB_RECURSE MCF5307_NIM_SOURCES CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/src/*.nim")
 set_property(DIRECTORY "${PROJECT_SOURCE_DIR}"
     APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    ${MCF5307_NIM_SOURCES} "${MCF5307_NIM_VERSION_FILE}")
+    ${MCF5307_NIM_SOURCES} "${MCF5307_NIM_VERSION_FILE}"
+    "${MCF5307_ABI_CONTRACT_FILE}")
 
 execute_process(
     COMMAND ${MCF5307_NIM_COMMAND}
@@ -535,223 +552,653 @@ endif()
 message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 
 # ---------------------------------------------------------------------------
-# Step 4a. The visibility check.
+# Step 4a. The visibility gate.
 #
-# A published symbol has to reach a consumer through a shared object, because
-# the delivery form is a JUCE plugin. Nim decides that in the pragma set of the
-# declaration. Measured on Nim 2.2.10:
+# WHAT THE GATE PROTECTS. The delivery form is a JUCE plugin, and a plugin is a
+# shared object. Every symbol `include/mcf5307.h` publishes must leave that
+# shared object with default visibility. Nim decides that in the pragma set of
+# the declaration. Measured on Nim 2.2.10, `{.exportc, cdecl.}` alone gives a
+# hidden symbol, and `dynlib` added to the set gives a visible one.
 #
-#   procedure  {.exportc, cdecl.}           ->  N_LIB_PRIVATE
-#   procedure  {.exportc, cdecl, dynlib.}   ->  N_LIB_EXPORT
-#   variable   {.exportc.}                  ->  N_LIB_PRIVATE
-#   variable   {.exportc, dynlib.}          ->  N_LIB_EXPORT_VAR
+# `nm` over the static archive reports a hidden symbol exactly as it reports a
+# visible one, and the smoke test of CPU-3 links statically. The shared object
+# is the first artifact that tells the two apart, so this step builds one.
 #
-# `nimbase.h` defines `N_LIB_PRIVATE` as `visibility("hidden")` for gcc and
-# clang. It defines both export forms as `visibility("default")`.
+# HOW THE GATE MEASURES IT. It asks two tools, and it parses no C of its own.
 #
-# No check that exists could see that fault. `nm` over the static archive
-# reports a hidden symbol as `T`, and the smoke test of CPU-3 links statically.
-# A shared object built from the archive is the first thing that reports it,
-# and nothing in this project builds one. This check reads the generated C
-# instead, where the decision is plain text.
+#   THE PUBLISHED SET COMES FROM A C COMPILER. A generated translation unit
+#   includes the contract header. `-Xclang -ast-dump=json` prints the syntax
+#   tree of that unit, and this file reads the function and object declarations
+#   out of the tree. A C parser decides what the C means.
 #
-# THE PUBLISHED SET COMES FROM `include/mcf5307.h` AND NOT FROM A PREFIX. That
-# header is the contract, and it publishes two families of names: nine that
-# start `mcf5307_` and nine that start `isp1181_`. A check scoped to one
-# prefix reports nothing at all about the other nine. A positive control
-# scoped to that same prefix cannot report the gap either, because it shares
-# the assumption it is there to guard. That pair is the fault this block ends.
+#   THE EXPORTED SET COMES FROM THE LINKER. This file builds a shared object
+#   from the generated C units and reads its symbol table with `nm`. That is
+#   the delivery-form property itself and not an opinion about it.
+#
+# The verdict is a comparison of sets. A published name that the shared object
+# defines and does not export is a fault. A published name that the shared
+# object does not define at all is NOT a fault, and the report keeps the two
+# apart. A later cpu task writes those definitions.
+#
+# THE GATE KNOWS NOTHING ABOUT `N_LIB_EXPORT`, `N_LIB_EXPORT_VAR` OR
+# `N_LIB_PRIVATE`. Those macros are one Nim release's way to write a visibility
+# attribute. The linker reports the result of the attribute, so the gate reads
+# the result and never the macro. A Nim release that renames the macros changes
+# nothing here.
+#
+# WHY THE READER THIS BLOCK REPLACES HAD TO GO. It parsed C with regular
+# expressions. Measured, seven ordinary shapes defeated it:
+#
+#   struct mcf5307_ctx* mcf5307_peek(void);          dropped in silence
+#   struct isp1181_ctx *isp1181_peek(void);          dropped in silence
+#   enum mcf5307_bus_status mcf5307_last_status(void);   dropped in silence
+#   union mcf5307_word mcf5307_peek_word(void);      dropped in silence
+#   __attribute__((visibility("default"))) void mcf5307_boom(void);
+#                                                    published `__attribute__`
+#   uint32_t (*mcf5307_get_reader(int idx))(void*, uint32_t);
+#                                                    published `uint32_t`
+#   extern uint32_t mcf5307_lo, mcf5307_hi;          lost `mcf5307_lo`
+#
+# It was wrong in both directions, and its own guard caught only a statement it
+# could not classify. It never caught one it classified WRONGLY. A compiler
+# handles all seven by construction, and the calibration below proves that on
+# every configure run rather than in a review comment.
 #
 # `include/mcf5307.h` belongs to CPU-0. It is read here and never written here.
-#
-# The storage class comes from the generated `.c` units, where `N_LIB_EXPORT`,
-# `N_LIB_EXPORT_VAR` and `N_LIB_PRIVATE` are the visibility attribute itself.
 
 # ---------------------------------------------------------------------------
-# The scanner for one generated C file.
+# The escape hatch, and why it is loud.
 #
-# It returns one `<storage>|<name>` token for every file-scope declaration or
-# definition it reads. `<storage>` is the visibility macro that opens the line,
-# or `none` when the line opens with no such macro. Neither field can hold a
-# `;`, so the result is a list CMake can carry without damage.
+# The gate needs a Clang-compatible C parser and an `nm`. A host without both
+# cannot run it. The gate then FAILS the configure step and names the tool it
+# did not find, because a check that quietly does not run is the fault this
+# whole block exists to end.
 #
-# IT STRIPS C COMMENTS AND IT CARRIES THE BLOCK-COMMENT STATE FROM LINE TO
-# LINE. Without that state a declaration inside a comment that spans lines
-# reads as a declaration, and it is not one.
-#
-# It does not evaluate `#if`, `#ifdef` or any other conditional. A declaration
-# inside `#if 0` is read as a live declaration. That limit is written down
-# here, and it is not repaired here: a real answer needs a real preprocessor.
-function(mcf5307_abi_scan mcf5307_scan_output mcf5307_scan_file)
-    set(mcf5307_scan_result "")
-    set(mcf5307_scan_open FALSE)
-    file(STRINGS "${mcf5307_scan_file}" mcf5307_scan_lines)
-    foreach(mcf5307_scan_line IN LISTS mcf5307_scan_lines)
-        if(mcf5307_scan_open)
-            if(mcf5307_scan_line MATCHES "\\*/(.*)$")
-                set(mcf5307_scan_line "${CMAKE_MATCH_1}")
-                set(mcf5307_scan_open FALSE)
-            else()
-                continue()
-            endif()
-        endif()
-        string(REGEX REPLACE "/\\*[^*]*\\*+([^/*][^*]*\\*+)*/" ""
-            mcf5307_scan_line "${mcf5307_scan_line}")
-        if(mcf5307_scan_line MATCHES "^(.*)/\\*")
-            set(mcf5307_scan_line "${CMAKE_MATCH_1}")
-            set(mcf5307_scan_open TRUE)
-        endif()
-        string(REGEX REPLACE "//.*$" "" mcf5307_scan_line
-            "${mcf5307_scan_line}")
+# `-DMCF5307_ABI_GATE=OFF` configures such a host. It prints a WARNING on every
+# configure run. The build is then a build whose published symbols nobody
+# measured, and the warning says so in those words.
+set(MCF5307_ABI_GATE ON CACHE BOOL
+    "Measure the visibility of every published symbol at configure time")
 
-        # A procedure: an optional visibility macro, then Nim's own calling
-        # convention macro, then the name, then the parameter list.
-        if(mcf5307_scan_line MATCHES
-"^(N_LIB_EXPORT|N_LIB_EXPORT_VAR|N_LIB_PRIVATE|N_LIB_IMPORT)?[ \t]*N_[A-Z_]+\\(.*,[ \t]*([A-Za-z_][A-Za-z0-9_]*)\\)\\(")
-            set(mcf5307_scan_storage "${CMAKE_MATCH_1}")
-            set(mcf5307_scan_name "${CMAKE_MATCH_2}")
-        # An object. The visibility macro is REQUIRED here and not optional.
-        # Every `exportc` variable carries one, measured above, and a line with
-        # no macro at all is any C declaration whatever.
-        elseif(mcf5307_scan_line MATCHES
-"^(N_LIB_EXPORT_VAR|N_LIB_PRIVATE|N_LIB_IMPORT)[ \t]+[^;]*[ \t*]([A-Za-z_][A-Za-z0-9_]*)[ \t]*(\\[[^]]*\\])?[ \t]*;")
-            set(mcf5307_scan_storage "${CMAKE_MATCH_1}")
-            set(mcf5307_scan_name "${CMAKE_MATCH_2}")
-        else()
+if(NOT MCF5307_ABI_GATE)
+    message(WARNING
+        "mcf5307: step 4a IS TURNED OFF. MCF5307_ABI_GATE is OFF, so nothing "
+        "in this configure run measured the visibility of the published "
+        "symbols of ${MCF5307_ABI_CONTRACT_FILE}. A published "
+        "symbol that reaches the shared object hidden makes a plugin that "
+        "exports nothing, and this build would not report it. Turn the gate "
+        "back on with -DMCF5307_ABI_GATE=ON.")
+else()
+
+# ---------------------------------------------------------------------------
+# The two tools.
+#
+# The parser must accept `-Xclang -ast-dump=json`. The project's own C compiler
+# is used when it is Clang, because that keeps the parse and the build on one
+# toolchain. Otherwise a Clang is looked up separately. GCC has no equivalent
+# dump for C.
+#
+# The shared object is built with the PROJECT'S C compiler and not with the
+# parser. The exported set is a property of the toolchain that ships the
+# library, so the toolchain that ships it is the one that must answer.
+
+if(CMAKE_C_COMPILER_ID MATCHES "^(Clang|AppleClang)$")
+    set(MCF5307_ABI_PARSER "${CMAKE_C_COMPILER}")
+    set(MCF5307_ABI_PARSER_SOURCE "the project's own C compiler")
+else()
+    find_program(MCF5307_ABI_CLANG NAMES clang clang-cl
+        DOC "A Clang that prints a JSON syntax tree for step 4a")
+    if(MCF5307_ABI_CLANG)
+        set(MCF5307_ABI_PARSER "${MCF5307_ABI_CLANG}")
+        set(MCF5307_ABI_PARSER_SOURCE "a separate Clang found on this host")
+    else()
+        message(FATAL_ERROR
+            "mcf5307: step 4a failed: no Clang was found.\n"
+            "  project C compiler : ${CMAKE_C_COMPILER} "
+            "(${CMAKE_C_COMPILER_ID})\n"
+            "The published set of ${PROJECT_SOURCE_DIR}/include/mcf5307.h is "
+            "read from a C syntax tree, which Clang prints with "
+            "`-Xclang -ast-dump=json`. A regular expression over the header "
+            "text is what this step replaced, and it was wrong in both "
+            "directions. Install Clang, or configure with "
+            "-DMCF5307_ABI_GATE=OFF and accept a build whose published "
+            "symbols nobody measured.")
+    endif()
+endif()
+
+if(CMAKE_NM)
+    set(MCF5307_ABI_NM "${CMAKE_NM}")
+else()
+    find_program(MCF5307_ABI_NM_PROGRAM NAMES nm llvm-nm
+        DOC "The symbol lister that reads the measurement shared object")
+    set(MCF5307_ABI_NM "${MCF5307_ABI_NM_PROGRAM}")
+endif()
+if(NOT MCF5307_ABI_NM)
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: no `nm` was found.\n"
+        "The exported set is read from the symbol table of a shared object. "
+        "Nothing else reports whether a published symbol left that object. "
+        "Install binutils or LLVM, or configure with -DMCF5307_ABI_GATE=OFF "
+        "and accept a build whose published symbols nobody measured.")
+endif()
+
+set(MCF5307_ABI_DIR "${PROJECT_BINARY_DIR}/mcf5307_abi")
+file(MAKE_DIRECTORY "${MCF5307_ABI_DIR}")
+
+# ---------------------------------------------------------------------------
+# The reader of a published set.
+#
+# It writes a translation unit that includes one header, asks the parser for
+# the syntax tree of that unit, and folds the tree.
+#
+# THE UNIT CARRIES TWO SENTINEL DECLARATIONS, one before the include and one
+# after it. They are the per-read control of the file attribution below. The
+# caller asserts that the fold attributed exactly those two to the unit itself.
+# A fold that lost the attribution and gave everything to the header would put
+# the sentinels in the published set. A fold that gave nothing to the header
+# would still show them. Neither failure can pass this pair.
+#
+# HOW THE ATTRIBUTION WORKS. Clang prints `loc.file` on a node only when the
+# file differs from the previous node's file. The fold therefore carries the
+# last file it saw forward, exactly as the printer expects. A declaration that
+# no file covers goes into the unattributed list, and the caller stops over it.
+#
+# It keeps a `FunctionDecl` and a `VarDecl`, and it keeps nothing else. A
+# `typedef`, a `struct`, a `union` and an `enum` name a type and publish no
+# symbol. A `static` declaration publishes no symbol either.
+function(mcf5307_abi_read_published
+        mcf5307_read_names mcf5307_read_sentinels mcf5307_read_unattributed
+        mcf5307_read_label mcf5307_read_header)
+    set(mcf5307_read_unit "${MCF5307_ABI_DIR}/${mcf5307_read_label}_probe.c")
+    set(mcf5307_read_tree "${MCF5307_ABI_DIR}/${mcf5307_read_label}_ast.json")
+    file(WRITE "${mcf5307_read_unit}"
+        "/* GENERATED by cmake/Nim.cmake step 4a. Do not edit this copy. */\n"
+        "extern int mcf5307_abi_sentinel_alpha(void);\n"
+        "#include \"${mcf5307_read_header}\"\n"
+        "extern int mcf5307_abi_sentinel_omega(void);\n")
+
+    execute_process(
+        COMMAND "${MCF5307_ABI_PARSER}" -std=c11 -fsyntax-only
+                "-I${PROJECT_SOURCE_DIR}/include"
+                -Xclang -ast-dump=json "${mcf5307_read_unit}"
+        OUTPUT_FILE "${mcf5307_read_tree}"
+        ERROR_VARIABLE mcf5307_read_error
+        RESULT_VARIABLE mcf5307_read_result)
+    if(NOT mcf5307_read_result EQUAL 0)
+        mcf5307_clip(mcf5307_read_error_head "${mcf5307_read_error}" 2000)
+        message(FATAL_ERROR
+            "mcf5307: step 4a failed: the parser did not read "
+            "${mcf5307_read_header}.\n"
+            "  parser : ${MCF5307_ABI_PARSER}\n"
+            "  unit   : ${mcf5307_read_unit}\n"
+            "  exit   : ${mcf5307_read_result}\n"
+            "  stderr : ${mcf5307_read_error_head}\n"
+            "A header the C compiler refuses is a header no consumer can "
+            "include, and this step reports nothing about a file it could not "
+            "parse.")
+    endif()
+
+    file(READ "${mcf5307_read_tree}" mcf5307_read_text)
+    string(JSON mcf5307_read_count
+        ERROR_VARIABLE mcf5307_read_json_error
+        LENGTH "${mcf5307_read_text}" inner)
+    if(NOT mcf5307_read_json_error STREQUAL "NOTFOUND")
+        message(FATAL_ERROR
+            "mcf5307: step 4a failed: ${mcf5307_read_tree} carries no readable "
+            "`inner` array.\n"
+            "  error : ${mcf5307_read_json_error}\n"
+            "That member holds the declarations of the translation unit. A "
+            "Clang release that renames it needs this step read the new name.")
+    endif()
+
+    set(mcf5307_read_result_names "")
+    set(mcf5307_read_result_sentinels "")
+    set(mcf5307_read_result_lost "")
+    set(mcf5307_read_file "")
+    math(EXPR mcf5307_read_last "${mcf5307_read_count} - 1")
+    foreach(mcf5307_read_index RANGE ${mcf5307_read_last})
+        string(JSON mcf5307_read_node
+            GET "${mcf5307_read_text}" inner ${mcf5307_read_index})
+
+        # The file is sticky. It is updated whenever the node carries one, and
+        # it is carried forward whenever the node does not.
+        string(JSON mcf5307_read_node_file
+            ERROR_VARIABLE mcf5307_read_file_error
+            GET "${mcf5307_read_node}" loc file)
+        if(mcf5307_read_file_error STREQUAL "NOTFOUND")
+            set(mcf5307_read_file "${mcf5307_read_node_file}")
+        endif()
+
+        string(JSON mcf5307_read_kind
+            ERROR_VARIABLE mcf5307_read_kind_error
+            GET "${mcf5307_read_node}" kind)
+        if(NOT mcf5307_read_kind_error STREQUAL "NOTFOUND")
             continue()
         endif()
-        if(mcf5307_scan_storage STREQUAL "")
-            set(mcf5307_scan_storage "none")
+        if(NOT mcf5307_read_kind STREQUAL "FunctionDecl"
+                AND NOT mcf5307_read_kind STREQUAL "VarDecl")
+            continue()
         endif()
-        list(APPEND mcf5307_scan_result
-            "${mcf5307_scan_storage}|${mcf5307_scan_name}")
+
+        # A compiler-supplied declaration is not part of any header's contract.
+        string(JSON mcf5307_read_implicit
+            ERROR_VARIABLE mcf5307_read_implicit_error
+            GET "${mcf5307_read_node}" isImplicit)
+        if(mcf5307_read_implicit_error STREQUAL "NOTFOUND"
+                AND mcf5307_read_implicit)
+            continue()
+        endif()
+
+        # `static` gives the name internal linkage. No consumer can reach it,
+        # so it publishes nothing and the gate says nothing about it.
+        string(JSON mcf5307_read_storage
+            ERROR_VARIABLE mcf5307_read_storage_error
+            GET "${mcf5307_read_node}" storageClass)
+        if(mcf5307_read_storage_error STREQUAL "NOTFOUND"
+                AND mcf5307_read_storage STREQUAL "static")
+            continue()
+        endif()
+
+        string(JSON mcf5307_read_name
+            ERROR_VARIABLE mcf5307_read_name_error
+            GET "${mcf5307_read_node}" name)
+        if(NOT mcf5307_read_name_error STREQUAL "NOTFOUND")
+            continue()
+        endif()
+
+        if(mcf5307_read_file STREQUAL "")
+            list(APPEND mcf5307_read_result_lost "${mcf5307_read_name}")
+        elseif(mcf5307_read_file STREQUAL "${mcf5307_read_header}")
+            list(APPEND mcf5307_read_result_names "${mcf5307_read_name}")
+        elseif(mcf5307_read_file STREQUAL "${mcf5307_read_unit}")
+            list(APPEND mcf5307_read_result_sentinels "${mcf5307_read_name}")
+        endif()
     endforeach()
-    list(REMOVE_DUPLICATES mcf5307_scan_result)
-    set(${mcf5307_scan_output} "${mcf5307_scan_result}" PARENT_SCOPE)
+
+    list(REMOVE_DUPLICATES mcf5307_read_result_names)
+    set(${mcf5307_read_names} "${mcf5307_read_result_names}" PARENT_SCOPE)
+    set(${mcf5307_read_sentinels} "${mcf5307_read_result_sentinels}"
+        PARENT_SCOPE)
+    set(${mcf5307_read_unattributed} "${mcf5307_read_result_lost}"
+        PARENT_SCOPE)
 endfunction()
 
 # ---------------------------------------------------------------------------
-# The reader for the contract header.
+# The per-read control of the reader above.
 #
-# A C declaration spans as many lines as it likes, so this reader works on
-# statements and not on lines. It strips the comments first, drops the lines a
-# statement must not absorb, and then splits on the semicolon. A CMake string
-# that holds semicolons IS a list, so the split needs no further work.
-#
-# It skips `typedef`, `struct`, `union` and `enum`. Those name a type and they
-# publish no symbol. What is left is a function declaration or an `extern`
-# object declaration, and both are read.
-#
-# IT ACCOUNTS FOR EVERY STATEMENT AND IT DROPS NONE IN SILENCE. A statement it
-# can neither skip nor read goes into the second output, and control 1 stops
-# the configure step over it. A reader that finds most names and loses the rest
-# is the fault this step repairs. It is the same fault, one level up.
-function(mcf5307_abi_contract mcf5307_contract_output mcf5307_contract_unread
-        mcf5307_contract_file)
-    set(mcf5307_contract_text "")
-    set(mcf5307_contract_open FALSE)
-    file(STRINGS "${mcf5307_contract_file}" mcf5307_contract_lines)
-    foreach(mcf5307_contract_line IN LISTS mcf5307_contract_lines)
-        if(mcf5307_contract_open)
-            if(mcf5307_contract_line MATCHES "\\*/(.*)$")
-                set(mcf5307_contract_line "${CMAKE_MATCH_1}")
-                set(mcf5307_contract_open FALSE)
-            else()
-                continue()
-            endif()
-        endif()
-        string(REGEX REPLACE "/\\*[^*]*\\*+([^/*][^*]*\\*+)*/" ""
-            mcf5307_contract_line "${mcf5307_contract_line}")
-        if(mcf5307_contract_line MATCHES "^(.*)/\\*")
-            set(mcf5307_contract_line "${CMAKE_MATCH_1}")
-            set(mcf5307_contract_open TRUE)
-        endif()
-        string(REGEX REPLACE "//.*$" "" mcf5307_contract_line
-            "${mcf5307_contract_line}")
-
-        # A preprocessor line, the `extern "C"` opener and a lone closing brace
-        # all carry no semicolon. Each would otherwise join the statement that
-        # follows it and change what that statement looks like.
-        if(mcf5307_contract_line MATCHES "^[ \t]*#")
-            continue()
-        endif()
-        if(mcf5307_contract_line MATCHES "^[ \t]*extern[ \t]+\"C\"")
-            continue()
-        endif()
-        if(mcf5307_contract_line MATCHES "^[ \t]*\\}[ \t]*$")
-            continue()
-        endif()
-        string(APPEND mcf5307_contract_text "${mcf5307_contract_line}\n")
-    endforeach()
-
-    set(mcf5307_contract_result "")
-    set(mcf5307_contract_lost "")
-    foreach(mcf5307_contract_statement IN LISTS mcf5307_contract_text)
-        string(REGEX REPLACE "[ \t\r\n]+" " " mcf5307_contract_statement
-            "${mcf5307_contract_statement}")
-        string(STRIP "${mcf5307_contract_statement}"
-            mcf5307_contract_statement)
-        if(mcf5307_contract_statement STREQUAL "")
-            continue()
-        endif()
-        if(mcf5307_contract_statement MATCHES "^(typedef|struct|union|enum)[ ]")
-            continue()
-        endif()
-        if(mcf5307_contract_statement MATCHES
-                "([A-Za-z_][A-Za-z0-9_]*)[ ]*\\(.*\\)$")
-            list(APPEND mcf5307_contract_result "${CMAKE_MATCH_1}")
-        elseif(mcf5307_contract_statement MATCHES
-                "^extern[ ].*[ *]([A-Za-z_][A-Za-z0-9_]*)(\\[[^]]*\\])?$")
-            list(APPEND mcf5307_contract_result "${CMAKE_MATCH_1}")
-        else()
-            string(APPEND mcf5307_contract_lost
-                "\n        ${mcf5307_contract_statement}")
-        endif()
-    endforeach()
-    list(REMOVE_DUPLICATES mcf5307_contract_result)
-    set(${mcf5307_contract_output} "${mcf5307_contract_result}" PARENT_SCOPE)
-    set(${mcf5307_contract_unread} "${mcf5307_contract_lost}" PARENT_SCOPE)
+# It runs on the calibration read AND on the contract read, so the fold is
+# calibrated on the very read whose answer is used. The expected answer is
+# written out here, so a blind fold cannot produce it.
+function(mcf5307_abi_check_sentinels mcf5307_check_label mcf5307_check_seen
+        mcf5307_check_lost)
+    set(mcf5307_check_want
+        "mcf5307_abi_sentinel_alpha;mcf5307_abi_sentinel_omega")
+    if(NOT mcf5307_check_lost STREQUAL "")
+        message(FATAL_ERROR
+            "mcf5307: step 4a failed: control A (${mcf5307_check_label}): a "
+            "declaration was read and no file covers it.\n"
+            "  unattributed : ${mcf5307_check_lost}\n"
+            "The fold carries the last file Clang printed forward. A "
+            "declaration before the first printed file means the fold no "
+            "longer follows the printer, and every name it sorted afterwards "
+            "is in doubt.")
+    endif()
+    if(NOT "${mcf5307_check_seen}" STREQUAL "${mcf5307_check_want}")
+        message(FATAL_ERROR
+            "mcf5307: step 4a failed: control A (${mcf5307_check_label}): the "
+            "sentinels of the generated translation unit were not read back.\n"
+            "  expected : ${mcf5307_check_want}\n"
+            "  read     : ${mcf5307_check_seen}\n"
+            "The unit declares one sentinel before the include and one after "
+            "it. A fold that gave the whole unit to the header would report "
+            "neither here and both in the published set. A fold that read "
+            "nothing would report neither anywhere. This pair separates those "
+            "two failures from a correct read.")
+    endif()
 endfunction()
 
 # ---------------------------------------------------------------------------
-# The three inputs. Each one comes from a different file and a different
-# reader, and the controls below use that separation.
+# The reader of a shared object's symbols.
+#
+# It reads the object TWICE and returns two sets.
+#
+#   `defined`  every symbol the object defines, whatever its visibility.
+#   `exported` every symbol the object defines AND makes external.
+#
+# The two sets are what separate `hidden` from `not implemented yet`. A hidden
+# symbol is defined and not exported. A symbol nothing implements is in
+# neither set. The reader before this one could not tell those apart, and it
+# reported both as `not defined in this compilation`.
+#
+# `nm` prints `<address> <type> <name>`, and it prints `U`, `u`, `w` or `v` in
+# the type column for a symbol the object does not define. Those four are
+# dropped and every other type is a definition.
+function(mcf5307_abi_read_symbols mcf5307_symbols_out_defined
+        mcf5307_symbols_out_exported mcf5307_symbols_object)
+    foreach(mcf5307_symbols_pass all external)
+        if(mcf5307_symbols_pass STREQUAL "external")
+            set(mcf5307_symbols_flags -g)
+        else()
+            set(mcf5307_symbols_flags "")
+        endif()
+        execute_process(
+            COMMAND "${MCF5307_ABI_NM}" ${mcf5307_symbols_flags}
+                    "${mcf5307_symbols_object}"
+            OUTPUT_VARIABLE mcf5307_symbols_output
+            ERROR_VARIABLE mcf5307_symbols_error
+            RESULT_VARIABLE mcf5307_symbols_result)
+        if(NOT mcf5307_symbols_result EQUAL 0)
+            mcf5307_clip(mcf5307_symbols_error_head
+                "${mcf5307_symbols_error}" 2000)
+            message(FATAL_ERROR
+                "mcf5307: step 4a failed: `${MCF5307_ABI_NM}` exited "
+                "${mcf5307_symbols_result} over "
+                "${mcf5307_symbols_object}.\n"
+                "  stderr : ${mcf5307_symbols_error_head}")
+        endif()
+        string(REPLACE "\r" "" mcf5307_symbols_output
+            "${mcf5307_symbols_output}")
+        string(REPLACE "\n" ";" mcf5307_symbols_lines
+            "${mcf5307_symbols_output}")
+        set(mcf5307_symbols_set_${mcf5307_symbols_pass} "")
+        foreach(mcf5307_symbols_line IN LISTS mcf5307_symbols_lines)
+            if(NOT mcf5307_symbols_line MATCHES
+                    "^[0-9a-fA-F]*[ \t]+([A-Za-z])[ \t]+([^ \t]+)[ \t]*$")
+                continue()
+            endif()
+            # THE TWO CAPTURES ARE COPIED OUT BEFORE THE NEXT `MATCHES` RUNS.
+            # A second `MATCHES` overwrites `CMAKE_MATCH_1` and `CMAKE_MATCH_2`
+            # on a hit AND clears them on a miss. Reading them afterwards gave
+            # every defined symbol the empty name.
+            set(mcf5307_symbols_type "${CMAKE_MATCH_1}")
+            set(mcf5307_symbols_name "${CMAKE_MATCH_2}")
+            if(mcf5307_symbols_type MATCHES "^[Uuwv]$")
+                continue()
+            endif()
+            list(APPEND mcf5307_symbols_set_${mcf5307_symbols_pass}
+                "${mcf5307_symbols_name}")
+        endforeach()
+        list(REMOVE_DUPLICATES mcf5307_symbols_set_${mcf5307_symbols_pass})
+    endforeach()
+    set(${mcf5307_symbols_out_defined} "${mcf5307_symbols_set_all}"
+        PARENT_SCOPE)
+    set(${mcf5307_symbols_out_exported} "${mcf5307_symbols_set_external}"
+        PARENT_SCOPE)
+endfunction()
 
-set(MCF5307_ABI_CONTRACT_FILE "${PROJECT_SOURCE_DIR}/include/mcf5307.h")
+# ---------------------------------------------------------------------------
+# Calibration 1. The published-set reader reads seven ordinary C shapes.
+#
+# THIS IS THE MECHANISED FORM OF THE DEFECT THAT ENDED THE READER BEFORE THIS
+# ONE. The calibration header below carries every shape that defeated it, plus
+# four shapes that publish nothing and one declaration behind `#if 0`. The
+# expected answer is WRITTEN OUT. A reader that lost a shape, that reported a
+# type keyword, or that reported a type name cannot produce it.
+#
+# The check runs on every configure run and not in a review.
+
+set(MCF5307_ABI_CALIBRATION "${MCF5307_ABI_DIR}/calibration.h")
+file(WRITE "${MCF5307_ABI_CALIBRATION}" [==[
+/* GENERATED by cmake/Nim.cmake step 4a. Do not edit this copy in the build
+ * tree. It is the calibration input of the published-set reader.
+ *
+ * The first group holds the seven shapes that defeated the regular-expression
+ * reader this step replaced. Every one of them publishes a symbol.
+ * The second group publishes nothing at all. */
+
+#include <stddef.h>
+#include <stdint.h>
+
+struct mcf5307_cal_ctx* mcf5307_cal_struct_return(void);
+struct mcf5307_cal_ctx *mcf5307_cal_pointer_spacing(void);
+enum mcf5307_cal_status mcf5307_cal_enum_return(void);
+union mcf5307_cal_word mcf5307_cal_union_return(void);
+__attribute__((visibility("default"))) void mcf5307_cal_attribute(void);
+uint32_t (*mcf5307_cal_function_pointer(int idx))(void*, uint32_t);
+extern uint32_t mcf5307_cal_first_object, mcf5307_cal_second_object;
+
+typedef struct mcf5307_cal_ctx mcf5307_cal_context;
+typedef enum { MCF5307_CAL_ZERO = 0 } mcf5307_cal_enumeration;
+typedef void (*mcf5307_cal_callback)(void* user, uint32_t address);
+static inline int mcf5307_cal_internal(void) { return 0; }
+
+/* A declaration behind a false conditional. A reader with no preprocessor
+ * publishes it, and it is not published. */
+#if 0
+void mcf5307_cal_dead_branch(void);
+#endif
+]==])
+
+# The expected answer. It is sorted, because the comparison below sorts the
+# measurement too. The order of the declarations is a property of Clang's
+# printer and it is not the property under test.
+set(MCF5307_ABI_CALIBRATION_EXPECTED
+    mcf5307_cal_attribute
+    mcf5307_cal_enum_return
+    mcf5307_cal_first_object
+    mcf5307_cal_function_pointer
+    mcf5307_cal_pointer_spacing
+    mcf5307_cal_second_object
+    mcf5307_cal_struct_return
+    mcf5307_cal_union_return)
+
+mcf5307_abi_read_published(MCF5307_ABI_CALIBRATION_READ
+    MCF5307_ABI_CALIBRATION_SENTINELS MCF5307_ABI_CALIBRATION_LOST
+    calibration "${MCF5307_ABI_CALIBRATION}")
+mcf5307_abi_check_sentinels("the calibration header"
+    "${MCF5307_ABI_CALIBRATION_SENTINELS}" "${MCF5307_ABI_CALIBRATION_LOST}")
+
+set(MCF5307_ABI_CALIBRATION_SORTED ${MCF5307_ABI_CALIBRATION_READ})
+list(SORT MCF5307_ABI_CALIBRATION_SORTED)
+if(NOT "${MCF5307_ABI_CALIBRATION_SORTED}" STREQUAL
+        "${MCF5307_ABI_CALIBRATION_EXPECTED}")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: control B: the published-set reader did not "
+        "read the calibration header correctly.\n"
+        "  header   : ${MCF5307_ABI_CALIBRATION}\n"
+        "  expected : ${MCF5307_ABI_CALIBRATION_EXPECTED}\n"
+        "  read     : ${MCF5307_ABI_CALIBRATION_SORTED}\n"
+        "That header carries a `struct`, a `union` and an `enum` return type, "
+        "a pointer return written both ways, a GNU attribute in front of a "
+        "declaration, a function that returns a function pointer, two "
+        "declarators in one statement, four shapes that publish nothing, and "
+        "one declaration behind `#if 0`. A reader that cannot answer this "
+        "cannot be trusted with the contract, and the answer it gives for the "
+        "contract would look exactly like a correct one.")
+endif()
+
+message(STATUS
+    "mcf5307: step 4a control B the published-set reader answered the "
+    "calibration header exactly (8 of 8 shapes, 5 negatives)")
+
+# ---------------------------------------------------------------------------
+# The published set. It comes from the contract header, through the same
+# reader and the same per-read control. `MCF5307_ABI_CONTRACT_FILE` is set
+# beside the configure-time dependency list above, so the file this step reads
+# and the file that re-runs this step are one name.
+
 if(NOT EXISTS "${MCF5307_ABI_CONTRACT_FILE}")
     message(FATAL_ERROR
         "mcf5307: step 4a failed: ${MCF5307_ABI_CONTRACT_FILE} does not exist. "
-        "That header is the published set of this library, and the check reads "
+        "That header is the published set of this library, and the gate reads "
         "its names from there.")
 endif()
-mcf5307_abi_contract(MCF5307_ABI_PUBLISHED MCF5307_ABI_CONTRACT_UNREAD
-    "${MCF5307_ABI_CONTRACT_FILE}")
 
-set(MCF5307_ABI_HEADER_FILE "${MCF5307_NIMCACHE}/${MCF5307_NIM_HEADER}")
-if(NOT EXISTS "${MCF5307_ABI_HEADER_FILE}")
+mcf5307_abi_read_published(MCF5307_ABI_PUBLISHED MCF5307_ABI_SENTINELS
+    MCF5307_ABI_LOST contract "${MCF5307_ABI_CONTRACT_FILE}")
+mcf5307_abi_check_sentinels("the contract header"
+    "${MCF5307_ABI_SENTINELS}" "${MCF5307_ABI_LOST}")
+
+if(MCF5307_ABI_PUBLISHED STREQUAL "")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: ${MCF5307_ABI_HEADER_FILE} does not exist. "
-        "Step 2 passes `--header:${MCF5307_NIM_HEADER}`, and control 1 below "
-        "reads the compiler's own view of the published set from that file.")
+        "mcf5307: step 4a failed: control C: ${MCF5307_ABI_CONTRACT_FILE} "
+        "publishes no symbol at all.\n"
+        "This project publishes at least `mcf5307_runtime_init`. An empty "
+        "published set makes every verdict below it vacuous, and silence is "
+        "not a pass.")
 endif()
 
-# What NIM says it publishes. Measured on Nim 2.2.10, in this header alone:
-# a procedure with `dynlib` reaches it as `N_LIB_IMPORT`. A procedure without
-# `dynlib` reaches it as `N_LIB_PRIVATE`. A published VARIABLE reaches it as a
-# plain `extern`, with no macro at all. This set therefore holds the published
-# procedures alone, and control 1 is what it is for.
-mcf5307_abi_scan(MCF5307_ABI_NIM_TOKENS "${MCF5307_ABI_HEADER_FILE}")
-set(MCF5307_ABI_NIM_PUBLISHED "")
-foreach(token IN LISTS MCF5307_ABI_NIM_TOKENS)
-    if(token MATCHES "^N_LIB_IMPORT\\|(.+)$")
-        list(APPEND MCF5307_ABI_NIM_PUBLISHED "${CMAKE_MATCH_1}")
+# ---------------------------------------------------------------------------
+# The measurement shared object.
+#
+# It carries the generated C units of step 3 and one generated probe unit. The
+# static archive of step 5 is not built yet at configure time, and it would
+# add nothing: the archive holds these same objects, and a shared object made
+# from the archive with a force-load flag holds them all as well. This route
+# needs no archive semantics and no platform force-load flag.
+#
+# THE CONSUMER'S `CMAKE_C_FLAGS` ARE NOT PASSED HERE. This object is a
+# measuring instrument and it is never shipped. A consumer's `-Werror` would
+# stop the measurement over a warning in code this project does not author.
+#
+# The probe unit is what calibrates the symbol reader. It is compiled into
+# THIS object and not into a separate one, so the calibration is a statement
+# about the artifact the verdict is read from.
+
+set(MCF5307_ABI_PROBE_SOURCE "${MCF5307_ABI_DIR}/visibility_probe.c")
+file(WRITE "${MCF5307_ABI_PROBE_SOURCE}" [==[
+/* GENERATED by cmake/Nim.cmake step 4a. Do not edit this copy in the build
+ * tree. It calibrates the symbol reader on the object the verdict is read
+ * from.
+ *
+ * `mcf5307_abi_probe_visible` must be defined AND exported.
+ * `mcf5307_abi_probe_hidden`  must be defined AND NOT exported.
+ * `mcf5307_abi_probe_absent`  is defined nowhere and must be in neither set.
+ *
+ * The three answers together prove that the reader separates the three
+ * outcomes the verdict below depends on. */
+__attribute__((visibility("default"))) void mcf5307_abi_probe_visible(void) {}
+__attribute__((visibility("hidden"))) void mcf5307_abi_probe_hidden(void) {}
+]==])
+
+set(MCF5307_ABI_OBJECT
+    "${MCF5307_ABI_DIR}/libmcf5307_abi_measure${CMAKE_SHARED_LIBRARY_SUFFIX}")
+
+# Both variables hold a command fragment as ONE string with spaces in it, and
+# not a CMake list. `${VAR}` inside a COMMAND would pass the whole fragment as
+# a single argument. `separate_arguments` splits it the way a shell would.
+separate_arguments(MCF5307_ABI_SHARED_FLAGS NATIVE_COMMAND
+    "${CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS}")
+separate_arguments(MCF5307_ABI_PIC_FLAGS NATIVE_COMMAND
+    "${CMAKE_C_COMPILE_OPTIONS_PIC}")
+
+execute_process(
+    COMMAND "${CMAKE_C_COMPILER}"
+            ${MCF5307_ABI_SHARED_FLAGS}
+            ${MCF5307_ABI_PIC_FLAGS}
+            -std=c11
+            "-isystem" "${MCF5307_NIM_LIB_DIR}"
+            -o "${MCF5307_ABI_OBJECT}"
+            ${MCF5307_NIM_C_SOURCES}
+            "${MCF5307_ABI_PROBE_SOURCE}"
+    OUTPUT_VARIABLE MCF5307_ABI_LINK_OUTPUT
+    ERROR_VARIABLE MCF5307_ABI_LINK_ERROR
+    RESULT_VARIABLE MCF5307_ABI_LINK_RESULT)
+
+if(NOT MCF5307_ABI_LINK_RESULT EQUAL 0)
+    mcf5307_clip(MCF5307_ABI_LINK_OUTPUT_HEAD "${MCF5307_ABI_LINK_OUTPUT}" 2000)
+    mcf5307_clip(MCF5307_ABI_LINK_ERROR_HEAD "${MCF5307_ABI_LINK_ERROR}" 2000)
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: the measurement shared object did not "
+        "build.\n"
+        "  compiler : ${CMAKE_C_COMPILER}\n"
+        "  object   : ${MCF5307_ABI_OBJECT}\n"
+        "  exit     : ${MCF5307_ABI_LINK_RESULT}\n"
+        "  stdout   : ${MCF5307_ABI_LINK_OUTPUT_HEAD}\n"
+        "  stderr   : ${MCF5307_ABI_LINK_ERROR_HEAD}\n"
+        "The delivery form is a shared object, so the gate builds one and "
+        "reads its symbol table. Without it nothing here measures visibility.")
+endif()
+
+mcf5307_abi_read_symbols(MCF5307_ABI_DEFINED_RAW MCF5307_ABI_EXPORTED_RAW
+    "${MCF5307_ABI_OBJECT}")
+
+# ---------------------------------------------------------------------------
+# Control D. The symbol reader, calibrated on the object it just read.
+#
+# The visible probe also MEASURES the platform's symbol prefix. Mach-O puts one
+# underscore in front of every C name and ELF puts none. The prefix is read off
+# a name this file wrote, and it is never assumed.
+set(MCF5307_ABI_PREFIX "")
+set(MCF5307_ABI_PREFIX_FOUND FALSE)
+foreach(name IN LISTS MCF5307_ABI_EXPORTED_RAW)
+    if(name MATCHES "^(_*)mcf5307_abi_probe_visible$")
+        set(MCF5307_ABI_PREFIX "${CMAKE_MATCH_1}")
+        set(MCF5307_ABI_PREFIX_FOUND TRUE)
     endif()
 endforeach()
+if(NOT MCF5307_ABI_PREFIX_FOUND)
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: control D: the probe symbol "
+        "`mcf5307_abi_probe_visible` is not among the exported symbols of "
+        "${MCF5307_ABI_OBJECT}.\n"
+        "  exported : ${MCF5307_ABI_EXPORTED_RAW}\n"
+        "That probe carries `visibility(\"default\")` and this file compiled "
+        "it into that object. A reader that cannot find it read the wrong "
+        "file, read nothing, or cannot see an exported symbol at all. Every "
+        "`hidden` verdict below would then be false, and every `visible` "
+        "verdict would be unearned.")
+endif()
 
-# The names Nim's own runtime scaffolding takes under `--nimMainPrefix:`. The
-# prefix is the one of the entry module steps 2 to 6 build, and it is read
-# back under that module's own name. They are not part of the published set,
-# and step 4a REPORTS them instead of skipping them. See the note below.
+function(mcf5307_abi_strip mcf5307_strip_output)
+    set(mcf5307_strip_result "")
+    foreach(mcf5307_strip_name IN LISTS ARGN)
+        if(NOT MCF5307_ABI_PREFIX STREQUAL "")
+            string(REGEX REPLACE "^${MCF5307_ABI_PREFIX}" ""
+                mcf5307_strip_name "${mcf5307_strip_name}")
+        endif()
+        list(APPEND mcf5307_strip_result "${mcf5307_strip_name}")
+    endforeach()
+    set(${mcf5307_strip_output} "${mcf5307_strip_result}" PARENT_SCOPE)
+endfunction()
+
+mcf5307_abi_strip(MCF5307_ABI_DEFINED ${MCF5307_ABI_DEFINED_RAW})
+mcf5307_abi_strip(MCF5307_ABI_EXPORTED ${MCF5307_ABI_EXPORTED_RAW})
+
+if(NOT "mcf5307_abi_probe_hidden" IN_LIST MCF5307_ABI_DEFINED)
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: control D: the probe symbol "
+        "`mcf5307_abi_probe_hidden` is not among the DEFINED symbols of "
+        "${MCF5307_ABI_OBJECT}.\n"
+        "  defined : ${MCF5307_ABI_DEFINED}\n"
+        "This file compiled a definition of it into that object. A reader "
+        "that cannot see a hidden definition cannot separate `hidden` from "
+        "`not implemented yet`, and it would report every hidden symbol as an "
+        "unwritten one. That is the report the gate must never give.")
+endif()
+
+if("mcf5307_abi_probe_hidden" IN_LIST MCF5307_ABI_EXPORTED)
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: control D: the probe symbol "
+        "`mcf5307_abi_probe_hidden` is among the EXPORTED symbols of "
+        "${MCF5307_ABI_OBJECT}.\n"
+        "  exported : ${MCF5307_ABI_EXPORTED}\n"
+        "It carries `visibility(\"hidden\")`. A reader that calls it exported "
+        "calls every hidden symbol exported, and the whole gate then passes "
+        "whatever it is given.")
+endif()
+
+if("mcf5307_abi_probe_absent" IN_LIST MCF5307_ABI_DEFINED
+        OR "mcf5307_abi_probe_absent" IN_LIST MCF5307_ABI_EXPORTED)
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: control D: the name "
+        "`mcf5307_abi_probe_absent` was read out of ${MCF5307_ABI_OBJECT}.\n"
+        "Nothing defines it anywhere in this project. A reader that reports it "
+        "reports names the object does not hold, and its `visible` verdicts "
+        "are then worth nothing.")
+endif()
+
+message(STATUS
+    "mcf5307: step 4a control D the symbol reader separated visible, hidden "
+    "and absent on ${MCF5307_ABI_OBJECT} (symbol prefix: "
+    "`${MCF5307_ABI_PREFIX}`)")
+
+# ---------------------------------------------------------------------------
+# The Nim runtime scaffolding.
+#
+# Those names belong to the Nim runtime under `--nimMainPrefix:`. The contract
+# does not declare them, and the undeclared-export check below would otherwise
+# stop over them. They are reported instead.
 set(MCF5307_ABI_SCAFFOLDING "")
 foreach(suffix
         NimMain NimMainInner NimMainModule
@@ -759,226 +1206,124 @@ foreach(suffix
     list(APPEND MCF5307_ABI_SCAFFOLDING "${MCF5307_NIM_BUILT_PREFIX}${suffix}")
 endforeach()
 
-# ---------------------------------------------------------------------------
-# The measurement. Every site of every interesting name is kept, with the unit
-# it was read in. The report below then states what was read, and not a guess
-# about the cause.
-
-foreach(name IN LISTS MCF5307_ABI_PUBLISHED MCF5307_ABI_SCAFFOLDING)
-    unset(MCF5307_ABI_SITES_${name})
-endforeach()
-
-set(MCF5307_ABI_SEEN "")
-set(MCF5307_ABI_CLASSES "")
-foreach(unit IN LISTS MCF5307_NIM_C_SOURCES)
-    get_filename_component(MCF5307_ABI_UNIT_NAME "${unit}" NAME)
-    mcf5307_abi_scan(MCF5307_ABI_UNIT_TOKENS "${unit}")
-    foreach(token IN LISTS MCF5307_ABI_UNIT_TOKENS)
-        if(NOT token MATCHES "^([^|]*)\\|(.*)$")
-            continue()
-        endif()
-        set(MCF5307_ABI_STORAGE "${CMAKE_MATCH_1}")
-        set(MCF5307_ABI_SYMBOL "${CMAKE_MATCH_2}")
-        list(APPEND MCF5307_ABI_CLASSES "${MCF5307_ABI_STORAGE}")
-        if(MCF5307_ABI_SYMBOL IN_LIST MCF5307_ABI_PUBLISHED)
-            list(APPEND MCF5307_ABI_SEEN "${MCF5307_ABI_SYMBOL}")
-        elseif(NOT MCF5307_ABI_SYMBOL IN_LIST MCF5307_ABI_SCAFFOLDING)
-            continue()
-        endif()
-        list(APPEND MCF5307_ABI_SITES_${MCF5307_ABI_SYMBOL}
-            "${MCF5307_ABI_STORAGE} in ${MCF5307_ABI_UNIT_NAME}")
-    endforeach()
-endforeach()
-list(REMOVE_DUPLICATES MCF5307_ABI_SEEN)
-list(REMOVE_DUPLICATES MCF5307_ABI_CLASSES)
+# The two probe names are this file's own instrument. They are in the
+# measurement object and they are in no shipped artifact.
+set(MCF5307_ABI_INSTRUMENT
+    mcf5307_abi_probe_visible mcf5307_abi_probe_hidden)
 
 # ---------------------------------------------------------------------------
-# Control 1. The two headers hold each other up.
+# The verdict. Three categories, and each name lands in exactly one.
 #
-# The check above reads `include/mcf5307.h` with one reader. This control
-# reads the compiler's own header with a DIFFERENT reader, and asserts that
-# what Nim publishes is non-empty and is declared in the contract. Blind the
-# contract reader and the subset test fails. Blind the Nim-header reader and
-# the non-empty test fails. NEITHER READER CAN GO BLIND ON ITS OWN.
+#   VISIBLE            published, defined, exported.        Pass.
+#   HIDDEN             published, defined, NOT exported.    FAILS THE CONFIGURE
+#                                                           STEP.
+#   NOT IMPLEMENTED    published and NOT defined.           Reported, not a
+#                                                           fault.
 #
-# The first part is narrower and it comes first. The two tests below both need
-# the contract reader to have read the WHOLE contract. A reader that returned
-# most of the names would pass both. The names it lost would then be published
-# symbols this step says nothing about.
-if(NOT MCF5307_ABI_CONTRACT_UNREAD STREQUAL "")
-    message(FATAL_ERROR
-        "mcf5307: step 4a failed: control 1: a statement of "
-        "${MCF5307_ABI_CONTRACT_FILE} was neither skipped nor read.\n"
-        "    unread statements:${MCF5307_ABI_CONTRACT_UNREAD}\n"
-        "The reader skips a `typedef`, a `struct`, a `union` and an `enum`, "
-        "and it reads a function declaration and an `extern` object "
-        "declaration. A statement outside those five shapes is a symbol this "
-        "step would report nothing about, and silence is not a pass.")
-endif()
+# THE THIRD CATEGORY IS A SEPARATE LINE AND A SEPARATE WORD. The reader before
+# this one reported `not defined in this compilation` for both `a later cpu
+# task writes this` and `the reader could not see it`. Those two must never
+# share a line. The `defined` set is what separates them, and control D is what
+# proves the `defined` set works.
 
-if(MCF5307_ABI_NIM_PUBLISHED STREQUAL "")
-    message(FATAL_ERROR
-        "mcf5307: step 4a failed: control 1: ${MCF5307_ABI_HEADER_FILE} names "
-        "no published procedure at all.\n"
-        "This project publishes at least `mcf5307_runtime_init`, and a "
-        "procedure that carries `dynlib` reaches that header as "
-        "`N_LIB_IMPORT`. An empty set means this step no longer reads what it "
-        "was written to read, and every verdict below it would be vacuous.")
-endif()
-
-set(MCF5307_ABI_UNDECLARED "")
-foreach(name IN LISTS MCF5307_ABI_NIM_PUBLISHED)
-    if(NOT name IN_LIST MCF5307_ABI_PUBLISHED)
-        list(APPEND MCF5307_ABI_UNDECLARED "${name}")
+set(MCF5307_ABI_VISIBLE "")
+set(MCF5307_ABI_HIDDEN "")
+set(MCF5307_ABI_UNIMPLEMENTED "")
+foreach(name IN LISTS MCF5307_ABI_PUBLISHED)
+    if(NOT name IN_LIST MCF5307_ABI_DEFINED)
+        list(APPEND MCF5307_ABI_UNIMPLEMENTED "${name}")
+    elseif(name IN_LIST MCF5307_ABI_EXPORTED)
+        list(APPEND MCF5307_ABI_VISIBLE "${name}")
+    else()
+        list(APPEND MCF5307_ABI_HIDDEN "${name}")
     endif()
+endforeach()
+
+if(NOT MCF5307_ABI_HIDDEN STREQUAL "")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: ${MCF5307_ABI_CONTRACT_FILE} publishes a "
+        "symbol that the shared object DEFINES AND DOES NOT EXPORT.\n"
+        "  hidden          : ${MCF5307_ABI_HIDDEN}\n"
+        "  visible         : ${MCF5307_ABI_VISIBLE}\n"
+        "  measured object : ${MCF5307_ABI_OBJECT}\n"
+        "  symbol lister   : ${MCF5307_ABI_NM}\n"
+        "A consumer of the plugin cannot reach a name that is not exported. "
+        "The static archive still builds and `nm` over the archive still "
+        "reports the name, so this step is the only one that reports the "
+        "fault.\n"
+        "THE USUAL CAUSE IS A PRAGMA SET WITHOUT `dynlib`. `src/mcf5307.nim` "
+        "defines `mcf5307Abi` as `cdecl, dynlib` together for exactly this "
+        "reason. A procedure declared `{.exportc: \"<c name>\", cdecl.}` "
+        "alone is hidden. Write `{.exportc: \"<c name>\", mcf5307Abi.}` "
+        "instead. An exported VARIABLE needs `{.exportc: \"<c name>\", "
+        "dynlib.}`.")
+endif()
+
+# ---------------------------------------------------------------------------
+# The other direction. An exported name the contract does not declare.
+#
+# A consumer cannot call a symbol it cannot declare. This check is also a
+# CONSTRAINT ON THIS PROJECT, and `src/mcf5307.nim` records it: CPU-1 cannot
+# add an exported status symbol of its own, because the contract belongs to
+# CPU-0 and this step refuses an export the contract does not carry.
+set(MCF5307_ABI_UNDECLARED "")
+foreach(name IN LISTS MCF5307_ABI_EXPORTED)
+    if(name IN_LIST MCF5307_ABI_PUBLISHED
+            OR name IN_LIST MCF5307_ABI_SCAFFOLDING
+            OR name IN_LIST MCF5307_ABI_INSTRUMENT)
+        continue()
+    endif()
+    list(APPEND MCF5307_ABI_UNDECLARED "${name}")
 endforeach()
 if(NOT MCF5307_ABI_UNDECLARED STREQUAL "")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control 1: the Nim compilation publishes a "
-        "name that the contract does not declare.\n"
+        "mcf5307: step 4a failed: the shared object exports a name that "
+        "${MCF5307_ABI_CONTRACT_FILE} does not declare.\n"
         "  undeclared : ${MCF5307_ABI_UNDECLARED}\n"
-        "  contract   : ${MCF5307_ABI_CONTRACT_FILE}\n"
-        "Either the contract header lost the declaration, or this step no "
-        "longer reads that header. Both readings are faults and this step "
-        "cannot tell them apart. A symbol a consumer cannot declare is a "
-        "symbol a consumer cannot call.")
-endif()
-
-# Control 2. The unit reader found at least one published symbol.
-#
-# Every `not defined here` verdict below rests on the unit reader working. If
-# it read nothing at all, every published name would be reported as `not
-# defined here`, and that report reads exactly like a young project.
-if(MCF5307_ABI_SEEN STREQUAL "")
-    message(FATAL_ERROR
-        "mcf5307: step 4a failed: control 2: no published symbol was found in "
-        "any generated C unit.\n"
-        "  units : ${MCF5307_NIM_C_SOURCES}\n"
-        "This project defines at least `mcf5307_runtime_init`. An empty result "
-        "means the unit reader read nothing, and silence is not a pass.")
-endif()
-
-# Control 3. The unit reader can tell the two storage classes apart.
-#
-# The verdict is a comparison between the visible macros and the hidden one. A
-# reader that never saw the hidden macro anywhere cannot make that comparison,
-# and it would report every symbol as visible. Nim's own units carry many
-# `N_LIB_PRIVATE` declarations, so the two classes are both present in any
-# build this step can run against.
-if(NOT "N_LIB_EXPORT" IN_LIST MCF5307_ABI_CLASSES
-        OR NOT "N_LIB_PRIVATE" IN_LIST MCF5307_ABI_CLASSES)
-    message(FATAL_ERROR
-        "mcf5307: step 4a failed: control 3: the unit reader did not see both "
-        "storage classes.\n"
-        "  classes read : ${MCF5307_ABI_CLASSES}\n"
-        "It has to read `N_LIB_EXPORT` and `N_LIB_PRIVATE` somewhere in the "
-        "units before its verdict means anything. A reader blind to the hidden "
-        "macro calls every symbol visible.")
+        "Either the contract lost the declaration, or this project exported "
+        "something the contract never promised. A symbol a consumer cannot "
+        "declare is a symbol a consumer cannot call.")
 endif()
 
 # ---------------------------------------------------------------------------
-# The verdict. A published symbol passes when EVERY site of it carries a
-# visible macro. One site that does not is enough to fail the name.
-
-set(MCF5307_ABI_VISIBLE "")
-set(MCF5307_ABI_FAULTY "")
-foreach(name IN LISTS MCF5307_ABI_SEEN)
-    set(MCF5307_ABI_NAME_OK TRUE)
-    foreach(site IN LISTS MCF5307_ABI_SITES_${name})
-        if(NOT site MATCHES "^(N_LIB_EXPORT|N_LIB_EXPORT_VAR) ")
-            set(MCF5307_ABI_NAME_OK FALSE)
-        endif()
-    endforeach()
-    if(MCF5307_ABI_NAME_OK)
-        list(APPEND MCF5307_ABI_VISIBLE "${name}")
-    else()
-        list(APPEND MCF5307_ABI_FAULTY "${name}")
-    endif()
-endforeach()
-
-if(NOT MCF5307_ABI_FAULTY STREQUAL "")
-    set(MCF5307_ABI_REPORT "")
-    foreach(name IN LISTS MCF5307_ABI_FAULTY)
-        string(APPEND MCF5307_ABI_REPORT "\n    ${name}")
-        set(MCF5307_ABI_NAME_SITES "${MCF5307_ABI_SITES_${name}}")
-        list(REMOVE_DUPLICATES MCF5307_ABI_NAME_SITES)
-        foreach(site IN LISTS MCF5307_ABI_NAME_SITES)
-            string(APPEND MCF5307_ABI_REPORT "\n        ${site}")
-        endforeach()
-    endforeach()
-    message(FATAL_ERROR
-        "mcf5307: step 4a failed: ${MCF5307_ABI_CONTRACT_FILE} publishes a "
-        "symbol that the generated C does not emit visible.\n"
-        "Every site of every name below is listed, with the storage class "
-        "this step read at that site:${MCF5307_ABI_REPORT}\n"
-        "  visible : ${MCF5307_ABI_VISIBLE}\n"
-        "`N_LIB_PRIVATE` is `__attribute__((visibility(\"hidden\")))`. THIS "
-        "STEP READ A STORAGE CLASS AND IT DID NOT MEASURE A CAUSE. Two causes "
-        "fit: the Nim declaration carries a pragma set without `dynlib`, or "
-        "the name has more than one declaration and they disagree. A name "
-        "listed with sites of two classes is the second one. `mcf5307Abi` in "
-        "`src/mcf5307.nim` holds `cdecl` and `dynlib` together, and `dynlib` "
-        "is what asks for the visible form.\n"
-        "The archive still builds and `nm` over the archive still reports the "
-        "symbol, so this is the only step that reports the fault.")
-endif()
-
-# ---------------------------------------------------------------------------
-# The report. It names what passed, and it names what this compilation does
-# not define yet, so that neither reads as the other.
-
-set(MCF5307_ABI_UNDEFINED "")
-foreach(name IN LISTS MCF5307_ABI_PUBLISHED)
-    if(NOT name IN_LIST MCF5307_ABI_SEEN)
-        list(APPEND MCF5307_ABI_UNDEFINED "${name}")
-    endif()
-endforeach()
+# The report.
 
 list(LENGTH MCF5307_ABI_PUBLISHED MCF5307_ABI_PUBLISHED_COUNT)
 list(LENGTH MCF5307_ABI_VISIBLE MCF5307_ABI_VISIBLE_COUNT)
-list(LENGTH MCF5307_ABI_UNDEFINED MCF5307_ABI_UNDEFINED_COUNT)
+list(LENGTH MCF5307_ABI_UNIMPLEMENTED MCF5307_ABI_UNIMPLEMENTED_COUNT)
 
 message(STATUS
     "mcf5307: step 4a ${MCF5307_ABI_CONTRACT_FILE} publishes "
-    "${MCF5307_ABI_PUBLISHED_COUNT} symbol(s)")
+    "${MCF5307_ABI_PUBLISHED_COUNT} symbol(s), read by ${MCF5307_ABI_PARSER} "
+    "(${MCF5307_ABI_PARSER_SOURCE})")
 message(STATUS
-    "mcf5307: step 4a ${MCF5307_ABI_VISIBLE_COUNT} of them are emitted "
-    "visible: ${MCF5307_ABI_VISIBLE}")
+    "mcf5307: step 4a ${MCF5307_ABI_VISIBLE_COUNT} of them are DEFINED AND "
+    "EXPORTED by the measurement shared object: ${MCF5307_ABI_VISIBLE}")
 message(STATUS
-    "mcf5307: step 4a ${MCF5307_ABI_UNDEFINED_COUNT} of them are not defined "
-    "in this compilation: ${MCF5307_ABI_UNDEFINED}")
+    "mcf5307: step 4a ${MCF5307_ABI_UNIMPLEMENTED_COUNT} of them are NOT YET "
+    "IMPLEMENTED. No compilation unit defines them, and a later cpu task "
+    "writes them: ${MCF5307_ABI_UNIMPLEMENTED}")
 
-# ---------------------------------------------------------------------------
-# The runtime scaffolding. Design section 5.4 rule 2 says C++ never calls the
-# runtime entry point directly, and THAT RULE HAS NO MECHANISM BEHIND IT.
-#
-# `include/mcf5307.h` does not declare `<prefix>NimMain`, so a C++ caller has
-# to write its own declaration to reach it. That is the whole barrier. The
-# symbol itself carries no visibility macro at all in the generated C. That is
-# C default visibility, so it does reach a consumer of the shared object.
-#
-# This step cannot enforce the rule and it does not pretend to. It prints what
-# it read, so that the fact sits in the configure log rather than nowhere. A
+# The scaffolding report. Design section 5.4 rule 2 asks C++ never to call the
+# runtime entry point directly. `include/mcf5307.h` does not declare it, and
+# that is the whole barrier. This line prints what the shared object actually
+# exports, so the fact sits in the configure log rather than nowhere. A
 # mechanism would be a linker export list, and that belongs to the build that
-# makes the shared object.
+# makes the shipped shared object.
 set(MCF5307_ABI_REACHABLE "")
 foreach(name IN LISTS MCF5307_ABI_SCAFFOLDING)
-    if(NOT DEFINED MCF5307_ABI_SITES_${name})
-        continue()
+    if(name IN_LIST MCF5307_ABI_EXPORTED)
+        list(APPEND MCF5307_ABI_REACHABLE "${name}")
     endif()
-    foreach(site IN LISTS MCF5307_ABI_SITES_${name})
-        if(NOT site MATCHES "^N_LIB_PRIVATE ")
-            list(APPEND MCF5307_ABI_REACHABLE "${name}")
-        endif()
-    endforeach()
 endforeach()
-list(REMOVE_DUPLICATES MCF5307_ABI_REACHABLE)
 if(NOT MCF5307_ABI_REACHABLE STREQUAL "")
     message(STATUS
         "mcf5307: step 4a NOTE: the runtime scaffolding a consumer can reach: "
         "${MCF5307_ABI_REACHABLE}. Design section 5.4 rule 2 asks C++ not to "
         "call it, the contract header does not declare it, and no mechanism "
         "here enforces that. This line is a report and not a check.")
+endif()
+
 endif()
 
 # ---------------------------------------------------------------------------

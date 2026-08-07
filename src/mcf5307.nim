@@ -33,9 +33,11 @@ import system/ansi_c
 # That shared object is the delivery form. The plugin then exports nothing,
 # and the host cannot reach the core.
 #
-# `cmake/Nim.cmake` step 4a reads the generated C and fails the configure step
-# when a published symbol lost the pragma. That check is what makes this
-# comment enforceable rather than advisory.
+# `cmake/Nim.cmake` step 4a BUILDS A SHARED OBJECT AT CONFIGURE TIME AND READS
+# ITS SYMBOL TABLE. A published symbol the object defines and does not export
+# fails the configure step. The check reads the linker's answer and it reads no
+# Nim macro, so this comment is enforceable rather than advisory, and a Nim
+# release that renames `N_LIB_EXPORT` changes nothing about it.
 #
 # `include/mcf5307.h` and design section 5.4 both describe the set as
 # `{.exportc, cdecl.}`, without `dynlib`. Those two are the property of other
@@ -56,25 +58,69 @@ proc mcf5307_NimMain() {.importc: "mcf5307_NimMain", cdecl.}
 # functions directly, and they add no Nim module to the unit list. Measured on
 # Nim 2.2.10: the unit count is six with them and six without them.
 #
-# `time` supplies the deadline. Its resolution is one second. That is the right
-# order for a stall bound, and it needs no platform-specific clock.
+# THE DEADLINE USES A MONOTONIC CLOCK AND NOT THE WALL CLOCK. `time` was here
+# before and it was wrong for two separate reasons.
+#
+#   Its resolution is one second, and the deadline is `time() + 5`. The start
+#   is truncated to a whole second and the comparison is truncated again, so
+#   the true wait is anything between four and five seconds. Measured over six
+#   runs of a harness in which one thread claims the latch and never releases
+#   it: 4.53, 4.99, 4.99, 4.99, 4.99 and 4.99 seconds. Not one run waited the
+#   five seconds the constant names.
+#
+#   `time` reads the SETTABLE wall clock. An operator, NTP or a container start
+#   can step it backwards at any moment. A backward step moves the deadline
+#   away from the waiter, and the loop then spins with no end. That is the
+#   unbounded spin this whole deadline exists to close, re-opened by a clock
+#   adjustment.
+#
+# `clock_gettime(CLOCK_MONOTONIC)` counts from an arbitrary origin, no caller
+# can set it, and its resolution is nanoseconds. `GetTickCount64` is the
+# Windows equivalent and it counts milliseconds since boot. The file already
+# carries a `when defined(windows)` branch for the yield, so a second branch
+# costs nothing new.
 #
 # `sched_yield`, or `SwitchToThread` on Windows, hands the core to another
 # thread. The wait loop below calls it. The loop it replaces called `cpuRelax`
-# alone and yielded to nothing. The Windows branch is not measured here. This
+# alone and yielded to nothing. THE WINDOWS BRANCH OF BOTH IS UNMEASURED. This
 # host is macOS and it builds the other branch.
 
-type
-  MCF5307Time {.importc: "time_t", header: "<time.h>".} = distinct int64
-
-proc mcf5307WallClock(destination: pointer): MCF5307Time {.
-    importc: "time", header: "<time.h>".}
-
 when defined(windows):
+  proc mcf5307TickCount(): uint64 {.
+      importc: "GetTickCount64", header: "<windows.h>", stdcall.}
+
+  proc mcf5307MonotonicMillis(): int64 =
+    int64(mcf5307TickCount())
+
   proc mcf5307Yield(): cint {.
       importc: "SwitchToThread", header: "<windows.h>",
       stdcall, discardable.}
 else:
+  # The object is `importc` with a header, so Nim emits no definition of its
+  # own and the C compiler supplies the real layout. `clong` is the type of
+  # both members on macOS and on 64-bit Linux.
+  type
+    MCF5307TimeSpec {.importc: "struct timespec", header: "<time.h>".} = object
+      tv_sec: clong
+      tv_nsec: clong
+
+  let mcf5307ClockMonotonic {.importc: "CLOCK_MONOTONIC",
+      header: "<time.h>".}: cint
+
+  proc mcf5307ClockGetTime(clockId: cint; target: ptr MCF5307TimeSpec): cint {.
+      importc: "clock_gettime", header: "<time.h>", discardable.}
+
+  proc mcf5307MonotonicMillis(): int64 =
+    ## The monotonic clock in milliseconds.
+    ##
+    ## A failure of `clock_gettime` is not handled here, and it cannot be:
+    ## this procedure runs before the Nim runtime exists and the contract
+    ## carries no failure channel. `CLOCK_MONOTONIC` is mandatory in POSIX
+    ## 2008 and the call fails only for an invalid clock identifier.
+    var now: MCF5307TimeSpec
+    discard mcf5307ClockGetTime(mcf5307ClockMonotonic, addr now)
+    int64(now.tv_sec) * 1000'i64 + int64(now.tv_nsec) div 1_000_000'i64
+
   proc mcf5307Yield(): cint {.
       importc: "sched_yield", header: "<sched.h>", discardable.}
 
@@ -97,11 +143,24 @@ const
   latchDone = 2
   latchAbandoned = 3
 
-# How long a caller waits for another thread to finish the initializer. The
-# bound is a trade and it is not a measurement of the initializer. A runtime
-# initializer that needs more than five seconds is already broken. A wait
-# without any bound cannot report a stall at all, and that outcome is worse.
-const latchWaitSeconds = 5'i64
+# How long a caller waits for another thread to finish the initializer.
+#
+# THE BOUND IS A TRADE AND THE MARGIN IS MEASURED. `mcf5307_runtime_init` was
+# timed with `clock_gettime(CLOCK_MONOTONIC)` around the call, one measurement
+# per process because the latch is one-time, over 20 processes on this host
+# (macOS 26.5.1, arm64, Nim 2.2.10, clang -O2):
+#
+#   8000 5000 5000 5000 6000 6000 3000 6000 6000 7000
+#   5000 7000 4000 6000 7000 5000 5000 6000 5000 5000    nanoseconds
+#
+#   minimum 3.0 us, maximum 8.0 us, mean 5.6 us over 20 runs.
+#
+# The bound is therefore about 625000 times the slowest run measured. A
+# runtime initializer that needs five seconds is already broken. A wait with no
+# bound cannot report a stall at all, and that outcome is worse.
+#
+# The unit is milliseconds because the clock below reports milliseconds.
+const latchWaitMillis = 5000'i64
 
 var latch: Atomic[int]
 
@@ -124,6 +183,34 @@ proc mcf5307LatchStalled() {.noreturn.} =
   ## The runtime is not initialized here, so every later call into this library
   ## would run without it. Design section 5.6 refuses a wrong answer with exit
   ## status 0, and a plain return to the caller would produce one.
+  ##
+  ## ENDING THE PROCESS IS THE WRONG ANSWER AND IT IS THE ONLY ONE AVAILABLE.
+  ## THE REAL DEFECT IS IN THE CONTRACT, AND CPU-0 OWNS IT. A library has no
+  ## business killing its host. A JUCE plugin that aborts takes the whole
+  ## digital audio workstation with it, and the user loses unsaved work that
+  ## has nothing to do with this core. The correct behaviour is to report the
+  ## failure to the caller and let the host decide.
+  ##
+  ## `include/mcf5307.h` declares `void mcf5307_runtime_init(void)`. THAT
+  ## SIGNATURE CARRIES NO FAILURE CHANNEL: no return value, no out-parameter
+  ## and no status call. There is no way for this procedure to say `I failed`
+  ## and return. `c_abort` is what is left.
+  ##
+  ## CPU-1 CANNOT REPAIR THIS FROM THIS FILE, AND THE REPAIR TO THE GATE IS
+  ## WHAT MAKES THAT MECHANICAL. `cmake/Nim.cmake` step 4a now fails the
+  ## configure step over ANY symbol the shared object exports that the contract
+  ## does not declare. Adding an `mcf5307_runtime_status` here would therefore
+  ## stop the configure step. The contract header belongs to CPU-0, and the
+  ## channel has to be added there first.
+  ##
+  ## What CPU-0 would have to add is one of:
+  ##   `int mcf5307_runtime_init(void);`         a non-zero result on failure
+  ##   `void mcf5307_runtime_init(int* status);` a status out-parameter
+  ##   `int mcf5307_runtime_ready(void);`        a separate query
+  ##
+  ## `src/mcf5307.nim` then returns instead of aborting, and this procedure
+  ## goes away. Until then the abort stands, and this comment is the record of
+  ## why it stands rather than a defence of it.
   ##
   ## The text goes out one line at a time. Each line is a C string literal, so
   ## the report needs no allocation and no Nim string.
@@ -185,16 +272,27 @@ proc mcf5307RuntimeInit() {.exportc: "mcf5307_runtime_init", mcf5307Abi.} =
   # Another thread claimed the latch. Wait for that thread, and stop at the
   # deadline. The waiter that stops writes `latchAbandoned` itself, so every
   # other waiter ends at once instead of serving its own deadline.
-  let deadline = int64(mcf5307WallClock(nil)) + latchWaitSeconds
+  let deadline = mcf5307MonotonicMillis() + latchWaitMillis
   while true:
     let waitedState = latch.load(moAcquire)
     if waitedState == latchDone:
       return
     if waitedState == latchAbandoned:
       mcf5307LatchStalled()
-    if int64(mcf5307WallClock(nil)) >= deadline:
+    if mcf5307MonotonicMillis() >= deadline:
+      # THE RESULT OF THE EXCHANGE IS READ AND IT IS NOT DISCARDED. There is a
+      # race between the load above and this line. The initializing thread can
+      # store `latchDone` in that window. The exchange then fails, `running`
+      # comes back holding `latchDone`, and the runtime IS initialized. A
+      # discarded result aborted a process whose runtime had just come up.
+      #
+      # A failure that reports any other value is a real stall. `latchRunning`
+      # means the initializing thread is still inside and out of time.
+      # `latchAbandoned` means another waiter reached its own deadline first.
       var running = latchRunning
-      discard latch.compareExchange(
-        running, latchAbandoned, moAcquireRelease, moAcquire)
+      if not latch.compareExchange(
+          running, latchAbandoned, moAcquireRelease, moAcquire):
+        if running == latchDone:
+          return
       mcf5307LatchStalled()
     mcf5307Yield()
