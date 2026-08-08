@@ -1,0 +1,193 @@
+{
+  "binutils": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cases": [
+    {
+      "encoding": [
+        "d280"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 3
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 1,
+          "d1": 2
+        }
+      },
+      "instruction": "add.l %d0,%d1",
+      "mnemonic": "add.l",
+      "name": "add_l_d0_to_d1"
+    },
+    {
+      "encoding": [
+        "9280"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 1
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 1,
+          "d1": 2
+        }
+      },
+      "instruction": "sub.l %d0,%d1",
+      "mnemonic": "sub.l",
+      "name": "sub_l_d0_from_d1"
+    },
+    {
+      "encoding": [
+        "4480"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": -5
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 5
+        }
+      },
+      "instruction": "neg.l %d0",
+      "mnemonic": "neg.l",
+      "name": "neg_l_d0"
+    },
+    {
+      "encoding": [
+        "4280"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 0
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896
+        }
+      },
+      "instruction": "clr.l %d0",
+      "mnemonic": "clr.l",
+      "name": "clr_l_d0"
+    },
+    {
+      "encoding": [
+        "5281"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 7
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d1": 6
+        }
+      },
+      "instruction": "addq.l #1,%d1",
+      "mnemonic": "addq.l",
+      "name": "addq_l_1_to_d1"
+    },
+    {
+      "encoding": [
+        "5380"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 5
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 6
+        }
+      },
+      "instruction": "subq.l #1,%d0",
+      "mnemonic": "subq.l",
+      "name": "subq_l_1_from_d0"
+    },
+    {
+      "encoding": [
+        "0681",
+        "0000",
+        "0007"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 8
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d1": 1
+        }
+      },
+      "instruction": "addi.l #7,%d1",
+      "mnemonic": "addi.l",
+      "name": "addi_l_7_to_d1"
+    },
+    {
+      "encoding": [
+        "4c00",
+        "1000"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 12
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 3,
+          "d1": 4
+        }
+      },
+      "instruction": "mulu.l %d0,%d1",
+      "mnemonic": "mulu.l",
+      "name": "mulu_l_d0_by_d1"
+    },
+    {
+      "encoding": [
+        "48c0"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": -32768
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 32768
+        }
+      },
+      "instruction": "ext.l %d0",
+      "mnemonic": "ext.l",
+      "name": "ext_l_d0_word"
+    }
+  ],
+  "format": 1,
+  "group": "alu"
+}

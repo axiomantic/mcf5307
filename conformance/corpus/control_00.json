@@ -1,0 +1,23 @@
+{
+  "binutils": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cases": [
+    {
+      "encoding": [
+        "4e71"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {}
+      },
+      "initial": {
+        "mem": [],
+        "regs": {}
+      },
+      "instruction": "nop",
+      "mnemonic": "nop",
+      "name": "nop"
+    }
+  ],
+  "format": 1,
+  "group": "control"
+}
