@@ -169,11 +169,17 @@ set(MCF5307_NIM_ENTRIES mcf5307)
 # therefore make the duplicate half of step 2a unable to fail. A check that
 # cannot fail is worse than no check.
 set(MCF5307_NIM_SOURCE_mcf5307 "${PROJECT_SOURCE_DIR}/src/mcf5307.nim")
+# `--path:src` puts the package root on the Nim search path so that the
+# entry module's `import mcf5307/<sub>` resolves to `src/mcf5307/<sub>.nim`.
+# The submodules of the core (CPU-6 and later) live under `src/mcf5307/`, and
+# without the path an entry module at `src/mcf5307.nim` cannot import them.
+set(MCF5307_NIM_PATH "${PROJECT_SOURCE_DIR}/src")
 set(MCF5307_NIM_COMMAND_mcf5307
     "${MCF5307_NIM_EXECUTABLE}" c
     --compileOnly
     --noMain
     "--nimcache:${MCF5307_NIMCACHE}"
+    "--path:${MCF5307_NIM_PATH}"
     ${MCF5307_NIM_FLAGS}
     --nimMainPrefix:mcf5307_
     "--header:${MCF5307_NIM_HEADER}"
