@@ -7,6 +7,15 @@
 
 import std/atomics
 import system/ansi_c
+# The core submodules. The entry module imports them so that the compiler
+# compiles them into this library; it never names their symbols itself. The
+# `UnusedImport` warning is therefore expected and is masked. The exported
+# `mcf5307_*` state functions the submodules carry are reached from C by name
+# (see `include/mcf5307.h` and `tests/abi_smoke.cpp`).
+{.push warning[UnusedImport]: off.}
+import mcf5307/decode
+import mcf5307/ea
+{.pop.}
 
 # ---------------------------------------------------------------------------
 # The pragma set of every symbol this project publishes.
