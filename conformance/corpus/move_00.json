@@ -1,0 +1,153 @@
+{
+  "binutils": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cases": [
+    {
+      "encoding": [
+        "2200"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 1
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 1,
+          "d1": 2
+        }
+      },
+      "instruction": "move.l %d0,%d1",
+      "mnemonic": "move.l",
+      "name": "move_l_d0_to_d1"
+    },
+    {
+      "encoding": [
+        "2248"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "a1": 4096
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a0": 4096,
+          "a1": 0
+        }
+      },
+      "instruction": "move.l %a0,%a1",
+      "mnemonic": "move.l",
+      "name": "move_l_a0_to_a1"
+    },
+    {
+      "encoding": [
+        "203c",
+        "1234",
+        "5678"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {}
+      },
+      "instruction": "move.l #0x12345678,%d0",
+      "mnemonic": "move.l",
+      "name": "move_l_imm_to_d0"
+    },
+    {
+      "encoding": [
+        "7005"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 5
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 0
+        }
+      },
+      "instruction": "moveq #5,%d0",
+      "mnemonic": "moveq",
+      "name": "moveq_5_to_d0"
+    },
+    {
+      "encoding": [
+        "43e8",
+        "0004"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "a1": 4100
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a0": 4096,
+          "a1": 0
+        }
+      },
+      "instruction": "lea (4,%a0),%a1",
+      "mnemonic": "lea",
+      "name": "lea_4_a0_to_a1"
+    },
+    {
+      "encoding": [
+        "3200"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 4660
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 4660,
+          "d1": 0
+        }
+      },
+      "instruction": "move.w %d0,%d1",
+      "mnemonic": "move.w",
+      "name": "move_w_d0_to_d1"
+    },
+    {
+      "encoding": [
+        "1200"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 52
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 4660,
+          "d1": 0
+        }
+      },
+      "instruction": "move.b %d0,%d1",
+      "mnemonic": "move.b",
+      "name": "move_b_d0_to_d1"
+    }
+  ],
+  "format": 1,
+  "group": "move"
+}

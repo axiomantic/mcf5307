@@ -1,0 +1,170 @@
+{
+  "binutils": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cases": [
+    {
+      "encoding": [
+        "c280"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 3840
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 3855,
+          "d1": 65280
+        }
+      },
+      "instruction": "and.l %d0,%d1",
+      "mnemonic": "and.l",
+      "name": "and_l_d0_d1"
+    },
+    {
+      "encoding": [
+        "8280"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 257
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 1,
+          "d1": 256
+        }
+      },
+      "instruction": "or.l %d0,%d1",
+      "mnemonic": "or.l",
+      "name": "or_l_d0_d1"
+    },
+    {
+      "encoding": [
+        "b181"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 4080
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 255,
+          "d1": 3855
+        }
+      },
+      "instruction": "eor.l %d0,%d1",
+      "mnemonic": "eor.l",
+      "name": "eor_l_d0_d1"
+    },
+    {
+      "encoding": [
+        "4680"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 4294967280
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 15
+        }
+      },
+      "instruction": "not.l %d0",
+      "mnemonic": "not.l",
+      "name": "not_l_d0"
+    },
+    {
+      "encoding": [
+        "e380"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 536870922
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 268435461
+        }
+      },
+      "instruction": "asl.l #1,%d0",
+      "mnemonic": "asl.l",
+      "name": "asl_l_1_d0"
+    },
+    {
+      "encoding": [
+        "e589"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 4
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d1": 1
+        }
+      },
+      "instruction": "lsl.l #2,%d1",
+      "mnemonic": "lsl.l",
+      "name": "lsl_l_2_d1"
+    },
+    {
+      "encoding": [
+        "e280"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 3221225476
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 2147483656
+        }
+      },
+      "instruction": "asr.l #1,%d0",
+      "mnemonic": "asr.l",
+      "name": "asr_l_1_d0"
+    },
+    {
+      "encoding": [
+        "e289"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 1073741824
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d1": 2147483648
+        }
+      },
+      "instruction": "lsr.l #1,%d1",
+      "mnemonic": "lsr.l",
+      "name": "lsr_l_1_d1"
+    }
+  ],
+  "format": 1,
+  "group": "logic"
+}
