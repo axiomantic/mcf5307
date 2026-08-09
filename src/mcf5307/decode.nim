@@ -23,6 +23,12 @@
 
 import mcf5307/ea
 
+# NOTE: A future commit should extract the shared types (Operation, Decoded,
+# MCF5307Ctx) from this module into a new mcf5307/decode_types.nim. This
+# breaks the decode.nim <-> move.nim module cycle that the current import
+# at line 236 only partially resolves. See the AGENTS.md section "Module
+# Cycle Prevention" in the spellbook repo for the full plan.
+
 # Import the instruction-group executor modules at the TOP so the symbols
 # they export (moveFamily, aluFamily, etc.) are visible to every function in
 # this module. The cycle (move <-> decode) is broken because by the time
@@ -54,19 +60,7 @@ type
 # design (design section 5.6, CPU-19) requires that allocation happen ONLY
 # inside `mcf5307_create`, never inside `mcf5307_exec`.
 
-type
-  MCF5307Ctx* = ref object
-    user*: pointer
-    readFn*: Mcf5307ReadFn
-    writeFn*: Mcf5307WriteFn
-    iackFn*: Mcf5307IackFn
-    pc*: uint32     ## the program counter
-    sp*: uint32     ## the single A7 - no supervisor/user split
-    sr*: uint32     ## the status register (kept 32-bit, low 16 meaningful)
-    dRegs*: array[8, uint32]  ## d0..d7 - the register file lands with CPU-7
-    aRegs*: array[7, uint32]  ## a0..a6; a7 is the single stack pointer `sp`
-    halted*: bool   ## set when execution must stop this cycle budget
-    fault*: bool    ## set on a firmware fault / illegal instruction
+
 
 
 # ---------------------------------------------------------------------------
@@ -93,13 +87,7 @@ type
     opLink        ## LINK An,#<d16>
     opUnlk        ## UNLK An
 
-  Decoded* = ref object
-    op*: Operation
-    ea*: EA            ## the instruction's effective address
-    size*: uint8       ## operand size in bytes: 1, 2 or 4 (0 when absent)
-    destReg*: uint8    ## destination register (MOVE/MOVEA/MOVEQ/LEA/LINK/UNLK)
-    destMode*: uint8   ## destination mode for MOVE (0=Dn, 1=An, else memory)
-    memDir*: bool      ## MOVEM: false registers->memory, true memory->registers
+
 
 proc decodeWord*(word: uint16): Decoded =
   ## Decode one 16-bit instruction word into its operation and effective
