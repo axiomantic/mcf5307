@@ -25,23 +25,13 @@
 //
 // THE ONE REGISTER BRIDGE. The corpus contract (conformance/generate.py,
 // CPU-4) requires the runner to set the `initial` registers and read back the
-// `expected` registers. The C ABI in `include/mcf5307.h` — which is owned by
-// CPU-0 and reviewed as one file — provides no register accessor, and the
-// core's data and address register file does not exist yet: it lands with the
-// instruction-group tasks CPU-7..10, whose semantics this runner replays.
-// `cmake/Nim.cmake` step 4a fails the configure step over any symbol the
-// shared object exports that the contract does not declare, so a register
-// accessor can be added only by a task that owns the contract (CPU-0) and the
-// register file (CPU-7..10). THIS SECTION IS THE RUNNER'S SINGLE INTEGRATION
-// POINT FOR THAT ACCESS. It isolates the one thing the harness needs that the
-// contract does not yet promise, so that when the access is provided, exactly
-// this section changes and nothing else.
-//
-// Until a register bridge exists, a case that carries an `initial` register
-// or an `expected` register reports a precise, named failure rather than a
-// silent pass. A case that carries neither (the seed `control` `nop`) runs
-// and passes when the core returns a non-zero cycle count. That keeps the
-// harness honest: it reports exactly what it can and cannot observe.
+// `expected` registers. CPU-7 added the register file to the core and the two
+// accessors `mcf5307_set_reg`/`mcf5307_get_reg` to the contract
+// (`include/mcf5307.h`), and the two bodies below are that wiring. THIS
+// SECTION IS THE RUNNER'S SINGLE INTEGRATION POINT FOR REGISTER ACCESS: it
+// isolates the one thing the harness needs that the contract's lifecycle
+// calls do not promise, so that a later change to the access touches exactly
+// this section and nothing else.
 //
 // Clean-room note (AGENTS.md section 4.2): none of this is copied from any
 // GPL or LGPL implementation. The JSON parse is a small hand-written
@@ -494,22 +484,46 @@ extern "C" void boardIack(void* user, int level, uint8_t vector) {
 // (orifies the state block into a register profile) replaces the two bodies
 // below and nothing else.
 
-const char* registerBridgeError = "no register bridge";
+std::string registerBridgeError = "no register bridge";
+
+// The one mapping between a corpus register name and the ABI's integer
+// index: 0..7 = d0..d7, 8..15 = a0..a7, 16 = sr, 17 = pc.
+int registerIndex(const std::string& name) {
+  if (name.size() == 2 && (name[0] == 'd' || name[0] == 'a') &&
+      name[1] >= '0' && name[1] <= '7') {
+    return (name[0] == 'd' ? 0 : 8) + (name[1] - '0');
+  }
+  if (name == "sr") return 16;
+  if (name == "pc") return 17;
+  return -1;
+}
 
 bool coreWriteReg(mcf5307_ctx* ctx, const std::string& name, uint32_t value) {
-  (void)ctx; (void)name; (void)value;
-  registerBridgeError = "core register access is not part of the C ABI yet "
-                        "(include/mcf5307.h, CPU-0) and the register file is "
-                        "not in the core yet (CPU-7..10)";
-  return false;
+  const int idx = registerIndex(name);
+  if (idx < 0) {
+    registerBridgeError = "no register named '" + name + "'";
+    return false;
+  }
+  if (idx > 16) {  // pc is set through mcf5307_reset, not through the bridge
+    registerBridgeError = "cannot set '" + name + "' through the bridge";
+    return false;
+  }
+  if (mcf5307_set_reg(ctx, idx, value) == 0) {
+    registerBridgeError =
+        "mcf5307_set_reg refused index " + std::to_string(idx);
+    return false;
+  }
+  return true;
 }
 
 bool coreReadReg(mcf5307_ctx* ctx, const std::string& name, uint32_t& out) {
-  (void)ctx; (void)name; (void)out;
-  registerBridgeError = "core register access is not part of the C ABI yet "
-                        "(include/mcf5307.h, CPU-0) and the register file is "
-                        "not in the core yet (CPU-7..10)";
-  return false;
+  const int idx = registerIndex(name);
+  if (idx < 0) {
+    registerBridgeError = "no register named '" + name + "'";
+    return false;
+  }
+  out = mcf5307_get_reg(ctx, idx);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -594,6 +608,23 @@ CaseRun runCase(const Case& cs) {
       out.ok = false;
       out.mismatchReg = r.first;
       out.expectedValue = r.second;
+      out.actualValue = actual;
+      mcf5307_destroy(ctx);
+      return out;
+    }
+  }
+
+  // The expected memory writes. Each entry is compared against the board
+  // after the exec, so a case whose effect is a store (MOVE to memory,
+  // MOVEM, PEA, LINK) is verified rather than read as a register-only case.
+  for (const auto& w : cs.expectedMem) {
+    const uint32_t actual = board.read(w.addr, w.size);
+    if (actual != w.value) {
+      out.ran = true;
+      out.ok = false;
+      out.mismatchReg =
+          "mem[" + std::to_string(w.addr) + ":" + std::to_string(w.size) + "]";
+      out.expectedValue = w.value;
       out.actualValue = actual;
       mcf5307_destroy(ctx);
       return out;

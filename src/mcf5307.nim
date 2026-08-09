@@ -15,6 +15,7 @@ import system/ansi_c
 {.push warning[UnusedImport]: off.}
 import mcf5307/decode
 import mcf5307/ea
+import mcf5307/move
 {.pop.}
 
 # ---------------------------------------------------------------------------

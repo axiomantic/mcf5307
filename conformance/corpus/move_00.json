@@ -146,6 +146,323 @@
       "instruction": "move.b %d0,%d1",
       "mnemonic": "move.b",
       "name": "move_b_d0_to_d1"
+    },
+    {
+      "encoding": [
+        "2029",
+        "0004"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 516,
+            "size": 4,
+            "value": 305419896
+          }
+        ],
+        "regs": {
+          "a1": 512,
+          "d0": 0
+        }
+      },
+      "instruction": "move.l (4,%a1),%d0",
+      "mnemonic": "move.l",
+      "name": "move_l_mem_to_d0"
+    },
+    {
+      "encoding": [
+        "2340",
+        "0004"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 516,
+            "size": 4,
+            "value": 3735928559
+          }
+        ],
+        "regs": {}
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a1": 512,
+          "d0": 3735928559
+        }
+      },
+      "instruction": "move.l %d0,(4,%a1)",
+      "mnemonic": "move.l",
+      "name": "move_l_d0_to_mem"
+    },
+    {
+      "encoding": [
+        "1210"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 171
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 768,
+            "size": 1,
+            "value": 171
+          }
+        ],
+        "regs": {
+          "a0": 768,
+          "d1": 0
+        }
+      },
+      "instruction": "move.b (0,%a0),%d1",
+      "mnemonic": "move.b",
+      "name": "move_b_mem_to_d1"
+    },
+    {
+      "encoding": [
+        "307c",
+        "8000"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "a0": 4294934528
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a0": 0
+        }
+      },
+      "instruction": "movea.w #0x8000,%a0",
+      "mnemonic": "movea.w",
+      "name": "movea_w_imm_signext"
+    },
+    {
+      "encoding": [
+        "3240"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "a1": 4660
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a1": 0,
+          "d0": 4660
+        }
+      },
+      "instruction": "movea.w %d0,%a1",
+      "mnemonic": "movea.w",
+      "name": "movea_w_d0_signext"
+    },
+    {
+      "encoding": [
+        "76ff"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d3": -1
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d3": 0
+        }
+      },
+      "instruction": "moveq #-1,%d3",
+      "mnemonic": "moveq",
+      "name": "moveq_neg1_to_d3"
+    },
+    {
+      "encoding": [
+        "48d1",
+        "000f"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 768,
+            "size": 4,
+            "value": 286331153
+          },
+          {
+            "addr": 772,
+            "size": 4,
+            "value": 572662306
+          },
+          {
+            "addr": 776,
+            "size": 4,
+            "value": 858993459
+          },
+          {
+            "addr": 780,
+            "size": 4,
+            "value": 1145324612
+          }
+        ],
+        "regs": {}
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a1": 768,
+          "d0": 286331153,
+          "d1": 572662306,
+          "d2": 858993459,
+          "d3": 1145324612
+        }
+      },
+      "instruction": "movem.l %d0-%d3,(%a1)",
+      "mnemonic": "movem.l",
+      "name": "movem_l_d0_d3_to_mem"
+    },
+    {
+      "encoding": [
+        "4cd1",
+        "0f00"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "a0": 1431655765,
+          "a1": 1717986918,
+          "a2": 2004318071,
+          "a3": 2290649224
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 768,
+            "size": 4,
+            "value": 1431655765
+          },
+          {
+            "addr": 772,
+            "size": 4,
+            "value": 1717986918
+          },
+          {
+            "addr": 776,
+            "size": 4,
+            "value": 2004318071
+          },
+          {
+            "addr": 780,
+            "size": 4,
+            "value": 2290649224
+          }
+        ],
+        "regs": {
+          "a1": 768
+        }
+      },
+      "instruction": "movem.l (%a1),%a0-%a3",
+      "mnemonic": "movem.l",
+      "name": "movem_l_mem_to_a0_a3"
+    },
+    {
+      "encoding": [
+        "4868",
+        "0004"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 4092,
+            "size": 4,
+            "value": 1028
+          }
+        ],
+        "regs": {
+          "a7": 4092
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a0": 1024,
+          "a7": 4096
+        }
+      },
+      "instruction": "pea (4,%a0)",
+      "mnemonic": "pea",
+      "name": "pea_4_a0"
+    },
+    {
+      "encoding": [
+        "4e55",
+        "fff8"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 4092,
+            "size": 4,
+            "value": 1280
+          }
+        ],
+        "regs": {
+          "a5": 4092,
+          "a7": 4084
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a5": 1280,
+          "a7": 4096
+        }
+      },
+      "instruction": "link %a5,#-8",
+      "mnemonic": "link",
+      "name": "link_a5_neg8"
+    },
+    {
+      "encoding": [
+        "4e5d"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "a5": 1280,
+          "a7": 4096
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 4092,
+            "size": 4,
+            "value": 1280
+          }
+        ],
+        "regs": {
+          "a5": 4092,
+          "a7": 4084
+        }
+      },
+      "instruction": "unlk %a5",
+      "mnemonic": "unlk",
+      "name": "unlk_a5"
     }
   ],
   "format": 1,

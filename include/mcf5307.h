@@ -96,6 +96,23 @@ void mcf5307_reset(mcf5307_ctx* ctx, uint32_t initial_sp, uint32_t initial_pc);
 /* Runs at most `max_cycles` cycles and returns the cycles actually spent. */
 uint32_t mcf5307_exec(mcf5307_ctx* ctx, uint32_t max_cycles);
 
+/* The register file, indexed by one integer:
+ *
+ *     0..7   d0..d7
+ *     8..15  a0..a7   (a7 is the single stack pointer - there is no
+ *                      supervisor and user stack split on ISA_A)
+ *     16     the status register (low 16 bits meaningful)
+ *     17     the program counter (read-only through this call)
+ *
+ * `mcf5307_set_reg` returns 1 on success and 0 for an out-of-range index or
+ * a nil context; `mcf5307_get_reg` returns the register's value and 0 for an
+ * out-of-range index. These are the harness's one register bridge: the
+ * conformance runner (CPU-5) sets the `initial` registers through them and
+ * reads the `expected` registers back. The core's instruction groups
+ * (CPU-7..10) own the register file this accessor exposes. */
+int mcf5307_set_reg(mcf5307_ctx* ctx, int index, uint32_t value);
+uint32_t mcf5307_get_reg(const mcf5307_ctx* ctx, int index);
+
 /* The named zero of the `level` argument below: no interrupt is pending. */
 #define MCF5307_IRQ_NONE 0
 
