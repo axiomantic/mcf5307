@@ -1,0 +1,60 @@
+## Shared types for the mcf5307 instruction-group modules.
+##
+## This module exists to break a module cycle between `decode.nim` and the
+## instruction-group executor modules (`move.nim`, `alu.nim`, `logic.nim`,
+## `control.nim`). The cycle was: decode.nim needs the executor functions,
+## and the executors need the types decode.nim defines. Putting the shared
+## types in a third module lets both sides import without a cycle.
+##
+## CPU-7 created this file (WIP at 10f211e had the cycle unfixed). The fix
+## is mechanical: move the type definitions from `decode.nim` here, then have
+## both `decode.nim` and the executor modules import from here.
+
+import mcf5307/ea
+
+type
+  Mcf5307BusStatus* {.size: sizeof(cint), pure.} = enum
+    busOk,
+    busSizeIllegal,
+    busAddressError
+
+  Operation* {.pure.} = enum
+    opNop
+    opMove, opMovea, opMoveq, opMovem
+    opLea, opPea
+    opLink, opUnlk
+    opAddq, opSubq
+    opAdd, opSub, opAdda, opSuba
+    opAddi, opSubi
+    opClr, opExt, opNeg
+    opMulu, opMuls, opDivu, opDivs
+    opAnd, opOr, opExg
+    opNot, opSwap, opTst
+    opBtst, opBchg, opBclr, opBset
+    opTas, opNbcd
+    opScc
+    opBcc, opBra
+    opIllegal
+
+  Decoded* = ref object
+    op*: Operation
+    ea*: EA
+    size*: uint8
+    destReg*: uint8
+    destMode*: uint8
+    memDir*: bool
+
+  MCF5307Ctx* = ref object
+    user*: pointer
+    readFn*: proc(user: pointer; address: uint32; size: cint;
+                  status: ptr Mcf5307BusStatus): uint32 {.cdecl.}
+    writeFn*: proc(user: pointer; address: uint32; size: cint;
+                   value: uint32; status: ptr Mcf5307BusStatus): uint32 {.cdecl.}
+    iackFn*: proc(user: pointer; level: cint; vector: uint8) {.cdecl.}
+    pc*: uint32
+    sp*: uint32
+    sr*: uint32
+    dRegs*: array[8, uint32]
+    aRegs*: array[7, uint32]
+    halted*: bool
+    fault*: bool
