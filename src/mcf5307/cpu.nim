@@ -45,6 +45,7 @@ import mcf5307/decode_types
 import mcf5307/decode
 import mcf5307/move
 import mcf5307/alu
+import mcf5307/logic
 
 # ---------------------------------------------------------------------------
 # The instruction-cycle costs.
@@ -143,18 +144,27 @@ proc step(ctx: MCF5307Ctx): uint32 =
     # instruction and halts the context with `fault` on an illegal size, an
     # illegal effective address or a divide by zero.
     result = fetchCycles + aluFamily(ctx, opWord, decoded)
-  of opAnd, opOr, opExg,
-     opNot, opSwap, opTst,
+  of opAnd, opOr, opEor,
+     opAndi, opOri, opEori,
+     opNot,
      opBtst, opBchg, opBclr, opBset,
+     opAsl, opAsr, opLsl, opLsr:
+    # The logic, bit-operation and shift group (CPU-9). `logicFamily` executes
+    # the instruction and halts the context with `fault` on an illegal size or
+    # an illegal effective address - a memory shift, a byte or word form of
+    # anything in the group, and a bit operation whose static form names an
+    # operand only the dynamic form may reach.
+    result = fetchCycles + logicFamily(ctx, opWord, decoded)
+  of opExg, opSwap, opTst,
      opTas, opNbcd,
      opScc,
      opBcc, opBra:
     # The `Operation` enum names every opcode the later instruction-group
     # tasks decode. Their execution semantics arrive with those tasks
-    # (CPU-9 and CPU-10), which add one executor import and one arm above.
-    # Until then exec halts rather than pretend to have executed them.
-    # `halted` is set and `fault` is not, because the encoding is valid and
-    # only the semantics are absent.
+    # (CPU-10), which add one executor import and one arm above. Until then
+    # exec halts rather than pretend to have executed them. `halted` is set
+    # and `fault` is not, because the encoding is valid and only the
+    # semantics are absent.
     ctx.halted = true
     result = 0
   of opIllegal:
