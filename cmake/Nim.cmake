@@ -1580,6 +1580,23 @@ message(STATUS
 # a failure.
 #
 # `tests/abi_stub.c` belongs to CPU-0. It is read here and never written here.
+#
+# WHICH FATAL BRANCHES OF THIS PART A CONTROL ENTERS, AND WHICH IT DOES NOT.
+# Controls E through I below drive the branches that depend on a MEASUREMENT -
+# the reader, the three verdict categories, the unpublished-export answer, the
+# internal-linkage route and the compile-fault split - because a measurement
+# can be wrong while the run stays green, and those are the branches that then
+# never fire. THREE BRANCHES BELOW HAVE NO CONTROL AND ARE NOT CLAIMED TO:
+#
+#   the stub source does not exist;
+#   the compiler rejected the stub for a fault of the stub's own;
+#   the compiler exited 0 and wrote no object.
+#
+# Each is a direct test of a condition this file did not compute - `EXISTS`, an
+# exit status, `EXISTS` again - so there is no reading in between for a control
+# to calibrate. THE POINT OF SAYING SO IS THAT NOTHING HERE CLAIMS OTHERWISE. A
+# blanket sentence about every fatal branch being covered would be a sixth
+# instance of the defect this part keeps being corrected for.
 
 if(NOT EXISTS "${MCF5307_ABI_STUB_FILE}")
     message(FATAL_ERROR
@@ -1624,11 +1641,128 @@ void mcf5307_abi_stub_probe_external(void) {}
 __attribute__((used)) static void mcf5307_abi_stub_probe_internal(void) {}
 ]==])
 
-# The two probe names are this file's own instrument in that object. They are
-# allowed there and nowhere else, and control G below is what holds the
-# unpublished-export check against the published set alone.
+# The two probe names are this file's own instrument in that object. The
+# unpublished-export check below EXEMPTS them, and an exemption is a hole
+# unless something closes it.
+#
+# WHAT CLOSES IT IS THE COMPILER, NOT A CONTROL. This comment used to say that
+# control G holds that check against the published set alone, so the exemption
+# cost nothing. IT DOES NOT: control G's own comment says the opposite in
+# capitals and gives the reason - held against the published set alone, a real
+# unpublished export would trip THE CONTROL instead of the check. So the
+# exemption is not covered there and never was.
+#
+# It is safe for a different reason, and the reason is measurable: THE PROBE
+# HEADER ABOVE DEFINES BOTH NAMES, so a stub that defines either one is
+# `error: redefinition` and the compile below exits non-zero. No verdict runs
+# on that translation unit at all, so there is no set for the exemption to hide
+# a name in. CONTROL I BELOW COMPILES THAT COLLISION AND ASSERTS IT.
 set(MCF5307_ABI_STUB_INSTRUMENT
     mcf5307_abi_stub_probe_external mcf5307_abi_stub_probe_internal)
+
+# ---------------------------------------------------------------------------
+# TWO FAULTS MUST NEVER SHARE A LINE, AND THE PROBE INJECTION GAVE THIS COMPILE
+# A SECOND ONE. `tests/abi_stub.c` is compiled here with `-include` of a header
+# THIS FILE GENERATES, so the compile can now fail for a fault that is not the
+# stub's: a stub name that collides with a probe name. Measured, the message
+# for that was `tests/abi_stub.c did not compile` - about a file that compiles
+# clean under the registered test's own `-Wall -Wextra -pedantic -Werror`, exit
+# 0. That is the rule stated where `hidden` is kept apart from `not implemented
+# yet`, broken by the instrument that was added to close a different hole.
+#
+# THE TWO ARE SEPARATED BY THE ONE THING THAT DISTINGUISHES THEM: whether the
+# compiler's own diagnostics name the generated probe header. `string(FIND)` is
+# literal, so a path with regex characters in it is still matched as a path.
+function(mcf5307_abi_stub_collided mcf5307_col_out mcf5307_col_text)
+    string(FIND "${mcf5307_col_text}" "${MCF5307_ABI_STUB_PROBE_SOURCE}"
+        mcf5307_col_at)
+    if(mcf5307_col_at EQUAL -1)
+        set(${mcf5307_col_out} FALSE PARENT_SCOPE)
+    else()
+        set(${mcf5307_col_out} TRUE PARENT_SCOPE)
+    endif()
+endfunction()
+
+# ---------------------------------------------------------------------------
+# Control I. THE COMPILE-FAULT SPLIT, RUN ON EVERY CONFIGURE RUN.
+#
+# IT RUNS BEFORE THE COMPILE IT CALIBRATES, unlike controls E through H, which
+# read an artifact that already exists. The branch this one feeds fires the
+# instant the real compile fails, so a calibration placed after it would be a
+# calibration the failing run never reaches.
+#
+# IT HAS TWO ARMS AND NEEDS BOTH. An arm that only proves a collision is
+# detected is passed by a predicate that answers TRUE always - and such a
+# predicate would report EVERY genuine stub fault as an instrument collision,
+# which is the same two-faults defect pointing the other way.
+function(mcf5307_abi_stub_compile_probe mcf5307_cp_out_result
+        mcf5307_cp_out_collided mcf5307_cp_name mcf5307_cp_text)
+    set(mcf5307_cp_src "${MCF5307_ABI_DIR}/${mcf5307_cp_name}.c")
+    file(WRITE "${mcf5307_cp_src}" "${mcf5307_cp_text}")
+    execute_process(
+        COMMAND "${CMAKE_C_COMPILER}"
+                -std=c11
+                "-I${PROJECT_SOURCE_DIR}/include"
+                "-include" "${MCF5307_ABI_STUB_PROBE_SOURCE}"
+                -c
+                -o "${MCF5307_ABI_DIR}/${mcf5307_cp_name}${CMAKE_C_OUTPUT_EXTENSION}"
+                "${mcf5307_cp_src}"
+        OUTPUT_VARIABLE mcf5307_cp_stdout
+        ERROR_VARIABLE mcf5307_cp_stderr
+        RESULT_VARIABLE mcf5307_cp_result)
+    mcf5307_abi_stub_collided(mcf5307_cp_collided
+        "${mcf5307_cp_stdout}${mcf5307_cp_stderr}")
+    set(${mcf5307_cp_out_result} "${mcf5307_cp_result}" PARENT_SCOPE)
+    set(${mcf5307_cp_out_collided} "${mcf5307_cp_collided}" PARENT_SCOPE)
+endfunction()
+
+# Arm one. A stub that reuses a probe name. This is the shape the exemption
+# above would otherwise leave uncovered.
+mcf5307_abi_stub_compile_probe(MCF5307_ABI_STUB_COLLIDE_RESULT
+    MCF5307_ABI_STUB_COLLIDE_COLLIDED collide_probe
+    "#include \"mcf5307.h\"\nvoid mcf5307_abi_stub_probe_external(void) {}\n")
+
+if(MCF5307_ABI_STUB_COLLIDE_RESULT EQUAL 0
+        OR NOT MCF5307_ABI_STUB_COLLIDE_COLLIDED)
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: control I: a translation unit that redefines "
+        "`mcf5307_abi_stub_probe_external` was not reported as an instrument "
+        "collision.\n"
+        "  exit     : ${MCF5307_ABI_STUB_COLLIDE_RESULT}\n"
+        "  collided : ${MCF5307_ABI_STUB_COLLIDE_COLLIDED}\n"
+        "  probe    : ${MCF5307_ABI_STUB_PROBE_SOURCE}\n"
+        "EXIT 0 means the probe header no longer defines that name, and the "
+        "unpublished-export check below then EXEMPTS a name a stub can really "
+        "define - the exemption's whole cover is that no such unit compiles. "
+        "COLLIDED FALSE means the compile failed and this step would blame "
+        "`${MCF5307_ABI_STUB_FILE}` for a fault belonging to a header this "
+        "file generated.")
+endif()
+
+# Arm two. An ordinary fault in the stub, with no probe name anywhere in it.
+mcf5307_abi_stub_compile_probe(MCF5307_ABI_STUB_OWNFAULT_RESULT
+    MCF5307_ABI_STUB_OWNFAULT_COLLIDED ownfault_probe
+    "#include \"mcf5307.h\"\nvoid mcf5307_abi_stub_own_fault(void) { ? }\n")
+
+if(MCF5307_ABI_STUB_OWNFAULT_RESULT EQUAL 0
+        OR MCF5307_ABI_STUB_OWNFAULT_COLLIDED)
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: control I: a translation unit whose only "
+        "fault is its own was reported as an instrument collision.\n"
+        "  exit     : ${MCF5307_ABI_STUB_OWNFAULT_RESULT}\n"
+        "  collided : ${MCF5307_ABI_STUB_OWNFAULT_COLLIDED}\n"
+        "  probe    : ${MCF5307_ABI_STUB_PROBE_SOURCE}\n"
+        "EXIT 0 means a unit this file wrote to be rejected was accepted, so "
+        "arm one's failure proves nothing about failing compiles. COLLIDED "
+        "TRUE means the split answers `collision` for everything, and a real "
+        "syntax error in ${MCF5307_ABI_STUB_FILE} would be reported as this "
+        "step's own instrument getting in the way - the same two faults on one "
+        "line, pointing the other way.")
+endif()
+
+message(STATUS
+    "mcf5307: step 4a control I the compile-fault split told an instrument "
+    "collision from a fault of the stub's own")
 
 # The object of an earlier configure run is REMOVED BEFORE THE COMPILE, for
 # the reason every driver in `tests/tests_cpu.cmake` records: without it a
@@ -1653,6 +1787,32 @@ if(NOT MCF5307_ABI_STUB_COMPILE_RESULT EQUAL 0)
         "${MCF5307_ABI_STUB_COMPILE_OUTPUT}" 2000)
     mcf5307_clip(MCF5307_ABI_STUB_COMPILE_ERROR_HEAD
         "${MCF5307_ABI_STUB_COMPILE_ERROR}" 2000)
+    mcf5307_abi_stub_collided(MCF5307_ABI_STUB_COMPILE_COLLIDED
+        "${MCF5307_ABI_STUB_COMPILE_OUTPUT}${MCF5307_ABI_STUB_COMPILE_ERROR}")
+endif()
+
+if(NOT MCF5307_ABI_STUB_COMPILE_RESULT EQUAL 0
+        AND MCF5307_ABI_STUB_COMPILE_COLLIDED)
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: ${MCF5307_ABI_STUB_FILE} collides with a "
+        "name THIS STEP injected into it.\n"
+        "  compiler : ${CMAKE_C_COMPILER}\n"
+        "  injected : ${MCF5307_ABI_STUB_PROBE_SOURCE}\n"
+        "  names    : ${MCF5307_ABI_STUB_INSTRUMENT}\n"
+        "  exit     : ${MCF5307_ABI_STUB_COMPILE_RESULT}\n"
+        "  stdout   : ${MCF5307_ABI_STUB_COMPILE_OUTPUT_HEAD}\n"
+        "  stderr   : ${MCF5307_ABI_STUB_COMPILE_ERROR_HEAD}\n"
+        "THIS IS NOT A FAULT IN THAT FILE. The compile above carries "
+        "`-include` of a header this file generates, and the diagnostics name "
+        "it. That same file may compile clean under the registered test "
+        "`t0_abi_header`, which uses `-Wall -Wextra -pedantic -Werror` and no "
+        "`-include`. This step still cannot measure it, because the "
+        "translation unit it would measure does not exist. Rename the stub's "
+        "name, or rename the probe: the probe names are this step's own and "
+        "the published set has no claim on either of them.")
+endif()
+
+if(NOT MCF5307_ABI_STUB_COMPILE_RESULT EQUAL 0)
     message(FATAL_ERROR
         "mcf5307: step 4a failed: ${MCF5307_ABI_STUB_FILE} did not compile.\n"
         "  compiler : ${CMAKE_C_COMPILER}\n"
@@ -1841,26 +2001,16 @@ endfunction()
 # ---------------------------------------------------------------------------
 # Control F. EVERY CATEGORY OF THE VERDICT, ENTERED ON EVERY CONFIGURE RUN.
 #
-# `MCF5307_ABI_STUB_INTERNAL` IS REACHABLE AND WAS NEVER REACHED. The obvious
-# route does not reach it: `static void mcf5307_destroy(mcf5307_ctx*)` after
-# the contract include is `static declaration ... follows non-static
-# declaration`, so the COMPILE STEP above stops first with a message of its
-# own; and `__attribute__((visibility("hidden")))` on a published name leaves
-# `T` in both `nm` passes, so that name is external and this category never
-# sees it. Two routes DO reach it, and both compile:
+# Two of the three categories are ones this project's own source is not
+# expected to produce, so without this control the two fatal branches below are
+# never entered on an ordinary run. THE PROBES GO THROUGH THE SAME FUNCTION AND
+# THE SAME MEASURED SETS AS THE PUBLISHED SET, and the expected answer is
+# written out here, so a classifier that lost an arm cannot produce it.
 #
-#   A `static` definition of a published name placed ABOVE the contract
-#   include. C11 6.2.2p4 gives the later `extern` declaration the internal
-#   linkage of the prior one, and the object holds `t <name>` - in the `all`
-#   pass, absent from the `-g` pass.
-#
-#   An `__asm__` label on a `static` helper that names a published symbol.
-#   Same object, same two passes, same answer.
-#
-# So the branch stays, and this control enters its category rather than
-# hoping. THE PROBES GO THROUGH THE SAME FUNCTION AND THE SAME MEASURED SETS
-# AS THE PUBLISHED SET, and the expected answer is written out here, so a
-# classifier that lost an arm cannot produce it.
+# THIS CONTROL COVERS THE CLASSIFIER AND NOT THE C. It proves the internal arm
+# sorts a name the reader reported as internal-defined. It says NOTHING about
+# what C source makes a compiler produce such a name, and a claim about that is
+# a claim about a compiler. CONTROL H BELOW COMPILES ONE AND MEASURES IT.
 mcf5307_abi_stub_classify(MCF5307_ABI_STUB_PROBE_LINKABLE
     MCF5307_ABI_STUB_PROBE_INTERNAL MCF5307_ABI_STUB_PROBE_ABSENT
     mcf5307_abi_stub_probe_external
@@ -1946,6 +2096,230 @@ message(STATUS
     "its probe on ${MCF5307_ABI_STUB_OBJECT}")
 
 # ---------------------------------------------------------------------------
+# Control H. THE INTERNAL BRANCH'S OWN ROUTE, COMPILED ON EVERY CONFIGURE RUN.
+#
+# A SENTENCE ABOUT WHAT A COMPILER DOES IS A MEASUREMENT AND NOT A FACT, and
+# this comment used to be a sentence. It said that a `static` definition of a
+# published name placed ABOVE the contract include makes the object hold
+# `t <name>`, and that an `__asm__` label on a `static` helper does the same.
+# BOTH WERE WRONG AS WRITTEN, and the object each one produces is BYTE-
+# IDENTICAL to the object produced by deleting the definition outright:
+# `nm` reports the name in NEITHER pass, and the run lands in the ABSENT branch
+# below. The cause is the fact this file already states where the internal
+# probe is written - AN UNREFERENCED `static` FUNCTION IS NOT EMITTED - so the
+# internal linkage is real and the definition is gone before `nm` runs.
+#
+# THE ROUTE IS REAL ONCE THE DEFINITION SURVIVES. Internal linkage plus a
+# reference that keeps the definition alive gives `t <name>` in the `all` pass,
+# absent from the `-g` pass, and that is what the INTERNAL branch below reads.
+# So this control STOPS DESCRIBING THE ROUTE AND COMPILES IT: the source is
+# generated here, the object is read with the same reader, and the name is
+# sorted by the same function that sorts the published set. A route that stops
+# working fails HERE, where the claim is, instead of rotting in a comment.
+#
+# THE TWO NON-ROUTES ARE COMPILED HERE TOO, for the same reason. `hidden`
+# visibility on a published name and `static` AFTER the contract include are
+# both written up as things that do NOT reach this category, and a sentence
+# saying a mutation does not reach a branch rots exactly like a sentence saying
+# it does. Arms two and three below run them. Between the three arms every
+# route this file names is a compile whose answer is asserted, and no route in
+# this comment is only described.
+#
+# THE SCOPE OF THIS MEASUREMENT IS ONE TOOLCHAIN. Every answer above was read
+# from Apple clang 21.0.0 targeting arm64 Mach-O. A different compiler may emit
+# an unreferenced internal definition and reach the branch by the shorter road.
+# That would not falsify anything here: these arms compile their routes and
+# assert the OUTCOME, so a toolchain that gets there another way still passes
+# arm one - and arms two and three would report the change rather than hide it.
+set(MCF5307_ABI_STUB_ROUTE_NAME "mcf5307_runtime_init")
+
+if(NOT "${MCF5307_ABI_STUB_ROUTE_NAME}" IN_LIST MCF5307_ABI_PUBLISHED)
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: control H: `${MCF5307_ABI_STUB_ROUTE_NAME}` "
+        "is not in the published set of ${MCF5307_ABI_CONTRACT_FILE}.\n"
+        "  published : ${MCF5307_ABI_PUBLISHED}\n"
+        "This control drives the INTERNAL branch with a REAL published name, "
+        "because that branch only ever reports one. Control C above states "
+        "that this project publishes at least this name. Point this control at "
+        "a name the contract still declares.")
+endif()
+
+# THE SAME CLASSIFIER, OVER ANOTHER OBJECT'S SETS. `mcf5307_abi_stub_classify`
+# reads the two measured sets out of its CALLING SCOPE, which is what lets the
+# verdict and control F share one reading of one object. This wrapper names its
+# two parameters after those two variables, so inside it they are function-local
+# and the nested call sorts the ROUTE object instead. It is the production
+# classifier that answers here - not a copy of it, and not a restatement of its
+# condition in this comment.
+function(mcf5307_abi_stub_classify_over
+        MCF5307_ABI_STUB_EXTERNAL MCF5307_ABI_STUB_DEFINED
+        mcf5307_over_out_linkable mcf5307_over_out_internal
+        mcf5307_over_out_absent)
+    mcf5307_abi_stub_classify(mcf5307_over_linkable mcf5307_over_internal
+        mcf5307_over_absent ${ARGN})
+    set(${mcf5307_over_out_linkable} "${mcf5307_over_linkable}" PARENT_SCOPE)
+    set(${mcf5307_over_out_internal} "${mcf5307_over_internal}" PARENT_SCOPE)
+    set(${mcf5307_over_out_absent} "${mcf5307_over_absent}" PARENT_SCOPE)
+endfunction()
+
+# One arm. It writes a unit, compiles it the way this step compiles the stub,
+# and answers with THE CATEGORY THE VERDICT WOULD PUT THE ROUTE NAME IN -
+# `REJECTED` when the compiler refused the unit, and otherwise whatever the
+# production classifier says over that object's own measured sets.
+#
+# The units are NEVER LINKED INTO ANYTHING. They are compiled, read and left in
+# the instrument directory, and no target of this project names them.
+function(mcf5307_abi_stub_route_probe mcf5307_rp_out_category
+        mcf5307_rp_out_detail mcf5307_rp_name mcf5307_rp_text)
+    set(mcf5307_rp_src "${MCF5307_ABI_DIR}/${mcf5307_rp_name}.c")
+    set(mcf5307_rp_obj
+        "${MCF5307_ABI_DIR}/${mcf5307_rp_name}${CMAKE_C_OUTPUT_EXTENSION}")
+    file(WRITE "${mcf5307_rp_src}"
+"/* GENERATED by cmake/Nim.cmake step 4a control H. Do not edit this copy in
+ * the build tree. It is compiled and read, and it is linked into nothing. */
+${mcf5307_rp_text}")
+    file(REMOVE "${mcf5307_rp_obj}")
+    execute_process(
+        COMMAND "${CMAKE_C_COMPILER}"
+                -std=c11
+                "-I${PROJECT_SOURCE_DIR}/include"
+                -c
+                -o "${mcf5307_rp_obj}"
+                "${mcf5307_rp_src}"
+        OUTPUT_VARIABLE mcf5307_rp_stdout
+        ERROR_VARIABLE mcf5307_rp_stderr
+        RESULT_VARIABLE mcf5307_rp_result)
+    if(NOT mcf5307_rp_result EQUAL 0 OR NOT EXISTS "${mcf5307_rp_obj}")
+        mcf5307_clip(mcf5307_rp_head "${mcf5307_rp_stderr}" 600)
+        set(${mcf5307_rp_out_category} "REJECTED" PARENT_SCOPE)
+        set(${mcf5307_rp_out_detail} "${mcf5307_rp_head}" PARENT_SCOPE)
+        return()
+    endif()
+    mcf5307_abi_read_symbols(mcf5307_rp_defined_raw mcf5307_rp_external_raw
+        "${mcf5307_rp_obj}")
+    mcf5307_abi_strip(mcf5307_rp_defined ${mcf5307_rp_defined_raw})
+    mcf5307_abi_strip(mcf5307_rp_external ${mcf5307_rp_external_raw})
+    mcf5307_abi_stub_classify_over(
+        "${mcf5307_rp_external}" "${mcf5307_rp_defined}"
+        mcf5307_rp_linkable mcf5307_rp_internal mcf5307_rp_absent
+        "${MCF5307_ABI_STUB_ROUTE_NAME}")
+    if(NOT mcf5307_rp_internal STREQUAL "")
+        set(${mcf5307_rp_out_category} "INTERNAL" PARENT_SCOPE)
+    elseif(NOT mcf5307_rp_linkable STREQUAL "")
+        set(${mcf5307_rp_out_category} "LINKABLE" PARENT_SCOPE)
+    else()
+        set(${mcf5307_rp_out_category} "ABSENT" PARENT_SCOPE)
+    endif()
+    set(${mcf5307_rp_out_detail}
+        "defined: ${mcf5307_rp_defined} | external: ${mcf5307_rp_external}"
+        PARENT_SCOPE)
+endfunction()
+
+# Arm one. THE ROUTE. Internal linkage from a `static` declaration ahead of the
+# contract, and an anchor that keeps the definition from being dropped - which
+# is the half the old comment left out. The anchor is `used` for the reason the
+# probe header gives: without it the anchor goes, the reference goes with it,
+# and the definition goes with that.
+mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_ROUTE_CATEGORY
+    MCF5307_ABI_STUB_ROUTE_DETAIL internal_route
+"static void ${MCF5307_ABI_STUB_ROUTE_NAME}(void);
+
+#include \"mcf5307.h\"
+
+static void ${MCF5307_ABI_STUB_ROUTE_NAME}(void) {}
+
+__attribute__((used)) static void mcf5307_abi_stub_route_anchor(void)
+{
+    ${MCF5307_ABI_STUB_ROUTE_NAME}();
+}
+")
+
+if(NOT MCF5307_ABI_STUB_ROUTE_CATEGORY STREQUAL "INTERNAL")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: control H arm one: the internal-linkage "
+        "route did not reach the INTERNAL category.\n"
+        "  name     : ${MCF5307_ABI_STUB_ROUTE_NAME}\n"
+        "  source   : ${MCF5307_ABI_DIR}/internal_route.c\n"
+        "  expected : INTERNAL\n"
+        "  read     : ${MCF5307_ABI_STUB_ROUTE_CATEGORY}\n"
+        "  detail   : ${MCF5307_ABI_STUB_ROUTE_DETAIL}\n"
+        "  reader   : ${MCF5307_ABI_NM}\n"
+        "READ AS `ABSENT`, the route no longer produces a SURVIVING internal "
+        "definition, and the INTERNAL branch below has no demonstrated way in - "
+        "the state this control exists to end. That is exactly what the route "
+        "does with no anchor: the definition is dropped unreferenced and the "
+        "object matches one that never had it. READ AS `LINKABLE`, the "
+        "`static` ahead of the contract stopped conferring internal linkage, "
+        "and the branch can no longer separate a `static` published definition "
+        "from a linkable one. READ AS `REJECTED`, the compiler refused the "
+        "unit - a changed signature in the contract reads this way too.")
+endif()
+
+# Arm two. NOT A ROUTE, AND MEASURED TO BE ONE. `hidden` visibility keeps
+# EXTERNAL linkage, so the name stays in the `-g` pass and this category never
+# sees it. The shared-object verdict above is where `hidden` is a fault; here
+# it must read LINKABLE, and a run where it reads INTERNAL means the two
+# verdicts have swapped meanings.
+mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_HIDDEN_CATEGORY
+    MCF5307_ABI_STUB_HIDDEN_DETAIL hidden_route
+"#include \"mcf5307.h\"
+
+__attribute__((visibility(\"hidden\"))) void ${MCF5307_ABI_STUB_ROUTE_NAME}(void)
+{
+}
+")
+
+if(NOT MCF5307_ABI_STUB_HIDDEN_CATEGORY STREQUAL "LINKABLE")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: control H arm two: `hidden` visibility on a "
+        "published name did not stay LINKABLE.\n"
+        "  name     : ${MCF5307_ABI_STUB_ROUTE_NAME}\n"
+        "  source   : ${MCF5307_ABI_DIR}/hidden_route.c\n"
+        "  expected : LINKABLE\n"
+        "  read     : ${MCF5307_ABI_STUB_HIDDEN_CATEGORY}\n"
+        "  detail   : ${MCF5307_ABI_STUB_HIDDEN_DETAIL}\n"
+        "Visibility and linkage are different properties, and this step's two "
+        "verdicts each own one of them. A `hidden` name that reads INTERNAL "
+        "here would be reported as a `static` published definition by the "
+        "branch below, which is a different fault with a different fix, and "
+        "the message would send the reader to remove a `static` that is not "
+        "there.")
+endif()
+
+# Arm three. NOT A ROUTE EITHER. `static` AFTER the contract include is a
+# constraint violation, so no object exists to classify and the compile branch
+# far above owns the report.
+mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_LATESTATIC_CATEGORY
+    MCF5307_ABI_STUB_LATESTATIC_DETAIL late_static_route
+"#include \"mcf5307.h\"
+
+static void ${MCF5307_ABI_STUB_ROUTE_NAME}(void)
+{
+}
+")
+
+if(NOT MCF5307_ABI_STUB_LATESTATIC_CATEGORY STREQUAL "REJECTED")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: control H arm three: `static` AFTER the "
+        "contract include was not rejected by the compiler.\n"
+        "  name     : ${MCF5307_ABI_STUB_ROUTE_NAME}\n"
+        "  source   : ${MCF5307_ABI_DIR}/late_static_route.c\n"
+        "  expected : REJECTED\n"
+        "  read     : ${MCF5307_ABI_STUB_LATESTATIC_CATEGORY}\n"
+        "  detail   : ${MCF5307_ABI_STUB_LATESTATIC_DETAIL}\n"
+        "This file records that shape as a constraint violation - `static "
+        "declaration follows non-static declaration` - and therefore as "
+        "something the COMPILE branch reports rather than the verdict. A "
+        "toolchain that accepts it makes that record false, and the category "
+        "it lands in is the one named above.")
+endif()
+
+message(STATUS
+    "mcf5307: step 4a control H compiled three routes to the INTERNAL "
+    "category: `${MCF5307_ABI_STUB_ROUTE_NAME}` internal-with-anchor is "
+    "INTERNAL, hidden is LINKABLE, late-`static` is REJECTED")
+
+# ---------------------------------------------------------------------------
 # The verdict itself, over the published set.
 mcf5307_abi_stub_classify(MCF5307_ABI_STUB_LINKABLE MCF5307_ABI_STUB_INTERNAL
     MCF5307_ABI_STUB_ABSENT ${MCF5307_ABI_PUBLISHED})
@@ -1993,9 +2367,16 @@ if(NOT MCF5307_ABI_STUB_INTERNAL STREQUAL "")
         "and the linkage is wrong. Remove the `static`.")
 endif()
 
-# The other direction. An external name the contract does not declare. The
-# probe names are allowed here and nowhere else: control G above is the run
-# that holds this same measurement against the published set alone.
+# The other direction. An external name the contract does not declare.
+#
+# THE PROBE NAMES ARE EXEMPTED, AND CONTROL G IS NOT WHAT COVERS THAT. This
+# comment used to say control G holds this same measurement against the
+# published set alone. It does not, deliberately, and its own comment says so:
+# the allowed set there is every OTHER external name of the object, precisely
+# so that a real unpublished export reaches THIS message instead of tripping
+# the control. What covers the exemption is control I, above the compile: a
+# stub that defines either probe name is `error: redefinition` and produces no
+# object, so no run reaches this line with such a name in the set.
 mcf5307_abi_stub_unallowed(MCF5307_ABI_STUB_EXTRA
     ${MCF5307_ABI_PUBLISHED} ${MCF5307_ABI_STUB_INSTRUMENT})
 
@@ -2044,11 +2425,36 @@ endif()
 # an owner that fails on it: the registered test `t0_abi_header`. So the
 # sentence is narrowed to the set this step measured, and the outcome it did
 # not measure is not claimed.
-list(LENGTH MCF5307_ABI_STUB_LINKABLE MCF5307_ABI_STUB_LINKABLE_COUNT)
+#
+# THE LINE NAMES A SET AND A FILE, AND THE TWO MUST AGREE. It used to give the
+# published count and then point at `abi_stub_measure.o`, and a reader who ran
+# `nm -g` on that object got ONE MORE NAME THAN THE COUNT: the external probe
+# this step compiles into it. The sentence was true of the stub and false of
+# the reproduction it offered. The set printed here is therefore the stub's OWN
+# external definitions - the same variable the two fatal messages above print,
+# introduced for exactly this reason - and the instrument that is in the object
+# but not in the set is named, so the two numbers a reader can get are both
+# accounted for.
+# The instrument names the EXTERNAL read actually answers with. It is computed
+# and not written down: the sentence below has to reconcile the number it
+# prints with the number a reader gets from the object, and only a measured
+# difference does that. The internal probe is in the `all` pass and not in this
+# one, so naming both here would overstate by one in the other direction.
+set(MCF5307_ABI_STUB_EXTERNAL_INSTRUMENT "")
+foreach(name IN LISTS MCF5307_ABI_STUB_EXTERNAL)
+    if(name IN_LIST MCF5307_ABI_STUB_INSTRUMENT)
+        list(APPEND MCF5307_ABI_STUB_EXTERNAL_INSTRUMENT "${name}")
+    endif()
+endforeach()
+
+list(LENGTH MCF5307_ABI_STUB_EXTERNAL_OWN MCF5307_ABI_STUB_EXTERNAL_OWN_COUNT)
+list(LENGTH MCF5307_ABI_STUB_EXTERNAL MCF5307_ABI_STUB_EXTERNAL_COUNT)
 message(STATUS
     "mcf5307: step 4a ${MCF5307_ABI_STUB_FILE} defines externally exactly the "
-    "${MCF5307_ABI_STUB_LINKABLE_COUNT} published symbol(s), read with "
-    "${MCF5307_ABI_NM} from ${MCF5307_ABI_STUB_OBJECT}")
+    "${MCF5307_ABI_STUB_EXTERNAL_OWN_COUNT} published symbol(s). "
+    "${MCF5307_ABI_NM} answers ${MCF5307_ABI_STUB_EXTERNAL_COUNT} on "
+    "${MCF5307_ABI_STUB_OBJECT}: those, and this step's own "
+    "${MCF5307_ABI_STUB_EXTERNAL_INSTRUMENT}")
 
 endif()
 
