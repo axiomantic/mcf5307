@@ -9,6 +9,12 @@
  *     That is the assertion - the executable does not build is the failure
  *     mode, and the test never needs to say so in a message.
  *
+ *     `EVERY` IS MEASURED AND IS NOT A CLAIM THIS COMMENT MAKES. The
+ *     sentence above was false for two symbols for as long as nothing
+ *     checked it. `cmake/Nim.cmake` step 4a now compares
+ *     `tests/abi_smoke_symbols.inc` against the set it parses out of the
+ *     contract header, in both directions, on every configure run.
+ *
  * (2) THE TWICE-CALL. The test calls `mcf5307_runtime_init()` TWICE and
  *     asserts both calls return. The function is documented as idempotent;
  *     a re-entrant call that crashes is a regression in the runtime, and
@@ -52,63 +58,43 @@ namespace {
  * the compiler must materialise every store, and the linker must resolve
  * every symbol.
  *
- * THIS LIST IS NOT THE WHOLE PUBLISHED SET AND SAYS SO. `include/mcf5307.h`
- * declares 22 functions; 20 are named here. `mcf5307_set_reg` and
- * `mcf5307_get_reg` were added to the contract by CPU-7 and never added to
- * this list, so a rename of either one is a fault this test does not catch.
- * Nothing here measures the gap either - the count is not asserted against
- * the contract - and closing it belongs to the task that owns this file.
- * `cmake/Nim.cmake` step 4a is what reads the contract's full published set
- * on every configure run. */
+ * THE LIST IS NOT IN THIS FILE AND NO COUNT IS EITHER. Both were the defect.
+ * `include/mcf5307.h` declares 22 functions and this file named 20 of them:
+ * `mcf5307_set_reg` and `mcf5307_get_reg` reached the contract with CPU-7 and
+ * never reached this list, so a rename of either one was a fault the one test
+ * whose stated job is the ABI surface did not catch. Nothing measured the
+ * gap, because the array length was a number a person typed.
+ *
+ * The names now live in `tests/abi_smoke_symbols.inc`, which this file
+ * includes TWICE - once to declare the pointers and once to gather them - so
+ * the array's length is the length of that list BY CONSTRUCTION and there is
+ * no second place to keep in step. `cmake/Nim.cmake` step 4a reads the same
+ * list on every configure run and compares it against the published set it
+ * parses out of the contract header with a C compiler. A name the header
+ * declares and the list omits FAILS THE CONFIGURE STEP and is named, and so
+ * does a name the list carries and the header does not declare. */
 #define MCF5307_ABI_FN(name)                                                   \
-    extern "C" auto const abi_addr_##name = &name
+    extern "C" auto const abi_addr_##name = &name;
 
-MCF5307_ABI_FN(mcf5307_runtime_init);
-MCF5307_ABI_FN(mcf5307_create);
-MCF5307_ABI_FN(mcf5307_destroy);
-MCF5307_ABI_FN(mcf5307_reset);
-MCF5307_ABI_FN(mcf5307_exec);
-MCF5307_ABI_FN(mcf5307_halted);
-MCF5307_ABI_FN(mcf5307_faulted);
-MCF5307_ABI_FN(mcf5307_set_irq);
-MCF5307_ABI_FN(mcf5307_state_size);
-MCF5307_ABI_FN(mcf5307_state_save);
-MCF5307_ABI_FN(mcf5307_state_load);
-MCF5307_ABI_FN(isp1181_create);
-MCF5307_ABI_FN(isp1181_destroy);
-MCF5307_ABI_FN(isp1181_read);
-MCF5307_ABI_FN(isp1181_write);
-MCF5307_ABI_FN(isp1181_rx);
-MCF5307_ABI_FN(isp1181_tick);
-MCF5307_ABI_FN(isp1181_state_size);
-MCF5307_ABI_FN(isp1181_state_save);
-MCF5307_ABI_FN(isp1181_state_load);
+#include "abi_smoke_symbols.inc"
 
-/* The 20 pointers as a single `volatile` array of `void const*`, so the
+#undef MCF5307_ABI_FN
+
+/* The same list again, as a single `volatile` array of `void const*`, so the
  * linker cannot drop any of them under `-ffunction-sections --gc-sections`
- * and still satisfy the reference. */
-volatile void const* const abi_addr_all[20] = {
-    reinterpret_cast<void const*>(abi_addr_mcf5307_runtime_init),
-    reinterpret_cast<void const*>(abi_addr_mcf5307_create),
-    reinterpret_cast<void const*>(abi_addr_mcf5307_destroy),
-    reinterpret_cast<void const*>(abi_addr_mcf5307_reset),
-    reinterpret_cast<void const*>(abi_addr_mcf5307_exec),
-    reinterpret_cast<void const*>(abi_addr_mcf5307_halted),
-    reinterpret_cast<void const*>(abi_addr_mcf5307_faulted),
-    reinterpret_cast<void const*>(abi_addr_mcf5307_set_irq),
-    reinterpret_cast<void const*>(abi_addr_mcf5307_state_size),
-    reinterpret_cast<void const*>(abi_addr_mcf5307_state_save),
-    reinterpret_cast<void const*>(abi_addr_mcf5307_state_load),
-    reinterpret_cast<void const*>(abi_addr_isp1181_create),
-    reinterpret_cast<void const*>(abi_addr_isp1181_destroy),
-    reinterpret_cast<void const*>(abi_addr_isp1181_read),
-    reinterpret_cast<void const*>(abi_addr_isp1181_write),
-    reinterpret_cast<void const*>(abi_addr_isp1181_rx),
-    reinterpret_cast<void const*>(abi_addr_isp1181_tick),
-    reinterpret_cast<void const*>(abi_addr_isp1181_state_size),
-    reinterpret_cast<void const*>(abi_addr_isp1181_state_save),
-    reinterpret_cast<void const*>(abi_addr_isp1181_state_load),
+ * and still satisfy the reference.
+ *
+ * THE ARRAY BOUND IS DEDUCED AND IS NEVER WRITTEN. A written bound is a
+ * second statement of the list's length, and the two fell apart once
+ * already. */
+#define MCF5307_ABI_FN(name)                                                   \
+    reinterpret_cast<void const*>(abi_addr_##name),
+
+volatile void const* const abi_addr_all[] = {
+#include "abi_smoke_symbols.inc"
 };
+
+#undef MCF5307_ABI_FN
 
 } /* namespace */
 
