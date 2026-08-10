@@ -6,15 +6,74 @@
 ## defects this file was written to catch, and the reason is structural rather
 ## than a gap that more cases would close.
 ##
-##   A wrongly-claimed encoding produces a passing execution of a different
-##   instruction. `decode.nim`'s EOR predicate must not read `>= 4`, because
-##   line 1011 opmode 111 is CMPA.L and `opmodeSize(7)` answers 4, so a wrong
-##   claim presents as a well-formed long EOR and nothing downstream notices:
-##   `cmpa.l %d0,%a1` is `b3c0`, and running it with d0 = 0x0f0f0f0f and
-##   d1 = 0x12345678 leaves d0 = 0x1d3b5977, which is d0 xor d1. The core runs
-##   `EOR.L D1,D0`: it writes a register CMPA must not touch and it computes
-##   no comparison. No number of green positive cases finds that. Only a case
-##   that asserts what must not decode can, which is what
+##   DESIGN SECTION 6.1 is section 6 "The MCF5307 Core and the Board Model",
+##   subsection 6.1 "The core", of the NMG2 emulator DESIGN DOCUMENT
+##   (`2026-08-04-nmg2-emulator-design.md`, in the nord-modular-emulator plan
+##   set). Opened and checked: it is the section that makes the legality mask a
+##   MANDATORY property of this core - "Each opcode carries its own legality
+##   mask. An illegal mode traps." - and it is the section that sizes the core
+##   and forbids a Musashi fork.
+##
+##   AGENTS.MD SECTION 11 is section 11 "External resources" of the
+##   nord-modular-emulator project's `AGENTS.md`. Opened and checked: it is the
+##   section that names the two Motorola documents this file takes instruction
+##   semantics from - the ColdFire Family Programmer's Reference Manual Rev 3
+##   and the MCF5307 User's Manual - and gives a download location for each.
+##
+##   ONE OF THE TWO IS OBTAINABLE AND ONE IS NOT, AND AN EARLIER REVISION OF
+##   THIS PARAGRAPH SAID NEITHER WAS. That was false, it was never searched
+##   for, and it is the sentence that told the next reader not to look for a
+##   document that was in fact at hand.
+##
+##   THE MCF5307 USER'S MANUAL is the one that was found, and it is the
+##   document every table and page cited below refers to. Its full identity,
+##   so that a reader can be sure of holding the same edition: Motorola,
+##   "MCF5307 ColdFire Integrated Microprocessor User's Manual", order number
+##   MCF5307UM/AD, (c) 1998 - the order number is printed at the top right of
+##   the cover and the title is the title page. IT IS NOT IN THIS REPOSITORY,
+##   it may not be copied into it, and a reader who has only this tree must
+##   obtain it separately from the download location AGENTS.md section 11
+##   gives. That is why every citation here names table, page and row instead
+##   of quoting.
+##
+##   THE COLDFIRE FAMILY PROGRAMMER'S REFERENCE MANUAL IS GENUINELY ABSENT -
+##   searched for by name and by content across the scratchpad, and the
+##   network is closed - and it is the document that would settle FIVE OF THE
+##   SIX uncertainties the `logic.nim` header declares: numbers 1, 2, 4, 5 and
+##   6, which is the list that header itself gives. Number 3, the exact cycle
+##   count, is not one of them - it needs the clock work of AGENTS.md open
+##   question 6. AN EARLIER REVISION OF THIS PARAGRAPH SAID "the four
+##   uncertainties", which named neither the right total nor the right subset.
+##   That absence, and not the User's Manual's, is why the shift-overflow note
+##   in `logic.nim` says what it says.
+##
+##   CPU-6'S PLAN ROW is the CPU-6 row of section 11.3 "The instruction set" of
+##   the NMG2 emulator IMPLEMENTATION PLAN
+##   (`2026-08-04-nmg2-emulator-impl.md`). Opened and checked: its Check line
+##   reads "The test asserts a trap for at least one illegal mode for each
+##   implemented opcode", which is the property the shift block below cites it
+##   for.
+##
+## Fifteen other files in this repository carry the same bare-citation style,
+## and one of them cites a path on the author's desktop. They belong to their
+## own tasks and are not repaired here.
+##
+## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_logic`. That corpus is 41
+## cases and every one of them is a POSITIVE case: an encoding this part has,
+## run against an expected register state. A positive corpus CANNOT SEE either
+## of the two defects this file was written to catch, and the reason is
+## structural rather than a gap that more cases would close.
+##
+##   A WRONGLY-CLAIMED ENCODING PRODUCES A PASSING EXECUTION OF A DIFFERENT
+##   INSTRUCTION. `decode.nim` claimed line 1011 opmode 111 - which is CMPA.L -
+##   as an EOR, because its predicate read `>= 4` where the opmodes of EOR are
+##   100, 101 and 110. `opmodeSize(7)` answers 4, so the wrong claim presented
+##   as a well-formed long EOR and nothing downstream noticed. Measured against
+##   the source before the fix: `cmpa.l %d0,%a1` is `b3c0`, and running it with
+##   d0 = 0x0f0f0f0f and d1 = 0x12345678 left d0 = 0x1d3b5977, which is
+##   d0 xor d1. The core ran `EOR.L D1,D0`: it wrote a register CMPA must not
+##   touch and it computed no comparison. NO NUMBER OF GREEN CASES FINDS THAT.
+##   Only a case that asserts what must NOT decode can, which is what
 ##   `decodeWord(0xb3c0).op == opIllegal` below is.
 ##
 ##   An operand the executor refuses is not an operand the corpus offers. The
@@ -300,45 +359,62 @@ proc checkMask(got: bool; want: bool; label: string) =
 const bitDirty = srBase or ccrN or ccrV or ccrC or ccrX
 
 # ---------------------------------------------------------------------------
-# `CMPA.L` is not this group's and must stay unrecognised here.
+# BLOCKING 1. `CMP` AND `CMPA.L` ARE NOT THIS GROUP'S, AND CPU-10 HAS TAKEN
+# THEM.
 #
-# Line 1011 carries EOR in opmodes 100, 101 and 110. The other five are CMP in
-# 000, 001 and 010, CMPA.W in 011 and CMPA.L in 111. The encoding must come
-# back as an unrecognised word - `opIllegal`, which is what `decodeWord`'s
-# final arm answers - and not as an operation of this group that `logic.nim`
-# then traps.
+# Line 1011 carries EOR in opmodes 100, 101 and 110. THE OTHER FIVE OPMODES
+# ARE CPU-10'S: CMP in 000, 001 and 010, CMPA.W in 011 and CMPA.L in 111.
+# FIVE AND NOT FOUR - an earlier revision of this comment omitted 011, where
+# `decode.nim`'s comment beside the same predicate counts five.
+#
+# THESE THREE ROWS USED TO ASSERT `opIllegal` AND THE SENTENCE THEY ASSERT IS
+# UNCHANGED: the encoding belongs to CPU-10 and not to the logic decoder. Until
+# CPU-10 landed, "belongs to CPU-10" and "not decoded" were the same
+# observable, and `opIllegal` was how this file said it. Now that the group
+# exists the same sentence has a stronger form - the encoding comes back as
+# CPU-10's own operation - and a defect that fed it back into `decodeLogicLine`
+# would show here exactly as it did before. `tests/t_control.nim` holds the
+# other half: that all three EOR opmodes stay EOR.
 #
 # Opmode 111 is CMPA.L because the assembler put it there, and not by any
 # inference from `cmpa.w`. `b3c0` is what `m68k-elf-as -mcpu=5307` emitted for
 # `cmpa.l %d0,%a1`, and `(0xb3c0 shr 6) and 7` is 111.
 
 block:
-  expectDecode(0xB3C0'u16, opIllegal,
-    "cmpa.l %d0,%a1 (b3c0) is not claimed by the logic decoder")
-  expectDecode(0xB280'u16, opIllegal,
-    "cmp.l %d0,%d1 (b280) is not claimed by the logic decoder")
+  expectDecode(0xB3C0'u16, opCmpa,
+    "cmpa.l %d0,%a1 (b3c0) is CPU-10's CMPA and not this group's EOR")
+  expectDecode(0xB280'u16, opCmp,
+    "cmp.l %d0,%d1 (b280) is CPU-10's CMP and not this group's EOR")
 
-  # The positive controls. Without them a predicate that claimed nothing on
-  # line 1011 would report the two cases above as passes, and EOR would be
-  # gone. All three EOR opmodes are still claimed, byte and word included -
-  # those two are not instructions on this part and they trap on the size.
+  # THE POSITIVE CONTROLS. Without them a predicate that gave the WHOLE of
+  # line 1011 to CPU-10 would report the two cases above as passes, and EOR
+  # would be gone. All three EOR opmodes are still claimed, byte and word
+  # included - those two are not instructions on this part and they trap on
+  # the SIZE, which is the channel `decodeLogicLine` and CPU-13 both use.
   expectDecode(0xB380'u16, opEor, "eor.l %d1,%d0 (b380) is still an EOR")
   expectDecode(0xB300'u16, opEor, "the byte EOR opmode (b300) is still an EOR")
   expectDecode(0xB340'u16, opEor, "the word EOR opmode (b340) is still an EOR")
 
-  # And the execution. `CMPA` writes no data register and computes a
-  # comparison; a wrongly-claimed `b3c0` writes d0 = d0 xor d1 = 0x1d3b5977. Both
-  # source registers and the destination address register are asserted
-  # unchanged, and the core reports the word it could not decode.
+  # AND THE EXECUTION. THE DEFECT THIS ROW WAS WRITTEN FOR IS AN EOR, AND IT
+  # STILL IS. `b3c0` decoded as a well-formed long EOR once and left
+  # d0 = d0 xor d1 = 0x1d3b5977; the row asserted a trap while CPU-10 was
+  # unwritten and it asserts the CMPA now, and BOTH REFUSE THAT VALUE.
+  #
+  # `cmpa.l %d0,%a1` computes a1 - d0 and DISCARDS it: 0x11223344 - 0x0f0f0f0f
+  # is 0x02132435, which is non-zero, positive and borrows nothing, and
+  # 0x0f0f0f0f and 0x11223344 are both positive so no signed overflow is
+  # possible. The incoming `sr` is the reset word, so the whole 16-bit result
+  # is 0x2700 - and a core that wrote a register would have to leave `d0`,
+  # `d1` or `a1` different from the values named here.
   let o = runIns([0xB3C0'u16],
                  d = [0x0F0F0F0F'u32, 0x12345678'u32, 0, 0, 0, 0, 0, 0],
                  a = [0'u32, 0x11223344'u32, 0, 0, 0, 0, 0, 0])
-  let got = (d0: o.d[0], d1: o.d[1], a1: o.a[1],
+  let got = (d0: o.d[0], d1: o.d[1], a1: o.a[1], sr: o.sr,
              fault: o.fault, halted: o.halted, cycles: o.cycles)
   let want = (d0: 0x0F0F0F0F'u32, d1: 0x12345678'u32, a1: 0x11223344'u32,
-              fault: true, halted: true, cycles: 0'u32)
+              sr: srBase, fault: false, halted: false, cycles: 1'u32)
   check(got == want,
-    "cmpa.l %d0,%a1 writes no register and is refused as an unknown word",
+    "cmpa.l %d0,%a1 compares and writes no register",
     $got, $want)
 
 # ---------------------------------------------------------------------------

@@ -440,6 +440,101 @@ proc eaRefWrite*(ctx: MCF5307Ctx; r: EaRef; size: uint8; value: uint32) =
   of erNone: discard
 
 # ---------------------------------------------------------------------------
+# THE EXCEPTION STACK FRAME. CPU-10 adds it, because `TRAP` is in its group and
+# a TRAP that did not take its vector would be a NOP with extra steps.
+#
+# IT IS HERE AND NOT IN `control.nim` FOR THE REASON THIS MODULE EXISTS. Four
+# later tasks need the same frame - CPU-14 owns the exception model itself,
+# CPU-15 the bus-fault channel, CPU-17 interrupts, and `control.nim`'s own
+# format-error path - and `exception.nim` will be a SIBLING of `control.nim`,
+# so it could not reach a copy that lived there without putting one executor
+# under another. That is the decoder-under-executor inversion one layer down;
+# `~/Desktop/avoiding-cycles.md` is the rule and CPU-8 followed it when it
+# lifted the register file out of `move.nim`.
+#
+# IT IS THE MINIMUM `TRAP` NEEDS AND NOT THE EXCEPTION MODEL. There is no
+# vector table object, no fault-status computation and no double-fault
+# handling; CPU-14 and CPU-15 own those and this procedure is what they will
+# extend.
+
+const
+  srSupervisor* = 0x2000'u32   ## S, status register bit 13
+  srTrace* = 0x8000'u32        ## T, status register bit 15
+
+proc exceptionFrameBase*(sp: uint32): uint32 =
+  ## Where the two-longword frame goes, and it is NOT simply `sp - 8`.
+  ##
+  ## MCF5307 User's Manual section 3.3, page 3-11: "the exception stack frame
+  ## is created at a 0-modulo-4 address on the top of the current system
+  ## stack". Table 3-2, "Format Field Encoding", page 3-14, gives the four
+  ## cases: an A7 whose low two bits are 00, 01, 10 or 11 leaves the handler
+  ## with A7-8, A7-9, A7-10 or A7-11, and each of those four results is
+  ## 0-modulo-4. That is this expression.
+  (sp - 8'u32) and not 3'u32
+
+proc exceptionFormat*(sp: uint32): uint32 =
+  ## The FORMAT field of the frame the stack pointer `sp` produces: 4, 5, 6 or
+  ## 7, the four rows of Table 3-2 in order. It RECORDS the misalignment the
+  ## frame base removed, so that `RTE` can put it back.
+  4'u32 + (sp and 3'u32)
+
+proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32) =
+  ## Stack a two-longword exception frame, then load the program counter from
+  ## the vector table.
+  ##
+  ## THE STATUS REGISTER IS COPIED BEFORE IT IS CHANGED. Section 3.3, page
+  ## 3-11: "the processor makes an internal copy of the SR and then enters
+  ## supervisor mode by setting the S-bit and disabling trace mode by clearing
+  ## the T-bit". The COPY is what reaches the frame; the modified word is what
+  ## the handler runs under. The M-bit and the interrupt priority mask are
+  ## changed only by an INTERRUPT exception, which is CPU-17's, so nothing
+  ## here touches them.
+  ##
+  ## THE FRAME IS TWO LONGWORD WRITES AND NOT SIX BYTEWISE PUSHES. Figure 3-7,
+  ## page 3-13, draws it as two longwords - the format/vector word above the
+  ## status register, then the program counter - and Table 3-14, page 3-29,
+  ## gives `trap #imm` a cost of `18(1/2)`: ONE read, the vector, and TWO
+  ## writes. Table 3-7's `TRAP` row on page 3-25 spells the same thing as
+  ## `SP-4;PC`, `SP-2;SR`, `SP-2;Format`, which agrees whenever A7 was already
+  ## longword aligned and does not show the self-alignment at all.
+  ##
+  ## THE VECTOR TABLE IS BASED AT ZERO, AND THAT IS A LIMITATION AND NOT A
+  ## CHOICE. Section 3.3, page 3-12: the handler address is "obtained by
+  ## fetching a value from the table located at the address defined in the
+  ## vector base register", indexed by `4 x vector_number`. THIS CORE HAS NO
+  ## VBR: the context holds no such field, and CPU-11 is the task that adds
+  ## `MOVEC` and therefore the only way to write one.
+  ##
+  ## THE RESET VALUE IS ZERO AND THE MANUAL PRINTS IT. Table B-2, "Summary
+  ## Chart of MCF5307 Internal CPU Memory Map", Appendix page B-5, gives
+  ## `CPU @ $801` the name VBR, a width of 32, a RESET VALUE of `$00000000`
+  ## and an ACCESS of `W`. So this expression is correct for a machine that
+  ## has not written VBR and wrong for one that has, and the one line that
+  ## changes when CPU-11 lands is the `readMem` below.
+  ##
+  ## A FAULT INSIDE THIS PROCEDURE IS A DOUBLE FAULT AND CPU-15 OWNS IT. Each
+  ## access is checked and the procedure returns early, leaving the context
+  ## halted with `fault`; it does not recurse, which is design section 5.2.1's
+  ## requirement. The status register has already been modified at that point,
+  ## which is a state a double-fault handler will have to define.
+  let stackedSr = ctx.sr and 0xFFFF'u32
+  ctx.sr = (ctx.sr or srSupervisor) and not srTrace
+  let format = exceptionFormat(ctx.sp)
+  let base = exceptionFrameBase(ctx.sp)
+  writeMem(ctx, base, 4,
+           (format shl 28) or (uint32(vector) shl 18) or stackedSr)
+  if ctx.halted:
+    return
+  writeMem(ctx, base + 4'u32, 4, stackedPc)
+  if ctx.halted:
+    return
+  ctx.sp = base
+  let handler = readMem(ctx, 4'u32 * uint32(vector), 4)
+  if ctx.halted:
+    return
+  ctx.pc = handler
+
+# ---------------------------------------------------------------------------
 # The register access the conformance harness needs. The C ABI in
 # `include/mcf5307.h` declares these. `index` 0..7 is d0..d7, 8..14 is a0..a6,
 # 15 is a7 (the single stack pointer), 16 is the status register, and 17 is
