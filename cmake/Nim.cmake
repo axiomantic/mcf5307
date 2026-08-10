@@ -301,8 +301,16 @@ set(MCF5307_ABI_SMOKE_LIST_FILE
 # dependency list below has to carry it.
 set(MCF5307_ABI_STUB_FILE "${PROJECT_SOURCE_DIR}/tests/abi_stub.c")
 
-# Editing a configure-time INPUT must re-run the configure step. Five files
-# are inputs, and all five are listed.
+# Editing a configure-time INPUT must re-run the configure step. The inputs
+# are enumerated here, and the property below lists every one of them.
+#
+# NO COUNT IS WRITTEN. A count is a number beside an enumeration that nothing
+# holds to it, and the enumeration is what a reader has to check anyway. The
+# count that stood here read `Four`, and `1188828` - the commit that added
+# `tests/abi_stub.c` to the list - had to hand-edit it to `Five` in the same
+# change. It was correct on both days, and it was correct because the author
+# remembered, which is the property being removed here rather than a stale
+# number.
 #
 #   `src/*.nim`        the unit list is read at configure time, and a new
 #                      module adds a unit to it.
@@ -1555,6 +1563,16 @@ message(STATUS
 #   freedom the smoke list - which is a list of published names and nothing
 #   else - has no equivalent of.
 #
+#   THE FATAL MESSAGE FOR THIS BRANCH USED TO GIVE A REASON THAT WAS FALSE. It
+#   said the stub is linked `beside the real library's own surface`, so a name
+#   of its own could collide there. Measured: `tests/tests_cpu.cmake` links
+#   case 3 as `t0_abi_header.c` plus `abi_stub_for_c.o` and case 4 as
+#   `t0_abi_header.cpp` plus `abi_stub_for_cpp.o`. NEITHER LINKS `libmcf5307`.
+#   The built executables carry no `NimMain`, which the static library defines,
+#   so the real surface is not in that link at all. The rule is kept and the
+#   invented mechanism is gone: the message now states the two faults the
+#   check cannot tell apart, which is what it actually detects.
+#
 # THE CONSUMER'S `CMAKE_C_FLAGS` ARE NOT PASSED HERE, for the reason the
 # measurement shared object gives above: this object is an instrument and it
 # is never shipped. The registered test `t0_abi_header` compiles the same file
@@ -1992,18 +2010,45 @@ if(NOT MCF5307_ABI_STUB_EXTRA STREQUAL "")
         "  defined by the stub                   : "
         "${MCF5307_ABI_STUB_EXTERNAL_OWN}\n"
         "Either the contract lost the declaration, or the stub grew a name "
-        "outside its one job. This translation unit is linked into two test "
-        "executables beside the real library's own surface, so an external "
-        "name of its own can collide there. A helper this file needs for "
-        "itself is `static`, and this check says nothing about a `static` "
-        "one.")
+        "outside its one job. That file's whole job is the published set, so "
+        "an external name outside that set is one of those two faults, and "
+        "this check does not guess which. A helper the file needs for itself "
+        "is `static`, and this check says nothing about a `static` one.")
 endif()
 
+# THE SUCCESS LINE STATES THE MEASUREMENT AND STOPS, and it used to state an
+# outcome instead: `so cases 3 and 4 of t0_abi_header can link against every
+# one of them`. THIS STEP NEVER RAN THAT LINK, and two things it did not run
+# can each falsify the sentence while this step exits 0.
+#
+#   THE FLAGS DIFFER. The compile above carries `-std=c11` and no warning
+#   flags. `tests/tests_cpu.cmake` sets `-Wall -Wextra -pedantic -Werror` and
+#   compiles the same file with them in both cases. Measured on a copy of the
+#   stub carrying one unused local in `mcf5307_destroy`: this step's command
+#   exited 0, and the driver's command exited 1 with `error: unused variable
+#   [-Werror,-Wunused-variable]`. A green verdict here therefore does not mean
+#   those two cases compile.
+#
+#   THE REFERENCES ARE FEWER THAN THE DEFINITIONS. `can link against every one
+#   of them` reads as coverage of the whole published set. `t0_abi_header.c`
+#   and `t0_abi_header.cpp` take their addresses from a fixed list of their own
+#   that names neither `mcf5307_set_reg`, `mcf5307_get_reg`, `mcf5307_halted`
+#   nor `mcf5307_faulted`, so a definition here for those four is a definition
+#   nothing over there references.
+#
+# THE FLAGS ARE NOT MATCHED HERE, AND THAT IS DELIBERATE. Adding `-Werror` to
+# this compile would make a warning in the stub fail the SYMBOL gate, so one
+# line would carry two faults - the thing this step refuses everywhere else,
+# stated where the measurement shared object is built and again where `hidden`
+# is kept apart from `not implemented yet`. The warning dimension already has
+# an owner that fails on it: the registered test `t0_abi_header`. So the
+# sentence is narrowed to the set this step measured, and the outcome it did
+# not measure is not claimed.
 list(LENGTH MCF5307_ABI_STUB_LINKABLE MCF5307_ABI_STUB_LINKABLE_COUNT)
 message(STATUS
     "mcf5307: step 4a ${MCF5307_ABI_STUB_FILE} defines externally exactly the "
-    "${MCF5307_ABI_STUB_LINKABLE_COUNT} published symbol(s), so cases 3 and 4 "
-    "of `t0_abi_header` can link against every one of them")
+    "${MCF5307_ABI_STUB_LINKABLE_COUNT} published symbol(s), read with "
+    "${MCF5307_ABI_NM} from ${MCF5307_ABI_STUB_OBJECT}")
 
 endif()
 
