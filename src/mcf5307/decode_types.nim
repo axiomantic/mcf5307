@@ -1,21 +1,26 @@
 ## Shared types for the mcf5307 instruction-group modules.
 ##
-## This module exists to break a module cycle between `decode.nim` and the
-## instruction-group executor modules (`move.nim`, `alu.nim`, `logic.nim`,
-## `control.nim`). The cycle was: decode.nim needs the executor functions,
-## and the executors need the types decode.nim defines. Putting the shared
-## types in a third module lets both sides import without a cycle.
+## THIS MODULE IS THE BOTTOM OF THE CORE, above `ea` alone. It holds the
+## types that the decoder (`decode.nim`) and every instruction-group executor
+## (`move.nim`, and later `alu.nim`, `logic.nim`, `control.nim`) both need.
+## Those modules are siblings and neither imports the other; each one reads
+## its types from here. `cpu.nim` sits above them and owns `step`.
 ##
-## CPU-7 created this file (WIP at 10f211e had the cycle unfixed). The fix
-## is mechanical: move the type definitions from `decode.nim` here, then have
-## both `decode.nim` and the executor modules import from here.
+## CPU-7 created this file. There was a module cycle before it: `decode.nim`
+## held `step`, so it needed the executor entry points, and the executors
+## needed the types `decode.nim` defined. Moving the shared types here broke
+## the cycle, and moving `step` up into `cpu.nim` removed the
+## decoder-to-executor edge that made the cycle possible.
 ##
 ## The effective-address legality table lives here for the same reason. The
 ## executor modules ask whether an operand is legal before they run an
 ## instruction. The table reads an `Operation` and an `EA` and it reads no
 ## decoder state, so it belongs beside the types and not beside the decoder.
-## `decode.nim` re-exports this module, so a caller that imports
-## `mcf5307/decode` sees the same names as before.
+##
+## NO MODULE RE-EXPORTS THIS ONE. A caller that needs `Operation`, `Decoded`,
+## `MCF5307Ctx`, the board callback types or `eaIsLegalFor` imports
+## `mcf5307/decode_types` by name. `decode.nim` re-exported it for a time,
+## which hid which layer each name came from.
 
 import mcf5307/ea
 

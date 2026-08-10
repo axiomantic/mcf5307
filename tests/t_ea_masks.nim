@@ -31,8 +31,18 @@
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code.
 
+## THE IMPORTS NAME THE LAYER EACH SYMBOL COMES FROM. `decode` no longer
+## re-exports `decode_types`, so each module below supplies exactly the names
+## the test takes from it: `cpu` the lifecycle ABI (`mcf5307_create`,
+## `mcf5307_reset`, `mcf5307_exec`, `mcf5307_destroy`), `decode` the decoder
+## (`decodeWord`), `decode_types` the shared types and the legality table
+## (`Operation`, `Mcf5307BusStatus`, `eaIsLegalFor`), and `ea` the
+## effective-address decoding (`EA`, `decodeEa`).
+
 import std/[strutils]
+import mcf5307/cpu
 import mcf5307/decode
+import mcf5307/decode_types
 import mcf5307/ea
 
 var failures: seq[string]
