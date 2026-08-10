@@ -294,8 +294,15 @@ set(MCF5307_ABI_CONTRACT_FILE "${PROJECT_SOURCE_DIR}/include/mcf5307.h")
 set(MCF5307_ABI_SMOKE_LIST_FILE
     "${PROJECT_SOURCE_DIR}/tests/abi_smoke_symbols.inc")
 
-# Editing a configure-time INPUT must re-run the configure step. Four files
-# are inputs, and all four are listed.
+# The link-partner stub of `t0_abi_header` cases 3 and 4. It is CPU-0's file,
+# it is COMPILED here and it is never written here. Step 4a, part three reads
+# the symbols its object defines and compares them against the same published
+# set. It is named at this point for the reason the two files above are: the
+# dependency list below has to carry it.
+set(MCF5307_ABI_STUB_FILE "${PROJECT_SOURCE_DIR}/tests/abi_stub.c")
+
+# Editing a configure-time INPUT must re-run the configure step. Five files
+# are inputs, and all five are listed.
 #
 #   `src/*.nim`        the unit list is read at configure time, and a new
 #                      module adds a unit to it.
@@ -307,6 +314,10 @@ set(MCF5307_ABI_SMOKE_LIST_FILE
 #                      leave the comparison speaking about a version of the
 #                      list that no longer exists - the exact failure the
 #                      paragraph below records for the contract header.
+#   `tests/abi_stub.c` step 4a compiles it and reads the symbols the object
+#                      defines. A definition added or removed without a re-run
+#                      would leave that comparison speaking about an object
+#                      this tree can no longer produce.
 #
 # Drop the contract header from this list and an edit to it does not re-run the
 # configure step: step 4a then keeps its verdict about a version of the
@@ -318,7 +329,8 @@ file(GLOB_RECURSE MCF5307_NIM_SOURCES CONFIGURE_DEPENDS
 set_property(DIRECTORY "${PROJECT_SOURCE_DIR}"
     APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     ${MCF5307_NIM_SOURCES} "${MCF5307_NIM_VERSION_FILE}"
-    "${MCF5307_ABI_CONTRACT_FILE}" "${MCF5307_ABI_SMOKE_LIST_FILE}")
+    "${MCF5307_ABI_CONTRACT_FILE}" "${MCF5307_ABI_SMOKE_LIST_FILE}"
+    "${MCF5307_ABI_STUB_FILE}")
 
 execute_process(
     COMMAND ${MCF5307_NIM_COMMAND}
@@ -1490,6 +1502,223 @@ message(STATUS
     "mcf5307: step 4a ${MCF5307_ABI_SMOKE_LIST_FILE} names exactly the "
     "${MCF5307_ABI_SMOKE_COUNT} published symbol(s), so `tests/abi_smoke.cpp` "
     "takes the address of every one of them")
+
+# ---------------------------------------------------------------------------
+# Step 4a, part three. THE LINK-PARTNER STUB GATE.
+#
+# WHAT IT PROTECTS. `tests/abi_stub.c` opens by claiming one definition, with
+# an empty body, of every function the contract declares. THAT SENTENCE WAS
+# FALSE FOR FOUR SYMBOLS. Measured at `ed85588`: the contract declared
+# twenty-two and the stub defined eighteen. `mcf5307_set_reg` and
+# `mcf5307_get_reg` reached the contract with CPU-7, `mcf5307_halted` and
+# `mcf5307_faulted` with CPU-5, and none of the four reached the stub. Nothing
+# measured the gap, and the file's own prose disagreed with itself about the
+# size of it - the opening sentence said every function and a later sentence
+# said eighteen.
+#
+# WHY THE STUB MUST DEFINE THE WHOLE PUBLISHED SET. It is the link partner of
+# cases 3 and 4 of `t0_abi_header`, and those two cases exist to make a
+# RENAMED declaration a link error rather than nothing at all. A reference
+# with no definition anywhere is an undefined symbol at that link, so the pair
+# can only report a rename for a name the stub defines.
+#
+# NOTHING HERE READS THE STUB'S SOURCE TEXT, AND NOTHING HERE PARSES C. The
+# smoke-test list above is a separate data file precisely so that its reader
+# needs no C parser. THAT TRICK DOES NOT TRANSFER: a stub is real C with a
+# real body and a different signature per function, so no list of names
+# generates it. The set is therefore read the way the EXPORTED set of the
+# measurement shared object is read above - the file is COMPILED, and `nm`
+# reports what the object DEFINES. A compiler and a linker decide what the C
+# means, exactly as this step's own history demands: a regular expression may
+# not be trusted to say what C declares, and the seven shapes in the
+# calibration header above are why.
+#
+# THE MEASUREMENT IS OVER EXTERNAL DEFINITIONS. `nm -g` reports what the link
+# of `t0_abi_header` can resolve against. A published name defined `static`
+# resolves nothing there, so it is a fault with a message of its own. The
+# `all` pass is read as well, because it is what separates `defined with
+# internal linkage` from `not defined at all` - the same separation the
+# visibility verdict above draws between `hidden` and `not implemented yet`,
+# and for the same reason: two different faults must never share a line.
+#
+# IT FAILS IN BOTH DIRECTIONS, AND THE SECOND DIRECTION IS NOT THE SMOKE
+# LIST'S.
+#
+#   A published name the stub does not define EXTERNALLY. That is the defect
+#   this block was written for, and the message names the symbol.
+#
+#   An EXTERNAL name the stub defines that the contract does not declare. This
+#   translation unit is linked into two test executables, and a name of its
+#   own there is either a contract that lost a declaration or a stub that grew
+#   something outside its job. An INTERNAL name is exempt: a `static` helper
+#   publishes nothing and can collide with nothing, so the stub keeps a
+#   freedom the smoke list - which is a list of published names and nothing
+#   else - has no equivalent of.
+#
+# THE CONSUMER'S `CMAKE_C_FLAGS` ARE NOT PASSED HERE, for the reason the
+# measurement shared object gives above: this object is an instrument and it
+# is never shipped. The registered test `t0_abi_header` compiles the same file
+# with `-Wall -Wextra -pedantic -Werror`, and that is where a warning in it is
+# a failure.
+#
+# `tests/abi_stub.c` belongs to CPU-0. It is read here and never written here.
+
+if(NOT EXISTS "${MCF5307_ABI_STUB_FILE}")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: ${MCF5307_ABI_STUB_FILE} does not exist. "
+        "That file is the link partner of cases 3 and 4 of the registered "
+        "test `t0_abi_header`, and this step compiles it and compares the "
+        "symbols it defines against the published set of "
+        "${MCF5307_ABI_CONTRACT_FILE}.")
+endif()
+
+set(MCF5307_ABI_STUB_OBJECT
+    "${MCF5307_ABI_DIR}/abi_stub_measure${CMAKE_C_OUTPUT_EXTENSION}")
+
+# The object of an earlier configure run is REMOVED BEFORE THE COMPILE, for
+# the reason every driver in `tests/tests_cpu.cmake` records: without it a
+# compile that failed would leave the earlier object in place, and the reader
+# below would then report a set this run never produced.
+file(REMOVE "${MCF5307_ABI_STUB_OBJECT}")
+
+execute_process(
+    COMMAND "${CMAKE_C_COMPILER}"
+            -std=c11
+            "-I${PROJECT_SOURCE_DIR}/include"
+            -c
+            -o "${MCF5307_ABI_STUB_OBJECT}"
+            "${MCF5307_ABI_STUB_FILE}"
+    OUTPUT_VARIABLE MCF5307_ABI_STUB_COMPILE_OUTPUT
+    ERROR_VARIABLE MCF5307_ABI_STUB_COMPILE_ERROR
+    RESULT_VARIABLE MCF5307_ABI_STUB_COMPILE_RESULT)
+
+if(NOT MCF5307_ABI_STUB_COMPILE_RESULT EQUAL 0)
+    mcf5307_clip(MCF5307_ABI_STUB_COMPILE_OUTPUT_HEAD
+        "${MCF5307_ABI_STUB_COMPILE_OUTPUT}" 2000)
+    mcf5307_clip(MCF5307_ABI_STUB_COMPILE_ERROR_HEAD
+        "${MCF5307_ABI_STUB_COMPILE_ERROR}" 2000)
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: ${MCF5307_ABI_STUB_FILE} did not compile.\n"
+        "  compiler : ${CMAKE_C_COMPILER}\n"
+        "  object   : ${MCF5307_ABI_STUB_OBJECT}\n"
+        "  exit     : ${MCF5307_ABI_STUB_COMPILE_RESULT}\n"
+        "  stdout   : ${MCF5307_ABI_STUB_COMPILE_OUTPUT_HEAD}\n"
+        "  stderr   : ${MCF5307_ABI_STUB_COMPILE_ERROR_HEAD}\n"
+        "A stub the C compiler refuses is a stub cases 3 and 4 of "
+        "`t0_abi_header` cannot link against, and this step reports nothing "
+        "about a file it could not compile.")
+endif()
+
+if(NOT EXISTS "${MCF5307_ABI_STUB_OBJECT}")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: the compiler exited 0 and "
+        "${MCF5307_ABI_STUB_OBJECT} does not exist. The object of an earlier "
+        "run was removed before the compile, so there is nothing here to "
+        "read, and a comparison over an empty set would report every "
+        "published symbol as missing.")
+endif()
+
+mcf5307_abi_read_symbols(MCF5307_ABI_STUB_DEFINED_RAW
+    MCF5307_ABI_STUB_EXTERNAL_RAW "${MCF5307_ABI_STUB_OBJECT}")
+mcf5307_abi_strip(MCF5307_ABI_STUB_DEFINED ${MCF5307_ABI_STUB_DEFINED_RAW})
+mcf5307_abi_strip(MCF5307_ABI_STUB_EXTERNAL ${MCF5307_ABI_STUB_EXTERNAL_RAW})
+
+# Control E. SILENCE IS NOT A PASS. An `nm` that answered nothing over this
+# object would make the comparison below report every published name as
+# missing, which is a loud failure, and would make the other direction report
+# nothing at all, which is a silent one. The symbol reader itself is already
+# calibrated by control D on the measurement shared object.
+if(MCF5307_ABI_STUB_EXTERNAL STREQUAL "")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: control E: `${MCF5307_ABI_NM}` reported no "
+        "external definition at all in ${MCF5307_ABI_STUB_OBJECT}.\n"
+        "That object was just compiled from ${MCF5307_ABI_STUB_FILE}, which "
+        "defines a function for every name the contract publishes. An empty "
+        "answer means the reader read the wrong file or read nothing.")
+endif()
+
+# The verdict. Three categories over the published set, and each published
+# name lands in exactly one.
+#
+#   LINKABLE  published and defined with EXTERNAL linkage.  Pass.
+#   INTERNAL  published and defined with INTERNAL linkage.  FAILS.
+#   ABSENT    published and not defined at all.             FAILS.
+set(MCF5307_ABI_STUB_LINKABLE "")
+set(MCF5307_ABI_STUB_INTERNAL "")
+set(MCF5307_ABI_STUB_ABSENT "")
+foreach(name IN LISTS MCF5307_ABI_PUBLISHED)
+    if(name IN_LIST MCF5307_ABI_STUB_EXTERNAL)
+        list(APPEND MCF5307_ABI_STUB_LINKABLE "${name}")
+    elseif(name IN_LIST MCF5307_ABI_STUB_DEFINED)
+        list(APPEND MCF5307_ABI_STUB_INTERNAL "${name}")
+    else()
+        list(APPEND MCF5307_ABI_STUB_ABSENT "${name}")
+    endif()
+endforeach()
+
+if(NOT MCF5307_ABI_STUB_ABSENT STREQUAL "")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: ${MCF5307_ABI_CONTRACT_FILE} publishes a "
+        "symbol that ${MCF5307_ABI_STUB_FILE} does not define.\n"
+        "  missing from the stub : ${MCF5307_ABI_STUB_ABSENT}\n"
+        "  published             : ${MCF5307_ABI_PUBLISHED}\n"
+        "  defined by the stub   : ${MCF5307_ABI_STUB_EXTERNAL}\n"
+        "  measured object       : ${MCF5307_ABI_STUB_OBJECT}\n"
+        "  symbol lister         : ${MCF5307_ABI_NM}\n"
+        "That file states its invariant as one definition, with an empty "
+        "body, of EVERY function the contract declares, and it is the link "
+        "partner of cases 3 and 4 of `t0_abi_header`. For a name it does not "
+        "define it cannot turn a rename into a link error - the reference "
+        "would be undefined either way. Add one empty definition for each "
+        "name above, with the exact declared signature and a fixed benign "
+        "return. Do not add behaviour: a test that needs behaviour links the "
+        "real library.")
+endif()
+
+if(NOT MCF5307_ABI_STUB_INTERNAL STREQUAL "")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: ${MCF5307_ABI_STUB_FILE} defines a "
+        "published symbol with INTERNAL linkage.\n"
+        "  internal        : ${MCF5307_ABI_STUB_INTERNAL}\n"
+        "  measured object : ${MCF5307_ABI_STUB_OBJECT}\n"
+        "A `static` definition is invisible to the link of `t0_abi_header`, "
+        "so the reference there stays undefined and the definition here "
+        "resolves nothing. This is a separate line from the missing-symbol "
+        "message above because it is a separate fault: the definition exists "
+        "and the linkage is wrong. Remove the `static`.")
+endif()
+
+# The other direction. An external name the contract does not declare.
+set(MCF5307_ABI_STUB_EXTRA "")
+foreach(name IN LISTS MCF5307_ABI_STUB_EXTERNAL)
+    if(NOT name IN_LIST MCF5307_ABI_PUBLISHED)
+        list(APPEND MCF5307_ABI_STUB_EXTRA "${name}")
+    endif()
+endforeach()
+
+if(NOT MCF5307_ABI_STUB_EXTRA STREQUAL "")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: ${MCF5307_ABI_STUB_FILE} defines an "
+        "EXTERNAL symbol that ${MCF5307_ABI_CONTRACT_FILE} does not "
+        "declare.\n"
+        "  defined by the stub and not published : "
+        "${MCF5307_ABI_STUB_EXTRA}\n"
+        "  published                             : ${MCF5307_ABI_PUBLISHED}\n"
+        "  defined by the stub                   : "
+        "${MCF5307_ABI_STUB_EXTERNAL}\n"
+        "Either the contract lost the declaration, or the stub grew a name "
+        "outside its one job. This translation unit is linked into two test "
+        "executables beside the real library's own surface, so an external "
+        "name of its own can collide there. A helper this file needs for "
+        "itself is `static`, and this check says nothing about a `static` "
+        "one.")
+endif()
+
+list(LENGTH MCF5307_ABI_STUB_LINKABLE MCF5307_ABI_STUB_LINKABLE_COUNT)
+message(STATUS
+    "mcf5307: step 4a ${MCF5307_ABI_STUB_FILE} defines externally exactly the "
+    "${MCF5307_ABI_STUB_LINKABLE_COUNT} published symbol(s), so cases 3 and 4 "
+    "of `t0_abi_header` can link against every one of them")
 
 endif()
 
