@@ -287,13 +287,26 @@ message(STATUS "mcf5307: nim invocation: ${MCF5307_NIM_COMMAND_TEXT}")
 # same variable.
 set(MCF5307_ABI_CONTRACT_FILE "${PROJECT_SOURCE_DIR}/include/mcf5307.h")
 
-# Editing a configure-time INPUT must re-run the configure step. Three files
-# are inputs, and all three are listed.
+# The smoke test's symbol list. It is CPU-3's file, it is read here and it is
+# never written here. Step 4a compares it against the published set of the
+# contract header above. It is named at this point for the same reason the
+# contract header is: the dependency list below has to carry it.
+set(MCF5307_ABI_SMOKE_LIST_FILE
+    "${PROJECT_SOURCE_DIR}/tests/abi_smoke_symbols.inc")
+
+# Editing a configure-time INPUT must re-run the configure step. Four files
+# are inputs, and all four are listed.
 #
 #   `src/*.nim`        the unit list is read at configure time, and a new
 #                      module adds a unit to it.
 #   `.nim-version`     step 1 compares it against the compiler.
 #   `include/mcf5307.h` step 4a reads the published set out of it.
+#   `tests/abi_smoke_symbols.inc`
+#                      step 4a reads the smoke test's list out of it and
+#                      compares the two. A list edited without a re-run would
+#                      leave the comparison speaking about a version of the
+#                      list that no longer exists - the exact failure the
+#                      paragraph below records for the contract header.
 #
 # Drop the contract header from this list and an edit to it does not re-run the
 # configure step: step 4a then keeps its verdict about a version of the
@@ -305,7 +318,7 @@ file(GLOB_RECURSE MCF5307_NIM_SOURCES CONFIGURE_DEPENDS
 set_property(DIRECTORY "${PROJECT_SOURCE_DIR}"
     APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     ${MCF5307_NIM_SOURCES} "${MCF5307_NIM_VERSION_FILE}"
-    "${MCF5307_ABI_CONTRACT_FILE}")
+    "${MCF5307_ABI_CONTRACT_FILE}" "${MCF5307_ABI_SMOKE_LIST_FILE}")
 
 execute_process(
     COMMAND ${MCF5307_NIM_COMMAND}
@@ -1293,6 +1306,190 @@ if(NOT MCF5307_ABI_REACHABLE STREQUAL "")
         "call it, the contract header does not declare it, and no mechanism "
         "here enforces that. This line is a report and not a check.")
 endif()
+
+# ---------------------------------------------------------------------------
+# Step 4a, part two. THE SMOKE-TEST LIST GATE.
+#
+# WHAT IT PROTECTS. `tests/abi_smoke.cpp` states its own invariant as taking
+# the address of every function the contract header declares. That sentence
+# was FALSE for two symbols: `mcf5307_set_reg` and `mcf5307_get_reg` reached
+# the contract with CPU-7 and never reached the test, so a rename of either
+# one was not a link error in the one test whose stated job is the ABI
+# surface. Nothing measured the gap, which is exactly why it opened.
+#
+# WHY THE CHECK LIVES HERE AND NOT IN THE TEST. The published set is what the
+# list must equal, and the published set is parsed HERE, by a C compiler,
+# above. A count asserted inside the test would be a third hand-maintained
+# number beside the list and the header, and it would fall behind them the
+# same way. This block compares two SETS and asserts no number at all.
+#
+# IT FAILS IN BOTH DIRECTIONS.
+#
+#   A name the contract declares and the list omits. That is the defect this
+#   block was written for, and the message names the symbol.
+#
+#   A name the list carries and the contract does not declare. The C++ side
+#   also refuses that one - `&name` needs a declaration - but it refuses it
+#   with a compiler diagnostic about a test file, at build time, and this
+#   block refuses it at configure time and says which of the two files is
+#   wrong.
+#
+# THE LIST IS READ AND THE TEST'S C++ IS NOT. `tests/abi_smoke_symbols.inc`
+# holds nothing but blank lines, comment lines and the entry macro, so the
+# reader below needs no C parser and no preprocessor. That is the whole reason
+# the list is a separate file. THE GRAMMAR IS TOTAL: every line lands in
+# exactly one of those three shapes or FAILS THE CONFIGURE STEP with its line
+# number. A line that carries `MCF5307_ABI_FN` in a shape the C++ side would
+# expand but this reader would not - a leading space, a trailing comment, a
+# semicolon - is a failure and never a skip.
+#
+# A COMMENTED-OUT ENTRY NEEDS NO SPECIAL RULE, and the reader deliberately has
+# none. Both readers skip a comment, so both stop seeing the name, and the
+# comparison against the CONTRACT is what fails: the header still declares the
+# symbol and the list no longer names it. This block compares two sets and
+# never a count, so a name it cannot see is a name it reports as missing. That
+# is why the comment shape is tested BEFORE the macro shape below, and why
+# this file's own prose may name the macro.
+#
+# WHEN THE GATE IS OFF THIS CHECK DOES NOT RUN, because there is no published
+# set to compare against. The warning that `-DMCF5307_ABI_GATE=OFF` prints
+# already says the configure run measured nothing.
+
+if(NOT EXISTS "${MCF5307_ABI_SMOKE_LIST_FILE}")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: ${MCF5307_ABI_SMOKE_LIST_FILE} does not "
+        "exist. That file is the symbol list of `tests/abi_smoke.cpp`, the "
+        "test includes it twice, and this step compares it against the "
+        "published set of ${MCF5307_ABI_CONTRACT_FILE}.")
+endif()
+
+file(READ "${MCF5307_ABI_SMOKE_LIST_FILE}" MCF5307_ABI_SMOKE_TEXT)
+string(REPLACE "\r" "" MCF5307_ABI_SMOKE_TEXT "${MCF5307_ABI_SMOKE_TEXT}")
+# A semicolon in the text would split one line into two list elements and the
+# line numbers below would drift. Escaping it keeps every line one element.
+string(REPLACE ";" "\\;" MCF5307_ABI_SMOKE_TEXT "${MCF5307_ABI_SMOKE_TEXT}")
+string(REPLACE "\n" ";" MCF5307_ABI_SMOKE_LINES "${MCF5307_ABI_SMOKE_TEXT}")
+
+set(MCF5307_ABI_SMOKE_NAMES "")
+set(MCF5307_ABI_SMOKE_LINE_NUMBER 0)
+foreach(MCF5307_ABI_SMOKE_LINE IN LISTS MCF5307_ABI_SMOKE_LINES)
+    math(EXPR MCF5307_ABI_SMOKE_LINE_NUMBER
+        "${MCF5307_ABI_SMOKE_LINE_NUMBER} + 1")
+
+    if(MCF5307_ABI_SMOKE_LINE MATCHES "^[ \t]*$")
+        continue()
+    endif()
+
+    # A comment line. The file's own header block is written this way, and it
+    # names the entry macro in its prose. The paragraph above says why a
+    # comment may be skipped without opening a hole: a name this reader cannot
+    # see is a name it reports as missing from the contract's published set.
+    if(MCF5307_ABI_SMOKE_LINE MATCHES "^[ \t]*(/\\*|\\*)")
+        continue()
+    endif()
+
+    # The entry form, anchored at both ends. THE CAPTURE IS COPIED OUT BEFORE
+    # THE NEXT `MATCHES` RUNS, for the reason the symbol reader above records.
+    if(MCF5307_ABI_SMOKE_LINE MATCHES
+            "^MCF5307_ABI_FN\\(([A-Za-z_][A-Za-z0-9_]*)\\)$")
+        set(MCF5307_ABI_SMOKE_NAME "${CMAKE_MATCH_1}")
+        if(MCF5307_ABI_SMOKE_NAME IN_LIST MCF5307_ABI_SMOKE_NAMES)
+            message(FATAL_ERROR
+                "mcf5307: step 4a failed: ${MCF5307_ABI_SMOKE_LIST_FILE} line "
+                "${MCF5307_ABI_SMOKE_LINE_NUMBER} repeats the entry "
+                "`${MCF5307_ABI_SMOKE_NAME}`, which an earlier line already "
+                "carries. The test declares one pointer per entry, so a "
+                "repeat is a redefinition there. The list is a set and this "
+                "step compares it as one.")
+        endif()
+        list(APPEND MCF5307_ABI_SMOKE_NAMES "${MCF5307_ABI_SMOKE_NAME}")
+        continue()
+    endif()
+
+    # A line that is not a comment, that mentions the macro, and that is not
+    # an entry. An entry with a leading space, a trailing comment or a
+    # semicolon lands here. THE C++ SIDE WOULD EXPAND IT AND THIS READER WOULD
+    # NOT, and that disagreement is the one shape this comparison cannot
+    # survive, because it makes the test take an address of a name this step
+    # never saw. It is refused rather than guessed at.
+    if(MCF5307_ABI_SMOKE_LINE MATCHES "MCF5307_ABI_FN")
+        message(FATAL_ERROR
+            "mcf5307: step 4a failed: ${MCF5307_ABI_SMOKE_LIST_FILE} line "
+            "${MCF5307_ABI_SMOKE_LINE_NUMBER} carries `MCF5307_ABI_FN` and is "
+            "neither an entry nor a comment.\n"
+            "  line : ${MCF5307_ABI_SMOKE_LINE}\n"
+            "An entry is exactly `MCF5307_ABI_FN(<identifier>)` with no "
+            "leading space, no trailing text and no semicolon. The C++ side "
+            "would expand this line and this step would not have counted it, "
+            "so the two would disagree about what the list holds.")
+    endif()
+
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: ${MCF5307_ABI_SMOKE_LIST_FILE} line "
+        "${MCF5307_ABI_SMOKE_LINE_NUMBER} is neither blank, nor a comment, "
+        "nor an entry.\n"
+        "  line : ${MCF5307_ABI_SMOKE_LINE}\n"
+        "That file is data and not C. `tests/abi_smoke.cpp` includes it twice "
+        "with two different definitions of `MCF5307_ABI_FN`, and anything "
+        "else in it would expand into both of them.")
+endforeach()
+
+if(MCF5307_ABI_SMOKE_NAMES STREQUAL "")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: ${MCF5307_ABI_SMOKE_LIST_FILE} holds no "
+        "entry at all. An empty list makes the smoke test take no address, "
+        "and the comparison below would then report every published symbol as "
+        "missing. Silence is not a pass.")
+endif()
+
+# The comparison. Two directions, two messages, and each one names the
+# symbols rather than a count.
+set(MCF5307_ABI_SMOKE_MISSING "")
+foreach(name IN LISTS MCF5307_ABI_PUBLISHED)
+    if(NOT name IN_LIST MCF5307_ABI_SMOKE_NAMES)
+        list(APPEND MCF5307_ABI_SMOKE_MISSING "${name}")
+    endif()
+endforeach()
+
+set(MCF5307_ABI_SMOKE_EXTRA "")
+foreach(name IN LISTS MCF5307_ABI_SMOKE_NAMES)
+    if(NOT name IN_LIST MCF5307_ABI_PUBLISHED)
+        list(APPEND MCF5307_ABI_SMOKE_EXTRA "${name}")
+    endif()
+endforeach()
+
+if(NOT MCF5307_ABI_SMOKE_MISSING STREQUAL "")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: ${MCF5307_ABI_CONTRACT_FILE} publishes a "
+        "symbol that ${MCF5307_ABI_SMOKE_LIST_FILE} does not name.\n"
+        "  missing from the test : ${MCF5307_ABI_SMOKE_MISSING}\n"
+        "  published             : ${MCF5307_ABI_PUBLISHED}\n"
+        "  named by the test     : ${MCF5307_ABI_SMOKE_NAMES}\n"
+        "`tests/abi_smoke.cpp` states its invariant as taking the address of "
+        "EVERY function the contract declares, and a symbol it does not name "
+        "is a symbol whose rename that test cannot catch. Add one "
+        "`MCF5307_ABI_FN(<name>)` line to the list file for each name above. "
+        "The test's array grows with the list and carries no written length.")
+endif()
+
+if(NOT MCF5307_ABI_SMOKE_EXTRA STREQUAL "")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: ${MCF5307_ABI_SMOKE_LIST_FILE} names a "
+        "symbol that ${MCF5307_ABI_CONTRACT_FILE} does not declare.\n"
+        "  named by the test and not published : ${MCF5307_ABI_SMOKE_EXTRA}\n"
+        "  published                           : ${MCF5307_ABI_PUBLISHED}\n"
+        "  named by the test                   : ${MCF5307_ABI_SMOKE_NAMES}\n"
+        "Either the contract lost the declaration, or the list names "
+        "something that was never in the contract. The C++ compiler refuses "
+        "the second one too, at build time, and this message says which of "
+        "the two files to change.")
+endif()
+
+list(LENGTH MCF5307_ABI_SMOKE_NAMES MCF5307_ABI_SMOKE_COUNT)
+message(STATUS
+    "mcf5307: step 4a ${MCF5307_ABI_SMOKE_LIST_FILE} names exactly the "
+    "${MCF5307_ABI_SMOKE_COUNT} published symbol(s), so `tests/abi_smoke.cpp` "
+    "takes the address of every one of them")
 
 endif()
 
