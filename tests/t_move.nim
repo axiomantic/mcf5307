@@ -1,14 +1,22 @@
 ## `t_move` - the sized write to a data register in the data-movement group.
 ## Design section 6.1.
 ##
-## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_move`. That corpus is 18 of
-## 18, and it stays 18 of 18 with a destination register that is WRONG. The
-## corpus holds exactly two sized cases, `move_w_d0_to_d1` and
-## `move_b_d0_to_d1`, and BOTH START THE DESTINATION REGISTER AT ZERO. A core
-## that keeps the bytes outside the size and a core that zeroes them produce the
-## same register from a zero destination, so the two cores are not separable by
-## any case the corpus holds. The hole is in the corpus, not only in the
-## executor.
+## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_move`. When this file was
+## written that corpus was 18 of 18, and it STAYED 18 of 18 with a destination
+## register that was WRONG. The corpus held exactly two sized cases,
+## `move_w_d0_to_d1` and `move_b_d0_to_d1`, and BOTH STARTED THE DESTINATION
+## REGISTER AT ZERO. A core that keeps the bytes outside the size and a core
+## that zeroes them produce the same register from a zero destination, so the
+## two cores were not separable by any case the corpus held. The hole was in
+## the corpus, not only in the executor.
+##
+## THE CORPUS HOLE IS NOW CLOSED AND THIS FILE STAYS. `conformance/generate.py`
+## seeds every mergeable destination with 0x12345678 and both sized cases now
+## fail against a replacing write, as does `move_b_mem_to_d1`, which had the
+## same zero destination on the load path. The redundancy between a generated
+## corpus and a hand-written case is not duplication to remove: this file
+## carries source-operand and zero-source variants the corpus does not, and it
+## is the control that would catch a corpus regenerated wrongly.
 ##
 ## EVERY CASE BELOW STARTS THE DESTINATION AT 0x12345678. That is the whole
 ## point of the file: the bytes outside the operand size carry a value that a
@@ -28,10 +36,12 @@
 ##
 ## EVERY CASE ASSERTS A COMPLETE TUPLE (the register, the whole status
 ## register, `fault`), so a register that is right with a flag that is wrong
-## fails, and a flag that is right with a register that is wrong fails. This
-## file can assert the condition codes AT ALL only because it is not the
-## corpus: no case in any of the four corpus files names `sr`, and
-## `conformance/runner.cpp` asserts only the registers a case names.
+## fails, and a flag that is right with a register that is wrong fails. When
+## this file was written it could assert the condition codes AT ALL only
+## because it was not the corpus: no case in any of the four corpus files
+## named `sr`. The corpus now names `sr` in the `move` and `alu` groups and
+## asserts THE SAME WHOLE 16-BIT WORD against the same `srBase` of 0x2700, so
+## the two views of one rule cannot drift apart.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
 ## semantics, the condition-code rules and the encodings are facts about

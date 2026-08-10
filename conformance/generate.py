@@ -63,9 +63,50 @@ A register name is "d0".."d7", "a0".."a7", "sr" or "pc". The runner (CPU-5)
 sets the `initial` registers, executes the case's encoding, and asserts each
 `expected` register equals its value. Registers the `expected` object does
 not name are not asserted: a case that affects only one register does not
-have to state every other one. This is what lets the seed corpus leave the
-condition-code register (`sr`) unstated where the case sets no data register
-it is required to change every time.
+have to state every other one.
+
+## THE CONDITION CODES ARE ASSERTED THROUGH `sr`, AND THE WHOLE WORD IS
+## ASSERTED
+
+`sr` IS A REGISTER LIKE ANY OTHER, in `initial` and in `expected` both. The
+runner sets it through the same bridge as `d0` and asserts it by the same
+equality. This was true of the runner from CPU-5 and NO CASE USED IT: measured
+on the committed corpus before this change, not one case in any of the four
+files named `sr` in its expected state, so every condition-code rule in every
+group was invisible to conformance. Dropping ADD's carry-out, dropping its
+signed overflow, dropping SUB's and NEG's borrow, and making the multiply
+never report V each left `mcf5307_conformance_alu` at 9 of 9.
+
+THE VALUE IS THE WHOLE 16-BIT STATUS REGISTER AND NOT A CONDITION-CODE MASK.
+`0x2700` is the reset value: supervisor set, interrupt mask 7, every condition
+code clear. A case that expects `0x2718` therefore asserts three things at
+once - that X and N are set, that C, V and Z are clear, AND that the executor
+left the supervisor bit and the interrupt mask alone. `tests/t_alu.nim` and
+`tests/t_move.nim` assert the same whole word, so the two views of one rule
+cannot drift apart.
+
+THE INCOMING `sr` IS DELIBERATELY DIRTY. A case whose instruction must CLEAR
+a flag proves nothing when that flag was already clear on entry, exactly as a
+sized MOVE proves nothing into a zero destination. Every flag-asserting case
+below therefore starts from `SR_DIRTY` (0x271F: every condition code set) and
+names the exact word the instruction must leave behind. A case whose
+instruction must not touch the condition codes AT ALL - MOVEA, LEA, PEA, LINK,
+UNLK, MOVEM - expects `SR_DIRTY` back unchanged, which is an assertion a clean
+incoming `sr` cannot make.
+
+WHERE THE MANUAL LEAVES A FLAG UNDEFINED, NO `sr` IS ASSERTED. The equality is
+over the whole word, so a case cannot assert four flags and decline the fifth.
+A case whose rule is not defined for every bit carries no `sr` at all rather
+than pin an accident of this implementation. `docs/toolchain.md` is not the
+authority here; the ColdFire Family Programmer's Reference Manual is
+(AGENTS.md section 11).
+
+A CASE THAT ASSERTS NO REGISTER IS JUDGED BY ITS CYCLE RETURN, and naming
+`sr` takes that judgement away. The runner falls back to "the instruction
+returned a non-zero cycle count" only when `expected.regs` is EMPTY. `nop` is
+the one case in this corpus with no register effect at all, so it deliberately
+names no `sr`: an `sr` expectation of "unchanged" would be satisfied by a NOP
+that never executed.
 
 "mem" is a list of `{"addr": int, "size": int, "value": int}` writes. The
 seed corpus carries only register cases, so every "mem" array in it is empty;
@@ -103,6 +144,51 @@ FORMAT_VERSION = 1
 BINUTILS_VERSION = "GNU assembler (GNU Binutils) 2.47.20260726"
 
 GROUPS = ("move", "alu", "logic", "control")
+
+# ---------------------------------------------------------------------------
+# The status register, written by name.
+#
+# ColdFire keeps the 68k condition-code register in bits 0..4 of the status
+# register: C at 0, V at 1, Z at 2, N at 3, X at 4. Bits 15..8 hold the trace
+# bits, the supervisor bit and the interrupt mask, and 0x2700 is the value the
+# part comes out of reset with: supervisor set, interrupt mask 7, every
+# condition code clear.
+#
+# These are facts about Motorola silicon (AGENTS.md section 11), and they are
+# the same five bit positions `src/mcf5307/machine.nim` names and the same
+# `srBase` `tests/t_alu.nim` and `tests/t_move.nim` name.
+
+SR_BASE = 0x2700      # supervisor, interrupt mask 7, every condition code clear
+CCR_C = 0x01
+CCR_V = 0x02
+CCR_Z = 0x04
+CCR_N = 0x08
+CCR_X = 0x10
+
+# THE INCOMING STATUS REGISTER OF EVERY FLAG-ASSERTING CASE. Every condition
+# code is SET on entry, so that an instruction which must CLEAR a flag is
+# separable from one that never wrote the flag at all. A clean incoming `sr`
+# cannot make that distinction, for the same reason a zero destination register
+# cannot separate a merging sized write from a replacing one.
+SR_DIRTY = SR_BASE | CCR_C | CCR_V | CCR_Z | CCR_N | CCR_X
+
+# ---------------------------------------------------------------------------
+# The destination seeds.
+#
+# A SIZED WRITE TO A DATA REGISTER REPLACES THE LOW size BYTES AND KEEPS THE
+# REST. A destination that starts at zero cannot tell that rule from a write
+# that replaces the whole register, because both leave the same value behind.
+# That is not hypothetical: `eaWrite` in `src/mcf5307/machine.nim` replaced the
+# whole register on a `MOVE.B` for days and `mcf5307_conformance_move` stayed at
+# 18 of 18 throughout, because BOTH of its sized cases started the destination
+# at zero.
+#
+# EVERY BYTE OF THESE SEEDS DIFFERS. A palindromic or repeating seed (0x11111111,
+# 0x12341234) survives a wrong byte lane, a wrong word half or a byte-swapped
+# store and still compares equal. 0x12345678 is the value the hand-written
+# `tests/t_move.nim` uses and it is used here for the same reason.
+DIRTY_D = 0x12345678   # the data-register destination seed
+DIRTY_A = 0x0BADC0DE   # the address-register destination seed
 
 
 def assemble_to_words(instruction):
@@ -143,9 +229,18 @@ def assemble_to_words(instruction):
 # The seed corpus. One entry per case, in the order it appears in the file.
 #
 # `initial` and `expected` are {"regs": {...}} states. The expected "regs"
-# name only the registers the case must change; every other register is not
-# asserted. This keeps the seed corpus unambiguous about arithmetic that
-# also touches the condition-code register, which no seed case asserts.
+# name only the registers the case must change, plus `sr` wherever the
+# condition-code rule is defined for every bit of the word; every other
+# register is not asserted.
+#
+# TWO RULES GOVERN EVERY CASE BELOW, and both exist because the corpus could
+# not see what it was supposed to be measuring.
+#
+#   1. THE DESTINATION NEVER STARTS AT ZERO where a sized write could merge
+#      into it. `DIRTY_D` and `DIRTY_A` are the seeds; see their definition.
+#   2. THE INCOMING `sr` IS `SR_DIRTY` wherever the case asserts flags at all,
+#      so that "the instruction cleared this flag" is separable from "the
+#      instruction never wrote this flag".
 #
 # The seed corpus is deliberately modest. CPU-7 to CPU-10 own their group's
 # `*_*.json` files and add the full instruction set there; this table is the
@@ -153,101 +248,142 @@ def assemble_to_words(instruction):
 # here, never in the committed JSON.
 
 CASES = {
+    # THE CONDITION-CODE RULES OF THIS GROUP. `MOVE` sets N and Z from the
+    # value moved AT THE OPERAND SIZE, clears V and C, and LEAVES X ALONE.
+    # `MOVEQ` does the same over the sign-extended long. `MOVEA`, `LEA`,
+    # `PEA`, `LINK`, `UNLK` and `MOVEM` AFFECT NO CONDITION CODE AT ALL, and
+    # each of those expects `SR_DIRTY` straight back.
     "move": [
         {
+            # THE CONTROL AGAINST AN OVER-FIX of the two sized cases below. A
+            # long write REPLACES the whole register: none of the seed
+            # survives. A core that merged at every size passes both sized
+            # cases and fails here.
             "name": "move_l_d0_to_d1",
             "mnemonic": "move.l",
             "instruction": "move.l %d0,%d1",
-            "initial": {"regs": {"d0": 1, "d1": 2}},
-            "expected": {"regs": {"d1": 1}},
+            "initial": {"regs": {"d0": 0xAABBCCDD, "d1": DIRTY_D,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0xAABBCCDD,
+                                  "sr": SR_BASE | CCR_X | CCR_N}},
         },
         {
+            # `move.l %a0,%a1` is MOVEA.L: destination mode 001. It writes the
+            # whole register and TOUCHES NO CONDITION CODE, which is why the
+            # dirty `sr` comes back unchanged.
             "name": "move_l_a0_to_a1",
             "mnemonic": "move.l",
             "instruction": "move.l %a0,%a1",
-            "initial": {"regs": {"a0": 0x1000, "a1": 0}},
-            "expected": {"regs": {"a1": 0x1000}},
+            "initial": {"regs": {"a0": 0x1000, "a1": DIRTY_A,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"a1": 0x1000, "sr": SR_DIRTY}},
         },
         {
             "name": "move_l_imm_to_d0",
             "mnemonic": "move.l",
             "instruction": "move.l #0x12345678,%d0",
-            "initial": {"regs": {}},
-            "expected": {"regs": {"d0": 0x12345678}},
+            "initial": {"regs": {"d0": 0xFFFFFFFF, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0x12345678, "sr": SR_BASE | CCR_X}},
         },
         {
             "name": "moveq_5_to_d0",
             "mnemonic": "moveq",
             "instruction": "moveq #5,%d0",
-            "initial": {"regs": {"d0": 0}},
-            "expected": {"regs": {"d0": 5}},
+            "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 5, "sr": SR_BASE | CCR_X}},
         },
         {
             "name": "lea_4_a0_to_a1",
             "mnemonic": "lea",
             "instruction": "lea (4,%a0),%a1",
-            "initial": {"regs": {"a0": 0x1000, "a1": 0}},
-            "expected": {"regs": {"a1": 0x1004}},
+            "initial": {"regs": {"a0": 0x1000, "a1": DIRTY_A,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"a1": 0x1004, "sr": SR_DIRTY}},
         },
         {
+            # THE WORD MERGE. The low word is replaced and THE UPPER WORD OF
+            # THE SEED SURVIVES; a replacing write gives 0x00001234 here. The
+            # source carries 0xFFFF above its low word and none of it may
+            # reach the destination, and N comes from BIT 15 of the word
+            # written (0) and not from bit 31 of the source (1).
             "name": "move_w_d0_to_d1",
             "mnemonic": "move.w",
             "instruction": "move.w %d0,%d1",
-            "initial": {"regs": {"d0": 0x1234, "d1": 0}},
-            "expected": {"regs": {"d1": 0x1234}},
+            "initial": {"regs": {"d0": 0xFFFF1234, "d1": DIRTY_D,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0x12341234, "sr": SR_BASE | CCR_X}},
         },
         {
+            # THE BYTE MERGE, and the case the repaired `eaWrite` defect was
+            # measured on: 0xAA over the low byte of 0x12345678 is 0x123456AA
+            # and a replacing write gives 0x000000AA. Bit 7 of the byte is
+            # set, so N is set.
             "name": "move_b_d0_to_d1",
             "mnemonic": "move.b",
             "instruction": "move.b %d0,%d1",
-            "initial": {"regs": {"d0": 0x1234, "d1": 0}},
-            "expected": {"regs": {"d1": 0x34}},
+            "initial": {"regs": {"d0": 0xFFFFFFAA, "d1": DIRTY_D,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0x123456AA,
+                                  "sr": SR_BASE | CCR_X | CCR_N}},
         },
         {
             "name": "move_l_mem_to_d0",
             "mnemonic": "move.l",
             "instruction": "move.l (4,%a1),%d0",
-            "initial": {"regs": {"a1": 0x200, "d0": 0},
+            "initial": {"regs": {"a1": 0x200, "d0": 0xFFFFFFFF,
+                                 "sr": SR_DIRTY},
                         "mem": [{"addr": 0x204, "size": 4,
                                  "value": 0x12345678}]},
-            "expected": {"regs": {"d0": 0x12345678}},
+            "expected": {"regs": {"d0": 0x12345678, "sr": SR_BASE | CCR_X}},
         },
         {
             "name": "move_l_d0_to_mem",
             "mnemonic": "move.l",
             "instruction": "move.l %d0,(4,%a1)",
-            "initial": {"regs": {"a1": 0x200, "d0": 0xDEADBEEF}},
-            "expected": {"mem": [{"addr": 0x204, "size": 4,
+            "initial": {"regs": {"a1": 0x200, "d0": 0xDEADBEEF,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"sr": SR_BASE | CCR_X | CCR_N},
+                         "mem": [{"addr": 0x204, "size": 4,
                                   "value": 0xDEADBEEF}]},
         },
         {
+            # THE BYTE MERGE FROM MEMORY. The load path and the register-to-
+            # register path are different code, so the merge is asserted on
+            # both; this one started the destination at zero too.
             "name": "move_b_mem_to_d1",
             "mnemonic": "move.b",
             "instruction": "move.b (0,%a0),%d1",
-            "initial": {"regs": {"a0": 0x300, "d1": 0},
+            "initial": {"regs": {"a0": 0x300, "d1": DIRTY_D,
+                                 "sr": SR_DIRTY},
                         "mem": [{"addr": 0x300, "size": 1, "value": 0xAB}]},
-            "expected": {"regs": {"d1": 0xAB}},
+            "expected": {"regs": {"d1": 0x123456AB,
+                                  "sr": SR_BASE | CCR_X | CCR_N}},
         },
         {
+            # MOVEA.W SIGN-EXTENDS INTO THE WHOLE REGISTER. It is the one
+            # word-sized write in this group that does NOT merge, so the seed
+            # must not survive any part of it.
             "name": "movea_w_imm_signext",
             "mnemonic": "movea.w",
             "instruction": "movea.w #0x8000,%a0",
-            "initial": {"regs": {"a0": 0}},
-            "expected": {"regs": {"a0": 0xFFFF8000}},
+            "initial": {"regs": {"a0": DIRTY_A, "sr": SR_DIRTY}},
+            "expected": {"regs": {"a0": 0xFFFF8000, "sr": SR_DIRTY}},
         },
         {
             "name": "movea_w_d0_signext",
             "mnemonic": "movea.w",
             "instruction": "movea.w %d0,%a1",
-            "initial": {"regs": {"d0": 0x00001234, "a1": 0}},
-            "expected": {"regs": {"a1": 0x1234}},
+            "initial": {"regs": {"d0": 0x00001234, "a1": DIRTY_A,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"a1": 0x1234, "sr": SR_DIRTY}},
         },
         {
             "name": "moveq_neg1_to_d3",
             "mnemonic": "moveq",
             "instruction": "moveq #-1,%d3",
-            "initial": {"regs": {"d3": 0}},
-            "expected": {"regs": {"d3": -1}},
+            "initial": {"regs": {"d3": DIRTY_D, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d3": -1,
+                                  "sr": SR_BASE | CCR_X | CCR_N}},
         },
         {
             "name": "movem_l_d0_d3_to_mem",
@@ -255,19 +391,25 @@ CASES = {
             "instruction": "movem.l %d0-%d3,(%a1)",
             "initial": {"regs": {"d0": 0x11111111, "d1": 0x22222222,
                                  "d2": 0x33333333, "d3": 0x44444444,
-                                 "a1": 0x300}},
-            "expected": {"mem": [
-                {"addr": 0x300, "size": 4, "value": 0x11111111},
-                {"addr": 0x304, "size": 4, "value": 0x22222222},
-                {"addr": 0x308, "size": 4, "value": 0x33333333},
-                {"addr": 0x30C, "size": 4, "value": 0x44444444},
-            ]},
+                                 "a1": 0x300, "sr": SR_DIRTY}},
+            "expected": {"regs": {"sr": SR_DIRTY},
+                         "mem": [
+                             {"addr": 0x300, "size": 4, "value": 0x11111111},
+                             {"addr": 0x304, "size": 4, "value": 0x22222222},
+                             {"addr": 0x308, "size": 4, "value": 0x33333333},
+                             {"addr": 0x30C, "size": 4, "value": 0x44444444},
+                         ]},
         },
         {
+            # THE LOADED REGISTERS START DIRTY. MOVEM.L replaces each register
+            # whole; a load that wrote a half-register would leave part of the
+            # seed behind, and every one of these started at zero.
             "name": "movem_l_mem_to_a0_a3",
             "mnemonic": "movem.l",
             "instruction": "movem.l (%a1),%a0-%a3",
-            "initial": {"regs": {"a1": 0x300},
+            "initial": {"regs": {"a0": DIRTY_A, "a1": 0x300,
+                                 "a2": 0x1F2E3D4C, "a3": 0x5A6B7C8D,
+                                 "sr": SR_DIRTY},
                         "mem": [
                             {"addr": 0x300, "size": 4, "value": 0x55555555},
                             {"addr": 0x304, "size": 4, "value": 0x66666666},
@@ -275,100 +417,200 @@ CASES = {
                             {"addr": 0x30C, "size": 4, "value": 0x88888888},
                         ]},
             "expected": {"regs": {"a0": 0x55555555, "a1": 0x66666666,
-                                  "a2": 0x77777777, "a3": 0x88888888}},
+                                  "a2": 0x77777777, "a3": 0x88888888,
+                                  "sr": SR_DIRTY}},
         },
         {
             "name": "pea_4_a0",
             "mnemonic": "pea",
             "instruction": "pea (4,%a0)",
-            "initial": {"regs": {"a0": 0x400, "a7": 0x1000}},
-            "expected": {"regs": {"a7": 0xFFC},
+            "initial": {"regs": {"a0": 0x400, "a7": 0x1000,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"a7": 0xFFC, "sr": SR_DIRTY},
                          "mem": [{"addr": 0xFFC, "size": 4, "value": 0x404}]},
         },
         {
             "name": "link_a5_neg8",
             "mnemonic": "link",
             "instruction": "link %a5,#-8",
-            "initial": {"regs": {"a5": 0x500, "a7": 0x1000}},
-            "expected": {"regs": {"a5": 0xFFC, "a7": 0xFF4},
+            "initial": {"regs": {"a5": 0x500, "a7": 0x1000,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"a5": 0xFFC, "a7": 0xFF4,
+                                  "sr": SR_DIRTY},
                          "mem": [{"addr": 0xFFC, "size": 4, "value": 0x500}]},
         },
         {
             "name": "unlk_a5",
             "mnemonic": "unlk",
             "instruction": "unlk %a5",
-            "initial": {"regs": {"a5": 0xFFC, "a7": 0xFF4},
+            "initial": {"regs": {"a5": 0xFFC, "a7": 0xFF4,
+                                 "sr": SR_DIRTY},
                         "mem": [{"addr": 0xFFC, "size": 4, "value": 0x500}]},
-            "expected": {"regs": {"a5": 0x500, "a7": 0x1000}},
+            "expected": {"regs": {"a5": 0x500, "a7": 0x1000,
+                                  "sr": SR_DIRTY}},
         },
     ],
 
+    # THE CONDITION-CODE RULES OF THIS GROUP. `ADD`, `SUB`, `ADDQ`, `SUBQ`,
+    # `ADDI` and `NEG` set N and Z from the result, V from the SIGNED overflow,
+    # and C AND X TOGETHER from the carry or the borrow out of bit 31 - X is
+    # RECOMPUTED by these, not preserved. `CLR` sets Z, clears N, V and C, and
+    # LEAVES X ALONE. `EXT` and the 32-bit multiply set N and Z from the
+    # result, clear C, and leave X alone; the multiply's V reports that the 32
+    # bits written are not the whole product.
+    #
+    # HALF OF THIS GROUP IS THE FLAGS, AND THE FLAGS WERE NOT ASSERTED. Every
+    # `sr` below was measured against a mutation that the corpus previously
+    # could not see; the four the task names are marked.
     "alu": [
         {
             "name": "add_l_d0_to_d1",
             "mnemonic": "add.l",
             "instruction": "add.l %d0,%d1",
-            "initial": {"regs": {"d0": 1, "d1": 2}},
-            "expected": {"regs": {"d1": 3}},
+            "initial": {"regs": {"d0": 1, "d1": 2, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 3, "sr": SR_BASE}},
+        },
+        {
+            # THE CARRY OUT OF BIT 31 SETS BOTH C AND X, and the result is
+            # zero, so Z is set too. DROPPING ADD'S CARRY-OUT IS INVISIBLE
+            # WITHOUT THIS CASE: `add.l` of 1 and 2 carries nothing, and the
+            # register result 0 is the same either way.
+            "name": "add_l_carry_out",
+            "mnemonic": "add.l",
+            "instruction": "add.l %d0,%d1",
+            "initial": {"regs": {"d0": 1, "d1": 0xFFFFFFFF,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0,
+                                  "sr": SR_BASE | CCR_C | CCR_X | CCR_Z}},
+        },
+        {
+            # THE SIGNED OVERFLOW IS A DIFFERENT QUESTION FROM THE CARRY, and
+            # this case is where the two disagree: 0x7FFFFFFF + 1 crosses into
+            # the negative half, so V and N are set and C IS CLEAR. A core that
+            # reported the carry as the overflow fails here and a core that
+            # dropped V altogether fails here; the register result is right in
+            # both.
+            "name": "add_l_signed_overflow",
+            "mnemonic": "add.l",
+            "instruction": "add.l %d0,%d1",
+            "initial": {"regs": {"d0": 1, "d1": 0x7FFFFFFF,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0x80000000,
+                                  "sr": SR_BASE | CCR_V | CCR_N}},
         },
         {
             "name": "sub_l_d0_from_d1",
             "mnemonic": "sub.l",
             "instruction": "sub.l %d0,%d1",
-            "initial": {"regs": {"d0": 1, "d1": 2}},
-            "expected": {"regs": {"d1": 1}},
+            "initial": {"regs": {"d0": 1, "d1": 2, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 1, "sr": SR_BASE}},
         },
         {
+            # THE BORROW SETS C AND X. 1 - 2 is -1, which a core that dropped
+            # the borrow still computes correctly.
+            "name": "sub_l_borrow",
+            "mnemonic": "sub.l",
+            "instruction": "sub.l %d0,%d1",
+            "initial": {"regs": {"d0": 2, "d1": 1, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": -1,
+                                  "sr": SR_BASE | CCR_C | CCR_X | CCR_N}},
+        },
+        {
+            # NEG SETS C WHENEVER A BORROW LEFT THE WORD, which for a negation
+            # is exactly "the operand was not zero". The register result -5 is
+            # the same with or without that rule.
             "name": "neg_l_d0",
             "mnemonic": "neg.l",
             "instruction": "neg.l %d0",
-            "initial": {"regs": {"d0": 5}},
-            "expected": {"regs": {"d0": -5}},
+            "initial": {"regs": {"d0": 5, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": -5,
+                                  "sr": SR_BASE | CCR_C | CCR_X | CCR_N}},
         },
         {
+            # CLR LEAVES X ALONE. It is the one instruction in this group that
+            # does, and a dirty incoming X is the only way to say so: from a
+            # clear X, "preserved" and "cleared" are the same answer.
             "name": "clr_l_d0",
             "mnemonic": "clr.l",
             "instruction": "clr.l %d0",
-            "initial": {"regs": {"d0": 0x12345678}},
-            "expected": {"regs": {"d0": 0}},
+            "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0, "sr": SR_BASE | CCR_Z | CCR_X}},
         },
         {
             "name": "addq_l_1_to_d1",
             "mnemonic": "addq.l",
             "instruction": "addq.l #1,%d1",
-            "initial": {"regs": {"d1": 6}},
-            "expected": {"regs": {"d1": 7}},
+            "initial": {"regs": {"d1": 6, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 7, "sr": SR_BASE}},
+        },
+        {
+            # THE ADDQ DATA FIELD 000 MEANS EIGHT, NOT ZERO. One to seven
+            # encode themselves and zero would be a no-operation, so the
+            # encoding spends that slot on the eighth value. NO OTHER CASE
+            # SEPARATES THE TWO READINGS: every other ADDQ here uses #1.
+            "name": "addq_l_8_to_d1",
+            "mnemonic": "addq.l",
+            "instruction": "addq.l #8,%d1",
+            "initial": {"regs": {"d1": 6, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 14, "sr": SR_BASE}},
         },
         {
             "name": "subq_l_1_from_d0",
             "mnemonic": "subq.l",
             "instruction": "subq.l #1,%d0",
-            "initial": {"regs": {"d0": 6}},
-            "expected": {"regs": {"d0": 5}},
+            "initial": {"regs": {"d0": 6, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 5, "sr": SR_BASE}},
         },
         {
             "name": "addi_l_7_to_d1",
             "mnemonic": "addi.l",
             "instruction": "addi.l #7,%d1",
-            "initial": {"regs": {"d1": 1}},
-            "expected": {"regs": {"d1": 8}},
+            "initial": {"regs": {"d1": 1, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 8, "sr": SR_BASE}},
         },
         {
             "name": "mulu_l_d0_by_d1",
             "mnemonic": "mulu.l",
             "instruction": "mulu.l %d0,%d1",
-            "initial": {"regs": {"d0": 3, "d1": 4}},
-            "expected": {"regs": {"d1": 12}},
+            "initial": {"regs": {"d0": 3, "d1": 4, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 12, "sr": SR_BASE | CCR_X}},
         },
         {
+            # V REPORTS THAT THE 32 BITS WRITTEN ARE NOT THE WHOLE PRODUCT.
+            # 0x10000 squared is 0x1_0000_0000, whose low 32 bits are zero:
+            # WITHOUT V THIS CASE IS INDISTINGUISHABLE FROM A MULTIPLY BY
+            # ZERO, so the register expectation alone cannot catch a core that
+            # never reports the overflow.
+            "name": "mulu_l_overflow_sets_v",
+            "mnemonic": "mulu.l",
+            "instruction": "mulu.l %d0,%d1",
+            "initial": {"regs": {"d0": 0x10000, "d1": 0x10000,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0,
+                                  "sr": SR_BASE | CCR_V | CCR_Z | CCR_X}},
+        },
+        {
+            # EXT.L REPLACES THE WHOLE REGISTER from its low word, so the seed
+            # above that word must not survive. N comes from bit 31 of the
+            # extended long, and X is untouched.
             "name": "ext_l_d0_word",
             "mnemonic": "ext.l",
             "instruction": "ext.l %d0",
-            "initial": {"regs": {"d0": 0x00008000}},
-            "expected": {"regs": {"d0": -32768}},
+            "initial": {"regs": {"d0": 0xAAAA8000, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": -32768,
+                                  "sr": SR_BASE | CCR_N | CCR_X}},
         },
     ],
 
+    # THIS GROUP CARRIES NO `sr` EXPECTATION, AND THAT IS A DELIBERATE GAP.
+    # `mcf5307_conformance_logic` is 0 of 8 because no executor for the group
+    # exists yet; CPU-9 writes it and owns these cases. The shift rules - what
+    # ASL's V reports, what a shift count of zero does to C, and which shifts
+    # write X - are the substance of that task, and pinning them here from a
+    # group with nothing to measure against would pin a guess rather than a
+    # rule. The mechanism is proven on `move` and `alu`; CPU-9 adds `"sr"` to
+    # these cases the same way, and the same two rules at the head of this
+    # table apply.
     "logic": [
         {
             "name": "and_l_d0_d1",
@@ -428,6 +670,12 @@ CASES = {
         },
     ],
 
+    # `nop` NAMES NO REGISTER ON PURPOSE, AND THAT INCLUDES `sr`. It has no
+    # register effect of any kind, so the runner judges it by its cycle return
+    # - and the runner applies that judgement ONLY when `expected.regs` is
+    # empty. An `sr` expectation of "unchanged" would be satisfied by a NOP
+    # that never executed at all, so naming `sr` here would REMOVE the only
+    # assertion this case has rather than add one.
     "control": [
         {
             "name": "nop",
