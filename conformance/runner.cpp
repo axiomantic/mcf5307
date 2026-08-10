@@ -23,6 +23,15 @@
 //   `mcf5307_conformance_control`  runner --group control
 //   `mcf5307_conformance_all`      runner            (all four groups)
 //
+// WHAT A CASE HAS TO SATISFY. Three things, and the first one is newer than
+// the other two: the core must not be halted or faulted after the case's one
+// instruction, every register the case's `expected` state names must match,
+// and every memory word it names must match. THE RUN-STATE CHECK COMES FIRST
+// BECAUSE A TRAP LEAVES THE OPERANDS ALONE - a case that traps and expects a
+// register to be unchanged satisfies the value comparison exactly, and passed
+// this runner until `mcf5307_halted`/`mcf5307_faulted` were added to
+// `include/mcf5307.h`. See the note above the three checks in `runCase`.
+//
 // THE ONE REGISTER BRIDGE. The corpus contract (conformance/generate.py,
 // CPU-4) requires the runner to set the `initial` registers and read back the
 // `expected` registers. CPU-7 added the register file to the core and the two
@@ -551,6 +560,39 @@ struct CaseRun {
   uint32_t actualValue = 0;
 };
 
+// ---------------------------------------------------------------------------
+// THE CYCLE BUDGET IS ONE, AND THAT IS WHAT MAKES THE RUN STATE READABLE.
+//
+// A corpus case is ONE instruction, and the runner has to judge THAT
+// instruction. `mcf5307_exec` is a loop: it keeps stepping while the budget
+// lasts and the core has not halted. With the generous budget this runner used
+// before, the loop walked off the end of the case's encoding into the board's
+// zero fill, `0x0000` decoded as an illegal instruction, and the core ended
+// EVERY case halted and faulted. Measured, `moveq #42,%d0` with a budget of
+// 4096 returns 6 cycles and leaves `mcf5307_faulted` at 1 - the fault belongs
+// to the zero word after the case, not to the case. Asserting the run state
+// after such a run would fail all 41 committed cases, including the 33 that
+// are correct, and report nothing true about any of them.
+//
+// A BUDGET OF ONE EXECUTES EXACTLY ONE INSTRUCTION. `mcf5307_exec` tests the
+// budget before it steps, so it always starts the first instruction; it
+// completes that instruction whatever the instruction costs, and then the
+// budget is spent and the loop ends. The run state read afterwards is
+// therefore the state the CASE'S OWN INSTRUCTION left behind, which is the
+// only state this runner has any business asserting.
+//
+// The returned cycle count stops carrying information under this budget - a
+// completed instruction reports the budget and a halted core reports zero - so
+// it is read as "did an instruction complete" and never as a cost. The corpus
+// asserts no cycle count (`conformance/generate.py`), and CPU-6's own note
+// says the per-instruction costs are nominal until the clock question is
+// settled.
+//
+// A CORE THAT REFUSED TO START AN INSTRUCTION IT COULD NOT AFFORD would return
+// zero here, and `runCase` fails a case that completed no instruction. This
+// budget cannot decay into a case that passes without running.
+const uint32_t kBudget = 1;
+
 CaseRun runCase(const Case& cs) {
   CaseRun out;
 
@@ -594,12 +636,73 @@ CaseRun runCase(const Case& cs) {
     }
   }
 
-  // A generous budget: enough cycles to fetch the instruction and every
-  // extension word and to execute it. The core returns the cycles actually
-  // spent. The single exec below is the case's whole run; a case that
-  // asserts no register is judged by its cycle return, so the return is kept.
-  const uint32_t kBudget = 4096;
+  // One instruction. See the note on `kBudget` above.
   const uint32_t cycles = mcf5307_exec(ctx, kBudget);
+
+  // ---------------------------------------------------------------------
+  // THE RUN STATE, ASSERTED BEFORE ANY VALUE IS COMPARED.
+  //
+  // This is the assertion the runner did not have. It judged a case purely
+  // by the registers and memory the case named, so a case whose instruction
+  // TRAPPED still passed whenever those named values happened to match -
+  // which is every case that expects a register to be UNCHANGED, because a
+  // trap leaves the operands exactly as it found them. Measured on this
+  // runner before the assertion existed: `divu.l %d1,%d0` with `d1` zero
+  // divides by zero, the core halts with `fault`, `d0` and `d1` are
+  // untouched, and the case reported `1 cases, 0 failed`.
+  //
+  // `tests/t_alu.nim` and `tests/t_move.nim` assert the same property
+  // through `ctx.fault`, because they are Nim and reach the context
+  // directly. This runner goes through the C ABI, and the ABI published no
+  // way to see either bit. `mcf5307_halted` and `mcf5307_faulted`
+  // (`include/mcf5307.h`) are that channel, and the three checks below are
+  // the whole reason they exist.
+  //
+  // THE THREE CHECKS ARE ORDERED FROM THE MOST SPECIFIC REASON TO THE
+  // LEAST, so the message names WHY the case is wrong rather than a
+  // register value that a trap made meaningless.
+  //
+  //   faulted   the instruction trapped: a bus error, an illegal
+  //             instruction word, an illegal effective address for the
+  //             opcode, an illegal operand size, or a divide by zero.
+  //   halted    the core stopped and did not fault. On this core that is a
+  //             valid opcode whose semantics a later task owns.
+  //   cycles    no instruction completed at all.
+  //
+  // THE CYCLE CHECK IS NO LONGER CONDITIONAL ON THE EXPECTED REGISTERS.
+  // It used to apply only when `expected.regs` was empty, so naming any
+  // register silently removed the runner's only "it ran" assertion.
+  // `conformance/generate.py`'s `nop` case carries a comment about exactly
+  // that hazard. All three checks below run for every case.
+  if (mcf5307_faulted(ctx) != 0) {
+    out.ran = true;
+    out.ok = false;
+    out.reason =
+        "the instruction TRAPPED: the core halted with a fault "
+        "(mcf5307_faulted is 1). A bus error, an illegal instruction word, "
+        "an illegal effective address, an illegal size or a divide by zero. "
+        "The registers this case names may still match, and that is exactly "
+        "why this is checked before them.";
+    mcf5307_destroy(ctx);
+    return out;
+  }
+  if (mcf5307_halted(ctx) != 0) {
+    out.ran = true;
+    out.ok = false;
+    out.reason =
+        "the core HALTED without a fault (mcf5307_halted is 1, "
+        "mcf5307_faulted is 0). The encoding is valid and its semantics are "
+        "not written yet.";
+    mcf5307_destroy(ctx);
+    return out;
+  }
+  if (cycles == 0) {
+    out.ran = true;
+    out.ok = false;
+    out.reason = "the instruction did not execute (0 cycles returned)";
+    mcf5307_destroy(ctx);
+    return out;
+  }
 
   // Read the expected registers and compare each. Only the registers the
   // expected state names are asserted (the corpus contract: a case that
@@ -641,17 +744,6 @@ CaseRun runCase(const Case& cs) {
       mcf5307_destroy(ctx);
       return out;
     }
-  }
-
-  // No expected registers: the case passes when the instruction ran. The
-  // conformance reader's only observable for "it ran" through the current
-  // ABI is a non-zero cycle return from that one exec.
-  if (cs.expectedRegs.empty() && cycles == 0) {
-    out.ran = true;
-    out.ok = false;
-    out.reason = "the instruction did not execute (0 cycles returned)";
-    mcf5307_destroy(ctx);
-    return out;
   }
 
   out.ran = true;

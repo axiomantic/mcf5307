@@ -113,6 +113,39 @@ uint32_t mcf5307_exec(mcf5307_ctx* ctx, uint32_t max_cycles);
 int mcf5307_set_reg(mcf5307_ctx* ctx, int index, uint32_t value);
 uint32_t mcf5307_get_reg(const mcf5307_ctx* ctx, int index);
 
+/* THE CORE'S RUN STATE, AND THE ONLY WAY TO SEE IT ACROSS THIS INTERFACE.
+ *
+ * `mcf5307_exec` returns a cycle count and nothing else. A cycle count cannot
+ * say WHY the core stopped, so before these two calls existed a caller that
+ * went through this header could not tell an instruction that executed from
+ * an instruction that trapped. The conformance runner (conformance/runner.cpp)
+ * measured exactly that gap: a case whose instruction traps still passed
+ * whenever the registers it named happened to hold the expected values, which
+ * is every case that expects a register to be UNCHANGED. The Nim-side tests
+ * (`tests/t_alu.nim`, `tests/t_move.nim`) assert the same thing through
+ * `ctx.fault` because they reach the context directly; a C++ caller cannot,
+ * and these two calls are that missing channel.
+ *
+ * Both return 1 for true and 0 for false, and both return 0 for a nil
+ * context - a caller with no context has no halted core and no faulted one.
+ *
+ * `mcf5307_halted` is 1 when the core has stopped and will run no further
+ * instruction until the next `mcf5307_reset`. `mcf5307_exec` returns
+ * immediately on a halted context.
+ *
+ * `mcf5307_faulted` is 1 when the reason for that stop was a FAULT: a bus
+ * error on an operand or instruction access, an illegal instruction word, an
+ * illegal effective address for the opcode, an illegal operand size, or a
+ * divide by zero. THE TWO ARE NOT THE SAME FLAG. A core can be halted without
+ * a fault - a valid opcode whose semantics a later task owns halts and does
+ * not fault - so a caller that wants "did this instruction trap" must ask
+ * `mcf5307_faulted`, and a caller that wants "may I run more" must ask
+ * `mcf5307_halted`. A faulted core is always also halted.
+ *
+ * Neither call changes any state, which is why both take a const context. */
+int mcf5307_halted(const mcf5307_ctx* ctx);
+int mcf5307_faulted(const mcf5307_ctx* ctx);
+
 /* The named zero of the `level` argument below: no interrupt is pending. */
 #define MCF5307_IRQ_NONE 0
 
