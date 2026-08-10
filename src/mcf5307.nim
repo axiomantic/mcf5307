@@ -13,10 +13,12 @@ import system/ansi_c
 # `mcf5307_*` state functions the submodules carry are reached from C by name
 # (see `include/mcf5307.h` and `tests/abi_smoke.cpp`).
 {.push warning[UnusedImport]: off.}
+import mcf5307/alu
 import mcf5307/cpu
 import mcf5307/decode
 import mcf5307/decode_types
 import mcf5307/ea
+import mcf5307/machine
 import mcf5307/move
 {.pop.}
 

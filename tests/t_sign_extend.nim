@@ -1,4 +1,4 @@
-## `t_sign_extend` - the sign-extension helpers of `mcf5307/move`.
+## `t_sign_extend` - the sign-extension helpers of `mcf5307/machine`.
 ##
 ## TEN CASES, AND EACH ONE CAN FAIL. `s16` and `s8` turn a displacement or an
 ## immediate value from the instruction stream into the signed 32-bit value
@@ -29,9 +29,14 @@
 ## returned a constant 0, or a program that cannot run at all, would not be
 ## separable from a helper that extends the sign correctly.
 ##
-## THE HELPERS ARE PRIVATE AND STAY PRIVATE. `s16` and `s8` are internal to
-## `mcf5307/move`; they are not part of the C ABI and no other module calls
-## them. This file therefore uses `include` and not `import`: `include` puts
+## THE HELPERS FOLLOWED THE CODE THEY SERVE. CPU-7 wrote `s16` and `s8` inside
+## `mcf5307/move`; CPU-8 lifted them, with the rest of the machine substrate,
+## into `mcf5307/machine`, so this file includes that module instead. The
+## boundary values it pins are unchanged, and the reason it pins them is
+## unchanged.
+##
+## They are not part of the C ABI and no C caller names
+## them. This file uses `include` and not `import`: `include` puts
 ## the module's text in this program, which gives the test the private names
 ## WITHOUT adding an export to the module under test. Exporting the two
 ## helpers to make them testable would enlarge the module's public surface for
@@ -43,7 +48,7 @@
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code.
 
-include mcf5307/move
+include mcf5307/machine
 
 var failures: seq[string]
 var passCount = 0

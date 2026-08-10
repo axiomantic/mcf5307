@@ -41,6 +41,11 @@ type
     opTas, opNbcd
     opScc
     opBcc, opBra
+    # CPU-8 appends here, IMMEDIATELY BEFORE `opIllegal` and nowhere else.
+    # `opNop` must stay at ordinal 0, because a zero-initialised `Decoded`
+    # reads as `opNop`, and `opIllegal` must stay last. Appending here moves
+    # no ordinal that anything depends on.
+    opAddx, opSubx, opNegx, opExtb
     opIllegal
 
   Decoded* = ref object
@@ -50,6 +55,10 @@ type
     destReg*: uint8
     destMode*: uint8
     memDir*: bool
+    dirToEa*: bool   ## ADD/SUB direction: false is `<ea> op Dn -> Dn`,
+                     ## true is `Dn op <ea> -> <ea>`.
+    imm*: uint8      ## the quick immediate of ADDQ and SUBQ, already
+                     ## resolved: the encoded data field 000 means eight.
 
   # ---------------------------------------------------------------------------
   # The bus-status values and the board callbacks, matching `include/mcf5307.h`
@@ -84,15 +93,41 @@ type
 # ---------------------------------------------------------------------------
 # The effective-address legality table.
 
+const eaMemoryAlterable* = EaLegality(modes: eaMemAlterableModes,
+                                      ea7: eaMemAlterable7)
+  ## The destination mask of the `Dn op <ea> -> <ea>` direction of ADD and
+  ## SUB. It is not reachable through `eaLegalityFor`, because that table is
+  ## keyed on the operation alone and this direction is a property of the
+  ## instruction WORD, not of the operation. `alu.nim` names it directly.
+
 proc eaLegalityFor*(op: Operation): EaLegality =
-  ## The legality mask the opcode carries. Illegal for an opcode with no
-  ## effective address is meaningless (the empty mask).
+  ## The legality mask the opcode carries. An opcode with no effective
+  ## address carries the empty mask.
   case op
-  of opMove, opMovea, opAddq, opSubq:
+  of opMove, opMovea:
     # These take data addressing, which admits every mode including the
     # mode-7 sub-variants. The reserved and invalid mode-7 encodings stay
     # out of the mask, so they trap.
     EaLegality(modes: eaDataModes, ea7: eaData7)
+  of opAdd, opSub, opAdda, opSuba:
+    # The `<ea>` operand of the register direction, and the source of ADDA
+    # and SUBA: data addressing, PC-relative and immediate included.
+    EaLegality(modes: eaDataModes, ea7: eaData7)
+  of opAddq, opSubq:
+    # ALTERABLE, WHICH IS NARROWER THAN THE DATA ADDRESSING THIS ENTRY USED
+    # TO NAME. An ADDQ destination is written, so it cannot be PC-relative
+    # and it cannot be an immediate; `m68k-elf-as -mcpu=5307` rejects
+    # `addq.l #1,(4,%pc)`. An address register IS allowed, which is why this
+    # is `alterable` and not `data alterable`.
+    EaLegality(modes: eaAlterableModes, ea7: eaAlterable7)
+  of opClr, opMulu, opMuls, opDivu, opDivs:
+    # Data alterable: no An, no PC-relative, no immediate.
+    EaLegality(modes: eaDataAlterableModes, ea7: eaDataAlterable7)
+  of opAddi, opSubi, opNeg, opNegx, opExt, opExtb, opAddx, opSubx:
+    # A DATA REGISTER AND NOTHING ELSE on this part. The 68000 forms that
+    # reach memory (`addi.l #7,(%a0)`, `neg.l (%a0)`) and the memory form of
+    # ADDX are all rejected by `m68k-elf-as -mcpu=5307`.
+    EaLegality(modes: {eaDn}, ea7: {})
   of opLea, opMovem, opPea:
     # These take control addressing only: (An), (d16,An), (d8,An,Xn),
     # (xxx).L, (d16,PC), (d8,PC,Xn). A data register direct (mode 0), an
@@ -104,6 +139,12 @@ proc eaLegalityFor*(op: Operation): EaLegality =
 
 proc eaIsLegalFor*(op: Operation; ea: EA): bool =
   ## True when `ea` is inside the opcode's legality mask. An opcode with no
-  ## effective address has no mask and therefore no illegal mode.
-  result = (op in {opMove, opMovea, opAddq, opSubq, opLea, opMovem, opPea}) and
-    isEaLegal(eaLegalityFor(op), ea)
+  ## effective address carries the empty mask and no mode is inside it.
+  ##
+  ## THE EMPTY MASK IS THE TEST, and it used to be a second list of the
+  ## operations `eaLegalityFor` names. Two lists drift: an operation added to
+  ## the table above and forgotten here would have had every effective
+  ## address rejected, which reads as "the opcode is strict" and is really
+  ## "the opcode is unreachable".
+  let legality = eaLegalityFor(op)
+  result = legality.modes != {} and isEaLegal(legality, ea)
