@@ -895,7 +895,19 @@ endif()
 # The program prints `t_logic: <N> cases passed`; failing cases make it exit
 # non-zero, which the check above already rejects. Anchoring the tail here
 # keeps a run that printed the banner but skipped the cases from passing.
-if(NOT logic_run_out MATCHES "t_logic: [0-9]+ cases passed")
+#
+# THE COUNT IS `[1-9][0-9]*` AND NOT `[0-9]+`, AND THE DIFFERENCE IS THE WHOLE
+# CHECK. `[0-9]+` matches `0`, so a `t_logic.nim` reduced to nothing but
+# `echo "t_logic: ", 0, " cases passed"` exits 0, prints the banner, runs no
+# case and PASSES this test - which is the one outcome the paragraph above
+# says this anchor exists to reject. Measured: with `[0-9]+`, that reduced
+# program passes; with the pattern below it fails.
+#
+# THE FOUR OTHER BLOCKS IN THIS FILE CARRY THE SAME SENTENCE AND THE SAME
+# `[0-9]+`. They belong to their own tasks - section 7.4.2 makes CPU-26 the
+# owner of this file and admits a later cpu task only as a second writer of
+# ITS OWN registration - so they are not repaired here and they are filed.
+if(NOT logic_run_out MATCHES "t_logic: [1-9][0-9]* cases passed")
     message(FATAL_ERROR
         "t_logic: the run exited 0 but did not report a full pass.\n"
         "  stdout : ${logic_run_out}\n  stderr : ${logic_run_err}")
