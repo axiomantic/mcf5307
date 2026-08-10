@@ -149,8 +149,18 @@ proc writeMem*(ctx: MCF5307Ctx; address: uint32; size: uint8; value: uint32) =
 
 proc fetchExt*(ctx: MCF5307Ctx): uint16 =
   ## Read one extension word from the instruction stream and advance the pc
-  ## past it. The pc-relative base of a PC mode is the pc AFTER its last
-  ## extension word, which is exactly where the next instruction begins.
+  ## past it.
+  ##
+  ## THIS PROCEDURE DOES NOT DEFINE THE PC-RELATIVE BASE, AND AN EARLIER
+  ## REVISION OF THIS COMMENT ASSERTED THAT IT DID. It read "the pc-relative
+  ## base of a PC mode is the pc AFTER its last extension word, which is
+  ## exactly where the next instruction begins", and that is false: the base is
+  ## the address OF the displacement word, which is the pc BEFORE this call.
+  ## `eaAddr` reads `ctx.pc` into a local before it calls this procedure for
+  ## exactly that reason; the citation is on the two PC arms there.
+  ##
+  ## The wrong sentence was not idle. `eaAddr` was written to agree with it and
+  ## every PC-relative operand in the core was two bytes high.
   var st = Mcf5307BusStatus.busOk
   let v = ctx.readFn(ctx.user, ctx.pc, 2, addr st)
   if st != Mcf5307BusStatus.busOk:
@@ -180,12 +190,39 @@ func s8*(x: uint16): int32 =
 
 proc indexOperand*(ctx: MCF5307Ctx; ext: uint16): uint32 =
   ## The scaled index operand of an indexed extension word. Bit 15 selects
-  ## Dn(0) or An(1), bits 14..12 the index register, bits 10..9 the scale
-  ## (1, 2, 4, 8), bit 8 word(0) or long(1) index, bits 7..0 the signed d8.
+  ## Dn(0) or An(1), bits 14..12 the index register, BIT 11 word(0) or long(1)
+  ## index, bits 10..9 the scale (1, 2, 4, 8), bit 8 the brief-format marker,
+  ## bits 7..0 the signed d8.
+  ##
+  ## THE WORD/LONG SELECT IS BIT 11 AND THIS READ IT AT BIT 8. Bit 8 is the
+  ## brief-format marker and is zero in every word the assembler emits, so the
+  ## old reading answered WORD for every legal encoding and sign-extended an
+  ## index that must not be narrowed at all.
+  ##
+  ## THE MANUAL DOES NOT PRINT THE EXTENSION WORD'S LAYOUT. There is no
+  ## brief-format figure anywhere in the MCF5307 User's Manual, so the pinned
+  ## assembler is the authority for the bit position: `btst %d1,(4,%pc,%d2)`
+  ## assembles to `033b 2804`, whose `2804` has bit 11 SET and bit 8 CLEAR, and
+  ## `m68k-elf-objdump -m m68k:5307` prints `%pc@(0x6,%d2:l)` - `:l`, a LONG
+  ## index. Scaling corroborates the neighbouring fields: `(4,%pc,%d2*4)` is
+  ## `2c04`, which moves bits 10..9 alone.
+  ##
+  ## WHAT THE MANUAL DOES SAY IS THAT THE WORD FORM DOES NOT EXIST HERE.
+  ## Section 3.5.2, "Address Error Exception", page 3-15: "Any attempted use of
+  ## a word-sized index register (Xi.w) or a scale factor of 8 on an indexed
+  ## effective addressing mode generates an address error". `m68k-elf-as
+  ## -mcpu=5307` agrees and REJECTS `btst %d1,(4,%pc,%d2.w)`, so bit 11 is set
+  ## in every encoding this core can legally be given and the narrowing branch
+  ## below is unreachable from assembled code.
+  ##
+  ## THAT ADDRESS ERROR IS NOT RAISED HERE, and nothing asserts it. This
+  ## procedure narrows a word index rather than faulting on one, and it applies
+  ## a scale of 8 rather than faulting on that. Both are outside the defect
+  ## this comment repairs; see the uncertainty note in `eaAddr` below.
   let isAn = (ext and 0x8000'u16) != 0'u16
   let n = (ext shr 12) and 0x7'u16
   let scale = (ext shr 9) and 0x3'u16
-  let longIndex = (ext and 0x0100'u16) != 0'u16
+  let longIndex = (ext and 0x0800'u16) != 0'u16
   var v = if isAn: regA(ctx, uint8(n)) else: regD(ctx, uint8(n))
   if not longIndex:
     v = uint32(s16(uint16(v and 0xFFFF'u32)))
@@ -194,6 +231,29 @@ proc indexOperand*(ctx: MCF5307Ctx; ext: uint16): uint32 =
 proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
   ## The effective address of a memory-addressing mode. Register and
   ## immediate modes have no address; a caller that asks for one gets 0.
+  ##
+  ## WHAT THIS PROCEDURE DOES NOT KNOW. Two things, and the rule for both is
+  ## the one `logic.nim`'s header uses: THE IMPLEMENTATION PICKS A BEHAVIOUR
+  ## AND NOTHING ASSERTS IT.
+  ##
+  ##   1. THE ADDRESS ERROR OF AN ILLEGAL INDEX. MCF5307 User's Manual section
+  ##      3.5.2, page 3-15, says a word-sized index register or a scale factor
+  ##      of 8 "generates an address error". `indexOperand` raises no such
+  ##      error: it narrows the word index and it applies the scale of 8. No
+  ##      case reaches either, because `m68k-elf-as -mcpu=5307` REFUSES to
+  ##      assemble `(4,%pc,%d2.w)` and `(4,%pc,%d2*8)`, so the corpus - which
+  ##      is generated through that assembler - cannot express one, and a
+  ##      hand-written word would be asserting a trap this core does not have.
+  ##      Raising it is a change of behaviour and belongs to whoever owns the
+  ##      exception model, not to a repair of the address arithmetic.
+  ##
+  ##   2. THE SIGN EXTENSION OF `(xxx).W`. `ea7AbsW` sign-extends its one
+  ##      extension word, so `0x8000.w` addresses `0xFFFF8000`. NOTHING PINS
+  ##      IT: the conformance runner's board is 1 MiB, an access above it
+  ##      reports `busUnmapped`, and a case whose operand access faults fails
+  ##      on the run state rather than on the address. Every `(xxx).W` case in
+  ##      the corpus therefore uses a positive short address, at which
+  ##      sign-extending and zero-extending are the same answer.
   case ea.mode
   of eaAnInd:
     result = regA(ctx, ea.reg)
@@ -213,21 +273,53 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
     of ea7AbsW:
       result = uint32(s16(fetchExt(ctx)))
     of ea7AbsL:
-      # The first extension word is the high half. ColdFire Family
-      # Programmer's Reference Manual, Rev. 3, section 2.2.11 and Figure 2-13:
-      # "The first extension word contains the high-order part of the address;
-      # the second contains the low-order part." The two `fetchExt` calls are
-      # ordered, so naming them the other way round assembles the address
-      # word-swapped and every `(xxx).L` operand reads the wrong place.
+      # THE FIRST EXTENSION WORD IS THE HIGH HALF OF THE ADDRESS. MCF5307
+      # User's Manual section 3.7.2, "Organization of Integer Data Formats in
+      # Memory", page 3-19: "The address N of a longword data item corresponds
+      # to the address of the high order word. The lower order word is located
+      # at address N + 2." The extension pair is a longword in the instruction
+      # stream, so the word at the lower address is the high half.
+      # `m68k-elf-as -mcpu=5307` agrees: `btst %d1,0x00030004` assembles to
+      # `0339 0003 0004`.
+      #
+      # THIS READ THE TWO HALVES THE OTHER WAY ROUND, and nothing saw it: no
+      # case in any group used an absolute-long operand at all. Measured on a
+      # dynamic BTST against `$00030004`, the core reached `$00040003`. The two
+      # other readers of a longword in the instruction stream - `ea7Imm` below
+      # and `execImmediate` in `logic.nim` - already took the high half first,
+      # so the tree disagreed with itself.
       let hi = fetchExt(ctx)
       let lo = fetchExt(ctx)
       result = (uint32(hi) shl 16) or uint32(lo)
     of ea7PCDisp:
-      let d = s16(fetchExt(ctx))
-      result = ctx.pc + uint32(d)
+      # THE PC-RELATIVE BASE IS THE ADDRESS *OF* THE EXTENSION WORD, so it is
+      # taken BEFORE `fetchExt` advances the program counter past it. The
+      # indexed PC mode below takes its base the same way and for the same
+      # reason.
+      #
+      # THE MANUAL DOES NOT SETTLE THIS. The MCF5307 User's Manual names
+      # `(d16,PC)` and `(d8,PC,Xi)` in Table 3-5 (page 3-21) and prints no
+      # effective-address equation for any mode, so the authority here is the
+      # pinned assembler. Measured: `btst %d1,(target,%pc)` with the opcode at
+      # 0 assembles to `033a 0004` and `target` is placed at 6, and
+      # `m68k-elf-objdump -m m68k:5307` prints `btst %d1,%pc@(6 <target>)`.
+      # Base + 4 = 6, so the base is 2 - the address of the displacement word
+      # and not the address after it.
+      #
+      # THIS TOOK THE BASE AFTER THE WORD and every PC-relative operand in the
+      # core - MOVE's, the arithmetic group's and BTST's alike - was two bytes
+      # high. Nothing saw it: no conformance case in any group used a
+      # PC-relative operand, and `tests/t_logic.nim` seeded both candidate
+      # addresses with the same byte on purpose so that it would not pin the
+      # base.
+      let base = ctx.pc
+      result = base + uint32(s16(fetchExt(ctx)))
     of ea7PCIndex:
+      # The base is the address of the extension word, exactly as for
+      # `ea7PCDisp` above; the citation and the measurement are there.
+      let base = ctx.pc
       let ext = fetchExt(ctx)
-      result = ctx.pc + uint32(s8(ext)) + indexOperand(ctx, ext)
+      result = base + uint32(s8(ext)) + indexOperand(ctx, ext)
     else:
       # ea7Unused5 / ea7Invalid / ea7Unused7: reserved, never a legal EA.
       ctx.fault = true
