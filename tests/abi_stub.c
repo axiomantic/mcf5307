@@ -1,5 +1,5 @@
-/* abi_stub.c - one definition, with an empty body, of every function
- * `include/mcf5307.h` declares.
+/* abi_stub.c - one definition, with an empty body and EXTERNAL LINKAGE, of
+ * every function `include/mcf5307.h` declares.
  *
  * WHY IT EXISTS. Cases 3 and 4 of `t0_abi_header` COMPILE AND LINK, and
  * linking is what makes a RENAMED declaration a link error rather than
@@ -9,13 +9,43 @@
  * contract, so a check that waited for it could never pass at this task's
  * completion. This stub breaks that circle.
  *
- * NO LATER TASK EDITS THIS FILE. The real implementation supersedes it for
- * every later test; this translation unit stays exactly as strict and
- * exactly as empty as it is here, because its only job is to make the link
- * of the eighteen names succeed or fail.
+ * THE OPENING SENTENCE WAS FALSE AND NOTHING MEASURED IT. Measured at
+ * `ed85588`: the contract declared twenty-two functions and this file defined
+ * eighteen. `mcf5307_set_reg` and `mcf5307_get_reg` reached the contract with
+ * CPU-7, `mcf5307_halted` and `mcf5307_faulted` reached it with CPU-5, and
+ * none of the four reached this file. The prose also contradicted itself: the
+ * first sentence claimed every function and a later one named eighteen.
+ * `cmake/Nim.cmake` step 4a, part three now COMPILES this file, reads the
+ * symbols the object defines with `nm`, and compares that set against the
+ * published set it parses out of the contract with a C compiler. NO COUNT IS
+ * WRITTEN HERE OR THERE. A count is a third number beside the header and the
+ * code, and it falls behind them both - which is exactly what the word
+ * `eighteen` did.
  *
- * NOTHING HERE EMULATES ANYTHING. Every body is empty and every return is a
- * fixed benign value. A test that needs behaviour links the real library.
+ * WHAT NO LATER TASK MAY DO TO THIS FILE, AND WHAT THE FREEZE NEVER MEANT.
+ * The freeze is on BEHAVIOUR and it still holds: every body stays empty,
+ * every return stays a fixed benign value, and nothing here emulates
+ * anything. A test that needs behaviour links the real library. THE SET OF
+ * DEFINITIONS IS NOT FROZEN and never could be, because it is the contract's
+ * own published set: it moves when the contract moves, and a file forbidden
+ * to move with it is a file whose opening sentence goes stale in silence.
+ * The gate is what makes that movement mechanical rather than remembered.
+ *
+ * A HELPER WITH INTERNAL LINKAGE IS ALLOWED AND IS NOT MEASURED. The gate
+ * compares EXTERNAL definitions, because an external definition is what the
+ * link of `t0_abi_header` resolves against. A published name defined `static`
+ * here would resolve nothing there, so the gate refuses that and says nothing
+ * about a `static` name the contract never declared.
+ *
+ * WHAT THIS FILE CANNOT DO ON ITS OWN. A link error needs a reference as well
+ * as a definition. `t0_abi_header.c` and `t0_abi_header.cpp` take EIGHTEEN
+ * addresses each, from a fixed list of their own, and neither one names
+ * `mcf5307_set_reg`, `mcf5307_get_reg`, `mcf5307_halted` or
+ * `mcf5307_faulted`. A rename of those four is therefore still caught by
+ * nothing in `t0_abi_header`, whatever this file defines. That gap belongs to
+ * those two files and is not this one's to close. `tests/abi_smoke.cpp` does
+ * take the address of all twenty-two, through `tests/abi_smoke_symbols.inc`,
+ * and step 4a holds that list against the contract in both directions.
  */
 
 #include <stddef.h>
@@ -58,6 +88,38 @@ uint32_t mcf5307_exec(mcf5307_ctx* ctx, uint32_t max_cycles)
     (void)ctx;
     (void)max_cycles;
     return 0u;
+}
+
+/* The register bridge of CPU-7. `mcf5307_set_reg` returns 0, which the
+ * contract reads as "the write did not happen", and `mcf5307_get_reg` returns
+ * 0. Both are the fixed benign value of a stub and neither is a register. */
+int mcf5307_set_reg(mcf5307_ctx* ctx, int index, uint32_t value)
+{
+    (void)ctx;
+    (void)index;
+    (void)value;
+    return 0;
+}
+
+uint32_t mcf5307_get_reg(const mcf5307_ctx* ctx, int index)
+{
+    (void)ctx;
+    (void)index;
+    return 0u;
+}
+
+/* The run state of CPU-5. Both return 0, which the contract reads as "not
+ * halted" and "not faulted" - the answer it also gives for a nil context. */
+int mcf5307_halted(const mcf5307_ctx* ctx)
+{
+    (void)ctx;
+    return 0;
+}
+
+int mcf5307_faulted(const mcf5307_ctx* ctx)
+{
+    (void)ctx;
+    return 0;
 }
 
 void mcf5307_set_irq(mcf5307_ctx* ctx, int level, uint8_t vector,
