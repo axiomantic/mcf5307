@@ -184,14 +184,30 @@ const eaBitDynamic* = EaLegality(modes: eaDataAlterableModes,
   ## `bset %d1,#5`, `bclr %d1,#5` and `bchg %d1,#5` are rejected under BOTH,
   ## so that rejection distinguishes nothing either.
   ##
+  ## THE SECOND TABLE OF THE SAME MANUAL READS THE OTHER WAY, AND IT IS NAMED
+  ## HERE so that the disagreement is checkable. MCF5307 User's Manual
+  ## Table 3-5, "Effective Addressing Modes and Categories", page 3-21, marks
+  ## Immediate `#<xxx>` with an `x` in the DATA column. A dynamic BTST READS
+  ## its operand, so DATA is its class, and that column RESTORES the immediate
+  ## Table 3-13 dashes. That reading, and not the assembler, is what a future
+  ## reader would reverse this constant on.
+  ##
+  ## CUTTING THE OTHER WAY, Table 3-7 on page 3-23 gives BTST's operand syntax
+  ## as `Dy,<ea>x`. The `x` suffix is the manual's DESTINATION mark - `CLR`
+  ## reads `<ea>x` with the operation "0 -> Destination", and `CMP` reads
+  ## `<ea>y,Dx` with "Destination - Source" - and an immediate is not a
+  ## destination. The manual is loose here, because BTST writes nothing, but
+  ## the notation it chose is the destination one.
+  ##
   ## WHAT WOULD OVERTURN THIS is the ColdFire Family Programmer's Reference
   ## Manual, whose per-instruction operand table names the modes directly. It
   ## is not on this machine (AGENTS.md section 11) and the network is closed.
   ## Uncertainty 4 in the `logic.nim` header is this one.
   ##
   ## IT IS A CONSTANT OF ITS OWN AND NOT A NARROWED `eaDataAddressing`,
-  ## because AND and OR keep the immediate: Table 3-13's `and.l <ea>,Rx` and
-  ## `or.l <ea>,Rx` rows both give `#xxx` a time of `1(0/0)`.
+  ## because AND and OR keep the immediate: Table 3-13's `and.l <ea>,Rx` row
+  ## on page 3-28 and its `or.l <ea>,Rx` row on the CONTINUATION PAGE 3-29
+  ## both give `#xxx` a time of `1(0/0)`.
 
 const eaBitStatic* = EaLegality(
   modes: {eaDn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp}, ea7: {})
@@ -264,9 +280,14 @@ proc eaLegalityFor*(op: Operation): EaLegality =
     # THE SOURCE OF THE `<ea> op Dn -> Dn` DIRECTION of AND and OR. It reads
     # and does not write, so the class is DATA addressing: no An, and the
     # PC-relative pair and the immediate are in. MCF5307 User's Manual
-    # Table 3-13, page 3-28: the `and.l <ea>,Rx` and `or.l <ea>,Rx` rows both
-    # give `#xxx` a time of `1(0/0)`, and `c0bc 0000 0005` disassembles as
-    # `andl #5,%d0` on `m68k-elf-objdump -m m68k:5307`.
+    # Table 3-13: the `and.l <ea>,Rx` row on page 3-28 and the `or.l <ea>,Rx`
+    # row on the CONTINUATION PAGE 3-29 both give `#xxx` a time of `1(0/0)`,
+    # and `c0bc 0000 0005` disassembles as `andl #5,%d0` on
+    # `m68k-elf-objdump -m m68k:5307`.
+    #
+    # THE TABLE SPANS TWO PAGES AND AN EARLIER REVISION PUT BOTH ROWS ON THE
+    # FIRST. Page 3-28 ends after the `mulu.l` row; `or.l`, `ori.l`, `sub.l`,
+    # `subi.l`, `subq.l` and `subx.l` are on 3-29.
     #
     # The OTHER direction of AND and OR writes memory and carries
     # `eaMemoryAlterable`, which this table cannot hold because the direction
@@ -297,9 +318,10 @@ proc eaLegalityFor*(op: Operation): EaLegality =
     #     `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`. The `clr.l` row above it and
     #     the `tst.l` row below it carry times in those columns, so the
     #     dashes belong to this row.
-    #   - Table 3-13, page 3-28: `andi.l | #imm,Dx`, `ori.l | #imm,Dx` and
-    #     `eori.l | #imm,Dx` each read `1(0/0)` under `Rn` and a dash
-    #     everywhere else, `#xxx` included.
+    #   - Table 3-13: `andi.l | #imm,Dx` and `eori.l | #imm,Dx` on page 3-28,
+    #     and `ori.l | #imm,Dx` on the continuation page 3-29, each read
+    #     `1(0/0)` under `Rn` and a dash everywhere else, `#xxx` included. An
+    #     earlier revision of this line put all three on 3-28.
     #   - Table 3-13 again: `asl.l`, `asr.l`, `lsl.l` and `lsr.l` all read
     #     `<ea>,Dx` with `1(0/0)` under `Rn` AND under `#xxx` - the immediate
     #     COUNT - and a dash under all six memory columns.

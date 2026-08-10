@@ -32,10 +32,14 @@
 ##
 ##   THE COLDFIRE FAMILY PROGRAMMER'S REFERENCE MANUAL IS GENUINELY ABSENT -
 ##   searched for by name and by content across the scratchpad, and the
-##   network is closed - and it is the document that would settle the four
-##   uncertainties the `logic.nim` header declares. That absence, and not the
-##   User's Manual's, is why the shift-overflow note in `logic.nim` says what
-##   it says.
+##   network is closed - and it is the document that would settle FIVE OF THE
+##   SIX uncertainties the `logic.nim` header declares: numbers 1, 2, 4, 5 and
+##   6, which is the list that header itself gives. Number 3, the exact cycle
+##   count, is not one of them - it needs the clock work of AGENTS.md open
+##   question 6. AN EARLIER REVISION OF THIS PARAGRAPH SAID "the four
+##   uncertainties", which named neither the right total nor the right subset.
+##   That absence, and not the User's Manual's, is why the shift-overflow note
+##   in `logic.nim` says what it says.
 ##
 ##   CPU-6'S PLAN ROW is the CPU-6 row of section 11.3 "The instruction set" of
 ##   the NMG2 emulator IMPLEMENTATION PLAN
@@ -102,8 +106,19 @@
 ## place in this file where a trap case contradicts the assembler, it is
 ## deliberate, and the manual rows that put it there are on `eaBitDynamic` in
 ## `decode_types.nim`. It is uncertainty 4 in the `logic.nim` header - the one
-## entry on that list which a future reader may have to REVERSE, and this case
-## is what would go red when they do.
+## entry on that list which a future reader may have to REVERSE.
+##
+## TWO ASSERTIONS GO RED WHEN THEY DO, NOT ONE, AND BOTH ARE NAMED HERE. An
+## earlier revision of this paragraph - and the message of the commit that
+## wrote it - said "this case is what would go red", which undercounts by one.
+## The two are this trap case and the
+## `checkMask(eaIsLegalFor(opBtst, decodeEa(0x3C)), false, ...)` row further
+## down, which that same commit flipped from `true`. MEASURED: `eaBitDynamic`'s
+## `ea7` restored to `eaData7` in a `git archive` extract of this commit,
+## confirmed in the generated C as `{253, 31}` against this commit's
+## `{253, 15}`, rebuilt from a fresh configure - `t_logic: 2 of 74 cases
+## failed`, exactly those two, and `mcf5307_conformance_logic` stayed
+## `41 cases, 0 failed`. The corpus does not pin this question either way.
 ##
 ## THE PC-RELATIVE CASES DO NOT PIN THE PC-RELATIVE BASE, and that is
 ## deliberate. `machine.nim` computes a `(d16,PC)` address from the program
@@ -199,6 +214,17 @@ const
 
 type Outcome = object
   cycles: uint32
+    ## `mcf5307_exec(ctx, 1)`'s RETURN, WHICH IS NOT A CYCLE COUNT despite the
+    ## name. `mcf5307_exec` saturates at its budget, and every instruction in
+    ## this group costs 2 for the fetch plus at least one more, so the value is
+    ## 1 for an instruction that ran and 0 for one that trapped. THE `cycles: 1`
+    ## HALF OF EVERY TUPLE BELOW ASSERTS "IT RAN" AND ASSERTS NO COUNT.
+    ## MEASURED: ALL NINE cycle returns in `logic.nim` replaced by wrong
+    ## numbers - 44, 66, 45, 65, 66, 46, 41, 61 and 47 in source order - every
+    ## one confirmed in the generated C, on a fresh extract with a fresh
+    ## configure; all 74 cases here and all 74 corpus cases stayed green. That
+    ## is why uncertainty 3 in the `logic.nim` header says nothing asserts the
+    ## cycle counts.
   fault: bool
   halted: bool
   d: array[8, uint32]
@@ -517,16 +543,21 @@ block:
   # cases that go red when it is removed, and what the four cases above
   # cannot be.
   #
-  # THEY ARE THREE OF FIVE AND NOT THE WHOLE OF IT. Deleting the mask check
-  # from `execBitOp` reddens FIVE cases in this file: these three, plus the
-  # two `btst #3,...` cases in the `eaBitStatic` block below, whose static
-  # mask is checked by the same line. An earlier revision of this comment -
-  # and the message of the commit that wrote it - called these three "the"
-  # cases that go red, which undercounts by two. MEASURED: the deletion
-  # applied to a `git archive` of that commit, rebuilt from a fresh
-  # configure, the guard confirmed absent from the generated C, and the run
-  # reported exactly `bset %d1,%a0`, `bclr %d1,%a0`, `bchg %d1,%a0`,
-  # `btst #3,(4,%pc)` and `btst #3,0x200.w` failing and nothing else.
+  # THEY ARE THREE OF SIX AND NOT THE WHOLE OF IT. Deleting the mask check
+  # from `execBitOp` reddens SIX cases in this file as it stands: these three,
+  # the two `btst #3,...` cases in the `eaBitStatic` block below, whose static
+  # mask is checked by the same line, and the `btst %d1,#5` trap case at the
+  # top of this file, which sits behind that same line too.
+  #
+  # THE COUNT WAS FIVE AND THE COMMIT THAT WROTE "FIVE" IS THE COMMIT THAT
+  # MADE IT SIX. `btst %d1,#5` became a trap case here, so it joined the five;
+  # a count measured before that change was true when it was written and is
+  # not true of this file. MEASURED BOTH WAYS, each on its own `git archive`
+  # extract with a fresh configure and the guard confirmed absent from the
+  # generated C: at `aa13eb4`, `t_logic: 5 of 75 cases failed`; at this commit,
+  # `t_logic: 6 of 74 cases failed` - `btst %d1,#5`, `bset %d1,%a0`,
+  # `bclr %d1,%a0`, `bchg %d1,%a0`, `btst #3,(4,%pc)` and `btst #3,0x200.w`,
+  # and nothing else.
   #
   # MEASURED with the mask check deleted from `execBitOp`:
   # `bset %d1,%a0` reported no fault, returned a cycle, and left a0 at
@@ -655,8 +686,10 @@ block:
 # It is the source mask of the `<ea> op Dn -> Dn` direction of AND and OR, and
 # THOSE TWO ONLY. Both READ and neither writes, so the PC-relative pair and
 # the immediate are in and the address register is out. MCF5307 User's Manual
-# Table 3-13, page 3-28: the `and.l <ea>,Rx` and `or.l <ea>,Rx` rows carry a
-# time in every column including `#xxx`, where both read `1(0/0)`.
+# Table 3-13: the `and.l <ea>,Rx` row on page 3-28 and the `or.l <ea>,Rx` row
+# on the CONTINUATION PAGE 3-29 carry a time in every column including `#xxx`,
+# where both read `1(0/0)`. The table spans two pages and an earlier revision
+# of this comment put both rows on the first.
 #
 # A DYNAMIC BTST NO LONGER READS THIS MASK. It reads `eaBitDynamic`, which is
 # this class minus the immediate; the rows behind that difference are on the
