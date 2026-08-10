@@ -18,10 +18,24 @@
 ##   section that names the two Motorola documents this file takes instruction
 ##   semantics from - the ColdFire Family Programmer's Reference Manual Rev 3
 ##   and the MCF5307 User's Manual - and gives a download location for each.
-##   NEITHER PDF IS ON THIS MACHINE - searched for, and the only Nord PDFs
-##   here are the G2 service manual and a spare-parts list - and neither is in
-##   this repository, which is also why the shift-overflow note in `logic.nim`
-##   says what it says.
+##
+##   ONE OF THE TWO IS ON THIS MACHINE AND ONE IS NOT, AND AN EARLIER REVISION
+##   OF THIS PARAGRAPH SAID NEITHER WAS. That was false, it was never
+##   searched for, and it is the sentence that told the next reader not to
+##   look for a document sitting in front of them. The MCF5307 USER'S MANUAL
+##   is present twice under the session scratchpad - as `MCF5307UM.pdf` at its
+##   root and again under `nmg2-artifacts-archive/datasheets/` - with an
+##   extracted text form beside the first as `MCF5307UM.txt`. Both copies
+##   predate this branch's first commit. Neither is in this repository and
+##   neither may be copied into it, which is why every citation here names
+##   table, page and row instead of quoting.
+##
+##   THE COLDFIRE FAMILY PROGRAMMER'S REFERENCE MANUAL IS GENUINELY ABSENT -
+##   searched for by name and by content across the scratchpad, and the
+##   network is closed - and it is the document that would settle the four
+##   uncertainties the `logic.nim` header declares. That absence, and not the
+##   User's Manual's, is why the shift-overflow note in `logic.nim` says what
+##   it says.
 ##
 ##   CPU-6'S PLAN ROW is the CPU-6 row of section 11.3 "The instruction set" of
 ##   the NMG2 emulator IMPLEMENTATION PLAN
@@ -53,12 +67,12 @@
 ##   `decodeWord(0xb3c0).op == opIllegal` below is.
 ##
 ##   AN OPERAND THE EXECUTOR REFUSES IS NOT AN OPERAND THE CORPUS OFFERS. The
-##   corpus holds no dynamic BTST against a PC-relative or an immediate
-##   operand, so the disagreement between `eaLegalityFor(opBtst)` - which
-##   admits both - and `execBitOp` - which resolved the operand through
-##   `eaResolve` and therefore refused both - was invisible. Measured before
-##   the fix: `btst %d1,(4,%pc)` (`033a 0004`) and `btst %d1,#5`
-##   (`033c 0005`) each halted with `fault` and returned no cycles, though
+##   corpus holds no dynamic BTST against a PC-relative operand, so the
+##   disagreement between `eaLegalityFor(opBtst)` - which admits it - and
+##   `execBitOp` - which resolved the operand through `eaResolve` and
+##   therefore refused it - was invisible. Measured before the fix:
+##   `btst %d1,(4,%pc)` (`033a 0004`) and `btst %d1,(4,%pc,%d2)`
+##   (`033b 2804`) each halted with `fault` and returned no cycles, though
 ##   `m68k-elf-as -mcpu=5307` assembles both.
 ##
 ## AND NO REGISTERED TEST TOUCHED THIS GROUP AT ALL. `t_ea_masks` covers MOVE,
@@ -72,14 +86,24 @@
 ## register it must not have changed, `fault`, `halted`, the cycle return), so
 ## "it trapped" is separable from "it executed and wrote nothing".
 ##
-## EVERY TRAP CASE WAS OFFERED TO `m68k-elf-as -mcpu=5307` AND REJECTED, and
-## every positive case was assembled by it. The encodings the assembler refuses
-## to emit are built from a MEASURED base word by replacing the low six bits,
-## which is the effective-address field: `bset %d1,%d0` is `03c0`, so
-## `bset %d1,(4,%pc)` is `03c0 or 3a` = `03fa`. That method is cross-checked by
-## the two words the assembler DOES emit: `btst %d1,%d0` is `0300`, and
-## `0300 or 3a` and `0300 or 3c` are `033a` and `033c`, which are exactly what
-## the assembler produced for `btst %d1,(4,%pc)` and `btst %d1,#5`.
+## EVERY TRAP CASE BUT ONE WAS OFFERED TO `m68k-elf-as -mcpu=5307` AND
+## REJECTED, and every positive case was assembled by it. The encodings the
+## assembler refuses to emit are built from a MEASURED base word by replacing
+## the low six bits, which is the effective-address field: `bset %d1,%d0` is
+## `03c0`, so `bset %d1,(4,%pc)` is `03c0 or 3a` = `03fa`. That method is
+## cross-checked by the two words the assembler DOES emit: `btst %d1,%d0` is
+## `0300`, and `0300 or 3a` and `0300 or 3c` are `033a` and `033c`, which are
+## exactly what the assembler produced for `btst %d1,(4,%pc)` and
+## `btst %d1,#5`.
+##
+## THE ONE EXCEPTION IS `btst %d1,#5`, AND IT IS NAMED HERE RATHER THAN LEFT
+## FOR A READER TO NOTICE. The assembler ACCEPTS that form and emits
+## `033c 0005`, and this file asserts that the core TRAPS it. That is the only
+## place in this file where a trap case contradicts the assembler, it is
+## deliberate, and the manual rows that put it there are on `eaBitDynamic` in
+## `decode_types.nim`. It is uncertainty 4 in the `logic.nim` header - the one
+## entry on that list which a future reader may have to REVERSE, and this case
+## is what would go red when they do.
 ##
 ## THE PC-RELATIVE CASES DO NOT PIN THE PC-RELATIVE BASE, and that is
 ## deliberate. `machine.nim` computes a `(d16,PC)` address from the program
@@ -339,39 +363,36 @@ block:
     $got, $want)
 
 # ---------------------------------------------------------------------------
-# BLOCKING 2. A DYNAMIC `BTST` REACHES EVERY OPERAND ITS MASK ADMITS.
+# BLOCKING 2. A DYNAMIC `BTST` REACHES EVERY OPERAND ITS MASK ADMITS, AND THE
+# MASK STOPS AT THE IMMEDIATE.
 #
-# `eaLegalityFor(opBtst)` is `eaDataAddressing`, whose mode-7 set holds the
-# PC-relative pair and the immediate. BTST NEVER WRITES, so it must read
-# through `eaRead`, which serves all five sub-variants. `eaResolve` serves
-# `AbsW` and `AbsL` alone and faults on the rest, which is correct for the
-# operations that WRITE and wrong for this one.
+# `eaLegalityFor(opBtst)` is `eaBitDynamic`: the manual's DATA class WITHOUT
+# the immediate. BTST NEVER WRITES, so it must read the two PC-relative
+# sub-variants through `eaRead`; `eaResolve` serves `AbsW` and `AbsL` alone
+# and faults on the rest, which is correct for the operations that WRITE and
+# wrong for this one.
 #
-# `btst %d1,(4,%pc)` is `033a 0004` and `btst %d1,#5` is `033c 0005`, both
-# assembled by `m68k-elf-as -mcpu=5307`.
+# `btst %d1,(4,%pc)` is `033a 0004` and `btst %d1,(4,%pc,%d2)` is `033b 2804`,
+# both assembled by `m68k-elf-as -mcpu=5307`.
+#
+# WHY THE IMMEDIATE IS OUT, AND WHY THE ASSEMBLER DOES NOT SETTLE IT. See the
+# `eaBitDynamic` doc comment in `decode_types.nim` for the manual rows and the
+# toolchain measurements. The short form: MCF5307 User's Manual Table 3-13
+# (page 3-28) dashes the `#xxx` column of the `btst Dy,<ea>` row, and that
+# dash is the same mark the table uses for every form this part does not have.
+# `m68k-elf-as -mcpu=5307` does assemble `btst %d1,#5` as `033c 0005`, and
+# that acceptance is byte-for-byte the plain-68000 one - the assembler
+# narrows the STATIC bit-operation modes for ColdFire and leaves this form
+# untouched - so it measures the 68000 rule and not this part.
 
 block:
-  # The immediate operand. It needs no address, so this pair is exact: the
-  # operand is the word 0x0005, whose bit 0 is set and whose bit 1 is clear,
-  # and Z is the COMPLEMENT of the bit the number in d1 selects.
-  let oSet = runIns([0x033C'u16, 0x0005'u16],
-                    d = [0'u32, 0, 0, 0, 0, 0, 0, 0], sr = bitDirty or ccrZ)
-  let gotSet = (d1: oSet.d[1], sr: oSet.sr, fault: oSet.fault,
-                cycles: oSet.cycles)
-  let wantSet = (d1: 0'u32, sr: bitDirty, fault: false, cycles: 1'u32)
-  check(gotSet == wantSet,
-    "btst %d1,#5 reaches the immediate operand: bit 0 is set, so Z is cleared",
-    $gotSet, $wantSet)
-
-  let oClear = runIns([0x033C'u16, 0x0005'u16],
-                      d = [0'u32, 1, 0, 0, 0, 0, 0, 0], sr = bitDirty)
-  let gotClear = (d1: oClear.d[1], sr: oClear.sr, fault: oClear.fault,
-                  cycles: oClear.cycles)
-  let wantClear = (d1: 1'u32, sr: bitDirty or ccrZ, fault: false,
-                   cycles: 1'u32)
-  check(gotClear == wantClear,
-    "btst %d1,#5 with a bit number of 1 finds a clear bit and sets Z",
-    $gotClear, $wantClear)
+  # THE IMMEDIATE OPERAND TRAPS. `033c 0005` is the word the assembler emits
+  # for `btst %d1,#5`; d1 is seeded non-zero so the "unchanged" half is an
+  # assertion and not `0 == 0`.
+  expectTrapD(runIns([0x033C'u16, 0x0005'u16],
+                     d = [0'u32, 3, 0, 0, 0, 0, 0, 0], sr = bitDirty),
+    1, 3'u32,
+    "btst %d1,#5 traps: the immediate is not a dynamic BTST operand")
 
 block:
   # The PC-relative operand. The window is 0x104 to 0x10f, every byte 0x80, so
@@ -493,8 +514,21 @@ block:
   # ADDRESS REGISTER - it answers `erAn`, and `eaRefWrite` puts the result
   # INTO that register - so nothing under the executor stops these three. The
   # per-operation mask is the only guard they meet, which is what makes them
-  # the cases that go red when it is removed, and what the four cases above
-  # cannot be. MEASURED with the mask check deleted from `execBitOp`:
+  # cases that go red when it is removed, and what the four cases above
+  # cannot be.
+  #
+  # THEY ARE THREE OF FIVE AND NOT THE WHOLE OF IT. Deleting the mask check
+  # from `execBitOp` reddens FIVE cases in this file: these three, plus the
+  # two `btst #3,...` cases in the `eaBitStatic` block below, whose static
+  # mask is checked by the same line. An earlier revision of this comment -
+  # and the message of the commit that wrote it - called these three "the"
+  # cases that go red, which undercounts by two. MEASURED: the deletion
+  # applied to a `git archive` of that commit, rebuilt from a fresh
+  # configure, the guard confirmed absent from the generated C, and the run
+  # reported exactly `bset %d1,%a0`, `bclr %d1,%a0`, `bchg %d1,%a0`,
+  # `btst #3,(4,%pc)` and `btst #3,0x200.w` failing and nothing else.
+  #
+  # MEASURED with the mask check deleted from `execBitOp`:
   # `bset %d1,%a0` reported no fault, returned a cycle, and left a0 at
   # 0x0000123c - the seeded 0x00001234 with bit 3 set.
   #
@@ -618,13 +652,19 @@ block:
 
 # ---------------------------------------------------------------------------
 # `eaDataAddressing` - THE MANUAL'S `DATA` CLASS, WHICH DOES NOT INCLUDE `An`.
-# It is the source mask of the `<ea> op Dn -> Dn` direction of AND and OR and
-# the operand mask of a dynamic BTST. All three READ and none of them writes,
-# so the PC-relative pair and the immediate are in and the address register is
-# out.
+# It is the source mask of the `<ea> op Dn -> Dn` direction of AND and OR, and
+# THOSE TWO ONLY. Both READ and neither writes, so the PC-relative pair and
+# the immediate are in and the address register is out. MCF5307 User's Manual
+# Table 3-13, page 3-28: the `and.l <ea>,Rx` and `or.l <ea>,Rx` rows carry a
+# time in every column including `#xxx`, where both read `1(0/0)`.
+#
+# A DYNAMIC BTST NO LONGER READS THIS MASK. It reads `eaBitDynamic`, which is
+# this class minus the immediate; the rows behind that difference are on the
+# constant itself and the block below asserts both ends of it.
 #
 # Measured: `m68k-elf-as -mcpu=5307` accepts `and.l (4,%pc),%d1` (`c2ba 0004`)
-# and rejects `and.l %a0,%d1`.
+# and rejects `and.l %a0,%d1`; `c0bc 0000 0005` disassembles as `andl #5,%d0`
+# on `m68k-elf-objdump -m m68k:5307`.
 
 block:
   checkMask(isEaLegal(eaDataAddressing, decodeEa(0x00'u16)), true,
@@ -640,15 +680,18 @@ block:
   checkMask(isEaLegal(eaDataAddressing, decodeEa(0x3D'u16)), false,
     "the data-addressing mask rejects the reserved mode-7 encoding")
 
-  # THE DYNAMIC BIT OPERATION'S MASK IS THIS ONE, and the table is what says
-  # so. These read `eaLegalityFor` through `eaIsLegalFor`, which is the call
-  # `execBitOp` makes, so a table entry changed under the executor fails here.
+  # THE DYNAMIC BIT OPERATION'S MASK IS `eaBitDynamic`, and these rows are
+  # what say so. They read `eaLegalityFor` through `eaIsLegalFor`, which is
+  # the call `execBitOp` makes, so a table entry changed under the executor
+  # fails here. The immediate row is the one that separates this mask from
+  # `eaDataAddressing` above, and it is asserted at both ends: that mask
+  # admits the immediate two rows up, this one rejects it.
   checkMask(eaIsLegalFor(opBtst, decodeEa(0x3A'u16)), true,
     "the BTST mask admits (d16,PC)")
   checkMask(eaIsLegalFor(opBtst, decodeEa(0x3B'u16)), true,
     "the BTST mask admits (d8,PC,Xn)")
-  checkMask(eaIsLegalFor(opBtst, decodeEa(0x3C'u16)), true,
-    "the BTST mask admits an immediate")
+  checkMask(eaIsLegalFor(opBtst, decodeEa(0x3C'u16)), false,
+    "the BTST mask rejects an immediate")
   checkMask(eaIsLegalFor(opBtst, decodeEa(0x08'u16)), false,
     "the BTST mask rejects An")
 

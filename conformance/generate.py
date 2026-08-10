@@ -194,12 +194,14 @@ DIRTY_A = 0x0BADC0DE   # the address-register destination seed
 # that was one byte too wide, or that landed on the wrong end of the longword,
 # changes a byte the case names. A repeating seed would survive both.
 #
-# 0x02 is the addressed byte and it is chosen so that bit 1 of it is SET while
-# bit 9 of the longword 0x025A3CC1 is CLEAR: `btst #9,(%a0)` therefore answers
-# differently under the byte rule (bit 9 mod 8 = bit 1 = 1) and under a
-# longword rule (bit 9 = 0), and the case separates them. 0xC1 at the far end
-# has bit 1 clear, so a core that read the wrong end of the longword also
-# answers differently.
+# 0x02 is the addressed byte and it is chosen so that BIT 1 OF IT IS SET while
+# bit 1 of the longword 0x025A3CC1 - which is bit 1 of its low byte 0xC1 - is
+# CLEAR: `btst #1,(%a0)` therefore answers differently under the byte rule and
+# under a longword rule, and the case separates them. 0xC1 at the far end has
+# bit 1 clear too, so a core that read the wrong end of the longword also
+# answers differently. THE BIT NUMBER IS INSIDE A BYTE, so the separation is
+# of the ACCESS WIDTH alone and does not depend on how an out-of-range bit
+# number is reduced - see uncertainty 5 in `logic.nim`'s header.
 MEM_BASE = 0x2000
 MEM_SEED_BYTES = (0x02, 0x5A, 0x3C, 0xC1)
 MEM_GUARD = 0x0BADC0DE   # the longword after a longword memory destination
@@ -863,12 +865,30 @@ CASES = {
         # ----------------------------------------------------------- BTST
         #
         # A BIT OPERATION ON A DATA REGISTER IS 32 BITS WIDE AND ONE ON MEMORY
-        # IS 8. That is one rule and it decides both the bit number's modulus
-        # and the width of the access, and the two cases that pin it are
-        # `btst_l_bit_number_is_modulo_32` and
-        # `btst_b_memory_bit_number_is_modulo_8`. Each one picks a bit number
-        # whose answer under the OTHER rule is the opposite, so neither can
-        # pass against a core that applies the wrong width.
+        # IS 8. That is the OPERAND SIZE column of MCF5307 User's Manual
+        # Table 3-7, which reads "8,32" for BTST, BSET, BCLR and BCHG and for
+        # no other instruction in this group. The two cases that pin it are
+        # `btst_l_bit_number_above_a_byte` and
+        # `btst_b_memory_operand_is_one_byte`. Each one picks a bit number
+        # whose answer under the OTHER width is the opposite, so neither can
+        # pass against a core that applies the wrong one.
+        #
+        # NEITHER CASE USES A BIT NUMBER ITS OPERAND CANNOT HOLD, AND THAT IS
+        # DELIBERATE. `logic.nim` reduces an out-of-range bit number modulo
+        # the operand width, and NO PASSAGE OF THE USER'S MANUAL STATES ANY
+        # MODULUS - see uncertainty 5 in that module's header, which also says
+        # why Figure 3-8's `MODULO (OFFSET)` annotation does not settle it.
+        # An earlier revision of this corpus held `btst #41,%d0` and
+        # `btst #9,(%a0)` and asserted the modulo-32 and modulo-8 answers as
+        # facts about the part. They are this core's choice, the corpus must
+        # not pin a choice no document supports, and the two cases below get
+        # the same discrimination out of in-range numbers:
+        #
+        #   - bit 9 of the seed is SET, and a core that treated a data
+        #     register operand as a BYTE could not reach bit 9 at all;
+        #   - bit 1 of the addressed BYTE 0x02 is SET while bit 1 of the
+        #     longword at the same address (0x025A3CC1, low byte 0xC1) is
+        #     CLEAR, so a longword access answers the opposite.
         {
             "name": "btst_l_set_bit_clears_z",
             "mnemonic": "btst",
@@ -885,28 +905,33 @@ CASES = {
             "expected": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
         },
         {
-            # 41 mod 32 is 9, and bit 9 of the seed is SET. Under a byte rule
-            # (41 mod 8 = 1) the answer is CLEAR, and a core that formed the
-            # mask in 64 bits and truncated reads 0 and also answers CLEAR.
-            # Both wrong cores set Z; this case asserts Z is CLEARED.
-            "name": "btst_l_bit_number_is_modulo_32",
+            # A DATA REGISTER OPERAND IS 32 BITS, SO BIT 9 EXISTS. Bit 9 of
+            # the seed 0x12345678 is SET, so Z is CLEARED. A core that gave a
+            # register operand the memory width of 8 could not name bit 9 at
+            # all: under any byte reading it reaches bit 1 of 0x78, which is
+            # CLEAR, and sets Z. The bit number is inside the operand either
+            # way, so this case asserts the WIDTH and pins no modulus.
+            "name": "btst_l_bit_number_above_a_byte",
             "mnemonic": "btst",
-            "instruction": "btst #41,%d0",
+            "instruction": "btst #9,%d0",
             "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
             "expected": {"regs": {"d0": DIRTY_D,
                                   "sr": SR_DIRTY & ~CCR_Z}},
         },
         {
-            # 9 mod 8 is 1, and bit 1 of the addressed BYTE (0x02) is SET.
-            # Bit 9 of the longword at the same address (0x025A3CC1) is CLEAR,
-            # and so is bit 1 of the byte at the far end of that longword
-            # (0xC1), so a longword access and a wrong-ended byte access both
-            # answer CLEAR where this case asserts CLEARED Z.
+            # A MEMORY OPERAND IS ONE BYTE, AND IT IS THE ADDRESSED ONE. Bit 1
+            # of the byte at MEM_BASE (0x02) is SET, so Z is CLEARED. Bit 1 of
+            # the LONGWORD at the same address (0x025A3CC1) is bit 1 of its low
+            # byte 0xC1, which is CLEAR, and bit 1 of the far-end byte is the
+            # same bit, so a longword access and a wrong-ended byte access both
+            # set Z where this case asserts it CLEARED. The bit number is 1,
+            # which every candidate width holds, so this case asserts the
+            # WIDTH and pins no modulus.
             #
             # THE MEMORY IS ASSERTED UNCHANGED. BTST reads and must not write.
-            "name": "btst_b_memory_bit_number_is_modulo_8",
+            "name": "btst_b_memory_operand_is_one_byte",
             "mnemonic": "btst",
-            "instruction": "btst #9,(%a0)",
+            "instruction": "btst #1,(%a0)",
             "initial": {
                 "regs": {"a0": MEM_BASE, "sr": SR_DIRTY},
                 "mem": mem_bytes(MEM_BASE, MEM_SEED_BYTES),
