@@ -101,12 +101,19 @@ than pin an accident of this implementation. `docs/toolchain.md` is not the
 authority here; the ColdFire Family Programmer's Reference Manual is
 (AGENTS.md section 11).
 
-A CASE THAT ASSERTS NO REGISTER IS JUDGED BY ITS CYCLE RETURN, and naming
-`sr` takes that judgement away. The runner falls back to "the instruction
-returned a non-zero cycle count" only when `expected.regs` is EMPTY. `nop` is
-the one case in this corpus with no register effect at all, so it deliberately
-names no `sr`: an `sr` expectation of "unchanged" would be satisfied by a NOP
-that never executed.
+EVERY CASE IS JUDGED ON THE CORE'S RUN STATE BEFORE ANY VALUE IS COMPARED.
+`conformance/runner.cpp` asserts `mcf5307_faulted`, then `mcf5307_halted`,
+then a non-zero cycle return, for every case and whatever registers the case
+names. A case whose instruction TRAPS therefore fails even when the registers
+it names hold the expected values - which is the whole class of case that
+expects a register to be UNCHANGED, because a trap leaves its operands alone.
+
+That check used to exist only as a cycle-count fallback that applied when
+`expected.regs` was EMPTY, so naming any register silently removed it. `nop`
+carried the scar: it named no register at all, not even `sr`, because an `sr`
+expectation of "unchanged" would have been satisfied by a NOP that never
+executed. The fallback is now unconditional and `nop` names `sr` like every
+other case whose instruction must not touch the condition codes.
 
 "mem" is a list of `{"addr": int, "size": int, "value": int}` writes. The
 seed corpus carries only register cases, so every "mem" array in it is empty;
@@ -670,19 +677,36 @@ CASES = {
         },
     ],
 
-    # `nop` NAMES NO REGISTER ON PURPOSE, AND THAT INCLUDES `sr`. It has no
-    # register effect of any kind, so the runner judges it by its cycle return
-    # - and the runner applies that judgement ONLY when `expected.regs` is
-    # empty. An `sr` expectation of "unchanged" would be satisfied by a NOP
-    # that never executed at all, so naming `sr` here would REMOVE the only
-    # assertion this case has rather than add one.
+    # `nop` NOW NAMES `sr`, AND THE REASON IT DID NOT IS GONE.
+    #
+    # It used to name no register at all - not even `sr` - because the runner
+    # judged a register-less case by its cycle return and applied that
+    # judgement ONLY when `expected.regs` was empty. Naming `sr` therefore
+    # REMOVED the case's only assertion instead of adding one: an `sr`
+    # expectation of "unchanged" is satisfied by a NOP that never executed,
+    # since an instruction that never ran changes nothing.
+    #
+    # `conformance/runner.cpp` no longer works that way. It asserts
+    # `mcf5307_faulted`, then `mcf5307_halted`, then a non-zero cycle return,
+    # for EVERY case and before it compares one register. A NOP that never
+    # executed cannot reach the comparison: the core either faulted, halted or
+    # completed no instruction, and each of those fails the case on its own.
+    # Measured on the mutation "the encoding word is 0000 instead of 4e71" -
+    # a NOP that is not there - the old runner passed the case with `sr`
+    # named and this one reports the trap.
+    #
+    # So the case takes the corpus's ordinary shape for an instruction that
+    # must not touch the condition codes: `SR_DIRTY` in, `SR_DIRTY` back. That
+    # is now an assertion ON TOP OF the run-state checks rather than instead
+    # of them, and it is the strongest statement this corpus can make about
+    # NOP - the whole 16-bit status word is unchanged.
     "control": [
         {
             "name": "nop",
             "mnemonic": "nop",
             "instruction": "nop",
-            "initial": {"regs": {}},
-            "expected": {"regs": {}},
+            "initial": {"regs": {"sr": SR_DIRTY}},
+            "expected": {"regs": {"sr": SR_DIRTY}},
         },
     ],
 }

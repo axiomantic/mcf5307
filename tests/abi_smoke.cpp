@@ -43,14 +43,23 @@ namespace {
  * Every entry has the EXACT function-pointer type the header declares, so
  * the address-of expression is well typed and the compiler does not warn.
  *
- * The 18 pointers are stored in a `volatile` array of `void const*`. The
+ * The pointers are stored in a `volatile` array of `void const*`. The
  * `volatile` qualifier is what keeps the compiler honest: without it, the
  * compiler can prove the array is read only through `abi_addr_all[0]`,
  * elide the rest, and then elide the address-of expressions that fed
  * them, and this test would pass against a library that defined none of
- * the 17 functions the runtime does not yet implement. With `volatile`
+ * the functions the runtime does not yet implement. With `volatile`
  * the compiler must materialise every store, and the linker must resolve
- * every symbol. */
+ * every symbol.
+ *
+ * THIS LIST IS NOT THE WHOLE PUBLISHED SET AND SAYS SO. `include/mcf5307.h`
+ * declares 22 functions; 20 are named here. `mcf5307_set_reg` and
+ * `mcf5307_get_reg` were added to the contract by CPU-7 and never added to
+ * this list, so a rename of either one is a fault this test does not catch.
+ * Nothing here measures the gap either - the count is not asserted against
+ * the contract - and closing it belongs to the task that owns this file.
+ * `cmake/Nim.cmake` step 4a is what reads the contract's full published set
+ * on every configure run. */
 #define MCF5307_ABI_FN(name)                                                   \
     extern "C" auto const abi_addr_##name = &name
 
@@ -59,6 +68,8 @@ MCF5307_ABI_FN(mcf5307_create);
 MCF5307_ABI_FN(mcf5307_destroy);
 MCF5307_ABI_FN(mcf5307_reset);
 MCF5307_ABI_FN(mcf5307_exec);
+MCF5307_ABI_FN(mcf5307_halted);
+MCF5307_ABI_FN(mcf5307_faulted);
 MCF5307_ABI_FN(mcf5307_set_irq);
 MCF5307_ABI_FN(mcf5307_state_size);
 MCF5307_ABI_FN(mcf5307_state_save);
@@ -73,15 +84,17 @@ MCF5307_ABI_FN(isp1181_state_size);
 MCF5307_ABI_FN(isp1181_state_save);
 MCF5307_ABI_FN(isp1181_state_load);
 
-/* The 18 pointers as a single `volatile` array of `void const*`, so the
+/* The 20 pointers as a single `volatile` array of `void const*`, so the
  * linker cannot drop any of them under `-ffunction-sections --gc-sections`
  * and still satisfy the reference. */
-volatile void const* const abi_addr_all[18] = {
+volatile void const* const abi_addr_all[20] = {
     reinterpret_cast<void const*>(abi_addr_mcf5307_runtime_init),
     reinterpret_cast<void const*>(abi_addr_mcf5307_create),
     reinterpret_cast<void const*>(abi_addr_mcf5307_destroy),
     reinterpret_cast<void const*>(abi_addr_mcf5307_reset),
     reinterpret_cast<void const*>(abi_addr_mcf5307_exec),
+    reinterpret_cast<void const*>(abi_addr_mcf5307_halted),
+    reinterpret_cast<void const*>(abi_addr_mcf5307_faulted),
     reinterpret_cast<void const*>(abi_addr_mcf5307_set_irq),
     reinterpret_cast<void const*>(abi_addr_mcf5307_state_size),
     reinterpret_cast<void const*>(abi_addr_mcf5307_state_save),

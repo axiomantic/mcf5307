@@ -381,3 +381,32 @@ proc mcf5307_get_reg*(ctx: MCF5307Ctx; index: cint): uint32
   if ctx.isNil or index < 0 or index > 17:
     return 0'u32
   regFileGet(ctx, int(index))
+
+# ---------------------------------------------------------------------------
+# The run state the conformance harness needs. `include/mcf5307.h` (CPU-0)
+# declares these two beside the register accessors, and for the same reason:
+# the harness goes through the C ABI and the ABI published no way to see them.
+#
+# THEY ARE TWO CALLS AND NOT ONE, BECAUSE `halted` AND `fault` ARE TWO BITS.
+# `cpu.nim`'s `step` sets `halted` alone for a valid opcode whose semantics a
+# later task owns, and it sets BOTH for a bus error, an illegal instruction
+# word, an illegal effective address, an illegal size or a divide by zero.
+# Folding them into one call would make "this instruction trapped" and "this
+# instruction is not written yet" the same answer, and the conformance runner
+# has to separate exactly those two.
+#
+# THEY REPORT AND THEY DO NOT CLEAR. `mcf5307_reset` is what clears both bits,
+# so a reader may ask twice and get the same answer. A nil context answers 0
+# to both: a caller with no context has no halted core and no faulted one.
+
+proc mcf5307_halted*(ctx: MCF5307Ctx): cint
+    {.exportc: "mcf5307_halted", cdecl, dynlib.} =
+  if ctx.isNil or not ctx.halted:
+    return cast[cint](0)
+  cast[cint](1)
+
+proc mcf5307_faulted*(ctx: MCF5307Ctx): cint
+    {.exportc: "mcf5307_faulted", cdecl, dynlib.} =
+  if ctx.isNil or not ctx.fault:
+    return cast[cint](0)
+  cast[cint](1)

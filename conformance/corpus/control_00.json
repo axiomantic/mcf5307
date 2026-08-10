@@ -7,11 +7,15 @@
       ],
       "expected": {
         "mem": [],
-        "regs": {}
+        "regs": {
+          "sr": 10015
+        }
       },
       "initial": {
         "mem": [],
-        "regs": {}
+        "regs": {
+          "sr": 10015
+        }
       },
       "instruction": "nop",
       "mnemonic": "nop",
