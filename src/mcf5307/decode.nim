@@ -352,11 +352,20 @@ proc decodeWord*(word: uint16): Decoded =
   elif (word and 0xF000'u16) == 0x8000'u16:
     return decodeLogicLine(word, opOr)
   elif (word and 0xF000'u16) == 0xB000'u16 and
-       ((word shr 6) and 0x7'u16) >= 4'u16:
+       ((word shr 6) and 0x7'u16) in 4'u16 .. 6'u16:
     # EOR.<sz> Dn,<ea>. THE OTHER OPMODES OF LINE 1011 ARE NOT THIS TASK'S:
     # 000, 001 and 010 are CMP, 011 is CMPA.W and 111 is CMPA.L, and CPU-10
     # owns all five. They stay unrecognised here rather than be claimed and
     # trapped, which would take the encodings away from that task.
+    #
+    # THE RANGE IS 100 TO 110 AND NOT "100 OR ABOVE". EOR has THREE opmodes -
+    # byte, word and long - and 111 is the fourth value of that range, which
+    # is CMPA.L. A `>= 4` predicate claimed it, and the claim was SILENT:
+    # `opmodeSize(7)` answers 4, so `cmpa.l %d0,%a1` (`b3c0`) decoded as a
+    # well-formed long EOR and executed as one. Measured before the fix, it
+    # left d0 = d0 xor d1 - it wrote a register CMPA must not touch and
+    # computed no comparison. `tests/t_logic.nim` asserts the encoding comes
+    # back as an unrecognised word.
     #
     # `1011 rrr 1 ss 001 rrr` is CMPM on a 68000, a byte or word opmode whose
     # effective address is an address register. It traps on the size and on

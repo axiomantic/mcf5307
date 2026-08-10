@@ -243,18 +243,43 @@ proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
     if ctx.halted: return 0'u32
   let bit = bitNumber and (8'u32 * uint32(d.size) - 1'u32)
   let selector = 1'u32 shl bit
-  let dest = eaResolve(ctx, d.ea, d.size)
-  if ctx.halted: return 0'u32
-  let value = eaRefRead(ctx, dest, d.size)
-  if ctx.halted: return 0'u32
-  let wasSet = (value and selector) != 0'u32
-  if d.op != opBtst:
+  # BTST READS AND THE OTHER THREE READ AND WRITE, AND THAT DECIDES WHICH
+  # OPERAND EVALUATOR EACH ONE USES.
+  #
+  # `eaResolve` returns a reference a later write can reach, so it refuses
+  # every operand that cannot be written: the PC-relative pair, the immediate
+  # and the reserved mode-7 encodings. That is CORRECT FOR BSET, BCLR AND BCHG
+  # and WRONG FOR BTST, whose mask is `eaDataAddressing` and which admits all
+  # three of the readable mode-7 sub-variants. Measured: `btst %d1,(4,%pc)`
+  # (`033a 0004`) and `btst %d1,#5` (`033c 0005`) both assemble on
+  # `-mcpu=5307`, and both halted with `fault` while this procedure resolved
+  # every operand through `eaResolve`.
+  #
+  # THE FIX IS HERE AND NOT IN `eaResolve`. Widening that procedure would let
+  # a WRITE reach a PC-relative or an immediate operand, and the three bit
+  # operations that write are not the only callers it has. BTST never writes,
+  # so it reads through `eaRead`, which serves every mode its mask admits.
+  # `tests/t_logic.nim` asserts both halves: that BTST reaches those operands
+  # and that BSET, BCLR and BCHG still refuse them.
+  var value: uint32
+  if d.op == opBtst:
+    value = eaRead(ctx, d.ea, d.size)
+    if ctx.halted: return 0'u32
+  else:
+    # THE DESTINATION IS RESOLVED ONCE, for the reason `execAndOr` gives:
+    # `(An)+` and `-(An)` adjust the address register, and a read followed by
+    # an independent write would adjust it twice.
+    let dest = eaResolve(ctx, d.ea, d.size)
+    if ctx.halted: return 0'u32
+    value = eaRefRead(ctx, dest, d.size)
+    if ctx.halted: return 0'u32
     let written = case d.op
       of opBset: value or selector
       of opBclr: value and not selector
       else: value xor selector
     eaRefWrite(ctx, dest, d.size, written)
     if ctx.halted: return 0'u32
+  let wasSet = (value and selector) != 0'u32
   # Z ALONE, AND IT IS THE COMPLEMENT OF THE BIT AS IT WAS FOUND. N, V, C and
   # X are not written: a bit operation is not an arithmetic result and must
   # not disturb a multi-precision sequence or a pending conditional branch.
