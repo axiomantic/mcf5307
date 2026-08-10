@@ -116,6 +116,20 @@ proc sizeMask*(size: uint8): uint32 =
   if size == 4: 0xFFFF_FFFF'u32
   else: (1'u32 shl (8 * size)) - 1'u32
 
+proc mergeSized*(old: uint32; value: uint32; size: uint8): uint32 =
+  ## A SIZED WRITE TO A REGISTER REPLACES THE LOW size BYTES AND NOTHING ELSE.
+  ## `MOVE.B` and `MOVE.W` into `Dn` leave the rest of `Dn` untouched, and so do
+  ## `CLR.B`, `CLR.W` and the low half of `EXT.W`. A size of 4 masks to all ones
+  ## and this reduces to the value, which is why the long forms need no case of
+  ## their own.
+  ##
+  ## THERE IS ONE COPY OF THIS RULE AND EVERY SIZED REGISTER WRITE GOES THROUGH
+  ## IT. `eaWrite` and `eaRefWrite` each carried their own copy, they disagreed,
+  ## and the disagreement was a live defect: `eaWrite` REPLACED the whole
+  ## register, so `move.b %d0,%d1` with d1 = 0x12345678 and d0 = 0xAA gave
+  ## 0x000000AA where the part gives 0x123456AA. `tests/t_move.nim` asserts it.
+  (old and not sizeMask(size)) or (value and sizeMask(size))
+
 proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
   ## N and Z from the result, V and C cleared, X unchanged. This is the rule
   ## MOVE, MOVEQ, EXT, EXTB and the ColdFire 32-bit multiply share; the
@@ -259,12 +273,13 @@ proc eaRead*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
       result = 0
 
 proc eaWrite*(ctx: MCF5307Ctx; ea: EA; size: uint8; value: uint32) =
-  ## Write the operand of an alterable effective address. A Dn write keeps
-  ## the low size bits; memory modes write through the board; PC-relative
-  ## and immediate mode-7 sub-variants are not alterable and trap.
+  ## Write the operand of an alterable effective address. A Dn write REPLACES
+  ## THE LOW size BYTES AND KEEPS THE REST of the register; memory modes write
+  ## through the board; PC-relative and immediate mode-7 sub-variants are not
+  ## alterable and trap.
   case ea.mode
   of eaDn:
-    setRegD(ctx, ea.reg, value and sizeMask(size))
+    setRegD(ctx, ea.reg, mergeSized(regD(ctx, ea.reg), value, size))
   of eaAn:
     setRegA(ctx, ea.reg, value)
   of eaAnInd, eaAnPost, eaAnPre, eaAnDisp, eaAnIndex:
@@ -336,8 +351,7 @@ proc eaRefRead*(ctx: MCF5307Ctx; r: EaRef; size: uint8): uint32 =
 
 proc eaRefWrite*(ctx: MCF5307Ctx; r: EaRef; size: uint8; value: uint32) =
   case r.kind
-  of erDn: setRegD(ctx, r.reg, (regD(ctx, r.reg) and not sizeMask(size)) or
-                               (value and sizeMask(size)))
+  of erDn: setRegD(ctx, r.reg, mergeSized(regD(ctx, r.reg), value, size))
   of erAn: setRegA(ctx, r.reg, value)
   of erMem: writeMem(ctx, r.address, size, value)
   of erNone: discard
