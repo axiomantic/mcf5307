@@ -8,10 +8,10 @@
 ##
 ## The decoder (`mcf5307/decode`, CPU-6) recognizes the instruction words and
 ## supplies the effective address in bits 5..0 of the word; this module
-## executes them. This module imports `mcf5307/decode_types` and NOT
-## `mcf5307/decode`, because the decoder calls `moveFamily` below. The shared
-## types and the effective-address legality table live in `decode_types` so
-## that the dependency runs one way and the two modules make no cycle.
+## executes them. THIS MODULE AND THE DECODER ARE SIBLINGS. Both read the
+## shared types from `mcf5307/decode_types`, and neither imports the other.
+## `mcf5307/cpu` sits above both: it owns `step`, and `step` is the one
+## procedure that calls the decoder and then calls `moveFamily` below.
 ## The extension words of an instruction (displacements,
 ## index words, immediate values, and the MOVEM register mask) live in the
 ## instruction stream after the opcode word, and are consumed here as the
@@ -20,7 +20,7 @@
 ##
 ## CYCLES ARE NOMINAL. The per-instruction cycle budget on serial MCF5307
 ## silicon needs the clock work of open question 6 in AGENTS.md; until it is
-## settled no exact cost is asserted anywhere (decode.nim carries the same
+## settled no exact cost is asserted anywhere (cpu.nim carries the same
 ## note). A later task replaces the constants when the clock is settled.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
@@ -351,11 +351,11 @@ proc execMovem(ctx: MCF5307Ctx; d: Decoded): uint32 =
   result = 8'u32 + 2'u32 * uint32(count)
 
 # ---------------------------------------------------------------------------
-# The dispatch entry the decoder calls.
+# The dispatch entry `step` calls.
 
 proc moveFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
-  ## Execute one data-movement instruction. Called from the decoder's step
-  ## loop with the opcode word and the decoded operation. Returns the
+  ## Execute one data-movement instruction. Called from `step` in
+  ## `mcf5307/cpu` with the opcode word and the decoded operation. Returns the
   ## instruction's nominal cycles excluding the fetch; halts the context
   ## with `fault` set on an illegal encoding or an illegal effective
   ## address.
