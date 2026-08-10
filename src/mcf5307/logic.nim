@@ -62,10 +62,17 @@
 ## THAT LEFT THE WORD rather than a bit of the result, and ASL's overflow is
 ## "the sign changed AT ANY POINT during the shift" rather than "the sign of
 ## the result differs from the sign of the operand". Those two readings of the
-## overflow rule agree at a count of one and can differ above it; the
-## conformance corpus asserts V at a count of one only, because the ColdFire
-## Family Programmer's Reference Manual is the document that separates them
-## (AGENTS.md section 11) and it is not on this machine.
+## overflow rule agree at a count of one and can differ above it, so THE
+## CONFORMANCE CORPUS ASSERTS V ONLY WHERE EVERY CANDIDATE READING AGREES ON
+## ITS VALUE. That is two kinds of case and not one: every case at a count of
+## ONE, and a case at a LARGER count whose operand CANNOT CHANGE SIGN.
+## `asl_l_count_register_d1` is the second kind - it shifts `0x12345678` by
+## two, the sign after k shifts is bit 31-k of the operand, and bits 31, 30
+## and 29 are all zero, so no step of that shift changes the sign and both
+## readings give V clear. NO CASE PINS A COUNT AT WHICH THE TWO READINGS
+## DISAGREE, because the ColdFire Family Programmer's Reference Manual is the
+## document that separates them (AGENTS.md section 11) and it is not on this
+## machine.
 ##
 ## A SHIFT COUNT OF ZERO IS REACHABLE THROUGH THE REGISTER FORM ALONE, because
 ## the immediate form spends its zero slot on the value eight. It shifts
