@@ -270,7 +270,7 @@ proc execExt(ctx: MCF5307Ctx; d: Decoded; fromByte: bool): uint32 =
     if fromByte or d.size == 2'u8: uint32(s8(uint16(src and 0xFF'u32)))
     else: uint32(s16(uint16(src and 0xFFFF'u32)))
   if d.size == 2'u8:
-    setRegD(ctx, d.ea.reg, (src and 0xFFFF0000'u32) or (widened and 0xFFFF'u32))
+    setRegD(ctx, d.ea.reg, mergeSized(src, widened, 2))
   else:
     setRegD(ctx, d.ea.reg, widened)
   setNzClearVc(ctx, widened, d.size)
