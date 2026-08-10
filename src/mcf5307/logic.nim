@@ -139,18 +139,50 @@
 ##
 ##   2. THE STATUS WORD OF A SHIFT BY ZERO. See the paragraph above.
 ##
-##   3. THE EXACT CYCLE COUNT of every instruction in this group.
+##   3. THE EXACT CYCLE COUNT of every instruction in this group. NOTHING
+##      ASSERTS IT, AND `tests/t_logic.nim`'s `cycles` FIELD IS NOT A COUNTER-
+##      CASE THOUGH ITS NAME READS LIKE ONE. That field is the return of
+##      `mcf5307_exec(ctx, 1)`, and `mcf5307_exec` SATURATES AT ITS BUDGET: a
+##      cost of 2 for the fetch plus anything this module returns already
+##      exceeds a budget of one, so the value is 1 for an instruction that ran
+##      and 0 for one that trapped, and it cannot see a count at all. MEASURED:
+##      ALL NINE cycle returns in this module replaced by wrong numbers - 44,
+##      66, 45, 65, 66, 46, 41, 61 and 47 in source order, `trap`'s zero left
+##      alone - every one confirmed in the generated C, rebuilt from a fresh
+##      configure of a fresh extract; all 74 `t_logic` cases and all 74 corpus
+##      cases stayed GREEN.
 ##
 ##   4. WHETHER A DYNAMIC BTST MAY READ AN IMMEDIATE OPERAND. User's Manual
-##      Table 3-13 dashes the `#xxx` column of the `btst Dy,<ea>` row, and
-##      `m68k-elf-as -mcpu=5307` assembles `btst %d1,#5` anyway. The mask
-##      follows the manual and traps it; the full evidence, including why the
-##      assembler's acceptance is the 68000's rule rather than this part's, is
-##      on `eaBitDynamic` in `decode_types.nim`. THIS ONE IS ASSERTED, in
-##      `tests/t_logic.nim`, because a mask must be one thing or the other and
-##      a trap that no case covers is a trap nothing measures. It is the one
-##      entry on this list that a future reader may have to REVERSE rather
-##      than merely fill in.
+##      Table 3-13, page 3-28, dashes the `#xxx` column of the `btst Dy,<ea>`
+##      row, and `m68k-elf-as -mcpu=5307` assembles `btst %d1,#5` anyway. The
+##      mask follows the manual and traps it; the full evidence, including why
+##      the assembler's acceptance is the 68000's rule rather than this part's,
+##      is on `eaBitDynamic` in `decode_types.nim`.
+##
+##      THE SECOND TABLE IS TABLE 3-5 ON PAGE 3-21, AND IT IS NAMED HERE so
+##      that "two tables of one manual disagree" is a sentence a reader can
+##      check without leaving this list. That table is "Effective Addressing
+##      Modes and Categories" and it marks Immediate `#<xxx>` with an `x` in
+##      the DATA column. A dynamic BTST READS its operand, so the DATA class is
+##      its class, and that column RESTORES the immediate the timing table
+##      dashes. Cutting the other way, Table 3-7 on page 3-23 gives BTST's
+##      operand syntax as `Dy,<ea>x`, and the `x` suffix is the manual's
+##      DESTINATION mark - `CLR <ea>x` is "0 -> Destination" and
+##      `CMP <ea>y,Dx` is "Destination - Source" - which an immediate cannot
+##      be.
+##
+##      THIS ONE IS ASSERTED, in `tests/t_logic.nim`, because a mask must be
+##      one thing or the other and a trap that no case covers is a trap nothing
+##      measures. IT IS ASSERTED TWICE AND A READER WHO REVERSES IT MUST CHANGE
+##      BOTH: the `btst %d1,#5` trap case, and the
+##      `checkMask(eaIsLegalFor(opBtst, decodeEa(0x3C)), false, ...)` row that
+##      this commit flipped from `true`. MEASURED: `eaBitDynamic`'s `ea7`
+##      restored to `eaData7`, confirmed in the generated C as `{253, 31}`
+##      against this commit's `{253, 15}`, rebuilt from a fresh configure of a
+##      `git archive` of this commit - `t_logic: 2 of 74 cases failed`, exactly
+##      those two, and the corpus stayed 41 of 41. It is the one entry on this
+##      list that a future reader may have to REVERSE rather than merely fill
+##      in.
 ##
 ##   5. THE BIT NUMBER'S MODULUS. `execBitOp` reduces the number modulo the
 ##      operand width - 32 for a data register, 8 for memory. Table 3-7 gives
@@ -160,9 +192,53 @@
 ##      (OFFSET) < 31, OFFSET OF 0 = MSB)", which numbers from the MSB where
 ##      every bit operation here numbers from the LSB, stops at 31 rather than
 ##      including it, and uses the word OFFSET, which belongs to the bit-field
-##      instructions section 3.9 lists among the REMOVED ones. The corpus
-##      asserts the two widths, which the manual does give, and asserts no
-##      out-of-range bit number.
+##      instructions section 3.9 lists among the REMOVED ones.
+##
+##      THE MEMORY HALF IS PINNED BY THE CORPUS AND THE REGISTER HALF IS NOT.
+##      An earlier revision of this entry said the corpus "asserts no
+##      out-of-range bit number", and that was false.
+##      `bchg_b_memory_dynamic_bit_number` in
+##      `conformance/corpus/logic_00.json` is `bchg %d1,(%a0)` WITH d1 = 9
+##      AGAINST A BYTE MEMORY OPERAND - 9 is outside the range a byte holds -
+##      and its expected result is the modulo-8 answer AND NOTHING ELSE: the
+##      byte at 0x2000 goes 0x02 to 0x00, which is bit 1 cleared, and sr goes
+##      0x271f to 0x271b, which is Z cleared because bit 1 was found SET.
+##
+##      THE RIVAL READINGS ALL MISS IT, AND TWO OF THE THREE ARE COVERED BY
+##      THE MUTATION BELOW. MODULO 32 selects bit 9 of a byte that has no bit
+##      9, so Z comes out SET and the byte keeps 0x02; NO REDUCTION AT ALL
+##      selects bit 9 too, which is the same computation at this bit number, so
+##      the same mutant answers for it. A CLAMP TO 7 selects bit 7, so Z comes
+##      out SET and the byte becomes 0x82 - that third one is arithmetic a
+##      reader can check and it was NOT RUN. Only the modulo-8 reading gives
+##      0x00 with Z clear.
+##
+##      MEASURED: `and (8 * size - 1)` in `execBitOp` replaced by `and 31`,
+##      confirmed in the generated C as
+##      `bit_1 = (NU32)(bitNumber_1 & ((NU32)31));`, rebuilt from a fresh
+##      configure of a fresh extract - `mcf5307_conformance_logic: 41 cases,
+##      1 failed`, that case, `sr differs: expected=0x271b actual=0x271f`.
+##
+##      BOTH HALVES OF THE CASE FAIL AND THE RUNNER SHOWS ONLY THE FIRST. It
+##      prints ONE mismatch per case and it compares the registers before the
+##      memory. With that case's expected `sr` deleted IN A SCRATCH COPY, so
+##      that the comparison reaches the byte, the same mutant reports
+##      `mem[8192:1] differs: expected=0x0 actual=0x2`. The destination and the
+##      status word are each the modulo-8 answer and each refuses the modulo-32
+##      one.
+##
+##      All 74 `t_logic` cases stayed GREEN under the same mutation, so THE
+##      CORPUS IS THE ONLY THING THAT HOLDS IT.
+##
+##      WHAT REMAINS UNPINNED IS THE 32-BIT MODULUS, and the bit numbers are
+##      enumerated here rather than summarised. The corpus holds ELEVEN
+##      bit-operation cases. The SEVEN with a DATA REGISTER operand use 4, 7,
+##      9, 9, 7, 4 and 7; the FOUR with a MEMORY operand use 1, 0, 1 and the 9
+##      above. `tests/t_logic.nim` executes bit numbers 3, 6 and 7 and every
+##      one is inside the width its operand holds. So nothing separates modulo
+##      32 from a wider reduction or from no reduction at all for a REGISTER
+##      operand, and nothing pins the MEMORY reduction at any bit number except
+##      9.
 ##
 ##   6. THE REGISTER SHIFT COUNT'S MODULUS. `execShift` takes it modulo 64.
 ##      Table 3-7 gives the shift operations as `X/C <- (Dy << Dx) <- 0` and
@@ -290,10 +366,19 @@ proc execNot(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## Execution Times", page 3-27: the `not.l` row carries `Dx` in the `<EA>`
   ## column, `1(0/0)` under `Rn`, and A DASH under every one of `(An)`,
   ## `(An)+`, `-(An)`, `(d16,An)`, `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`. The
-  ## `clr.l` and `tst.l` rows directly above and below it carry times in those
-  ## same columns, so the dashes are this row's and not the table's.
-  ## `m68k-elf-as -mcpu=5307` agrees: it rejects `not.l (%a0)`. So the operand
-  ## mask is `{Dn}` and every other addressing mode traps.
+  ## `clr.l` row SIX ROWS ABOVE it and the `tst.l` row FIVE ROWS BELOW it carry
+  ## times in those same columns, so the dashes are this row's and not the
+  ## table's. `m68k-elf-as -mcpu=5307` agrees: it rejects `not.l (%a0)`. So the
+  ## operand mask is `{Dn}` and every other addressing mode traps.
+  ##
+  ## THEY ARE NOT "DIRECTLY ABOVE AND BELOW IT", which an earlier revision of
+  ## this comment said. Counted in the table: `ext.w`, `ext.l`, `extb.l`,
+  ## `neg.l` and `negx.l` sit between `clr.l` and `not.l`, and `scc`, `swap`,
+  ## `tst.b` and `tst.w` sit between `not.l` and `tst.l`. The nearest TIMED row
+  ## below `not.l` is `tst.b`, THREE rows down; the five rows between `clr.l`
+  ## and `not.l` are dashed exactly as `not.l` is. The conclusion is unchanged
+  ## - a dashed row sits between timed ones in the same columns - and only the
+  ## distances are.
   ##
   ## DO NOT CITE OBJDUMP HERE. An earlier revision said `4690` is not an
   ## instruction `m68k-elf-objdump -m m68k:5307` decodes. IT DECODES IT, as
@@ -330,8 +415,15 @@ proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## core does with a number that does not fit, and NO PASSAGE IN THE USER'S
   ## MANUAL STATES IT. It is uncertainty 5 in this module's header, which
   ## says why Figure 3-8's `MODULO (OFFSET)` annotation does not settle it.
-  ## Nothing asserts it: the corpus asks for no bit number outside the range
-  ## its operand holds.
+  ##
+  ## THE MEMORY HALF OF IT IS ASSERTED, AND AN EARLIER REVISION OF THIS
+  ## PARAGRAPH SAID NOTHING WAS. `bchg_b_memory_dynamic_bit_number` in
+  ## `conformance/corpus/logic_00.json` is `bchg %d1,(%a0)` with d1 = 9 against
+  ## a BYTE operand, and it expects the modulo-8 answer - which is what makes
+  ## the sentence "the corpus asks for no bit number outside the range its
+  ## operand holds" false. THE 32-BIT HALF IS NOT asserted: no case in the
+  ## corpus or in `tests/t_logic.nim` uses a bit number of 32 or more. Both
+  ## halves are enumerated, case by case, in uncertainty 5.
   ##
   ## THE STATIC FORM IS NARROWER THAN THE DYNAMIC ONE. `eaBitStatic` is its
   ## mask and the measurement behind it is beside that constant; the dynamic
