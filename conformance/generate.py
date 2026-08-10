@@ -680,9 +680,12 @@ CASES = {
     # SAME STATEMENT at a count of one and can differ at a larger count. The
     # ColdFire Family Programmer's Reference Manual is the authority that
     # separates them (AGENTS.md section 11) and it is not on this machine, so
-    # no case here pins a count at which the two disagree. `asl_l_count_2_d0`
-    # carries no V hazard for the same reason: its operand's top three bits are
-    # all zero, so the sign is unchanged under either reading.
+    # no case here pins a count at which the two disagree.
+    # `asl_l_count_register_d1` carries no V hazard for the same reason: it
+    # shifts by two, and its operand's top three bits are all zero - the sign
+    # after k shifts is bit 31-k of the operand, so bits 31, 30 and 29 are
+    # every sign the shift passes through - so the sign is unchanged under
+    # either reading and both give V clear.
     #
     # THE REGISTER SHIFT COUNT OF ZERO CARRIES NO `sr`, for the same reason:
     # what a zero count does to C is a rule this project cannot cite today. The
@@ -772,6 +775,13 @@ CASES = {
                                   "sr": SR_BASE | CCR_N | CCR_X}},
         },
         {
+            # THE SOURCE REGISTER AND THE ADDRESS REGISTER ARE BOTH ASSERTED
+            # UNCHANGED, exactly as `and_l_d1_to_memory` asserts them. The
+            # runner compares only the registers a case NAMES, so a case that
+            # named `sr` alone was blind to a core that clobbered either one.
+            # Measured: the mutation "zero `d.destReg` after the store" on
+            # `execAndOr`'s `<ea>`-destination path - the path AND and OR
+            # SHARE - failed `and_l_d1_to_memory` and this case PASSED it.
             "name": "or_l_d1_to_memory",
             "mnemonic": "or.l",
             "instruction": "or.l %d1,(%a0)",
@@ -781,7 +791,8 @@ CASES = {
                         {"addr": MEM_BASE + 4, "size": 4, "value": MEM_GUARD}],
             },
             "expected": {
-                "regs": {"sr": SR_BASE | CCR_X},
+                "regs": {"a0": MEM_BASE, "d1": DIRTY_D,
+                         "sr": SR_BASE | CCR_X},
                 "mem": [{"addr": MEM_BASE, "size": 4, "value": 0x1F3F5F7F},
                         {"addr": MEM_BASE + 4, "size": 4, "value": MEM_GUARD}],
             },
@@ -820,6 +831,14 @@ CASES = {
                                   "sr": SR_BASE | CCR_Z | CCR_X}},
         },
         {
+            # THE SOURCE REGISTER AND THE ADDRESS REGISTER ARE BOTH ASSERTED
+            # UNCHANGED, and this case is THE ONLY ONE THAT CAN ASSERT IT FOR
+            # EOR. `execEor` is a SEPARATE path from `execAndOr`, so
+            # `and_l_d1_to_memory` guards nothing here, and every other EOR
+            # case in this group has a data register for its destination.
+            # Measured: the mutation "zero `d.destReg` after the store" on
+            # `execEor`'s `<ea>`-destination path left the whole group green
+            # while this case named `sr` alone.
             "name": "eor_l_d1_to_memory",
             "mnemonic": "eor.l",
             "instruction": "eor.l %d1,(%a0)",
@@ -829,7 +848,8 @@ CASES = {
                         {"addr": MEM_BASE + 4, "size": 4, "value": MEM_GUARD}],
             },
             "expected": {
-                "regs": {"sr": SR_BASE | CCR_N | CCR_X},
+                "regs": {"a0": MEM_BASE, "d1": DIRTY_D,
+                         "sr": SR_BASE | CCR_N | CCR_X},
                 "mem": [{"addr": MEM_BASE, "size": 4, "value": 0xEDCB5678},
                         {"addr": MEM_BASE + 4, "size": 4, "value": MEM_GUARD}],
             },
