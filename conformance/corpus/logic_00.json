@@ -8,14 +8,17 @@
       "expected": {
         "mem": [],
         "regs": {
-          "d1": 3840
+          "d0": 252645135,
+          "d1": 33818120,
+          "sr": 10000
         }
       },
       "initial": {
         "mem": [],
         "regs": {
-          "d0": 3855,
-          "d1": 65280
+          "d0": 252645135,
+          "d1": 305419896,
+          "sr": 10015
         }
       },
       "instruction": "and.l %d0,%d1",
@@ -24,19 +27,138 @@
     },
     {
       "encoding": [
-        "8280"
+        "c280"
       ],
       "expected": {
         "mem": [],
         "regs": {
-          "d1": 257
+          "d1": 2153791520,
+          "sr": 10008
         }
       },
       "initial": {
         "mem": [],
         "regs": {
-          "d0": 1,
-          "d1": 256
+          "d0": 4042322160,
+          "d1": 2271560481,
+          "sr": 10015
+        }
+      },
+      "instruction": "and.l %d0,%d1",
+      "mnemonic": "and.l",
+      "name": "and_l_result_negative_sets_n"
+    },
+    {
+      "encoding": [
+        "c280"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 0,
+          "sr": 10004
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 65535,
+          "d1": 305397760,
+          "sr": 10015
+        }
+      },
+      "instruction": "and.l %d0,%d1",
+      "mnemonic": "and.l",
+      "name": "and_l_result_zero_sets_z"
+    },
+    {
+      "encoding": [
+        "c390"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 4,
+            "value": 271601776
+          },
+          {
+            "addr": 8196,
+            "size": 4,
+            "value": 195936478
+          }
+        ],
+        "regs": {
+          "a0": 8192,
+          "d1": 305419896,
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 4,
+            "value": 4042322160
+          },
+          {
+            "addr": 8196,
+            "size": 4,
+            "value": 195936478
+          }
+        ],
+        "regs": {
+          "a0": 8192,
+          "d1": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "and.l %d1,(%a0)",
+      "mnemonic": "and.l",
+      "name": "and_l_d1_to_memory"
+    },
+    {
+      "encoding": [
+        "0281",
+        "0f0f",
+        "0f0f"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 33818120,
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d1": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "andi.l #0x0f0f0f0f,%d1",
+      "mnemonic": "andi.l",
+      "name": "andi_l_d1"
+    },
+    {
+      "encoding": [
+        "8280"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 252645135,
+          "d1": 524246911,
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 252645135,
+          "d1": 305419896,
+          "sr": 10015
         }
       },
       "instruction": "or.l %d0,%d1",
@@ -45,19 +167,113 @@
     },
     {
       "encoding": [
-        "b181"
+        "8280"
       ],
       "expected": {
         "mem": [],
         "regs": {
-          "d1": 4080
+          "d1": 2452903544,
+          "sr": 10008
         }
       },
       "initial": {
         "mem": [],
         "regs": {
-          "d0": 255,
-          "d1": 3855
+          "d0": 2147483648,
+          "d1": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "or.l %d0,%d1",
+      "mnemonic": "or.l",
+      "name": "or_l_result_negative_sets_n"
+    },
+    {
+      "encoding": [
+        "8390"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 4,
+            "value": 524246911
+          },
+          {
+            "addr": 8196,
+            "size": 4,
+            "value": 195936478
+          }
+        ],
+        "regs": {
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 4,
+            "value": 252645135
+          },
+          {
+            "addr": 8196,
+            "size": 4,
+            "value": 195936478
+          }
+        ],
+        "regs": {
+          "a0": 8192,
+          "d1": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "or.l %d1,(%a0)",
+      "mnemonic": "or.l",
+      "name": "or_l_d1_to_memory"
+    },
+    {
+      "encoding": [
+        "0080",
+        "0000",
+        "ff00"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 305463160,
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "ori.l #0x0000ff00,%d0",
+      "mnemonic": "ori.l",
+      "name": "ori_l_d0"
+    },
+    {
+      "encoding": [
+        "b181"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 4294901760,
+          "d1": 3989526136,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 4294901760,
+          "d1": 305419896,
+          "sr": 10015
         }
       },
       "instruction": "eor.l %d0,%d1",
@@ -66,18 +282,110 @@
     },
     {
       "encoding": [
-        "4680"
+        "b180"
       ],
       "expected": {
         "mem": [],
         "regs": {
-          "d0": 4294967280
+          "d0": 0,
+          "sr": 10004
         }
       },
       "initial": {
         "mem": [],
         "regs": {
-          "d0": 15
+          "d0": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "eor.l %d0,%d0",
+      "mnemonic": "eor.l",
+      "name": "eor_l_d0_with_itself_sets_z"
+    },
+    {
+      "encoding": [
+        "b390"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 4,
+            "value": 3989526136
+          },
+          {
+            "addr": 8196,
+            "size": 4,
+            "value": 195936478
+          }
+        ],
+        "regs": {
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 4,
+            "value": 4294901760
+          },
+          {
+            "addr": 8196,
+            "size": 4,
+            "value": 195936478
+          }
+        ],
+        "regs": {
+          "a0": 8192,
+          "d1": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "eor.l %d1,(%a0)",
+      "mnemonic": "eor.l",
+      "name": "eor_l_d1_to_memory"
+    },
+    {
+      "encoding": [
+        "0a81",
+        "ffff",
+        "ffff"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 3989547399,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d1": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "eori.l #0xffffffff,%d1",
+      "mnemonic": "eori.l",
+      "name": "eori_l_d1"
+    },
+    {
+      "encoding": [
+        "4680"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 3989547399,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10015
         }
       },
       "instruction": "not.l %d0",
@@ -86,43 +394,626 @@
     },
     {
       "encoding": [
-        "e380"
+        "4680"
       ],
       "expected": {
         "mem": [],
         "regs": {
-          "d0": 536870922
+          "d0": 0,
+          "sr": 10004
         }
       },
       "initial": {
         "mem": [],
         "regs": {
-          "d0": 268435461
+          "d0": 4294967295,
+          "sr": 10015
         }
       },
-      "instruction": "asl.l #1,%d0",
-      "mnemonic": "asl.l",
-      "name": "asl_l_1_d0"
+      "instruction": "not.l %d0",
+      "mnemonic": "not.l",
+      "name": "not_l_all_ones_sets_z"
     },
     {
       "encoding": [
-        "e589"
+        "0800",
+        "0004"
       ],
       "expected": {
         "mem": [],
         "regs": {
-          "d1": 4
+          "d0": 305419896,
+          "sr": 10011
         }
       },
       "initial": {
         "mem": [],
         "regs": {
-          "d1": 1
+          "d0": 305419896,
+          "sr": 10015
         }
       },
-      "instruction": "lsl.l #2,%d1",
+      "instruction": "btst #4,%d0",
+      "mnemonic": "btst",
+      "name": "btst_l_set_bit_clears_z"
+    },
+    {
+      "encoding": [
+        "0800",
+        "0007"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10015
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10011
+        }
+      },
+      "instruction": "btst #7,%d0",
+      "mnemonic": "btst",
+      "name": "btst_l_clear_bit_sets_z"
+    },
+    {
+      "encoding": [
+        "0800",
+        "0029"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10011
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "btst #41,%d0",
+      "mnemonic": "btst",
+      "name": "btst_l_bit_number_is_modulo_32"
+    },
+    {
+      "encoding": [
+        "0810",
+        "0009"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 1,
+            "value": 2
+          },
+          {
+            "addr": 8193,
+            "size": 1,
+            "value": 90
+          },
+          {
+            "addr": 8194,
+            "size": 1,
+            "value": 60
+          },
+          {
+            "addr": 8195,
+            "size": 1,
+            "value": 193
+          }
+        ],
+        "regs": {
+          "a0": 8192,
+          "sr": 10011
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 1,
+            "value": 2
+          },
+          {
+            "addr": 8193,
+            "size": 1,
+            "value": 90
+          },
+          {
+            "addr": 8194,
+            "size": 1,
+            "value": 60
+          },
+          {
+            "addr": 8195,
+            "size": 1,
+            "value": 193
+          }
+        ],
+        "regs": {
+          "a0": 8192,
+          "sr": 10015
+        }
+      },
+      "instruction": "btst #9,(%a0)",
+      "mnemonic": "btst",
+      "name": "btst_b_memory_bit_number_is_modulo_8"
+    },
+    {
+      "encoding": [
+        "0300"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "d1": 9,
+          "sr": 10011
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "d1": 9,
+          "sr": 10015
+        }
+      },
+      "instruction": "btst %d1,%d0",
+      "mnemonic": "btst",
+      "name": "btst_l_dynamic_bit_number_in_d1"
+    },
+    {
+      "encoding": [
+        "08c0",
+        "0007"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 305420024,
+          "sr": 10015
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10011
+        }
+      },
+      "instruction": "bset #7,%d0",
+      "mnemonic": "bset",
+      "name": "bset_l_clear_bit_sets_z_and_the_bit"
+    },
+    {
+      "encoding": [
+        "08d0",
+        "0000"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 1,
+            "value": 3
+          },
+          {
+            "addr": 8193,
+            "size": 1,
+            "value": 90
+          },
+          {
+            "addr": 8194,
+            "size": 1,
+            "value": 60
+          },
+          {
+            "addr": 8195,
+            "size": 1,
+            "value": 193
+          }
+        ],
+        "regs": {
+          "a0": 8192,
+          "sr": 10015
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 1,
+            "value": 2
+          },
+          {
+            "addr": 8193,
+            "size": 1,
+            "value": 90
+          },
+          {
+            "addr": 8194,
+            "size": 1,
+            "value": 60
+          },
+          {
+            "addr": 8195,
+            "size": 1,
+            "value": 193
+          }
+        ],
+        "regs": {
+          "a0": 8192,
+          "sr": 10011
+        }
+      },
+      "instruction": "bset #0,(%a0)",
+      "mnemonic": "bset",
+      "name": "bset_b_memory_keeps_the_other_three_bytes"
+    },
+    {
+      "encoding": [
+        "0880",
+        "0004"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 305419880,
+          "sr": 10011
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "bclr #4,%d0",
+      "mnemonic": "bclr",
+      "name": "bclr_l_set_bit_clears_z_and_the_bit"
+    },
+    {
+      "encoding": [
+        "0890",
+        "0001"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 1,
+            "value": 0
+          },
+          {
+            "addr": 8193,
+            "size": 1,
+            "value": 90
+          },
+          {
+            "addr": 8194,
+            "size": 1,
+            "value": 60
+          },
+          {
+            "addr": 8195,
+            "size": 1,
+            "value": 193
+          }
+        ],
+        "regs": {
+          "a0": 8192,
+          "sr": 10011
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 1,
+            "value": 2
+          },
+          {
+            "addr": 8193,
+            "size": 1,
+            "value": 90
+          },
+          {
+            "addr": 8194,
+            "size": 1,
+            "value": 60
+          },
+          {
+            "addr": 8195,
+            "size": 1,
+            "value": 193
+          }
+        ],
+        "regs": {
+          "a0": 8192,
+          "sr": 10015
+        }
+      },
+      "instruction": "bclr #1,(%a0)",
+      "mnemonic": "bclr",
+      "name": "bclr_b_memory_keeps_the_other_three_bytes"
+    },
+    {
+      "encoding": [
+        "0840",
+        "0007"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 305420024,
+          "sr": 10015
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10011
+        }
+      },
+      "instruction": "bchg #7,%d0",
+      "mnemonic": "bchg",
+      "name": "bchg_l_clear_bit_sets_z_and_flips_the_bit"
+    },
+    {
+      "encoding": [
+        "0350"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 1,
+            "value": 0
+          },
+          {
+            "addr": 8193,
+            "size": 1,
+            "value": 90
+          },
+          {
+            "addr": 8194,
+            "size": 1,
+            "value": 60
+          },
+          {
+            "addr": 8195,
+            "size": 1,
+            "value": 193
+          }
+        ],
+        "regs": {
+          "a0": 8192,
+          "d1": 9,
+          "sr": 10011
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 1,
+            "value": 2
+          },
+          {
+            "addr": 8193,
+            "size": 1,
+            "value": 90
+          },
+          {
+            "addr": 8194,
+            "size": 1,
+            "value": 60
+          },
+          {
+            "addr": 8195,
+            "size": 1,
+            "value": 193
+          }
+        ],
+        "regs": {
+          "a0": 8192,
+          "d1": 9,
+          "sr": 10015
+        }
+      },
+      "instruction": "bchg %d1,(%a0)",
+      "mnemonic": "bchg",
+      "name": "bchg_b_memory_dynamic_bit_number"
+    },
+    {
+      "encoding": [
+        "e388"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 610839792,
+          "sr": 9984
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "lsl.l #1,%d0",
       "mnemonic": "lsl.l",
-      "name": "lsl_l_2_d1"
+      "name": "lsl_l_1_d0"
+    },
+    {
+      "encoding": [
+        "e388"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 248153666,
+          "sr": 10001
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 2271560481,
+          "sr": 10015
+        }
+      },
+      "instruction": "lsl.l #1,%d0",
+      "mnemonic": "lsl.l",
+      "name": "lsl_l_1_carry_out_sets_c_and_x"
+    },
+    {
+      "encoding": [
+        "e188"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 878082048,
+          "sr": 9984
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "lsl.l #8,%d0",
+      "mnemonic": "lsl.l",
+      "name": "lsl_l_8_d0"
+    },
+    {
+      "encoding": [
+        "e3a8"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 591751040,
+          "d1": 4,
+          "sr": 10001
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "d1": 4,
+          "sr": 10015
+        }
+      },
+      "instruction": "lsl.l %d1,%d0",
+      "mnemonic": "lsl.l",
+      "name": "lsl_l_count_register_d1"
+    },
+    {
+      "encoding": [
+        "e3a8"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "d1": 0
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "d1": 0
+        }
+      },
+      "instruction": "lsl.l %d1,%d0",
+      "mnemonic": "lsl.l",
+      "name": "lsl_l_count_register_zero_is_a_no_operation"
+    },
+    {
+      "encoding": [
+        "e288"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 152709948,
+          "sr": 9984
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "lsr.l #1,%d0",
+      "mnemonic": "lsr.l",
+      "name": "lsr_l_1_d0"
+    },
+    {
+      "encoding": [
+        "e288"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 152709948,
+          "sr": 10001
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419897,
+          "sr": 10015
+        }
+      },
+      "instruction": "lsr.l #1,%d0",
+      "mnemonic": "lsr.l",
+      "name": "lsr_l_1_carry_out_sets_c_and_x"
+    },
+    {
+      "encoding": [
+        "e888"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 141972530,
+          "sr": 9984
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 2271560481,
+          "sr": 10015
+        }
+      },
+      "instruction": "lsr.l #4,%d0",
+      "mnemonic": "lsr.l",
+      "name": "lsr_l_4_is_logical_not_arithmetic"
     },
     {
       "encoding": [
@@ -131,38 +1022,156 @@
       "expected": {
         "mem": [],
         "regs": {
-          "d0": 3221225476
+          "d0": 3283263888,
+          "sr": 10009
         }
       },
       "initial": {
         "mem": [],
         "regs": {
-          "d0": 2147483656
+          "d0": 2271560481,
+          "sr": 10015
         }
       },
       "instruction": "asr.l #1,%d0",
       "mnemonic": "asr.l",
-      "name": "asr_l_1_d0"
+      "name": "asr_l_1_replicates_the_sign"
     },
     {
       "encoding": [
-        "e289"
+        "e280"
       ],
       "expected": {
         "mem": [],
         "regs": {
-          "d1": 1073741824
+          "d0": 152709948,
+          "sr": 9984
         }
       },
       "initial": {
         "mem": [],
         "regs": {
-          "d1": 2147483648
+          "d0": 305419896,
+          "sr": 10015
         }
       },
-      "instruction": "lsr.l #1,%d1",
-      "mnemonic": "lsr.l",
-      "name": "lsr_l_1_d1"
+      "instruction": "asr.l #1,%d0",
+      "mnemonic": "asr.l",
+      "name": "asr_l_1_positive"
+    },
+    {
+      "encoding": [
+        "e2a0"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 4168504370,
+          "d1": 4,
+          "sr": 9992
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 2271560481,
+          "d1": 4,
+          "sr": 10015
+        }
+      },
+      "instruction": "asr.l %d1,%d0",
+      "mnemonic": "asr.l",
+      "name": "asr_l_count_register_d1"
+    },
+    {
+      "encoding": [
+        "e380"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 3221225472,
+          "sr": 9994
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 1610612736,
+          "sr": 10015
+        }
+      },
+      "instruction": "asl.l #1,%d0",
+      "mnemonic": "asl.l",
+      "name": "asl_l_1_sign_change_sets_v"
+    },
+    {
+      "encoding": [
+        "e380"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 248153666,
+          "sr": 10003
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 2271560481,
+          "sr": 10015
+        }
+      },
+      "instruction": "asl.l #1,%d0",
+      "mnemonic": "asl.l",
+      "name": "asl_l_1_carry_out_and_sign_change"
+    },
+    {
+      "encoding": [
+        "e380"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 2147483648,
+          "sr": 10009
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 3221225472,
+          "sr": 10015
+        }
+      },
+      "instruction": "asl.l #1,%d0",
+      "mnemonic": "asl.l",
+      "name": "asl_l_1_sign_kept_clears_v"
+    },
+    {
+      "encoding": [
+        "e3a0"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 1221679584,
+          "d1": 2,
+          "sr": 9984
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "d1": 2,
+          "sr": 10015
+        }
+      },
+      "instruction": "asl.l %d1,%d0",
+      "mnemonic": "asl.l",
+      "name": "asl_l_count_register_d1"
     }
   ],
   "format": 1,

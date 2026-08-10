@@ -179,6 +179,37 @@ SR_DIRTY = SR_BASE | CCR_C | CCR_V | CCR_Z | CCR_N | CCR_X
 DIRTY_D = 0x12345678   # the data-register destination seed
 DIRTY_A = 0x0BADC0DE   # the address-register destination seed
 
+# ---------------------------------------------------------------------------
+# The memory seeds, and the address the memory cases point an address register
+# at. CPU-9 added these: the bit operations are the first group whose memory
+# operand is a BYTE while the register operand is a LONGWORD, so a core that
+# read or wrote four bytes where the part reads one is a defect this corpus
+# has to be able to see.
+#
+# `MEM_BASE` is clear of the encoding (the runner places that at 0x10000) and
+# inside the runner's 1 MiB board.
+#
+# THE FOUR SEED BYTES ALL DIFFER, AND NEITHER PAIR IS SYMMETRIC. A byte case
+# names `MEM_BASE` and asserts the OTHER THREE BYTES ARE UNCHANGED, so a write
+# that was one byte too wide, or that landed on the wrong end of the longword,
+# changes a byte the case names. A repeating seed would survive both.
+#
+# 0x02 is the addressed byte and it is chosen so that bit 1 of it is SET while
+# bit 9 of the longword 0x025A3CC1 is CLEAR: `btst #9,(%a0)` therefore answers
+# differently under the byte rule (bit 9 mod 8 = bit 1 = 1) and under a
+# longword rule (bit 9 = 0), and the case separates them. 0xC1 at the far end
+# has bit 1 clear, so a core that read the wrong end of the longword also
+# answers differently.
+MEM_BASE = 0x2000
+MEM_SEED_BYTES = (0x02, 0x5A, 0x3C, 0xC1)
+MEM_GUARD = 0x0BADC0DE   # the longword after a longword memory destination
+
+
+def mem_bytes(base, values):
+    """The `mem` list that seeds or asserts consecutive single bytes."""
+    return [{"addr": base + i, "size": 1, "value": v}
+            for i, v in enumerate(values)]
+
 
 def assemble_to_words(instruction):
     """Assemble one instruction line and return its machine words.
@@ -586,67 +617,511 @@ CASES = {
         },
     ],
 
-    # This group carries no `sr` expectation, and that is a deliberate gap.
-    # No executor for the group exists yet. The shift rules - what ASL's V
-    # reports, what a shift count of zero does to C, and which shifts write
-    # X - cannot be measured against anything here, and pinning them from a
-    # group with no executor would pin a guess rather than a rule.
+    # THE CONDITION-CODE RULES OF THIS GROUP, AND WHERE EACH ONE COMES FROM.
+    # CPU-9 owns these cases; the gap the previous revision described - "no
+    # `sr` expectation anywhere, because no executor exists to measure one
+    # against" - is closed here.
+    #
+    #   AND, ANDI, OR, ORI, EOR, EORI, NOT
+    #       N and Z from the 32-bit result, V and C CLEARED, X UNTOUCHED. The
+    #       MCF5307 User's Manual section 3.2.1.5 defines V as set "if an
+    #       arithmetic overflow occurs", C as set on "a carryout of the operand
+    #       MSB ... for an addition, or ... a borrow ... in a subtraction", and
+    #       X as "set to the value of the C-bit for arithmetic operations;
+    #       otherwise not affected". A logical operation is neither an addition
+    #       nor a subtraction, so V and C are cleared and X is left alone. This
+    #       is the same rule `setNzClearVc` in `src/mcf5307/machine.nim`
+    #       already carries for MOVE.
+    #
+    #   BTST, BSET, BCLR, BCHG
+    #       Z ALONE. The manual's Table 3-7 gives the operation as
+    #       `~(<Bit Number> of Destination) -> Z` and names no other bit, so N,
+    #       V, C and X are untouched. Every bit case below therefore starts
+    #       from a status word in which Z has the WRONG value and asserts the
+    #       whole word back: a case whose bit is SET starts with Z set, and a
+    #       case whose bit is CLEAR starts with Z clear. A case that started
+    #       from the value it expects would pass against a core that never
+    #       writes Z at all.
+    #
+    #   LSL, LSR, ASL, ASR
+    #       X AND C BOTH TAKE THE LAST BIT SHIFTED OUT, which Table 3-7 states
+    #       directly for all four: `X/C <- (Dy << Dx) <- 0` for the two left
+    #       shifts and `MSB -> (Dy >> Dx) -> X/C`, `0 -> (Dy >> Dx) -> X/C` for
+    #       the two right ones. N and Z come from the result. V is cleared by
+    #       LSL, LSR and ASR - none of them can produce a value the operand
+    #       size cannot represent - and ASL sets it when the sign changes.
+    #
+    # THE ASL OVERFLOW CASES ALL USE A SHIFT COUNT OF ONE, DELIBERATELY. The
+    # two readings of the rule - "the MSB changed at any time during the shift"
+    # and "the MSB of the result differs from the MSB of the operand" - are the
+    # SAME STATEMENT at a count of one and can differ at a larger count. The
+    # ColdFire Family Programmer's Reference Manual is the authority that
+    # separates them (AGENTS.md section 11) and it is not on this machine, so
+    # no case here pins a count at which the two disagree. `asl_l_count_2_d0`
+    # carries no V hazard for the same reason: its operand's top three bits are
+    # all zero, so the sign is unchanged under either reading.
+    #
+    # THE REGISTER SHIFT COUNT OF ZERO CARRIES NO `sr`, for the same reason:
+    # what a zero count does to C is a rule this project cannot cite today. The
+    # case still earns its place - it asserts the destination is UNCHANGED,
+    # which a core that read the count out of the instruction word instead of
+    # out of the register would fail, because that core shifts by one.
     "logic": [
+        # ------------------------------------------------------------ AND
         {
             "name": "and_l_d0_d1",
             "mnemonic": "and.l",
             "instruction": "and.l %d0,%d1",
-            "initial": {"regs": {"d0": 0x0f0f, "d1": 0xff00}},
-            "expected": {"regs": {"d1": 0x0f00}},
+            "initial": {"regs": {"d0": 0x0F0F0F0F, "d1": DIRTY_D,
+                                 "sr": SR_DIRTY}},
+            # The source register is asserted UNCHANGED, so a core that wrote
+            # the result into the wrong operand fails here and not only on the
+            # destination.
+            "expected": {"regs": {"d0": 0x0F0F0F0F, "d1": 0x02040608,
+                                  "sr": SR_BASE | CCR_X}},
         },
+        {
+            "name": "and_l_result_negative_sets_n",
+            "mnemonic": "and.l",
+            "instruction": "and.l %d0,%d1",
+            "initial": {"regs": {"d0": 0xF0F0F0F0, "d1": 0x87654321,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0x80604020,
+                                  "sr": SR_BASE | CCR_N | CCR_X}},
+        },
+        {
+            "name": "and_l_result_zero_sets_z",
+            "mnemonic": "and.l",
+            "instruction": "and.l %d0,%d1",
+            "initial": {"regs": {"d0": 0x0000FFFF, "d1": 0x12340000,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0,
+                                  "sr": SR_BASE | CCR_Z | CCR_X}},
+        },
+        {
+            # THE OTHER DIRECTION: `Dn & <ea> -> <ea>`, whose destination is a
+            # memory-alterable operand and NOT the same operand class as the
+            # direction above. The guard longword after the destination is
+            # asserted unchanged, so a store that was too wide fails.
+            "name": "and_l_d1_to_memory",
+            "mnemonic": "and.l",
+            "instruction": "and.l %d1,(%a0)",
+            "initial": {
+                "regs": {"a0": MEM_BASE, "d1": DIRTY_D, "sr": SR_DIRTY},
+                "mem": [{"addr": MEM_BASE, "size": 4, "value": 0xF0F0F0F0},
+                        {"addr": MEM_BASE + 4, "size": 4, "value": MEM_GUARD}],
+            },
+            "expected": {
+                "regs": {"a0": MEM_BASE, "d1": DIRTY_D,
+                         "sr": SR_BASE | CCR_X},
+                "mem": [{"addr": MEM_BASE, "size": 4, "value": 0x10305070},
+                        {"addr": MEM_BASE + 4, "size": 4, "value": MEM_GUARD}],
+            },
+        },
+
+        # ----------------------------------------------------------- ANDI
+        {
+            "name": "andi_l_d1",
+            "mnemonic": "andi.l",
+            "instruction": "andi.l #0x0f0f0f0f,%d1",
+            "initial": {"regs": {"d1": DIRTY_D, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0x02040608,
+                                  "sr": SR_BASE | CCR_X}},
+        },
+
+        # ------------------------------------------------------------- OR
         {
             "name": "or_l_d0_d1",
             "mnemonic": "or.l",
             "instruction": "or.l %d0,%d1",
-            "initial": {"regs": {"d0": 0x0001, "d1": 0x0100}},
-            "expected": {"regs": {"d1": 0x0101}},
+            "initial": {"regs": {"d0": 0x0F0F0F0F, "d1": DIRTY_D,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0x0F0F0F0F, "d1": 0x1F3F5F7F,
+                                  "sr": SR_BASE | CCR_X}},
         },
         {
+            "name": "or_l_result_negative_sets_n",
+            "mnemonic": "or.l",
+            "instruction": "or.l %d0,%d1",
+            "initial": {"regs": {"d0": 0x80000000, "d1": DIRTY_D,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0x92345678,
+                                  "sr": SR_BASE | CCR_N | CCR_X}},
+        },
+        {
+            "name": "or_l_d1_to_memory",
+            "mnemonic": "or.l",
+            "instruction": "or.l %d1,(%a0)",
+            "initial": {
+                "regs": {"a0": MEM_BASE, "d1": DIRTY_D, "sr": SR_DIRTY},
+                "mem": [{"addr": MEM_BASE, "size": 4, "value": 0x0F0F0F0F},
+                        {"addr": MEM_BASE + 4, "size": 4, "value": MEM_GUARD}],
+            },
+            "expected": {
+                "regs": {"sr": SR_BASE | CCR_X},
+                "mem": [{"addr": MEM_BASE, "size": 4, "value": 0x1F3F5F7F},
+                        {"addr": MEM_BASE + 4, "size": 4, "value": MEM_GUARD}],
+            },
+        },
+
+        # ------------------------------------------------------------ ORI
+        {
+            "name": "ori_l_d0",
+            "mnemonic": "ori.l",
+            "instruction": "ori.l #0x0000ff00,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0x1234FF78,
+                                  "sr": SR_BASE | CCR_X}},
+        },
+
+        # ------------------------------------------------------------ EOR
+        {
+            # EOR HAS ONE DIRECTION ONLY on this part: `Dn ^ <ea> -> <ea>`.
+            # `eor.l (%a0),%d1` is not an encoding the assembler will produce
+            # for `-mcpu=5307`, so the destination here is the data register
+            # named by the effective address and not by bits 11..9.
             "name": "eor_l_d0_d1",
             "mnemonic": "eor.l",
             "instruction": "eor.l %d0,%d1",
-            "initial": {"regs": {"d0": 0x00ff, "d1": 0x0f0f}},
-            "expected": {"regs": {"d1": 0x0ff0}},
+            "initial": {"regs": {"d0": 0xFFFF0000, "d1": DIRTY_D,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0xFFFF0000, "d1": 0xEDCB5678,
+                                  "sr": SR_BASE | CCR_N | CCR_X}},
         },
+        {
+            "name": "eor_l_d0_with_itself_sets_z",
+            "mnemonic": "eor.l",
+            "instruction": "eor.l %d0,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0,
+                                  "sr": SR_BASE | CCR_Z | CCR_X}},
+        },
+        {
+            "name": "eor_l_d1_to_memory",
+            "mnemonic": "eor.l",
+            "instruction": "eor.l %d1,(%a0)",
+            "initial": {
+                "regs": {"a0": MEM_BASE, "d1": DIRTY_D, "sr": SR_DIRTY},
+                "mem": [{"addr": MEM_BASE, "size": 4, "value": 0xFFFF0000},
+                        {"addr": MEM_BASE + 4, "size": 4, "value": MEM_GUARD}],
+            },
+            "expected": {
+                "regs": {"sr": SR_BASE | CCR_N | CCR_X},
+                "mem": [{"addr": MEM_BASE, "size": 4, "value": 0xEDCB5678},
+                        {"addr": MEM_BASE + 4, "size": 4, "value": MEM_GUARD}],
+            },
+        },
+
+        # ----------------------------------------------------------- EORI
+        {
+            "name": "eori_l_d1",
+            "mnemonic": "eori.l",
+            "instruction": "eori.l #0xffffffff,%d1",
+            "initial": {"regs": {"d1": DIRTY_D, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0xEDCBA987,
+                                  "sr": SR_BASE | CCR_N | CCR_X}},
+        },
+
+        # ------------------------------------------------------------ NOT
         {
             "name": "not_l_d0",
             "mnemonic": "not.l",
             "instruction": "not.l %d0",
-            "initial": {"regs": {"d0": 0x0000000f}},
-            "expected": {"regs": {"d0": 0xfffffff0}},
+            "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0xEDCBA987,
+                                  "sr": SR_BASE | CCR_N | CCR_X}},
         },
         {
-            "name": "asl_l_1_d0",
-            "mnemonic": "asl.l",
-            "instruction": "asl.l #1,%d0",
-            "initial": {"regs": {"d0": 0x10000005}},
-            "expected": {"regs": {"d0": 0x2000000a}},
+            "name": "not_l_all_ones_sets_z",
+            "mnemonic": "not.l",
+            "instruction": "not.l %d0",
+            "initial": {"regs": {"d0": 0xFFFFFFFF, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0,
+                                  "sr": SR_BASE | CCR_Z | CCR_X}},
+        },
+
+        # ----------------------------------------------------------- BTST
+        #
+        # A BIT OPERATION ON A DATA REGISTER IS 32 BITS WIDE AND ONE ON MEMORY
+        # IS 8. That is one rule and it decides both the bit number's modulus
+        # and the width of the access, and the two cases that pin it are
+        # `btst_l_bit_number_is_modulo_32` and
+        # `btst_b_memory_bit_number_is_modulo_8`. Each one picks a bit number
+        # whose answer under the OTHER rule is the opposite, so neither can
+        # pass against a core that applies the wrong width.
+        {
+            "name": "btst_l_set_bit_clears_z",
+            "mnemonic": "btst",
+            "instruction": "btst #4,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": DIRTY_D,
+                                  "sr": SR_DIRTY & ~CCR_Z}},
         },
         {
-            "name": "lsl_l_2_d1",
+            "name": "btst_l_clear_bit_sets_z",
+            "mnemonic": "btst",
+            "instruction": "btst #7,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY & ~CCR_Z}},
+            "expected": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
+        },
+        {
+            # 41 mod 32 is 9, and bit 9 of the seed is SET. Under a byte rule
+            # (41 mod 8 = 1) the answer is CLEAR, and a core that formed the
+            # mask in 64 bits and truncated reads 0 and also answers CLEAR.
+            # Both wrong cores set Z; this case asserts Z is CLEARED.
+            "name": "btst_l_bit_number_is_modulo_32",
+            "mnemonic": "btst",
+            "instruction": "btst #41,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": DIRTY_D,
+                                  "sr": SR_DIRTY & ~CCR_Z}},
+        },
+        {
+            # 9 mod 8 is 1, and bit 1 of the addressed BYTE (0x02) is SET.
+            # Bit 9 of the longword at the same address (0x025A3CC1) is CLEAR,
+            # and so is bit 1 of the byte at the far end of that longword
+            # (0xC1), so a longword access and a wrong-ended byte access both
+            # answer CLEAR where this case asserts CLEARED Z.
+            #
+            # THE MEMORY IS ASSERTED UNCHANGED. BTST reads and must not write.
+            "name": "btst_b_memory_bit_number_is_modulo_8",
+            "mnemonic": "btst",
+            "instruction": "btst #9,(%a0)",
+            "initial": {
+                "regs": {"a0": MEM_BASE, "sr": SR_DIRTY},
+                "mem": mem_bytes(MEM_BASE, MEM_SEED_BYTES),
+            },
+            "expected": {
+                "regs": {"a0": MEM_BASE, "sr": SR_DIRTY & ~CCR_Z},
+                "mem": mem_bytes(MEM_BASE, MEM_SEED_BYTES),
+            },
+        },
+        {
+            # THE DYNAMIC FORM TAKES THE BIT NUMBER FROM A DATA REGISTER, and
+            # that register is asserted unchanged.
+            "name": "btst_l_dynamic_bit_number_in_d1",
+            "mnemonic": "btst",
+            "instruction": "btst %d1,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "d1": 9, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": DIRTY_D, "d1": 9,
+                                  "sr": SR_DIRTY & ~CCR_Z}},
+        },
+
+        # ----------------------------------------------------------- BSET
+        {
+            "name": "bset_l_clear_bit_sets_z_and_the_bit",
+            "mnemonic": "bset",
+            "instruction": "bset #7,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY & ~CCR_Z}},
+            "expected": {"regs": {"d0": 0x123456F8, "sr": SR_DIRTY}},
+        },
+        {
+            # THE THREE BYTES AROUND THE OPERAND ARE ASSERTED UNCHANGED. A
+            # core that read, modified and wrote a LONGWORD here would leave
+            # them equal by accident; one that wrote a longword built from the
+            # byte would not. Both are caught, because the seed's four bytes
+            # all differ.
+            "name": "bset_b_memory_keeps_the_other_three_bytes",
+            "mnemonic": "bset",
+            "instruction": "bset #0,(%a0)",
+            "initial": {
+                "regs": {"a0": MEM_BASE, "sr": SR_DIRTY & ~CCR_Z},
+                "mem": mem_bytes(MEM_BASE, MEM_SEED_BYTES),
+            },
+            "expected": {
+                "regs": {"a0": MEM_BASE, "sr": SR_DIRTY},
+                "mem": mem_bytes(MEM_BASE, (0x03,) + MEM_SEED_BYTES[1:]),
+            },
+        },
+
+        # ----------------------------------------------------------- BCLR
+        {
+            "name": "bclr_l_set_bit_clears_z_and_the_bit",
+            "mnemonic": "bclr",
+            "instruction": "bclr #4,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0x12345668,
+                                  "sr": SR_DIRTY & ~CCR_Z}},
+        },
+        {
+            "name": "bclr_b_memory_keeps_the_other_three_bytes",
+            "mnemonic": "bclr",
+            "instruction": "bclr #1,(%a0)",
+            "initial": {
+                "regs": {"a0": MEM_BASE, "sr": SR_DIRTY},
+                "mem": mem_bytes(MEM_BASE, MEM_SEED_BYTES),
+            },
+            "expected": {
+                "regs": {"a0": MEM_BASE, "sr": SR_DIRTY & ~CCR_Z},
+                "mem": mem_bytes(MEM_BASE, (0x00,) + MEM_SEED_BYTES[1:]),
+            },
+        },
+
+        # ----------------------------------------------------------- BCHG
+        {
+            "name": "bchg_l_clear_bit_sets_z_and_flips_the_bit",
+            "mnemonic": "bchg",
+            "instruction": "bchg #7,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY & ~CCR_Z}},
+            "expected": {"regs": {"d0": 0x123456F8, "sr": SR_DIRTY}},
+        },
+        {
+            # The dynamic form against a byte in memory: 9 mod 8 is bit 1 of
+            # 0x02, which is SET, so Z clears and the bit flips to 0.
+            "name": "bchg_b_memory_dynamic_bit_number",
+            "mnemonic": "bchg",
+            "instruction": "bchg %d1,(%a0)",
+            "initial": {
+                "regs": {"a0": MEM_BASE, "d1": 9, "sr": SR_DIRTY},
+                "mem": mem_bytes(MEM_BASE, MEM_SEED_BYTES),
+            },
+            "expected": {
+                "regs": {"a0": MEM_BASE, "d1": 9,
+                         "sr": SR_DIRTY & ~CCR_Z},
+                "mem": mem_bytes(MEM_BASE, (0x00,) + MEM_SEED_BYTES[1:]),
+            },
+        },
+
+        # ------------------------------------------------------------ LSL
+        {
+            # NOTHING LEAVES THE WORD, so C and X are both CLEARED. X starts
+            # SET, so this case asserts that a shift WRITES X rather than
+            # leaving it, which is the one thing a `setNzClearVc`-shaped
+            # implementation would get wrong.
+            "name": "lsl_l_1_d0",
             "mnemonic": "lsl.l",
-            "instruction": "lsl.l #2,%d1",
-            "initial": {"regs": {"d1": 1}},
-            "expected": {"regs": {"d1": 4}},
+            "instruction": "lsl.l #1,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0x2468ACF0, "sr": SR_BASE}},
         },
         {
-            "name": "asr_l_1_d0",
+            "name": "lsl_l_1_carry_out_sets_c_and_x",
+            "mnemonic": "lsl.l",
+            "instruction": "lsl.l #1,%d0",
+            "initial": {"regs": {"d0": 0x87654321, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0x0ECA8642,
+                                  "sr": SR_BASE | CCR_C | CCR_X}},
+        },
+        {
+            # THE ENCODED COUNT FIELD 000 MEANS EIGHT. A core that read it as
+            # zero leaves the register alone and fails on the value.
+            "name": "lsl_l_8_d0",
+            "mnemonic": "lsl.l",
+            "instruction": "lsl.l #8,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0x34567800, "sr": SR_BASE}},
+        },
+        {
+            "name": "lsl_l_count_register_d1",
+            "mnemonic": "lsl.l",
+            "instruction": "lsl.l %d1,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "d1": 4, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0x23456780, "d1": 4,
+                                  "sr": SR_BASE | CCR_C | CCR_X}},
+        },
+        {
+            # NO `sr`: see the note at the head of this group.
+            "name": "lsl_l_count_register_zero_is_a_no_operation",
+            "mnemonic": "lsl.l",
+            "instruction": "lsl.l %d1,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "d1": 0}},
+            "expected": {"regs": {"d0": DIRTY_D, "d1": 0}},
+        },
+
+        # ------------------------------------------------------------ LSR
+        {
+            "name": "lsr_l_1_d0",
+            "mnemonic": "lsr.l",
+            "instruction": "lsr.l #1,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0x091A2B3C, "sr": SR_BASE}},
+        },
+        {
+            # THE SAME DESTINATION VALUE AS THE CASE ABOVE AND DIFFERENT
+            # FLAGS. The pair is what proves C and X come from the bit shifted
+            # OUT and not from anything in the result.
+            "name": "lsr_l_1_carry_out_sets_c_and_x",
+            "mnemonic": "lsr.l",
+            "instruction": "lsr.l #1,%d0",
+            "initial": {"regs": {"d0": 0x12345679, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0x091A2B3C,
+                                  "sr": SR_BASE | CCR_C | CCR_X}},
+        },
+        {
+            # A LOGICAL RIGHT SHIFT FEEDS ZEROS IN. An arithmetic one would
+            # give 0xF8765432 and set N; this case asserts N is CLEAR.
+            "name": "lsr_l_4_is_logical_not_arithmetic",
+            "mnemonic": "lsr.l",
+            "instruction": "lsr.l #4,%d0",
+            "initial": {"regs": {"d0": 0x87654321, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0x08765432, "sr": SR_BASE}},
+        },
+
+        # ------------------------------------------------------------ ASR
+        {
+            # AN ARITHMETIC RIGHT SHIFT REPLICATES THE SIGN. A logical one
+            # would give 0x43B2A190 and clear N.
+            "name": "asr_l_1_replicates_the_sign",
             "mnemonic": "asr.l",
             "instruction": "asr.l #1,%d0",
-            "initial": {"regs": {"d0": 0x80000008}},
-            "expected": {"regs": {"d0": 0xc0000004}},
+            "initial": {"regs": {"d0": 0x87654321, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0xC3B2A190,
+                                  "sr": SR_BASE | CCR_N | CCR_C | CCR_X}},
         },
         {
-            "name": "lsr_l_1_d1",
-            "mnemonic": "lsr.l",
-            "instruction": "lsr.l #1,%d1",
-            "initial": {"regs": {"d1": 0x80000000}},
-            "expected": {"regs": {"d1": 0x40000000}},
+            "name": "asr_l_1_positive",
+            "mnemonic": "asr.l",
+            "instruction": "asr.l #1,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0x091A2B3C, "sr": SR_BASE}},
+        },
+        {
+            "name": "asr_l_count_register_d1",
+            "mnemonic": "asr.l",
+            "instruction": "asr.l %d1,%d0",
+            "initial": {"regs": {"d0": 0x87654321, "d1": 4, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0xF8765432, "d1": 4,
+                                  "sr": SR_BASE | CCR_N}},
+        },
+
+        # ------------------------------------------------------------ ASL
+        #
+        # THE THREE COUNT-OF-ONE CASES SEPARATE V FROM C IN BOTH DIRECTIONS.
+        # `asl_l_1_sign_change_sets_v` has V set with C clear, and
+        # `asl_l_1_sign_kept_clears_v` has C set with V clear, so a core that
+        # copied one bit into the other fails one of them whichever way round
+        # it copied. A core that never writes V fails the first.
+        {
+            "name": "asl_l_1_sign_change_sets_v",
+            "mnemonic": "asl.l",
+            "instruction": "asl.l #1,%d0",
+            "initial": {"regs": {"d0": 0x60000000, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0xC0000000,
+                                  "sr": SR_BASE | CCR_N | CCR_V}},
+        },
+        {
+            "name": "asl_l_1_carry_out_and_sign_change",
+            "mnemonic": "asl.l",
+            "instruction": "asl.l #1,%d0",
+            "initial": {"regs": {"d0": 0x87654321, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0x0ECA8642,
+                                  "sr": SR_BASE | CCR_V | CCR_C | CCR_X}},
+        },
+        {
+            "name": "asl_l_1_sign_kept_clears_v",
+            "mnemonic": "asl.l",
+            "instruction": "asl.l #1,%d0",
+            "initial": {"regs": {"d0": 0xC0000000, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0x80000000,
+                                  "sr": SR_BASE | CCR_N | CCR_C | CCR_X}},
+        },
+        {
+            "name": "asl_l_count_register_d1",
+            "mnemonic": "asl.l",
+            "instruction": "asl.l %d1,%d0",
+            "initial": {"regs": {"d0": DIRTY_D, "d1": 2, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 0x48D159E0, "d1": 2,
+                                  "sr": SR_BASE}},
         },
     ],
 

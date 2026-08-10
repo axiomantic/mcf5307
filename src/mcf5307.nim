@@ -18,6 +18,7 @@ import mcf5307/cpu
 import mcf5307/decode
 import mcf5307/decode_types
 import mcf5307/ea
+import mcf5307/logic
 import mcf5307/machine
 import mcf5307/move
 {.pop.}
