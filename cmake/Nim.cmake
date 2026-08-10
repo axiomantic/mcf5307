@@ -625,6 +625,44 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 #
 # `-DMCF5307_ABI_GATE=OFF` configures such a host, and prints a warning on
 # every configure run.
+#
+# WHAT THE GATE COSTS, MEASURED. This file stated its price nowhere, and a
+# reader reaching for the switch above is usually paying configure time for
+# something else. An adjective would not help that reader, so here is a number.
+#
+#   2810 ms   the whole configure run, from an empty build tree
+#   1570 ms   step 4a, from this switch to the end of the stub verdict
+#    198 ms   controls E through I together - SIX compiles and SIX `nm` runs
+#             that exist only to make the gate's own fatal branches fire
+#    149 ms   control H alone, the largest single control
+#
+# Median of fourteen runs, measured 2026-08-10 on eeks-MBP.lan (Apple M4 Pro,
+# macOS 26.5.1, Apple clang 21.0.0, CMake 4.3.4, `-DCMAKE_BUILD_TYPE=Debug`),
+# read from `cmake --profiling-output=... --profiling-format=google-trace` as
+# the span between the first and last profiled command in each line range of
+# this file.
+#
+# THOSE MILLISECONDS WERE MEASURED ON A BUSY MACHINE, at load average 5.6, and
+# they are reported rather than tidied. An earlier set on the same tree with the
+# machine quiet read 2089, 1160, 151 and 113 ms for those same four lines -
+# about 25% lower across the board. WHAT DID NOT MOVE IS THE RATIOS:
+# step 4a was 56% of the configure run in both sets, and controls E through I
+# were 13% of step 4a in both. So the shares below are the durable part of this
+# record and the absolute figures are the perishable part.
+#
+# WHAT A READER SHOULD TAKE FROM THOSE NUMBERS. Step 4a is about HALF of this
+# project's configure time, and CONTROLS E THROUGH I ARE AN EIGHTH OF STEP 4A.
+# The rest of step 4a is not broken out here, because the line ranges that would
+# do it interleave each control with the production read it calibrates - control
+# D's range carries the `nm` of the shared object, control B's carries a second
+# AST parse - and a number that cannot be attributed to one or the other is not
+# a number worth writing down. So turning the gate off to buy back configure
+# time buys between one and two seconds per configure, in exchange for a build
+# whose published symbols nobody measured.
+#
+# THE NUMBERS MOVE WITH THE HOST AND THE TOOLCHAIN AND THE METHOD DOES NOT. The
+# command above is written out so a reader who needs a current figure takes one
+# instead of trusting this one.
 set(MCF5307_ABI_GATE ON CACHE BOOL
     "Measure the visibility of every published symbol at configure time")
 
@@ -1586,17 +1624,52 @@ message(STATUS
 # the reader, the three verdict categories, the unpublished-export answer, the
 # internal-linkage route and the compile-fault split - because a measurement
 # can be wrong while the run stays green, and those are the branches that then
-# never fire. THREE BRANCHES BELOW HAVE NO CONTROL AND ARE NOT CLAIMED TO:
+# never fire. FIVE FATAL BRANCHES THIS PART CAN ENTER HAVE NO CONTROL AND ARE
+# NOT CLAIMED TO:
 #
 #   the stub source does not exist;
 #   the compiler rejected the stub for a fault of the stub's own;
-#   the compiler exited 0 and wrote no object.
+#   the compiler exited 0 and wrote no object;
+#   control H's own precondition - the route name is not in the published set;
+#   `nm` exited non-zero, inside `mcf5307_abi_read_symbols` far above.
 #
-# Each is a direct test of a condition this file did not compute - `EXISTS`, an
-# exit status, `EXISTS` again - so there is no reading in between for a control
-# to calibrate. THE POINT OF SAYING SO IS THAT NOTHING HERE CLAIMS OTHERWISE. A
-# blanket sentence about every fatal branch being covered would be a sixth
-# instance of the defect this part keeps being corrected for.
+# THE LAST TWO WERE MISSING FROM THIS LIST. A heading that promises a partition
+# and then names three of five is the same defect as a blanket claim of
+# coverage, only quieter, so both are named now.
+#
+#   CONTROL H'S GUARD is not written as a control and is not one. It fails when
+#   `MCF5307_ABI_STUB_ROUTE_NAME` is absent from the published set, and no
+#   control plants a contract that has lost `mcf5307_runtime_init`. It exists
+#   because control C checks that the published set is NON-EMPTY and not that it
+#   carries this name, so the membership is tested there or nowhere.
+#
+#   THE READER'S OWN `nm` BRANCH is not written below - it lives in
+#   `mcf5307_abi_read_symbols` - but this part reaches it twice: once for the
+#   stub object, and once inside control H for each unit that arm compiles. It
+#   is named here because this heading promises the fatal branches THIS PART CAN
+#   ENTER, and a branch is no less uncontrolled for being defined elsewhere.
+#
+# WHY EACH IS UNCONTROLLED, ONE AT A TIME. A single sentence covering all of
+# them is what this listing got wrong before.
+#
+#   The two `EXISTS` branches and the reader's `nm` exit status are each a
+#   direct test of a condition this file did not compute, so there is no reading
+#   in between for a control to calibrate.
+#
+#   THE COMPILE-FAULT BRANCH DOES HAVE A READING IN BETWEEN, AND THIS LISTING
+#   USED TO DENY IT. Reaching it requires `MCF5307_ABI_STUB_COMPILE_COLLIDED` to
+#   be FALSE, that value is computed by the `mcf5307_abi_stub_collided` call
+#   below, and control I calibrates it in BOTH directions. Only the exit status
+#   itself is uncontrolled. The old sentence UNDER-claimed the coverage this
+#   part has, which is the safe direction to be wrong in and still wrong.
+#
+#   Control H's guard reads a set this file DID compute, and control B
+#   calibrates the reader that produces it. It is uncontrolled in the one sense
+#   this heading means: no control makes it FIRE.
+#
+# THE POINT OF SAYING SO IS THAT NOTHING HERE CLAIMS OTHERWISE. A blanket
+# sentence about every fatal branch being covered would be a sixth instance of
+# the defect this part keeps being corrected for.
 
 if(NOT EXISTS "${MCF5307_ABI_STUB_FILE}")
     message(FATAL_ERROR
@@ -1687,9 +1760,15 @@ endfunction()
 # Control I. THE COMPILE-FAULT SPLIT, RUN ON EVERY CONFIGURE RUN.
 #
 # IT RUNS BEFORE THE COMPILE IT CALIBRATES, unlike controls E through H, which
-# read an artifact that already exists. The branch this one feeds fires the
-# instant the real compile fails, so a calibration placed after it would be a
-# calibration the failing run never reaches.
+# all run after that compile. The branch this one feeds fires the instant the
+# real compile fails, so a calibration placed after it would be a calibration
+# the failing run never reaches.
+#
+# THAT CONTRAST IS ABOUT ORDER, AND IT USED TO BE STATED AS SOMETHING ELSE. It
+# said controls E through H `read an artifact that already exists`. That is
+# false of control H, which compiles four units of its own below. The property
+# that separates this control from those four is where it sits relative to THE
+# STUB COMPILE, and nothing else.
 #
 # IT HAS TWO ARMS AND NEEDS BOTH. An arm that only proves a collision is
 # detected is passed by a predicate that answers TRUE always - and such a
@@ -2096,41 +2175,64 @@ message(STATUS
     "its probe on ${MCF5307_ABI_STUB_OBJECT}")
 
 # ---------------------------------------------------------------------------
-# Control H. THE INTERNAL BRANCH'S OWN ROUTE, COMPILED ON EVERY CONFIGURE RUN.
+# Control H. THE INTERNAL BRANCH'S TWO ROUTES, COMPILED ON EVERY CONFIGURE RUN.
 #
 # A SENTENCE ABOUT WHAT A COMPILER DOES IS A MEASUREMENT AND NOT A FACT, and
-# this comment used to be a sentence. It said that a `static` definition of a
-# published name placed ABOVE the contract include makes the object hold
-# `t <name>`, and that an `__asm__` label on a `static` helper does the same.
-# BOTH WERE WRONG AS WRITTEN, and the object each one produces is BYTE-
-# IDENTICAL to the object produced by deleting the definition outright:
-# `nm` reports the name in NEITHER pass, and the run lands in the ABSENT branch
-# below. The cause is the fact this file already states where the internal
-# probe is written - AN UNREFERENCED `static` FUNCTION IS NOT EMITTED - so the
-# internal linkage is real and the definition is gone before `nm` runs.
+# this comment used to be a sentence. It named two ways to put a published name
+# into the object with INTERNAL linkage - a `static` definition placed ABOVE the
+# contract include, and an `__asm__` label on a `static` helper - and asserted
+# what each produced without compiling either. BOTH DESCRIPTIONS ALSO LEFT OUT
+# THE HALF THAT MAKES THE ROUTE WORK AT ALL: the definition has to SURVIVE to
+# `nm`, because `nm` is what the INTERNAL branch reads. Each arm below therefore
+# carries something that holds its definition alive - a reference for arm one,
+# `used` for arm two - and each asserts the category ITS OWN object lands in.
 #
-# THE ROUTE IS REAL ONCE THE DEFINITION SURVIVES. Internal linkage plus a
-# reference that keeps the definition alive gives `t <name>` in the `all` pass,
+# THE ROUTES ARE REAL ONCE THE DEFINITION SURVIVES. Internal linkage plus
+# something that keeps the definition alive gives `t <name>` in the `all` pass,
 # absent from the `-g` pass, and that is what the INTERNAL branch below reads.
-# So this control STOPS DESCRIBING THE ROUTE AND COMPILES IT: the source is
-# generated here, the object is read with the same reader, and the name is
+# So this control STOPS DESCRIBING THE ROUTES AND COMPILES THEM: each source is
+# generated here, each object is read with the same reader, and the name is
 # sorted by the same function that sorts the published set. A route that stops
 # working fails HERE, where the claim is, instead of rotting in a comment.
+#
+#   ARM ONE is `static` ahead of the contract, with an anchor that references it.
+#   ARM TWO is the `__asm__` label, on a helper marked `used`.
 #
 # THE TWO NON-ROUTES ARE COMPILED HERE TOO, for the same reason. `hidden`
 # visibility on a published name and `static` AFTER the contract include are
 # both written up as things that do NOT reach this category, and a sentence
 # saying a mutation does not reach a branch rots exactly like a sentence saying
-# it does. Arms two and three below run them. Between the three arms every
-# route this file names is a compile whose answer is asserted, and no route in
-# this comment is only described.
+# it does. Arms three and four below run them.
+#
+# BETWEEN THE FOUR ARMS EVERY SHAPE THIS COMMENT NAMES IS A COMPILE WHOSE ANSWER
+# IS ASSERTED. That sentence arrived in `6239af5` over THREE arms, while this
+# same comment went on naming a fourth shape - the `__asm__` label, named here
+# since `677a88b` - and asserting a measurement about it that no arm ran. THE
+# COMPLETENESS CLAIM WAS FALSE IN THE SENTENCE THAT DECLARED THE CLASS CLOSED,
+# which is this part's own defect committed once more by the correction meant to
+# end it. ARM TWO IS WHAT MAKES THE SENTENCE TRUE.
+#
+# THE CLAIM ABOUT WHAT THESE SHAPES PRODUCE WITHOUT AN ANCHOR IS GONE RATHER
+# THAN REWORDED. No arm compiles an unanchored shape, so this file no longer
+# says what one produces. Keeping the sentence and marking it uncompiled was the
+# other way out and it is the weaker one: an uncompiled measurement rots whether
+# or not it is labelled.
 #
 # THE SCOPE OF THIS MEASUREMENT IS ONE TOOLCHAIN. Every answer above was read
 # from Apple clang 21.0.0 targeting arm64 Mach-O. A different compiler may emit
 # an unreferenced internal definition and reach the branch by the shorter road.
-# That would not falsify anything here: these arms compile their routes and
+# That would not falsify anything here: these arms compile their shapes and
 # assert the OUTCOME, so a toolchain that gets there another way still passes
-# arm one - and arms two and three would report the change rather than hide it.
+# arms one and two - and arms three and four would report the change rather than
+# hide it.
+#
+# ARM TWO'S LABEL CARRIES THE MEASURED SYMBOL PREFIX. An `__asm__` label names
+# an ASSEMBLER symbol, so it has to be written the way the assembler writes it -
+# `_mcf5307_runtime_init` on this host, `mcf5307_runtime_init` on a target with
+# no prefix. `MCF5307_ABI_PREFIX` is the prefix `mcf5307_abi_strip` removes, so
+# using it here is what makes the stripped name the reader answers with the
+# route name the classifier is asked about. A literal underscore would be an
+# assumption about a target, and this file measures that one already.
 set(MCF5307_ABI_STUB_ROUTE_NAME "mcf5307_runtime_init")
 
 if(NOT "${MCF5307_ABI_STUB_ROUTE_NAME}" IN_LIST MCF5307_ABI_PUBLISHED)
@@ -2162,10 +2264,30 @@ function(mcf5307_abi_stub_classify_over
     set(${mcf5307_over_out_absent} "${mcf5307_over_absent}" PARENT_SCOPE)
 endfunction()
 
-# One arm. It writes a unit, compiles it the way this step compiles the stub,
-# and answers with THE CATEGORY THE VERDICT WOULD PUT THE ROUTE NAME IN -
-# `REJECTED` when the compiler refused the unit, and otherwise whatever the
-# production classifier says over that object's own measured sets.
+# One arm. It writes a unit, compiles it, reads the object with the same reader,
+# and answers with THE CATEGORY THE VERDICT WOULD PUT THE ROUTE NAME IN.
+#
+# THE COMPILE LINE IS THE STUB'S MINUS ONE FLAG, AND THIS USED TO SAY IT WAS THE
+# STUB'S. It carries `-std=c11`, the project's include directory and `-c`,
+# exactly as the stub compile above does. It does NOT carry `-include` of the
+# generated probe header, and the stub compile DOES. The other helper this part
+# adds, `mcf5307_abi_stub_compile_probe`, carries it, because that header is
+# that helper's whole subject. Measured on this toolchain, adding it here puts
+# the two probe names in the object and changes no ANSWER here: arm one answers
+# INTERNAL with the flag and without it, because the classifier below is asked
+# about ONE name and the probe names are not it.
+#
+# `REJECTED` AND `NO OBJECT` ARE TWO ANSWERS, AND THEY USED TO BE ONE. This
+# helper reported both `the compiler refused the unit` and `the compiler exited
+# 0 and wrote nothing` as `REJECTED`, which is the two-faults-on-one-line defect
+# that this part states as a rule where `hidden` is kept apart from `not
+# implemented yet`, and that the production code obeys with a branch each. Two
+# consequences, and each was real. Arm four would have PASSED FOR THE WRONG
+# REASON on a toolchain that exits 0 without emitting - it asks for `REJECTED`
+# and would have got it from a compiler that accepted the unit. And an arm that
+# failed that way printed `the compiler refused the unit` with an EMPTY detail,
+# because the detail is clipped stderr and a silent success has none. The two
+# answers are separate below, and `NO OBJECT` carries a detail of its own.
 #
 # The units are NEVER LINKED INTO ANYTHING. They are compiled, read and left in
 # the instrument directory, and no target of this project names them.
@@ -2189,10 +2311,19 @@ ${mcf5307_rp_text}")
         OUTPUT_VARIABLE mcf5307_rp_stdout
         ERROR_VARIABLE mcf5307_rp_stderr
         RESULT_VARIABLE mcf5307_rp_result)
-    if(NOT mcf5307_rp_result EQUAL 0 OR NOT EXISTS "${mcf5307_rp_obj}")
+    if(NOT mcf5307_rp_result EQUAL 0)
         mcf5307_clip(mcf5307_rp_head "${mcf5307_rp_stderr}" 600)
         set(${mcf5307_rp_out_category} "REJECTED" PARENT_SCOPE)
-        set(${mcf5307_rp_out_detail} "${mcf5307_rp_head}" PARENT_SCOPE)
+        set(${mcf5307_rp_out_detail}
+            "exit ${mcf5307_rp_result}: ${mcf5307_rp_head}" PARENT_SCOPE)
+        return()
+    endif()
+    if(NOT EXISTS "${mcf5307_rp_obj}")
+        string(CONCAT mcf5307_rp_none
+            "exit 0 and no ${mcf5307_rp_obj}. The object of an earlier run is "
+            "removed before the compile, so there is nothing here to read.")
+        set(${mcf5307_rp_out_category} "NO-OBJECT" PARENT_SCOPE)
+        set(${mcf5307_rp_out_detail} "${mcf5307_rp_none}" PARENT_SCOPE)
         return()
     endif()
     mcf5307_abi_read_symbols(mcf5307_rp_defined_raw mcf5307_rp_external_raw
@@ -2215,11 +2346,11 @@ ${mcf5307_rp_text}")
         PARENT_SCOPE)
 endfunction()
 
-# Arm one. THE ROUTE. Internal linkage from a `static` declaration ahead of the
-# contract, and an anchor that keeps the definition from being dropped - which
-# is the half the old comment left out. The anchor is `used` for the reason the
-# probe header gives: without it the anchor goes, the reference goes with it,
-# and the definition goes with that.
+# Arm one. THE FIRST ROUTE. Internal linkage from a `static` declaration ahead
+# of the contract, and an anchor that keeps the definition from being dropped -
+# which is the half the old comment left out. The anchor is `used` for the
+# reason the probe header gives: without it the anchor goes, the reference goes
+# with it, and the definition goes with that.
 mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_ROUTE_CATEGORY
     MCF5307_ABI_STUB_ROUTE_DETAIL internal_route
 "static void ${MCF5307_ABI_STUB_ROUTE_NAME}(void);
@@ -2245,17 +2376,62 @@ if(NOT MCF5307_ABI_STUB_ROUTE_CATEGORY STREQUAL "INTERNAL")
         "  detail   : ${MCF5307_ABI_STUB_ROUTE_DETAIL}\n"
         "  reader   : ${MCF5307_ABI_NM}\n"
         "READ AS `ABSENT`, the route no longer produces a SURVIVING internal "
-        "definition, and the INTERNAL branch below has no demonstrated way in - "
-        "the state this control exists to end. That is exactly what the route "
-        "does with no anchor: the definition is dropped unreferenced and the "
-        "object matches one that never had it. READ AS `LINKABLE`, the "
-        "`static` ahead of the contract stopped conferring internal linkage, "
-        "and the branch can no longer separate a `static` published definition "
-        "from a linkable one. READ AS `REJECTED`, the compiler refused the "
-        "unit - a changed signature in the contract reads this way too.")
+        "definition, and the INTERNAL branch below loses one of its two "
+        "demonstrated ways in. The anchor above is what keeps the definition "
+        "alive; check it first. READ AS `LINKABLE`, the `static` ahead of the "
+        "contract stopped conferring internal linkage, and the branch can no "
+        "longer separate a `static` published definition from a linkable one. "
+        "READ AS `REJECTED`, the compiler refused the unit - a changed "
+        "signature in the contract reads this way too. READ AS `NO-OBJECT`, "
+        "the compiler accepted the unit and emitted nothing, which is a "
+        "different fault from a refusal and is why the two are separate "
+        "answers.")
 endif()
 
-# Arm two. NOT A ROUTE, AND MEASURED TO BE ONE. `hidden` visibility keeps
+# Arm two. THE SECOND ROUTE, AND THE ONE THIS COMMENT USED TO ONLY DESCRIBE. An
+# `__asm__` label renames the ASSEMBLER symbol of a `static` helper, so the
+# helper keeps internal linkage while carrying the published name. `used` is the
+# anchor here, and it is load-bearing for the same reason it is in the probe
+# header: an unreferenced `static` function is not emitted at all.
+#
+# THE LABEL IS BUILT FROM THE MEASURED PREFIX and not from a literal underscore,
+# for the reason the comment above this control gives.
+mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_ASMLABEL_CATEGORY
+    MCF5307_ABI_STUB_ASMLABEL_DETAIL asm_label_route
+"#include \"mcf5307.h\"
+
+__attribute__((used)) static void mcf5307_abi_stub_route_alias(void)
+    __asm__(\"${MCF5307_ABI_PREFIX}${MCF5307_ABI_STUB_ROUTE_NAME}\");
+
+static void mcf5307_abi_stub_route_alias(void) {}
+")
+
+if(NOT MCF5307_ABI_STUB_ASMLABEL_CATEGORY STREQUAL "INTERNAL")
+    message(FATAL_ERROR
+        "mcf5307: step 4a failed: control H arm two: the `__asm__` label route "
+        "did not reach the INTERNAL category.\n"
+        "  name     : ${MCF5307_ABI_STUB_ROUTE_NAME}\n"
+        "  label    : ${MCF5307_ABI_PREFIX}${MCF5307_ABI_STUB_ROUTE_NAME}\n"
+        "  source   : ${MCF5307_ABI_DIR}/asm_label_route.c\n"
+        "  expected : INTERNAL\n"
+        "  read     : ${MCF5307_ABI_STUB_ASMLABEL_CATEGORY}\n"
+        "  detail   : ${MCF5307_ABI_STUB_ASMLABEL_DETAIL}\n"
+        "  reader   : ${MCF5307_ABI_NM}\n"
+        "THIS ARM EXISTS BECAUSE THE COMMENT ABOVE NAMES THIS SHAPE. It was "
+        "named and asserted there from `677a88b` onward with no compile behind "
+        "it, while the sentence beside it declared every named route compiled. "
+        "READ AS `ABSENT`, either `used` stopped keeping the definition alive "
+        "or the label no longer renames the symbol, and the name the reader "
+        "answers with is not the one the classifier is asked about - check "
+        "`${MCF5307_ABI_PREFIX}` against what `${MCF5307_ABI_NM}` prints for "
+        "this object. READ AS `LINKABLE`, the label promoted the helper out of "
+        "internal linkage, and the INTERNAL branch can no longer be reached "
+        "this way. READ AS `REJECTED`, the toolchain does not accept an "
+        "`__asm__` label in this position under `-std=c11`. READ AS "
+        "`NO-OBJECT`, it accepted the unit and emitted nothing.")
+endif()
+
+# Arm three. NOT A ROUTE, AND MEASURED TO BE ONE. `hidden` visibility keeps
 # EXTERNAL linkage, so the name stays in the `-g` pass and this category never
 # sees it. The shared-object verdict above is where `hidden` is a fault; here
 # it must read LINKABLE, and a run where it reads INTERNAL means the two
@@ -2271,7 +2447,7 @@ __attribute__((visibility(\"hidden\"))) void ${MCF5307_ABI_STUB_ROUTE_NAME}(void
 
 if(NOT MCF5307_ABI_STUB_HIDDEN_CATEGORY STREQUAL "LINKABLE")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control H arm two: `hidden` visibility on a "
+        "mcf5307: step 4a failed: control H arm three: `hidden` visibility on a "
         "published name did not stay LINKABLE.\n"
         "  name     : ${MCF5307_ABI_STUB_ROUTE_NAME}\n"
         "  source   : ${MCF5307_ABI_DIR}/hidden_route.c\n"
@@ -2283,12 +2459,18 @@ if(NOT MCF5307_ABI_STUB_HIDDEN_CATEGORY STREQUAL "LINKABLE")
         "here would be reported as a `static` published definition by the "
         "branch below, which is a different fault with a different fix, and "
         "the message would send the reader to remove a `static` that is not "
-        "there.")
+        "there. READ AS `REJECTED` or `NO-OBJECT`, there is no object to "
+        "classify and the question this arm asks was never reached.")
 endif()
 
-# Arm three. NOT A ROUTE EITHER. `static` AFTER the contract include is a
+# Arm four. NOT A ROUTE EITHER. `static` AFTER the contract include is a
 # constraint violation, so no object exists to classify and the compile branch
 # far above owns the report.
+#
+# IT ASKS FOR `REJECTED` AND NOT FOR `NO-OBJECT`, and until the split above
+# those were one answer. The claim this arm carries is that the COMPILER
+# REFUSES this shape. A toolchain that accepted it and wrote no object would
+# have satisfied the old combined answer and left the claim false.
 mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_LATESTATIC_CATEGORY
     MCF5307_ABI_STUB_LATESTATIC_DETAIL late_static_route
 "#include \"mcf5307.h\"
@@ -2300,7 +2482,7 @@ static void ${MCF5307_ABI_STUB_ROUTE_NAME}(void)
 
 if(NOT MCF5307_ABI_STUB_LATESTATIC_CATEGORY STREQUAL "REJECTED")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control H arm three: `static` AFTER the "
+        "mcf5307: step 4a failed: control H arm four: `static` AFTER the "
         "contract include was not rejected by the compiler.\n"
         "  name     : ${MCF5307_ABI_STUB_ROUTE_NAME}\n"
         "  source   : ${MCF5307_ABI_DIR}/late_static_route.c\n"
@@ -2311,13 +2493,21 @@ if(NOT MCF5307_ABI_STUB_LATESTATIC_CATEGORY STREQUAL "REJECTED")
         "declaration follows non-static declaration` - and therefore as "
         "something the COMPILE branch reports rather than the verdict. A "
         "toolchain that accepts it makes that record false, and the category "
-        "it lands in is the one named above.")
+        "it lands in is the one named above. READ AS `NO-OBJECT`, it accepted "
+        "the unit and emitted nothing, which is not a refusal either.")
 endif()
 
+# THE LINE BELOW COUNTS FOUR UNITS AND CALLS TWO OF THEM ROUTES, and it used to
+# contradict itself inside one sentence: it said `compiled three routes to the
+# INTERNAL category` and then reported two of the three as LINKABLE and
+# REJECTED, while the comment at the head of this control called those same two
+# THE TWO NON-ROUTES. What this control compiles is four shapes; two are routes
+# to that category and two are shapes measured NOT to reach it.
 message(STATUS
-    "mcf5307: step 4a control H compiled three routes to the INTERNAL "
-    "category: `${MCF5307_ABI_STUB_ROUTE_NAME}` internal-with-anchor is "
-    "INTERNAL, hidden is LINKABLE, late-`static` is REJECTED")
+    "mcf5307: step 4a control H compiled four shapes and asserted each "
+    "category: `${MCF5307_ABI_STUB_ROUTE_NAME}` reaches INTERNAL by two "
+    "routes (`static`-with-anchor, `__asm__`-label-with-`used`), and does not "
+    "reach it by two others (hidden is LINKABLE, late-`static` is REJECTED)")
 
 # ---------------------------------------------------------------------------
 # The verdict itself, over the published set.
