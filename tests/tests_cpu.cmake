@@ -805,7 +805,13 @@ target_include_directories(abi_smoke PRIVATE
 target_link_libraries(abi_smoke PRIVATE mcf5307)
 target_compile_features(abi_smoke PRIVATE cxx_std_17)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-    target_compile_options(abi_smoke PRIVATE -Wall -Wextra -pedantic -Werror)
+    # `MCF5307_TEST_WARNING_RELAXATIONS` is the root list's probe result. It is
+    # empty for a standalone configure and for every compiler that does not
+    # know the diagnostic; it demotes ONLY a diagnostic a consumer's own flags
+    # produce, and never a warning in this project's source. See the root
+    # `CMakeLists.txt` for the measurement.
+    target_compile_options(abi_smoke PRIVATE -Wall -Wextra -pedantic -Werror
+        ${MCF5307_TEST_WARNING_RELAXATIONS})
 endif()
 add_dependencies(mcf5307_tests abi_smoke)
 add_test(NAME abi_smoke COMMAND abi_smoke)
