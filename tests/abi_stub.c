@@ -47,9 +47,18 @@
  *
  * THE FOUR NAMES ARE WRITTEN HERE AND THE SIZE OF THAT LIST IS NOT. A name is
  * falsifiable against the two files that hold it - `grep -c mcf5307_halted
- * tests/t0_abi_header.c` answers this paragraph. A count answers nothing about
- * itself: it is a third number beside the header and the code, and it falls
- * behind them both, which is exactly what the word `eighteen` did above.
+ * tests/t0_abi_header.c` answers this paragraph, and no reader has to trust
+ * this one.
+ *
+ * THE WORD REMOVED FROM THE PARAGRAPH ABOVE WAS `EIGHTEEN`, AND IT WAS
+ * CORRECT. It is not the stale `eighteen` of the opening paragraph. It counted
+ * the address-of expressions in `t0_abi_header.c` and `t0_abi_header.cpp`, and
+ * each of those files takes exactly eighteen and then holds itself to it with
+ * `if (found != 18) { return 1; }`. It was right the day it was written and it
+ * was right the day it was removed. What it lacked is anything HERE: that
+ * check lives in those two files and never tells this one, so the copy in this
+ * paragraph was correct because the author remembered - which is the property
+ * being removed, and not a stale number.
  *
  * `tests/abi_smoke.cpp` does take the address of EVERY published name, through
  * `tests/abi_smoke_symbols.inc`, and step 4a holds that list against the
