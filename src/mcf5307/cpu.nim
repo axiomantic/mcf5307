@@ -21,11 +21,15 @@
 ## `move`, which made the decoder depend on an executor. That inversion adds
 ## one import to the decoder for each new instruction group.
 ##
-## TO ADD AN INSTRUCTION GROUP (tasks CPU-8 to CPU-10): write the new
-## executor module beside `move.nim`, add one `import` line here, and add one
-## arm to the `case decoded.op` below. `decode.nim` gets the new opcodes in
-## its own `case` when the group is decoded, but it does not get a new
-## dependency.
+## TO ADD AN INSTRUCTION GROUP (tasks CPU-9 and CPU-10): write the new
+## executor module beside `move.nim` and `alu.nim`, add one `import` line
+## here, and add one arm to the `case decoded.op` below. `decode.nim` gets the
+## new opcodes in its own `case` when the group is decoded, but it does not
+## get a new dependency. CPU-8 IS THE PROOF THAT THE SHAPE HOLDS: adding the
+## integer-arithmetic group cost exactly one module, one import here and one
+## arm below, and `decode.nim`'s import list is still `{decode_types, ea}`.
+## The shared helpers that a second executor needed went DOWN into
+## `mcf5307/machine`, not sideways into `move.nim`.
 ##
 ## THE ONE A7. There is no supervisor and user stack split on ISA_A, so the
 ## context holds a single address register 7. `sp` is that one register.
@@ -40,6 +44,7 @@
 import mcf5307/decode_types
 import mcf5307/decode
 import mcf5307/move
+import mcf5307/alu
 
 # ---------------------------------------------------------------------------
 # The instruction-cycle costs.
@@ -131,10 +136,14 @@ proc step(ctx: MCF5307Ctx): uint32 =
     result = fetchCycles + moveFamily(ctx, opWord, decoded)
   of opAddq, opSubq,
      opAdd, opSub, opAdda, opSuba,
-     opAddi, opSubi,
-     opClr, opExt, opNeg,
-     opMulu, opMuls, opDivu, opDivs,
-     opAnd, opOr, opExg,
+     opAddi, opSubi, opAddx, opSubx,
+     opClr, opExt, opExtb, opNeg, opNegx,
+     opMulu, opMuls, opDivu, opDivs:
+    # The integer-arithmetic group (CPU-8). `aluFamily` executes the
+    # instruction and halts the context with `fault` on an illegal size, an
+    # illegal effective address or a divide by zero.
+    result = fetchCycles + aluFamily(ctx, opWord, decoded)
+  of opAnd, opOr, opExg,
      opNot, opSwap, opTst,
      opBtst, opBchg, opBclr, opBset,
      opTas, opNbcd,
@@ -142,12 +151,10 @@ proc step(ctx: MCF5307Ctx): uint32 =
      opBcc, opBra:
     # The `Operation` enum names every opcode the later instruction-group
     # tasks decode. Their execution semantics arrive with those tasks
-    # (CPU-8 to CPU-10), which add one executor import and one arm above.
+    # (CPU-9 and CPU-10), which add one executor import and one arm above.
     # Until then exec halts rather than pretend to have executed them.
     # `halted` is set and `fault` is not, because the encoding is valid and
-    # only the semantics are absent. The legality of the ADDQ and SUBQ
-    # effective address is asserted directly by the CPU-6 test through
-    # `eaIsLegalFor`.
+    # only the semantics are absent.
     ctx.halted = true
     result = 0
   of opIllegal:

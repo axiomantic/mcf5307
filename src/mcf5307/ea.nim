@@ -82,6 +82,22 @@ const
                        eaAnIndex, eaMode7}
   eaAlterable7* = {ea7AbsW, ea7AbsL}
 
+  # Data alterable: alterable without An. CLR takes this class, and so does
+  # the source of the ColdFire 32-bit multiply and divide - measured against
+  # `m68k-elf-as -mcpu=5307`, which rejects `clr.l %a0`, `mulu.l %a0,%d1`,
+  # `mulu.l (4,%pc),%d1` and `mulu.l #5,%d1` and accepts the rest.
+  eaDataAlterableModes* = {eaDn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp,
+                           eaAnIndex, eaMode7}
+  eaDataAlterable7* = {ea7AbsW, ea7AbsL}
+
+  # Memory alterable: data alterable without Dn. It is the destination class
+  # of the `Dn op <ea> -> <ea>` direction of ADD and SUB; the Dn and An
+  # encodings of that direction are the ADDX and ADDA slots and never a
+  # memory destination.
+  eaMemAlterableModes* = {eaAnInd, eaAnPost, eaAnPre, eaAnDisp, eaAnIndex,
+                          eaMode7}
+  eaMemAlterable7* = {ea7AbsW, ea7AbsL}
+
 # ---------------------------------------------------------------------------
 # A legality mask is a set of modes plus, for mode 7, a set of allowed
 # sub-variants.
