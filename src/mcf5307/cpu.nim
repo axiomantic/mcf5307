@@ -46,6 +46,7 @@ import mcf5307/decode
 import mcf5307/move
 import mcf5307/alu
 import mcf5307/logic
+import mcf5307/control
 
 # ---------------------------------------------------------------------------
 # The instruction-cycle costs.
@@ -155,16 +156,55 @@ proc step(ctx: MCF5307Ctx): uint32 =
     # anything in the group, and a bit operation whose static form names an
     # operand only the dynamic form may reach.
     result = fetchCycles + logicFamily(ctx, opWord, decoded)
-  of opExg, opSwap, opTst,
-     opTas, opNbcd,
-     opScc,
-     opBcc, opBra:
+  of opBcc, opBra, opBsr,
+     opScc, opTst,
+     opCmp, opCmpa, opCmpi,
+     opJmp, opJsr, opRts, opRte, opTrap:
+    # The control-flow and comparison group (CPU-10). `controlFamily` executes
+    # the instruction and halts the context with `fault` on an illegal size, an
+    # illegal effective address, a 32-bit branch displacement - which is ISA_B
+    # and not on this part - or an exception frame whose format field is not
+    # one of the four the part writes.
+    result = fetchCycles + controlFamily(ctx, opWord, decoded)
+  of opExg, opSwap, opTas, opNbcd:
     # The `Operation` enum names every opcode the later instruction-group
-    # tasks decode. Their execution semantics arrive with those tasks
-    # (CPU-10), which add one executor import and one arm above. Until then
-    # exec halts rather than pretend to have executed them. `halted` is set
-    # and `fault` is not, because the encoding is valid and only the
+    # tasks decode. Their execution semantics arrive with those tasks. Until
+    # then exec halts rather than pretend to have executed them. `halted` is
+    # set and `fault` is not, because the encoding is valid and only the
     # semantics are absent.
+    #
+    # NO ARM OF `decodeWord` PRODUCES ANY OF THESE FOUR TODAY, and the arm is
+    # kept rather than deleted because the enum members are reachable through
+    # `eaLegalityFor` and a `case` over `Operation` must be exhaustive.
+    #
+    # THE REASON IS NOT THE SAME FOR ALL FOUR, AND ONE OF THEM IS A DEFECT.
+    #
+    #   `opExg`, `opTas`, `opNbcd` - NOT ON THIS PART. Table 3-7, pages 3-23
+    #   to 3-25, carries no EXG, TAS or NBCD row, Table 3-12, page 3-27, none
+    #   either, and `m68k-elf-as -mcpu=5307` REJECTS `exg %d0,%d1`, `tas %d0`
+    #   and `nbcd %d0`. Section 3.9, page 3-21, names BCD among the removed
+    #   groups, which is NBCD; it does not name EXG or TAS, whose absence is
+    #   the tables' and the assembler's. Nothing decodes them because there is
+    #   nothing to decode. This is a property of the part.
+    #
+    #   `opSwap` - ON THIS PART, AND UNREACHABLE BECAUSE THIS CODE EATS IT.
+    #   SWAP IS NOT REMOVED: Table 3-7, page 3-25, carries the row
+    #   `SWAP | Dn | 16 | MSW of Dn <-> LSW of Dn`, Table 3-12, page 3-27,
+    #   carries a `swap Dx` row at 1(0/0), and `m68k-elf-as -mcpu=5307`
+    #   assembles `swap %d0` to `4840` and `swap %d7` to `4847`.
+    #   `decode.nim`'s PEA arm matches `word and 0xFFC0 == 0x4840`, which spans
+    #   `4840`-`487f` and so SWALLOWS ALL EIGHT SWAP ENCODINGS. Measured
+    #   against the decoder: `4840`, `4841` and `4847` all come back
+    #   `op=opPea, ea.mode=eaDn`, and `eaLegalityFor(opPea)` is control
+    #   addressing, which excludes `Dn` - so every `swap` on this core faults
+    #   as an illegal PEA operand instead of executing.
+    #
+    #   THAT IS A LIVE DEFECT, NOT A GAP AWAITING A LATER TASK. It is CPU-7's
+    #   code, pre-existing at commit a124077, and it is filed and repaired as
+    #   its own task - NOT here, and NOT by this arm. Until it is fixed,
+    #   "`opSwap` is not produced" must be read as "the decoder is wrong",
+    #   because the alternative reading - that the part has no SWAP - is
+    #   contradicted by both tables and by the assembler.
     ctx.halted = true
     result = 0
   of opIllegal:

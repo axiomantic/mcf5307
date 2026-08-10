@@ -344,6 +344,166 @@ def mem_bytes(base, values):
             for i, v in enumerate(values)]
 
 
+def lw(addr, value):
+    """One longword `mem` entry."""
+    return {"addr": addr, "size": 4, "value": value}
+
+
+# ---------------------------------------------------------------------------
+# CPU-10's own seeds: the stack, the branch targets and the vector table.
+#
+# THE STACK MUST BE INSIDE THE RUNNER'S BOARD AND THE DEFAULT IS NOT.
+# `conformance/runner.cpp` resets A7 to 0x400000 and its board is 1 MiB, so a
+# push through the default pointer is silently dropped by `MemBoard::write` and
+# a pop reads back zero. Every case below that touches the stack - BSR, JSR,
+# RTS, RTE, TRAP - therefore NAMES `a7`, and names it inside the board.
+#
+# `CTRL_STACK` is longword-aligned so that the TRAP cases which vary A7's low
+# two bits can do so by ADDING to it, and every one of them still writes its
+# frame at the same 0-modulo-4 address. Table 3-2 of the MCF5307 User's Manual
+# (page 3-14) is the rule those cases assert; see the TRAP block below.
+CTRL_STACK = 0x3000
+
+# THE GUARD LONGWORD AT THE INCOMING A7. A push writes BELOW the pointer, so
+# the longword AT it must come back untouched; each case pairs this with a
+# second guard below whatever it wrote. Seeding and asserting both makes "the
+# core wrote four bytes, at this address, and nowhere else" an assertion rather
+# than an assumption. `MEM_GUARD` is the same 0x0BADC0DE the earlier groups use.
+CTRL_GUARD_AT = CTRL_STACK              # at the incoming A7
+
+# THE BRANCH AND CALL TARGETS. Both are inside the board, neither is symmetric,
+# and neither shares a byte with the other, so a program counter that landed on
+# the wrong one is a different value in every byte.
+CTRL_TARGET = 0x00054320
+CTRL_TARGET_2 = 0x00098760
+
+# THE EXCEPTION VECTOR TABLE. MCF5307 User's Manual Table 3-1, "Exception
+# Vector Assignments", page 3-13: `TRAP #0-15` are vector numbers 32 to 47 at
+# vector offsets $080 to $0BC, and the vector offset is 4 x vector_number. The
+# table is based at the vector base register, whose reset value is zero
+# (Table 3-1's own offsets, and the VBR reset value $00000000 in the memory
+# map), and the core has no VBR register yet - CPU-11 adds MOVEC. So the
+# vector longword of `trap #n` is at 4 * (32 + n) and these two cases seed
+# exactly that.
+TRAP_VECTOR_0 = 4 * 32                  # $080
+TRAP_VECTOR_15 = 4 * 47                 # $0BC
+
+
+def frame_fv(fmt, vector, sr):
+    """The first longword of an exception stack frame.
+
+    MCF5307 User's Manual Figure 3-7, "Exception Stack Frame Form", page 3-13:
+    the first longword holds the 16-bit format/vector word and the 16-bit
+    status register, with FORMAT in bits 31..28, FS[3:2] in 27..26,
+    VECTOR[7:0] in 25..18, FS[1:0] in 17..16 and the status register in 15..0.
+
+    FS IS ZERO HERE AND THE MANUAL SAYS WHY. Table 3-3, "Fault Status
+    Encodings", page 3-14: `0000` is "Not an access or address error", and the
+    field "is defined for access and address errors only and written as zeros
+    for all other types of exceptions". A TRAP is neither.
+    """
+    return (fmt << 28) | (vector << 18) | sr
+
+
+# ---------------------------------------------------------------------------
+# THE CONDITIONAL BRANCH TABLE, AND WHY ITS CASES CANNOT ALL START FROM
+# `SR_DIRTY`.
+#
+# Every other case in this corpus starts from `SR_DIRTY` so that a flag the
+# instruction must CLEAR is separable from a flag it never wrote. A `Bcc`
+# writes NO flag, and the incoming status register is its INPUT: it is the
+# whole of what decides whether the branch is taken. One fixed incoming word
+# would exercise one truth value of each condition and leave the other
+# unreached.
+#
+# So each condition below carries TWO condition-code words - one on which it is
+# TRUE and one on which it is FALSE - and the pair is chosen to differ in the
+# flags THAT condition reads. `X` is set in both halves of every pair, because
+# no condition reads it and its arrival unchanged is the "Bcc touches no flag"
+# assertion this group can make.
+#
+# THIS TABLE SAMPLES THE CONDITION TABLE; IT DOES NOT PIN IT. Two conditions
+# that agree on both words of a pair are not separated by that pair, and the
+# corpus cannot afford the six condition-code words it takes to separate all
+# sixteen. `tests/t_control.nim` runs the FULL 16 conditions x 16 condition-code
+# words matrix and that is what pins each condition's truth table.
+#
+# THE ENCODING OF EACH CONDITION IS MEASURED AND NOT ASSUMED. Every mnemonic
+# below was assembled by `m68k-elf-as -mcpu=5307` at generation time, which is
+# what puts `bhi` at 0x62, `bls` at 0x63 and so on; the generator fails if any
+# one of them is not an instruction on this part.
+BCC_CONDITIONS = [
+    # (mnemonic, condition-code bits on which it is TRUE, and on which FALSE)
+    ("bhi", 0, CCR_C),                       # !C & !Z
+    ("bls", CCR_Z, 0),                       # C | Z
+    ("bcc", CCR_Z, CCR_C),                   # !C
+    ("bcs", CCR_C, CCR_Z),                   # C
+    ("bne", CCR_C, CCR_Z),                   # !Z
+    ("beq", CCR_Z, CCR_C),                   # Z
+    ("bvc", CCR_C, CCR_V),                   # !V
+    ("bvs", CCR_V, CCR_C),                   # V
+    ("bpl", CCR_V, CCR_N),                   # !N
+    ("bmi", CCR_N, CCR_V),                   # N
+    ("bge", CCR_N | CCR_V, CCR_N),           # N == V
+    ("blt", CCR_N, CCR_N | CCR_V),           # N != V
+    ("bgt", CCR_N | CCR_V, CCR_N | CCR_V | CCR_Z),   # !Z & (N == V)
+    ("ble", CCR_N | CCR_V | CCR_Z, CCR_N | CCR_V),   # Z | (N != V)
+]
+
+# THE TWO DISPLACEMENT FORMS, AND THE FOUR PROGRAM COUNTERS THEY PRODUCE.
+#
+# `Bcc <label>` has an operand size of "8,16" and no other - MCF5307 User's
+# Manual Table 3-7, "Instruction Set Summary", page 3-23 - so a branch is
+# either two words or one. The four outcomes are four different program
+# counters and each one is asserted:
+#
+#   taken, byte form     opcode + 2 + d8      the displacement is in the opcode
+#   taken, word form     opcode + 2 + d16     the base is the DISPLACEMENT WORD
+#   not taken, byte      opcode + 2           one word consumed
+#   not taken, word      opcode + 4           two words consumed
+#
+# THE BASE IS THE ADDRESS OF THE WORD AFTER THE OPCODE FOR BOTH FORMS, and it
+# is measured, not assumed: `bra.b .+8` assembles to `6006` and `bra.w .+0x2000`
+# to `6000 1ffe`, so in each the displacement is the target minus (opcode + 2).
+#
+# EACH CONDITION ALTERNATES WHICH FORM CARRIES WHICH OUTCOME, so that all four
+# rows above are reached across the table rather than only the two a fixed
+# assignment would reach.
+BCC_TAKEN_BYTE_PC = EXEC_BASE + 2 + 8
+BCC_TAKEN_WORD_PC = EXEC_BASE + 2 + 0xFE
+BCC_NOT_TAKEN_BYTE_PC = EXEC_BASE + 2
+BCC_NOT_TAKEN_WORD_PC = EXEC_BASE + 4
+
+
+def bcc_cases():
+    """One taken and one not-taken case for each of the fourteen conditions."""
+    out = []
+    for index, (mnemonic, ccr_true, ccr_false) in enumerate(BCC_CONDITIONS):
+        taken_is_byte = (index % 2) == 0
+        for taken in (True, False):
+            byte_form = taken_is_byte if taken else not taken_is_byte
+            suffix = "b" if byte_form else "w"
+            text = "%s.%s .+%s" % (mnemonic, suffix,
+                                   "10" if byte_form else "0x100")
+            ccr = ccr_true if taken else ccr_false
+            sr = SR_BASE | CCR_X | ccr
+            if taken:
+                pc = BCC_TAKEN_BYTE_PC if byte_form else BCC_TAKEN_WORD_PC
+            else:
+                pc = (BCC_NOT_TAKEN_BYTE_PC if byte_form
+                      else BCC_NOT_TAKEN_WORD_PC)
+            out.append({
+                "name": "%s_%s_%s" % (mnemonic,
+                                      "taken" if taken else "not_taken",
+                                      suffix),
+                "mnemonic": mnemonic,
+                "instruction": text,
+                "initial": {"regs": {"pc": EXEC_BASE, "sr": sr}},
+                "expected": {"regs": {"pc": pc, "sr": sr}},
+            })
+    return out
+
+
 def assemble_to_words(instruction):
     """Assemble one instruction line and return its machine words.
 
@@ -1649,37 +1809,814 @@ CASES = {
         },
     ],
 
-    # `nop` NOW NAMES `sr`, AND THE REASON IT DID NOT IS GONE.
+    # ------------------------------------------------------------------ CPU-10
+    # THE CONDITION-CODE RULES OF THIS GROUP, AND WHERE EACH COMES FROM.
     #
-    # It used to name no register at all - not even `sr` - because the runner
-    # judged a register-less case by its cycle return and applied that
-    # judgement ONLY when `expected.regs` was empty. Naming `sr` therefore
-    # REMOVED the case's only assertion instead of adding one: an `sr`
-    # expectation of "unchanged" is satisfied by a NOP that never executed,
-    # since an instruction that never ran changes nothing.
+    #   NOP, BRA, BSR, Bcc, JMP, JSR, Scc
+    #       NO CONDITION CODE AT ALL. MCF5307 User's Manual Table 3-7,
+    #       "Instruction Set Summary", pages 3-23 and 3-25, gives each of these
+    #       an OPERATION column that names the program counter, the stack
+    #       pointer or the destination and NO flag. Every one of these cases
+    #       therefore expects its incoming status word back byte for byte.
     #
-    # `conformance/runner.cpp` no longer works that way. It asserts
-    # `mcf5307_faulted`, then `mcf5307_halted`, then a non-zero cycle return,
-    # for EVERY case and before it compares one register. A NOP that never
-    # executed cannot reach the comparison: the core either faulted, halted or
-    # completed no instruction, and each of those fails the case on its own.
-    # Measured on the mutation "the encoding word is 0000 instead of 4e71" -
-    # a NOP that is not there - the old runner passed the case with `sr`
-    # named and this one reports the trap.
+    #   TST
+    #       "Set Integer Condition Codes" (Table 3-7, page 3-25) at the operand
+    #       size. N and Z from the operand, V and C cleared, X UNTOUCHED -
+    #       section 3.2.1.5, page 3-8, defines V as an ARITHMETIC overflow, C as
+    #       a carry out of an addition or a borrow in a subtraction, and TST
+    #       performs neither. That is `setNzClearVc`, the rule MOVE already has.
     #
-    # So the case takes the corpus's ordinary shape for an instruction that
-    # must not touch the condition codes: `SR_DIRTY` in, `SR_DIRTY` back. That
-    # is now an assertion ON TOP OF the run-state checks rather than instead
-    # of them, and it is the strongest statement this corpus can make about
-    # NOP - the whole 16-bit status word is unchanged.
+    #   CMP, CMPA, CMPI
+    #       "Destination - Source" (Table 3-7, page 3-23) with the result
+    #       DISCARDED. N, Z, V and C come from that subtraction and X IS NOT
+    #       WRITTEN. The X rule is uncertainty 2 in `control.nim`'s header: the
+    #       same section 3.2.1.5 says X takes C's value "for arithmetic
+    #       operations", which read literally would have a comparison write it.
+    #       These cases assert X unchanged, so a reader who reverses that
+    #       reading must change them.
+    #
+    #   RTE
+    #       The status register is RELOADED from the frame, not computed. Every
+    #       RTE case below therefore starts from a DIFFERENT word than the one
+    #       it expects, so "the core reloaded it" is separable from "the core
+    #       left it alone".
+    #
+    #   TRAP
+    #       Section 3.3, "Exception Processing Overview", page 3-11: "the
+    #       processor makes an internal copy of the SR and then enters
+    #       supervisor mode by setting the S-bit and disabling trace mode by
+    #       clearing the T-bit". The COPY is what reaches the stack frame and
+    #       the MODIFIED word is what the handler runs under.
     "control": [
         {
+            # `nop` NOW NAMES `sr`, AND THE REASON IT DID NOT IS GONE.
+            #
+            # It used to name no register at all - not even `sr` - because the
+            # runner judged a register-less case by its cycle return and applied
+            # that judgement ONLY when `expected.regs` was empty. Naming `sr`
+            # therefore REMOVED the case's only assertion instead of adding one:
+            # an `sr` expectation of "unchanged" is satisfied by a NOP that never
+            # executed, since an instruction that never ran changes nothing.
+            #
+            # `conformance/runner.cpp` no longer works that way. It asserts
+            # `mcf5307_faulted`, then `mcf5307_halted`, then a non-zero cycle
+            # return, for EVERY case and before it compares one register.
+            # Measured on the mutation "the encoding word is 0000 instead of
+            # 4e71" - a NOP that is not there - the old runner passed the case
+            # with `sr` named and this one reports the trap.
+            #
+            # IT NOW NAMES `pc` TOO, which is the assertion that separates a NOP
+            # from every other one-word instruction in this group: the program
+            # counter advances by exactly one word and by nothing else.
             "name": "nop",
             "mnemonic": "nop",
             "instruction": "nop",
-            "initial": {"regs": {"sr": SR_DIRTY}},
-            "expected": {"regs": {"sr": SR_DIRTY}},
+            "initial": {"regs": {"pc": EXEC_BASE, "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2, "sr": SR_DIRTY}},
         },
+
+        # -------------------------------------------------------------- BRA
+        # BOTH DIRECTIONS OF BOTH FORMS. A displacement is SIGNED, and a core
+        # that zero-extended it passes every forward case and fails both
+        # backward ones. `bra.b .-6` is `60f8` and `bra.w .-0x4000` is
+        # `6000 bffe`, each assembled by `m68k-elf-as -mcpu=5307`.
+        {
+            "name": "bra_b_forward",
+            "mnemonic": "bra.b",
+            "instruction": "bra.b .+8",
+            "initial": {"regs": {"pc": EXEC_BASE, "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2 + 6, "sr": SR_DIRTY}},
+        },
+        {
+            "name": "bra_b_backward",
+            "mnemonic": "bra.b",
+            "instruction": "bra.b .-6",
+            "initial": {"regs": {"pc": EXEC_BASE, "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2 - 8, "sr": SR_DIRTY}},
+        },
+        {
+            "name": "bra_w_forward",
+            "mnemonic": "bra.w",
+            "instruction": "bra.w .+0x2000",
+            "initial": {"regs": {"pc": EXEC_BASE, "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2 + 0x1FFE,
+                                  "sr": SR_DIRTY}},
+        },
+        {
+            "name": "bra_w_backward",
+            "mnemonic": "bra.w",
+            "instruction": "bra.w .-0x4000",
+            "initial": {"regs": {"pc": EXEC_BASE, "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2 - 0x4002,
+                                  "sr": SR_DIRTY}},
+        },
+
+        # -------------------------------------------------------------- BSR
+        # THE RETURN ADDRESS IS THE ADDRESS AFTER THE WHOLE INSTRUCTION, AND
+        # THE TWO FORMS ARE DIFFERENT LENGTHS. Table 3-7, page 3-23, gives BSR
+        # as "SP - 4 -> SP; PC -> (SP); PC + dn -> PC". The byte form pushes
+        # opcode + 2 and the word form pushes opcode + 4; a core that pushed
+        # the branch BASE - which is opcode + 2 for both - passes the byte case
+        # and fails the word one.
+        {
+            "name": "bsr_b_pushes_return_address",
+            "mnemonic": "bsr.b",
+            "instruction": "bsr.b .+8",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "a7": CTRL_STACK, "sr": SR_DIRTY},
+                "mem": [lw(CTRL_STACK - 8, MEM_GUARD),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+            "expected": {
+                "regs": {"pc": EXEC_BASE + 2 + 6, "a7": CTRL_STACK - 4,
+                         "sr": SR_DIRTY},
+                "mem": [lw(CTRL_STACK - 8, MEM_GUARD),
+                        lw(CTRL_STACK - 4, EXEC_BASE + 2),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+        },
+        {
+            "name": "bsr_w_pushes_return_address",
+            "mnemonic": "bsr.w",
+            "instruction": "bsr.w .+0x40",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "a7": CTRL_STACK, "sr": SR_DIRTY},
+                "mem": [lw(CTRL_STACK - 8, MEM_GUARD),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+            "expected": {
+                "regs": {"pc": EXEC_BASE + 2 + 0x3E, "a7": CTRL_STACK - 4,
+                         "sr": SR_DIRTY},
+                "mem": [lw(CTRL_STACK - 8, MEM_GUARD),
+                        lw(CTRL_STACK - 4, EXEC_BASE + 4),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+        },
+    ] + bcc_cases() + [
+
+        # -------------------------------------------------------------- Scc
+        # THE DESTINATION IS ONE BYTE OF A DATA REGISTER AND NOTHING WIDER.
+        # Table 3-7, page 3-25, gives `Scc Dx` an OPERAND SIZE of 8 and the
+        # operation "If Condition True, Then 1's -> Destination; Else 0's ->
+        # Destination". `DIRTY_D` is 0x12345678 and every byte of it differs,
+        # so a core that wrote the whole register lands on 0xFFFFFFFF or 0 and
+        # a core that wrote the wrong byte lane lands somewhere else again.
+        #
+        # THE OPERAND IS A DATA REGISTER AND NOTHING ELSE. Table 3-12, "One
+        # Operand Instruction Execution Times", page 3-27: the `scc Dx` row
+        # carries `1(0/0)` under `Rn` and A DASH under `(An)`, `(An)+`, `-(An)`,
+        # `(d16,An)`, `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`. The `clr.b` rows
+        # above it and the `tst.b` rows below it carry times in those columns,
+        # so the dashes are this row's. `m68k-elf-as -mcpu=5307` agrees and
+        # rejects `scc (%a0)`, `scc %a0` and `scc 0x1234.w`. The negative cases
+        # are in `tests/t_control.nim`; a positive corpus cannot hold them.
+        {
+            "name": "scc_st_writes_ones_into_the_low_byte",
+            "mnemonic": "st",
+            "instruction": "st %d0",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": DIRTY_D,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2,
+                                  "d0": (DIRTY_D & ~0xFF) | 0xFF,
+                                  "sr": SR_DIRTY}},
+        },
+        {
+            "name": "scc_sf_writes_zeros_into_the_low_byte",
+            "mnemonic": "sf",
+            "instruction": "sf %d0",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": DIRTY_D,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2,
+                                  "d0": DIRTY_D & ~0xFF,
+                                  "sr": SR_DIRTY}},
+        },
+        {
+            "name": "scc_seq_true",
+            "mnemonic": "seq",
+            "instruction": "seq %d0",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": DIRTY_D,
+                                 "sr": SR_BASE | CCR_X | CCR_Z}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2,
+                                  "d0": (DIRTY_D & ~0xFF) | 0xFF,
+                                  "sr": SR_BASE | CCR_X | CCR_Z}},
+        },
+        {
+            "name": "scc_seq_false",
+            "mnemonic": "seq",
+            "instruction": "seq %d0",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": DIRTY_D,
+                                 "sr": SR_BASE | CCR_X | CCR_C}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2,
+                                  "d0": DIRTY_D & ~0xFF,
+                                  "sr": SR_BASE | CCR_X | CCR_C}},
+        },
+        {
+            "name": "scc_smi_true",
+            "mnemonic": "smi",
+            "instruction": "smi %d0",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": DIRTY_D,
+                                 "sr": SR_BASE | CCR_X | CCR_N}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2,
+                                  "d0": (DIRTY_D & ~0xFF) | 0xFF,
+                                  "sr": SR_BASE | CCR_X | CCR_N}},
+        },
+        {
+            "name": "scc_scc_carry_clear_true",
+            "mnemonic": "scc",
+            "instruction": "scc %d0",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": DIRTY_D,
+                                 "sr": SR_BASE | CCR_X | CCR_Z}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2,
+                                  "d0": (DIRTY_D & ~0xFF) | 0xFF,
+                                  "sr": SR_BASE | CCR_X | CCR_Z}},
+        },
+
+        # -------------------------------------------------------------- TST
+        # ALL THREE SIZES EXIST HERE AND THE MANUAL PRINTS ALL THREE. Table
+        # 3-12, page 3-27, carries a `tst.b`, a `tst.w` AND a `tst.l` row, each
+        # timed under every one of `Rn`, `(An)`, `(An)+`, `-(An)`, `(d16,An)`,
+        # `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx` - no dash anywhere in the three
+        # rows. TST is the ONE instruction in this group that keeps the byte and
+        # word forms the rest of the core traps, and `m68k-elf-as -mcpu=5307`
+        # agrees: it accepts `tst.b %d0`, `tst.w %d0` and `tst.l #5`.
+        #
+        # EACH SIZED CASE ANSWERS THE OPPOSITE WAY AT THE OTHER SIZES. The seed
+        # is chosen so that the flag the case asserts changes if the operand is
+        # read one size wider or narrower, which is what makes these cases a
+        # test of the SIZE and not only of the flags.
+        {
+            "name": "tst_l_positive_clears_n_and_z_and_keeps_x",
+            "mnemonic": "tst.l",
+            "instruction": "tst.l %d0",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": DIRTY_D,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2, "d0": DIRTY_D,
+                                  "sr": SR_BASE | CCR_X}},
+        },
+        {
+            "name": "tst_l_negative_sets_n",
+            "mnemonic": "tst.l",
+            "instruction": "tst.l %d0",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": 0x80000000,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2, "d0": 0x80000000,
+                                  "sr": SR_BASE | CCR_X | CCR_N}},
+        },
+        {
+            # THE OPERAND IS ZERO AND THAT IS THE POINT. Every other case in
+            # this corpus seeds its destination non-zero; TST has no
+            # destination, and the value it reads is the whole of its input.
+            "name": "tst_l_zero_sets_z",
+            "mnemonic": "tst.l",
+            "instruction": "tst.l %d0",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": 0, "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2, "d0": 0,
+                                  "sr": SR_BASE | CCR_X | CCR_Z}},
+        },
+        {
+            # 0x1234FFFF IS NEGATIVE AS A WORD AND POSITIVE AS A LONGWORD.
+            "name": "tst_w_negative_low_word",
+            "mnemonic": "tst.w",
+            "instruction": "tst.w %d0",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": 0x1234FFFF,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2, "d0": 0x1234FFFF,
+                                  "sr": SR_BASE | CCR_X | CCR_N}},
+        },
+        {
+            # 0x12340000 IS ZERO AS A WORD AND NON-ZERO AS A LONGWORD.
+            "name": "tst_w_zero_low_word",
+            "mnemonic": "tst.w",
+            "instruction": "tst.w %d0",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": 0x12340000,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2, "d0": 0x12340000,
+                                  "sr": SR_BASE | CCR_X | CCR_Z}},
+        },
+        {
+            # 0x12345680 IS NEGATIVE AS A BYTE AND POSITIVE AS A WORD.
+            "name": "tst_b_negative_low_byte",
+            "mnemonic": "tst.b",
+            "instruction": "tst.b %d0",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": 0x12345680,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2, "d0": 0x12345680,
+                                  "sr": SR_BASE | CCR_X | CCR_N}},
+        },
+        {
+            # 0x12345600 IS ZERO AS A BYTE AND NON-ZERO AS A WORD.
+            "name": "tst_b_zero_low_byte",
+            "mnemonic": "tst.b",
+            "instruction": "tst.b %d0",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": 0x12345600,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2, "d0": 0x12345600,
+                                  "sr": SR_BASE | CCR_X | CCR_Z}},
+        },
+        {
+            # AN ADDRESS REGISTER IS A LEGAL `tst.l` OPERAND AND NOT A LEGAL
+            # `tst.b` ONE. `m68k-elf-as -mcpu=5307` accepts `tst.l %a0` and
+            # `tst.w %a0` and REJECTS `tst.b %a0`; the byte half is a trap case
+            # and lives in `tests/t_control.nim`.
+            "name": "tst_l_address_register",
+            "mnemonic": "tst.l",
+            "instruction": "tst.l %a0",
+            "initial": {"regs": {"pc": EXEC_BASE, "a0": DIRTY_A,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2, "a0": DIRTY_A,
+                                  "sr": SR_BASE | CCR_X}},
+        },
+        {
+            # TST READS AND WRITES NOTHING. All four seeded bytes are asserted
+            # unchanged, so a core that wrote its result back fails here.
+            "name": "tst_l_memory_reads_and_does_not_write",
+            "mnemonic": "tst.l",
+            "instruction": "tst.l (%a0)",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "a0": MEM_BASE, "sr": SR_DIRTY},
+                "mem": mem_bytes(MEM_BASE, (0xF0, 0xE1, 0xD2, 0xC3)),
+            },
+            "expected": {
+                "regs": {"pc": EXEC_BASE + 2, "a0": MEM_BASE,
+                         "sr": SR_BASE | CCR_X | CCR_N},
+                "mem": mem_bytes(MEM_BASE, (0xF0, 0xE1, 0xD2, 0xC3)),
+            },
+        },
+        {
+            # THE POSTINCREMENT IS BY THE OPERAND SIZE, WHICH IS ONE BYTE HERE.
+            # A core that advanced by four lands on `MEM_BASE + 4`.
+            "name": "tst_b_postincrement_advances_by_one",
+            "mnemonic": "tst.b",
+            "instruction": "tst.b (%a0)+",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "a0": MEM_BASE, "sr": SR_DIRTY},
+                "mem": mem_bytes(MEM_BASE, MEM_SEED_BYTES),
+            },
+            "expected": {
+                "regs": {"pc": EXEC_BASE + 2, "a0": MEM_BASE + 1,
+                         "sr": SR_BASE | CCR_X},
+                "mem": mem_bytes(MEM_BASE, MEM_SEED_BYTES),
+            },
+        },
+        {
+            # AN IMMEDIATE OPERAND IS TIMED IN TABLE 3-12 - `tst.l` reads
+            # `1(0/0)` under `#xxx` - and `m68k-elf-as -mcpu=5307` emits
+            # `4abc 0000 0005` for it. The program counter is what proves the
+            # core consumed TWO extension words and not one.
+            "name": "tst_l_immediate",
+            "mnemonic": "tst.l",
+            "instruction": "tst.l #5",
+            "initial": {"regs": {"pc": EXEC_BASE, "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 6,
+                                  "sr": SR_BASE | CCR_X}},
+        },
+
+        # -------------------------------------------------------------- CMP
+        # `cmp.l %d0,%d1` IS `d1 - d0`, AND THE ORDER IS MEASURED. The word is
+        # `b280` = `1011 001 010 000 000`: bits 11..9 are the DESTINATION data
+        # register (d1) and the low six bits are the SOURCE effective address
+        # (d0). Table 3-7, page 3-23, gives the operation as "Destination -
+        # Source". A core that subtracted the other way round gets the sign and
+        # the carry of `cmp_l_source_greater` backwards.
+        {
+            "name": "cmp_l_equal_sets_z",
+            "mnemonic": "cmp.l",
+            "instruction": "cmp.l %d0,%d1",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": DIRTY_D, "d1": DIRTY_D,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2, "d0": DIRTY_D,
+                                  "d1": DIRTY_D,
+                                  "sr": SR_BASE | CCR_X | CCR_Z}},
+        },
+        {
+            "name": "cmp_l_source_greater_sets_n_and_c",
+            "mnemonic": "cmp.l",
+            "instruction": "cmp.l %d0,%d1",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": 2, "d1": 1,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2, "d0": 2, "d1": 1,
+                                  "sr": SR_BASE | CCR_X | CCR_N | CCR_C}},
+        },
+        {
+            # THE SIGNED OVERFLOW IS A DIFFERENT QUESTION FROM THE BORROW.
+            # 0x80000000 - 1 is 0x7fffffff: no borrow, so C is CLEAR, and the
+            # sign of the result is not the sign the operands imply, so V is
+            # SET. A core that computed V from the carry fails here.
+            "name": "cmp_l_signed_overflow_sets_v_without_c",
+            "mnemonic": "cmp.l",
+            "instruction": "cmp.l %d0,%d1",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": 1, "d1": 0x80000000,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2, "d0": 1,
+                                  "d1": 0x80000000,
+                                  "sr": SR_BASE | CCR_X | CCR_V}},
+        },
+        {
+            "name": "cmp_l_memory_source",
+            "mnemonic": "cmp.l",
+            "instruction": "cmp.l (%a0),%d1",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "a0": MEM_BASE, "d1": DIRTY_D,
+                         "sr": SR_DIRTY},
+                "mem": [lw(MEM_BASE, DIRTY_D), lw(MEM_BASE + 4, MEM_GUARD)],
+            },
+            "expected": {
+                "regs": {"pc": EXEC_BASE + 2, "a0": MEM_BASE, "d1": DIRTY_D,
+                         "sr": SR_BASE | CCR_X | CCR_Z},
+                "mem": [lw(MEM_BASE, DIRTY_D), lw(MEM_BASE + 4, MEM_GUARD)],
+            },
+        },
+        {
+            # AN ADDRESS REGISTER IS A LEGAL CMP SOURCE. `b288` is what
+            # `m68k-elf-as -mcpu=5307` emits for `cmp.l %a0,%d1`, and Table 3-13
+            # (page 3-28) times the `cmp.l <ea>,Rx` row under `Rn`.
+            "name": "cmp_l_address_register_source",
+            "mnemonic": "cmp.l",
+            "instruction": "cmp.l %a0,%d1",
+            "initial": {"regs": {"pc": EXEC_BASE, "a0": DIRTY_A, "d1": DIRTY_A,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2, "a0": DIRTY_A,
+                                  "d1": DIRTY_A,
+                                  "sr": SR_BASE | CCR_X | CCR_Z}},
+        },
+        {
+            # THE PC-RELATIVE BASE IS THE ADDRESS OF THE DISPLACEMENT WORD.
+            # `b2ba 0020` puts its operand at EXEC_BASE + 2 + 0x20; the
+            # longword TWO BYTES FURTHER ON - where a core that based the
+            # address after the word would read - is seeded with the guard, so
+            # the two readings give different flags.
+            "name": "cmp_l_pc_relative_source",
+            "mnemonic": "cmp.l",
+            "instruction": "cmp.l (0x20,%pc),%d1",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "d1": 0x80112233, "sr": SR_DIRTY},
+                "mem": [lw(EXEC_BASE + 2 + 0x20, 0x80112233)],
+            },
+            "expected": {
+                "regs": {"pc": EXEC_BASE + 4, "d1": 0x80112233,
+                         "sr": SR_BASE | CCR_X | CCR_Z},
+                "mem": [lw(EXEC_BASE + 2 + 0x20, 0x80112233)],
+            },
+        },
+
+        # ------------------------------------------------------------- CMPA
+        # CMPA IS 32-BIT AND THERE IS NO OTHER SIZE. Table 3-7, page 3-23,
+        # gives `CMPA <ea>y,Ax` an OPERAND SIZE column of `32` and nothing else,
+        # and `m68k-elf-as -mcpu=5307` rejects `cmpa.w %d0,%a1`. The word form's
+        # encoding - line 1011 opmode 011 - is a trap case in
+        # `tests/t_control.nim`.
+        {
+            "name": "cmpa_l_equal_sets_z",
+            "mnemonic": "cmpa.l",
+            "instruction": "cmpa.l %d0,%a1",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": DIRTY_A, "a1": DIRTY_A,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2, "d0": DIRTY_A,
+                                  "a1": DIRTY_A,
+                                  "sr": SR_BASE | CCR_X | CCR_Z}},
+        },
+        {
+            "name": "cmpa_l_immediate",
+            "mnemonic": "cmpa.l",
+            "instruction": "cmpa.l #0x0badc0de,%a1",
+            "initial": {"regs": {"pc": EXEC_BASE, "a1": DIRTY_A,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 6, "a1": DIRTY_A,
+                                  "sr": SR_BASE | CCR_X | CCR_Z}},
+        },
+        {
+            "name": "cmpa_l_memory_source",
+            "mnemonic": "cmpa.l",
+            "instruction": "cmpa.l (%a0),%a1",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "a0": MEM_BASE, "a1": DIRTY_A,
+                         "sr": SR_DIRTY},
+                "mem": [lw(MEM_BASE, 1), lw(MEM_BASE + 4, MEM_GUARD)],
+            },
+            "expected": {
+                "regs": {"pc": EXEC_BASE + 2, "a0": MEM_BASE, "a1": DIRTY_A,
+                         "sr": SR_BASE | CCR_X},
+                "mem": [lw(MEM_BASE, 1), lw(MEM_BASE + 4, MEM_GUARD)],
+            },
+        },
+
+        # ------------------------------------------------------------- CMPI
+        # THE DESTINATION IS A DATA REGISTER AND NOTHING ELSE. Table 3-13, page
+        # 3-28: the `cmpi.l #imm,Dx` row carries `1(0/0)` under `Rn` and A DASH
+        # under every memory column and under `#xxx`. `m68k-elf-as -mcpu=5307`
+        # agrees and rejects `cmpi.l #5,(%a0)` and `cmpi.l #5,%a0`.
+        {
+            "name": "cmpi_l_equal_sets_z",
+            "mnemonic": "cmpi.l",
+            "instruction": "cmpi.l #0x12345678,%d0",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": DIRTY_D,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 6, "d0": DIRTY_D,
+                                  "sr": SR_BASE | CCR_X | CCR_Z}},
+        },
+        {
+            "name": "cmpi_l_immediate_greater_sets_n_and_c",
+            "mnemonic": "cmpi.l",
+            "instruction": "cmpi.l #2,%d0",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": 1, "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 6, "d0": 1,
+                                  "sr": SR_BASE | CCR_X | CCR_N | CCR_C}},
+        },
+
+        # -------------------------------------------------------------- JMP
+        # THE OPERAND CLASS IS CONTROL ADDRESSING, AND THE MANUAL GIVES IT TWICE.
+        # Table 3-15, "General Branch Instruction Execution Times", page 3-30:
+        # the `jmp <ea>` row carries a time under `(An)`, under
+        # `(d16,An)/(d16,PC)`, under `(d8,An,Xi*SF)/(d8,PC,Xi*SF)` and under
+        # `xxx.wl`, and A DASH under `Rn`, `(An)+`, `-(An)` and `#xxx`. Table
+        # 3-5, page 3-21, marks exactly those modes CONTROL. `m68k-elf-as
+        # -mcpu=5307` agrees on both halves: it rejects `jmp %d0`, `jmp %a0`,
+        # `jmp (%a0)+`, `jmp -(%a0)` and `jmp #4`, and it accepts the rest.
+        #
+        # `(xxx).W` IS IN THE CLASS. Table 3-5 marks the absolute SHORT row
+        # CONTROL, and page 3-26 states that the tables' `xxx.wl` column "refers
+        # to both forms of absolute addressing, xxx.w and xxx.l". This is why
+        # JMP and JSR carry a mask of their own rather than reuse the
+        # `eaControl7` that LEA, PEA and MOVEM share - see `eaJumpTarget` in
+        # `src/mcf5307/decode_types.nim`.
+        {
+            "name": "jmp_indirect",
+            "mnemonic": "jmp",
+            "instruction": "jmp (%a0)",
+            "initial": {"regs": {"pc": EXEC_BASE, "a0": CTRL_TARGET,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": CTRL_TARGET, "a0": CTRL_TARGET,
+                                  "sr": SR_DIRTY}},
+        },
+        {
+            "name": "jmp_displacement",
+            "mnemonic": "jmp",
+            "instruction": "jmp 4(%a0)",
+            "initial": {"regs": {"pc": EXEC_BASE, "a0": MEM_BASE,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": MEM_BASE + 4, "a0": MEM_BASE,
+                                  "sr": SR_DIRTY}},
+        },
+        {
+            # THE FIRST EXTENSION WORD IS THE HIGH HALF OF AN ABSOLUTE LONG
+            # ADDRESS. `4ef9 0005 4320` - a core that swapped the halves lands
+            # at 0x43200005, which is outside the board.
+            "name": "jmp_absolute_long",
+            "mnemonic": "jmp",
+            "instruction": "jmp 0x00054320",
+            "initial": {"regs": {"pc": EXEC_BASE, "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": CTRL_TARGET, "sr": SR_DIRTY}},
+        },
+        {
+            "name": "jmp_absolute_short",
+            "mnemonic": "jmp",
+            "instruction": "jmp 0x1234.w",
+            "initial": {"regs": {"pc": EXEC_BASE, "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": 0x1234, "sr": SR_DIRTY}},
+        },
+        {
+            # THE PC-RELATIVE BASE AGAIN, ON AN INSTRUCTION WHOSE WHOLE RESULT
+            # IS THE ADDRESS. `4efa 0020` jumps to EXEC_BASE + 2 + 0x20; a core
+            # that based it after the displacement word lands two bytes on.
+            "name": "jmp_pc_displacement",
+            "mnemonic": "jmp",
+            "instruction": "jmp (0x20,%pc)",
+            "initial": {"regs": {"pc": EXEC_BASE, "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": EXEC_BASE + 2 + 0x20, "sr": SR_DIRTY}},
+        },
+        {
+            # THE INDEX IS A LONGWORD AND NOT A SIGN-EXTENDED WORD.
+            # `INDEX_VALUE`'s low word sign-extends to -16 and the whole
+            # longword is +65520, so the two readings land 65536 bytes apart and
+            # the program counter names which one the core took.
+            "name": "jmp_an_index",
+            "mnemonic": "jmp",
+            "instruction": "jmp (4,%a0,%d2)",
+            "initial": {"regs": {"pc": EXEC_BASE, "a0": MEM_BASE,
+                                 "d2": INDEX_VALUE, "sr": SR_DIRTY}},
+            "expected": {"regs": {"pc": AN_INDEX_OPERAND, "a0": MEM_BASE,
+                                  "d2": INDEX_VALUE, "sr": SR_DIRTY}},
+        },
+
+        # -------------------------------------------------------------- JSR
+        # "SP - 4 -> SP; PC -> (SP); <ea> -> PC" - Table 3-7, page 3-24. THE
+        # PUSHED PROGRAM COUNTER IS THE ADDRESS AFTER THE WHOLE INSTRUCTION,
+        # EXTENSION WORDS INCLUDED, which is why the absolute-long case is here
+        # beside the register-indirect one: they are three words and one word
+        # long, so a core that pushed the address after the OPCODE passes the
+        # first and fails the second.
+        {
+            "name": "jsr_indirect_pushes_return_address",
+            "mnemonic": "jsr",
+            "instruction": "jsr (%a0)",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "a0": CTRL_TARGET,
+                         "a7": CTRL_STACK, "sr": SR_DIRTY},
+                "mem": [lw(CTRL_STACK - 8, MEM_GUARD),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+            "expected": {
+                "regs": {"pc": CTRL_TARGET, "a0": CTRL_TARGET,
+                         "a7": CTRL_STACK - 4, "sr": SR_DIRTY},
+                "mem": [lw(CTRL_STACK - 8, MEM_GUARD),
+                        lw(CTRL_STACK - 4, EXEC_BASE + 2),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+        },
+        {
+            "name": "jsr_absolute_long_pushes_after_the_extension_words",
+            "mnemonic": "jsr",
+            "instruction": "jsr 0x00054320",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "a7": CTRL_STACK, "sr": SR_DIRTY},
+                "mem": [lw(CTRL_STACK - 8, MEM_GUARD),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+            "expected": {
+                "regs": {"pc": CTRL_TARGET, "a7": CTRL_STACK - 4,
+                         "sr": SR_DIRTY},
+                "mem": [lw(CTRL_STACK - 8, MEM_GUARD),
+                        lw(CTRL_STACK - 4, EXEC_BASE + 6),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+        },
+
+        # -------------------------------------------------------------- RTS
+        # "(SP) -> PC; SP + 4 -> SP" - Table 3-7, page 3-25. RTS WRITES NO
+        # MEMORY, and the longword it read is asserted still there.
+        {
+            "name": "rts_pops_the_return_address",
+            "mnemonic": "rts",
+            "instruction": "rts",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "a7": CTRL_STACK, "sr": SR_DIRTY},
+                "mem": [lw(CTRL_STACK - 4, MEM_GUARD),
+                        lw(CTRL_STACK, CTRL_TARGET),
+                        lw(CTRL_STACK + 4, MEM_GUARD)],
+            },
+            "expected": {
+                "regs": {"pc": CTRL_TARGET, "a7": CTRL_STACK + 4,
+                         "sr": SR_DIRTY},
+                "mem": [lw(CTRL_STACK - 4, MEM_GUARD),
+                        lw(CTRL_STACK, CTRL_TARGET),
+                        lw(CTRL_STACK + 4, MEM_GUARD)],
+            },
+        },
+    ] + [
+
+        # -------------------------------------------------------------- RTE
+        # "(SP+2) -> SR; (SP+4) -> PC; SP + 8 -> PC" - Table 3-7, page 3-25,
+        # AND THAT LAST ARROW IS A MISPRINT IN THE MANUAL: the program counter
+        # has just been loaded from (SP+4), and the row would otherwise
+        # overwrite it with an address on the stack. The stack-pointer rule is
+        # given properly in section 3.5.7, "RTE and Format Error Exceptions",
+        # page 3-16: the processor "adjusts the stack pointer by adding the
+        # format value to the auto-incremented address after the fetch of the
+        # first longword", which is SP + 4 + FORMAT.
+        #
+        # THAT IS THE INVERSE OF TABLE 3-2, page 3-14, and the four cases below
+        # are that table's four rows read backwards: a frame whose format is
+        # 4, 5, 6 or 7 restores an A7 of SP + 8, SP + 9, SP + 10 or SP + 11.
+        # A core that added a fixed 8 passes the first case and fails the other
+        # three.
+        #
+        # THE INCOMING STATUS REGISTER IS `SR_DIRTY` AND THE FRAME HOLDS A
+        # DIFFERENT WORD, so "the core reloaded SR from the frame" is separable
+        # from "the core left SR alone".
+        {
+            "name": "rte_format_%d_restores_sr_pc_and_a7" % fmt,
+            "mnemonic": "rte",
+            "instruction": "rte",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "a7": CTRL_STACK, "sr": SR_DIRTY},
+                "mem": [lw(CTRL_STACK - 4, MEM_GUARD),
+                        lw(CTRL_STACK, frame_fv(fmt, 32, 0x2703)),
+                        lw(CTRL_STACK + 4, CTRL_TARGET)],
+            },
+            "expected": {
+                "regs": {"pc": CTRL_TARGET, "a7": CTRL_STACK + 4 + fmt,
+                         "sr": 0x2703},
+                "mem": [lw(CTRL_STACK - 4, MEM_GUARD),
+                        lw(CTRL_STACK, frame_fv(fmt, 32, 0x2703)),
+                        lw(CTRL_STACK + 4, CTRL_TARGET)],
+            },
+        }
+        for fmt in (4, 5, 6, 7)
+    ] + [
+
+        # ------------------------------------------------------------- TRAP
+        # THE WHOLE EXCEPTION SEQUENCE, AND EVERY PART OF IT IS IN THE MANUAL.
+        #
+        #   THE VECTOR. Table 3-1, page 3-13: `TRAP #0-15` are vector numbers
+        #   32 to 47, the vector offset is 4 x vector_number, and the stacked
+        #   program counter is "Next" - the address of the instruction after the
+        #   TRAP, not the address of the TRAP itself.
+        #
+        #   THE FRAME. Figure 3-7, page 3-13: the first longword is the 16-bit
+        #   format/vector word above the 16-bit status register, and the second
+        #   is the program counter. Table 3-3, page 3-14, writes the fault
+        #   status field as zeros for everything that is not an access or
+        #   address error.
+        #
+        #   THE SELF-ALIGNMENT. Table 3-2, page 3-14: the frame is written at a
+        #   0-modulo-4 address and the FORMAT field records how far the stack
+        #   pointer had to move to get there - A7-8 and format 0100 when A7's
+        #   low two bits were 00, through A7-11 and format 0111 when they were
+        #   11. The four cases below are that table's four rows.
+        #
+        #   THE STATUS REGISTER. Section 3.3, page 3-11: the processor copies
+        #   SR, sets the S-bit and clears the T-bit. The COPY is what is
+        #   stacked. `trap_0_clears_trace_and_sets_supervisor` starts from
+        #   0x871f - trace SET, supervisor CLEAR - so the frame holds 0x871f
+        #   and the machine continues under 0x271f; under `SR_DIRTY` alone the
+        #   two words are equal and the rule is invisible.
+        {
+            "name": "trap_0_takes_vector_32",
+            "mnemonic": "trap",
+            "instruction": "trap #0",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "a7": CTRL_STACK, "sr": SR_DIRTY},
+                "mem": [lw(TRAP_VECTOR_0, CTRL_TARGET),
+                        lw(CTRL_STACK - 12, MEM_GUARD),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+            "expected": {
+                "regs": {"pc": CTRL_TARGET, "a7": CTRL_STACK - 8,
+                         "sr": SR_DIRTY},
+                "mem": [lw(CTRL_STACK - 12, MEM_GUARD),
+                        lw(CTRL_STACK - 8, frame_fv(4, 32, SR_DIRTY)),
+                        lw(CTRL_STACK - 4, EXEC_BASE + 2),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+        },
+        {
+            # THE VECTOR NUMBER IS 32 PLUS THE FIELD AND THE OFFSET IS FOUR
+            # TIMES THAT. `trap #15` reads $0BC and stacks vector 47; a core
+            # that forgot the 32, or that indexed by the vector rather than by
+            # four times it, reads a longword this case did not seed and jumps
+            # to zero.
+            "name": "trap_15_takes_vector_47",
+            "mnemonic": "trap",
+            "instruction": "trap #15",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "a7": CTRL_STACK, "sr": SR_DIRTY},
+                "mem": [lw(TRAP_VECTOR_15, CTRL_TARGET_2),
+                        lw(CTRL_STACK - 12, MEM_GUARD),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+            "expected": {
+                "regs": {"pc": CTRL_TARGET_2, "a7": CTRL_STACK - 8,
+                         "sr": SR_DIRTY},
+                "mem": [lw(CTRL_STACK - 12, MEM_GUARD),
+                        lw(CTRL_STACK - 8, frame_fv(4, 47, SR_DIRTY)),
+                        lw(CTRL_STACK - 4, EXEC_BASE + 2),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+        },
+        {
+            "name": "trap_0_clears_trace_and_sets_supervisor",
+            "mnemonic": "trap",
+            "instruction": "trap #0",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "a7": CTRL_STACK, "sr": 0x871F},
+                "mem": [lw(TRAP_VECTOR_0, CTRL_TARGET),
+                        lw(CTRL_STACK - 12, MEM_GUARD),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+            "expected": {
+                "regs": {"pc": CTRL_TARGET, "a7": CTRL_STACK - 8,
+                         "sr": 0x271F},
+                "mem": [lw(CTRL_STACK - 12, MEM_GUARD),
+                        lw(CTRL_STACK - 8, frame_fv(4, 32, 0x871F)),
+                        lw(CTRL_STACK - 4, EXEC_BASE + 2),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+        },
+    ] + [
+        {
+            # THE THREE MISALIGNED ROWS OF TABLE 3-2. The frame lands at the
+            # SAME 0-modulo-4 address in all three, and the FORMAT field is the
+            # only thing that records how far A7 moved.
+            "name": "trap_0_a7_low_bits_%d_writes_format_%d" % (bits, 4 + bits),
+            "mnemonic": "trap",
+            "instruction": "trap #0",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "a7": CTRL_STACK + bits,
+                         "sr": SR_DIRTY},
+                "mem": [lw(TRAP_VECTOR_0, CTRL_TARGET),
+                        lw(CTRL_STACK - 12, MEM_GUARD),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+            "expected": {
+                "regs": {"pc": CTRL_TARGET, "a7": CTRL_STACK - 8,
+                         "sr": SR_DIRTY},
+                "mem": [lw(CTRL_STACK - 12, MEM_GUARD),
+                        lw(CTRL_STACK - 8, frame_fv(4 + bits, 32, SR_DIRTY)),
+                        lw(CTRL_STACK - 4, EXEC_BASE + 2),
+                        lw(CTRL_GUARD_AT, MEM_GUARD)],
+            },
+        }
+        for bits in (1, 2, 3)
     ],
 }
 

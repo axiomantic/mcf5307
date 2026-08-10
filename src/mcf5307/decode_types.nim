@@ -52,6 +52,17 @@ type
     # logic group needed that no earlier task had a use for.
     opEor, opAndi, opOri, opEori
     opAsl, opAsr, opLsl, opLsr
+    # CPU-10 appends here, under the same rule CPU-8 and CPU-9 followed:
+    # immediately before `opIllegal` and nowhere else. `opNop`, `opScc`,
+    # `opBcc`, `opBra` and `opTst` were already named above; these are the
+    # members the control-flow and comparison group needed that no earlier
+    # task had a use for. `opBsr` is one of them AND IT IS NOT `opBcc` WITH A
+    # CONDITION OF 1: `0110 0001 dddddddd` pushes a return address, so an
+    # executor that folded it into the conditional arm would branch and never
+    # push.
+    opBsr
+    opJmp, opJsr, opRts, opRte, opTrap
+    opCmp, opCmpa, opCmpi
     opIllegal
 
   Decoded* = ref object
@@ -253,6 +264,46 @@ const eaBitStatic* = EaLegality(
   ## gives above: static and dynamic are the same four operations and the
   ## table is keyed on the operation alone.
 
+const eaJumpTarget* = EaLegality(
+  modes: eaControlModes, ea7: eaControl7 + {ea7AbsW})
+  ## THE OPERAND OF `JMP` AND `JSR`: control addressing INCLUDING the absolute
+  ## SHORT form. CPU-10 added it.
+  ##
+  ## THE MANUAL GIVES THE CLASS TWICE AND BOTH READINGS INCLUDE `(xxx).W`.
+  ##
+  ##   - MCF5307 User's Manual Table 3-15, "General Branch Instruction
+  ##     Execution Times", page 3-30. The `jmp <ea>` row carries a time under
+  ##     `(An)` (5(0/0)), under the merged `(d16,An)/(d16,PC)` column
+  ##     (5(0/0)), under `(d8,An,Xi*SF)/(d8,PC,Xi*SF)` (6(0/0)) and under
+  ##     `xxx.wl` (1(0/0)), and A DASH under `Rn`, `(An)+`, `-(An)` and
+  ##     `#xxx`. The `jsr <ea>` row directly below it dashes and times exactly
+  ##     the same columns. Page 3-26 states what the column heading means:
+  ##     'The nomenclature "xxx.wl" refers to both forms of absolute
+  ##     addressing, xxx.w and xxx.l.'
+  ##
+  ##   - Table 3-5, "Effective Addressing Modes and Categories", page 3-21.
+  ##     The CONTROL column carries an `x` on `(An)`, `(d16,An)`,
+  ##     `(d8,An,Xi)`, `(d16,PC)`, `(d8,PC,Xi)`, `(xxx).W` AND `(xxx).L`, and
+  ##     nothing on `Dn`, `An`, `(An)+`, `-(An)` and `#<xxx>`.
+  ##
+  ## `m68k-elf-as -mcpu=5307` corroborates both halves: it emits `4ed0`,
+  ## `4ee8 0004`, `4ef0 2804`, `4ef8 1234`, `4ef9 0005 4320` and `4efa 0020`
+  ## for the six legal modes, and it REJECTS `jmp %d0`, `jmp %a0`,
+  ## `jmp (%a0)+`, `jmp -(%a0)` and `jmp #4`. `m68k-elf-objdump` decodes
+  ## `4ec0` and `4ec8` as an instruction on NEITHER `-m m68k:5307` nor
+  ## `-m m68k:68020`.
+  ##
+  ## IT IS A CONSTANT OF ITS OWN AND NOT `eaControl7`, AND THE TWO CANNOT BE
+  ## MERGED. `eaControl7` in `ea.nim` is `{ea7AbsL, ea7PCDisp, ea7PCIndex}` -
+  ## no `(xxx).W` - and LEA, PEA and MOVEM read it through the entry below.
+  ## Measured on the pinned assembler: `lea 0x1234.w,%a0` (`41f8 1234`) and
+  ## `pea 0x1234.w` (`4878 1234`) ARE accepted, and
+  ## `movem.l %d0-%d1,0x1234.w` is REJECTED. So MOVEM's exclusion is right and
+  ## LEA's and PEA's are not, one constant cannot serve all four, and
+  ## WIDENING `eaControl7` WOULD BREAK MOVEM. Repairing LEA and PEA is CPU-7's
+  ## and is not done here; `tests/t_control.nim` records the measurement so
+  ## the next reader does not have to take it again.
+
 proc eaLegalityFor*(op: Operation): EaLegality =
   ## The legality mask the opcode carries. An opcode with no effective
   ## address carries the empty mask.
@@ -344,6 +395,56 @@ proc eaLegalityFor*(op: Operation): EaLegality =
     # A DATA REGISTER AND NOTHING ELSE on this part. The 68000 forms that
     # reach memory (`addi.l #7,(%a0)`, `neg.l (%a0)`) and the memory form of
     # ADDX are all rejected by `m68k-elf-as -mcpu=5307`.
+    EaLegality(modes: {eaDn}, ea7: {})
+  of opJmp, opJsr:
+    # Control addressing, absolute short included. The manual rows and the
+    # toolchain measurements are on `eaJumpTarget` above.
+    eaJumpTarget
+  of opTst, opCmp, opCmpa:
+    # THESE THREE READ AND WRITE NOTHING, AND THEIR CLASS IS THE WIDEST ONE.
+    # Every column of Table 3-12's three `tst` rows on page 3-27 - `Rn`,
+    # `(An)`, `(An)+`, `-(An)`, `(d16,An)`, `(d8,An,Xi*SF)`, `xxx.wl` and
+    # `#xxx` - carries a time, and so does every column of Table 3-13's
+    # `cmp.l <ea>,Rx` row on page 3-28. There is NO DASH in any of the four
+    # rows, which is the same mark that puts `and.l Dy,<ea>`'s `Rn` and
+    # `btst #imm,<ea>`'s `xxx.wl` out.
+    #
+    # THAT IS THE `eaDataModes` SET AND NOT `eaDataAddressing`, because these
+    # three admit an ADDRESS REGISTER: `m68k-elf-as -mcpu=5307` emits `4a88`
+    # for `tst.l %a0`, `b288` for `cmp.l %a0,%d1` and `b3c8` for
+    # `cmpa.l %a0,%a1`. `eaDataAddressing` is the manual's DATA class, which
+    # excludes `An`, and it is the mask AND and OR read.
+    #
+    # A BYTE OPERAND MAY STILL NOT BE AN ADDRESS REGISTER, and that rule is
+    # about the SIZE rather than the mode: the assembler accepts `tst.w %a0`
+    # and `tst.l %a0` and REJECTS `tst.b %a0`. `control.nim`'s `execTst`
+    # carries it, because this table is keyed on the operation alone and the
+    # size is not part of the key - the same reason `eaMemoryAlterable` is not
+    # in it.
+    EaLegality(modes: eaDataModes, ea7: eaData7)
+  of opScc, opCmpi:
+    # A DATA REGISTER AND NOTHING ELSE, AND THE MANUAL'S TIMING TABLES SAY SO
+    # ROW BY ROW.
+    #
+    #   - Table 3-12, "One Operand Instruction Execution Times", page 3-27:
+    #     the `scc Dx` row reads `1(0/0)` under `Rn` and A DASH under `(An)`,
+    #     `(An)+`, `-(An)`, `(d16,An)`, `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`.
+    #     The `clr.b` rows above it and the `tst.b` rows below it carry times
+    #     in those same columns, so the dashes belong to this row.
+    #   - Table 3-13, page 3-28: the `cmpi.l #imm,Dx` row reads `1(0/0)` under
+    #     `Rn` and a dash everywhere else, `#xxx` included - the same shape as
+    #     `andi.l`, `eori.l` and `subi.l`.
+    #
+    # `m68k-elf-as -mcpu=5307` corroborates both: it rejects `scc (%a0)`,
+    # `scc %a0`, `scc 0x1234.w`, `cmpi.l #5,(%a0)` and `cmpi.l #5,%a0`.
+    #
+    # THIS MASK IS ALSO WHAT REFUSES THE 68000 `DBcc` WORD.
+    # `0101 cccc 11 001 rrr` is `DBcc Dn,<label>` on a 68000; here it is an Scc
+    # word whose operand is an ADDRESS REGISTER, and no DBcc at all, because
+    # manual section 3.9, which begins on page 3-21, lists "decrement and
+    # branch" among the removed instructions, and `m68k-elf-as -mcpu=5307`
+    # rejects `dbra %d0,.` and `dbf %d0,.`. CPU-13 owns the negative case and
+    # this mask is the mechanism it asserts through.
     EaLegality(modes: {eaDn}, ea7: {})
   of opLea, opMovem, opPea:
     # These take control addressing only: (An), (d16,An), (d8,An,Xn),

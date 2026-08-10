@@ -19,16 +19,21 @@
 ##   semantics from - the ColdFire Family Programmer's Reference Manual Rev 3
 ##   and the MCF5307 User's Manual - and gives a download location for each.
 ##
-##   ONE OF THE TWO IS ON THIS MACHINE AND ONE IS NOT, AND AN EARLIER REVISION
-##   OF THIS PARAGRAPH SAID NEITHER WAS. That was false, it was never
-##   searched for, and it is the sentence that told the next reader not to
-##   look for a document sitting in front of them. The MCF5307 USER'S MANUAL
-##   is present twice under the session scratchpad - as `MCF5307UM.pdf` at its
-##   root and again under `nmg2-artifacts-archive/datasheets/` - with an
-##   extracted text form beside the first as `MCF5307UM.txt`. Both copies
-##   predate this branch's first commit. Neither is in this repository and
-##   neither may be copied into it, which is why every citation here names
-##   table, page and row instead of quoting.
+##   ONE OF THE TWO IS OBTAINABLE AND ONE IS NOT, AND AN EARLIER REVISION OF
+##   THIS PARAGRAPH SAID NEITHER WAS. That was false, it was never searched
+##   for, and it is the sentence that told the next reader not to look for a
+##   document that was in fact at hand.
+##
+##   THE MCF5307 USER'S MANUAL is the one that was found, and it is the
+##   document every table and page cited below refers to. Its full identity,
+##   so that a reader can be sure of holding the same edition: Motorola,
+##   "MCF5307 ColdFire Integrated Microprocessor User's Manual", order number
+##   MCF5307UM/AD, (c) 1998 - the order number is printed at the top right of
+##   the cover and the title is the title page. IT IS NOT IN THIS REPOSITORY,
+##   it may not be copied into it, and a reader who has only this tree must
+##   obtain it separately from the download location AGENTS.md section 11
+##   gives. That is why every citation here names table, page and row instead
+##   of quoting.
 ##
 ##   THE COLDFIRE FAMILY PROGRAMMER'S REFERENCE MANUAL IS GENUINELY ABSENT -
 ##   searched for by name and by content across the scratchpad, and the
@@ -372,17 +377,22 @@ proc checkMask(got: bool; want: bool; label: string) =
 const bitDirty = srBase or ccrN or ccrV or ccrC or ccrX
 
 # ---------------------------------------------------------------------------
-# BLOCKING 1. `CMPA.L` IS NOT THIS GROUP'S AND MUST STAY UNRECOGNISED HERE.
+# BLOCKING 1. `CMP` AND `CMPA.L` ARE NOT THIS GROUP'S, AND CPU-10 HAS TAKEN
+# THEM.
 #
 # Line 1011 carries EOR in opmodes 100, 101 and 110. THE OTHER FIVE OPMODES
 # ARE CPU-10'S: CMP in 000, 001 and 010, CMPA.W in 011 and CMPA.L in 111.
 # FIVE AND NOT FOUR - an earlier revision of this comment omitted 011, where
-# `decode.nim`'s comment beside the same predicate counts five. THE ENCODING
-# MUST COME BACK AS AN UNRECOGNISED WORD - `opIllegal`, which is what
-# `decodeWord`'s final arm answers - and NOT as an operation of this group
-# that `logic.nim` then traps, because a claimed-and-trapped encoding is taken
-# away from the task that owns it just as surely as a claimed-and-executed
-# one.
+# `decode.nim`'s comment beside the same predicate counts five.
+#
+# THESE THREE ROWS USED TO ASSERT `opIllegal` AND THE SENTENCE THEY ASSERT IS
+# UNCHANGED: the encoding belongs to CPU-10 and not to the logic decoder. Until
+# CPU-10 landed, "belongs to CPU-10" and "not decoded" were the same
+# observable, and `opIllegal` was how this file said it. Now that the group
+# exists the same sentence has a stronger form - the encoding comes back as
+# CPU-10's own operation - and a defect that fed it back into `decodeLogicLine`
+# would show here exactly as it did before. `tests/t_control.nim` holds the
+# other half: that all three EOR opmodes stay EOR.
 #
 # `cmpa.l %d0,%a1` is `b3c0`, assembled by `m68k-elf-as -mcpu=5307`.
 #
@@ -398,33 +408,40 @@ const bitDirty = srBase or ccrN or ccrV or ccrC or ccrX
 # happens to be right and it does not follow from that premise.
 
 block:
-  expectDecode(0xB3C0'u16, opIllegal,
-    "cmpa.l %d0,%a1 (b3c0) is not claimed by the logic decoder")
-  expectDecode(0xB280'u16, opIllegal,
-    "cmp.l %d0,%d1 (b280) is not claimed by the logic decoder")
+  expectDecode(0xB3C0'u16, opCmpa,
+    "cmpa.l %d0,%a1 (b3c0) is CPU-10's CMPA and not this group's EOR")
+  expectDecode(0xB280'u16, opCmp,
+    "cmp.l %d0,%d1 (b280) is CPU-10's CMP and not this group's EOR")
 
-  # THE POSITIVE CONTROLS. Without them a predicate that claimed NOTHING on
-  # line 1011 would report the two cases above as passes, and EOR would be
-  # gone. All three EOR opmodes are still claimed, byte and word included -
-  # those two are not instructions on this part and they trap on the SIZE,
-  # which is the channel `decodeLogicLine` and CPU-13 both use.
+  # THE POSITIVE CONTROLS. Without them a predicate that gave the WHOLE of
+  # line 1011 to CPU-10 would report the two cases above as passes, and EOR
+  # would be gone. All three EOR opmodes are still claimed, byte and word
+  # included - those two are not instructions on this part and they trap on
+  # the SIZE, which is the channel `decodeLogicLine` and CPU-13 both use.
   expectDecode(0xB380'u16, opEor, "eor.l %d1,%d0 (b380) is still an EOR")
   expectDecode(0xB300'u16, opEor, "the byte EOR opmode (b300) is still an EOR")
   expectDecode(0xB340'u16, opEor, "the word EOR opmode (b340) is still an EOR")
 
-  # AND THE EXECUTION. `CMPA` writes no data register and computes a
-  # comparison; the defect made `b3c0` write d0 = d0 xor d1 = 0x1d3b5977. Both
-  # source registers and the destination address register are asserted
-  # unchanged, and the core reports the word it could not decode.
+  # AND THE EXECUTION. THE DEFECT THIS ROW WAS WRITTEN FOR IS AN EOR, AND IT
+  # STILL IS. `b3c0` decoded as a well-formed long EOR once and left
+  # d0 = d0 xor d1 = 0x1d3b5977; the row asserted a trap while CPU-10 was
+  # unwritten and it asserts the CMPA now, and BOTH REFUSE THAT VALUE.
+  #
+  # `cmpa.l %d0,%a1` computes a1 - d0 and DISCARDS it: 0x11223344 - 0x0f0f0f0f
+  # is 0x02132435, which is non-zero, positive and borrows nothing, and
+  # 0x0f0f0f0f and 0x11223344 are both positive so no signed overflow is
+  # possible. The incoming `sr` is the reset word, so the whole 16-bit result
+  # is 0x2700 - and a core that wrote a register would have to leave `d0`,
+  # `d1` or `a1` different from the values named here.
   let o = runIns([0xB3C0'u16],
                  d = [0x0F0F0F0F'u32, 0x12345678'u32, 0, 0, 0, 0, 0, 0],
                  a = [0'u32, 0x11223344'u32, 0, 0, 0, 0, 0, 0])
-  let got = (d0: o.d[0], d1: o.d[1], a1: o.a[1],
+  let got = (d0: o.d[0], d1: o.d[1], a1: o.a[1], sr: o.sr,
              fault: o.fault, halted: o.halted, cycles: o.cycles)
   let want = (d0: 0x0F0F0F0F'u32, d1: 0x12345678'u32, a1: 0x11223344'u32,
-              fault: true, halted: true, cycles: 0'u32)
+              sr: srBase, fault: false, halted: false, cycles: 1'u32)
   check(got == want,
-    "cmpa.l %d0,%a1 writes no register and is refused as an unknown word",
+    "cmpa.l %d0,%a1 compares and writes no register",
     $got, $want)
 
 # ---------------------------------------------------------------------------
