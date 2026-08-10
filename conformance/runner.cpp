@@ -477,12 +477,24 @@ extern "C" void boardIack(void* user, int level, uint8_t vector) {
 // THE REGISTER BRIDGE.
 //
 // See the file top comment. This is the runner's single integration point for
-// setting the `initial` registers and reading the `expected` registers. The
-// C ABI provides no register accessor and the register file is not in the
-// core yet (CPU-7..10), so today every call returns false and leaves a
-// diagnostic. A task that adds register access to the contract and the core
-// (orifies the state block into a register profile) replaces the two bodies
-// below and nothing else.
+// setting the `initial` registers and reading the `expected` registers. CPU-7
+// added the register file to the core and `mcf5307_set_reg`/`mcf5307_get_reg`
+// to the contract, and the two bodies below are that wiring; the paragraph
+// that stood here described the state BEFORE that and contradicted the file's
+// own top comment.
+//
+// `sr` IS INDEX 16 AND IT GOES THROUGH THIS BRIDGE IN BOTH DIRECTIONS. That
+// is the whole mechanism by which a case asserts a condition code: a case
+// names `sr` in `initial` to fix the incoming flags and in `expected` to
+// assert the outgoing ones, and the comparison below is the same equality it
+// applies to `d0`. Nothing here is condition-code aware, and nothing needs to
+// be - the value compared is the whole 16-bit status register, so a case
+// asserts the supervisor bit and the interrupt mask alongside the five
+// condition codes. `conformance/generate.py` documents which cases do so and
+// why the incoming word is deliberately dirty.
+//
+// `pc` (index 17) is READ-ONLY through this bridge: `mcf5307_set_reg` refuses
+// it and `runCase` routes an initial `pc` through `mcf5307_reset` instead.
 
 std::string registerBridgeError = "no register bridge";
 

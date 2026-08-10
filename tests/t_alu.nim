@@ -2,12 +2,23 @@
 ## file. Design section 6.1.
 ##
 ## WHY THIS FILE EXISTS BESIDE THE CONFORMANCE CORPUS. The CPU-8 Check: line is
-## `mcf5307_conformance_alu`, and that corpus asserts REGISTER RESULTS ALONE.
-## Measured on the committed corpus at this task's start: not one case in any
-## of the four groups names `sr` in its `expected` state, and the runner
-## asserts only the registers a case names. THE CONDITION CODES ARE THEREFORE
+## `mcf5307_conformance_alu`, and that corpus asserted REGISTER RESULTS ALONE.
+## Measured on the committed corpus at CPU-8's start: not one case in any of
+## the four groups named `sr` in its `expected` state, and the runner asserts
+## only the registers a case names. THE CONDITION CODES WERE THEREFORE
 ## INVISIBLE TO THE CORPUS. A core that computed every arithmetic result
-## correctly and set no flag at all would report 9 of 9.
+## correctly and set no flag at all reported 9 of 9.
+##
+## THE CORPUS NOW NAMES `sr` AND THIS FILE STAYS. `conformance/generate.py`
+## gives every `move` and `alu` case a dirty incoming `sr` and an exact
+## expected word, and five mutations that previously left the group green -
+## ADD's carry-out, ADD's signed overflow, SUB's and NEG's borrow, the
+## multiply's V, and the ADDQ 000 data field - are each caught there now. This
+## file is deliberately NOT reduced to match: it carries the sticky-Z rule of
+## ADDX/SUBX/NEGX, the trap cases for encodings this part does not have, and
+## the direct reads of `eaIsLegalFor`, none of which the corpus expresses.
+## Redundancy between a generated corpus and a hand-written case is not
+## duplication to remove.
 ##
 ## Half of this instruction group IS the condition codes: `ADDX`, `SUBX` and
 ## `NEGX` read X, the sticky-Z rule of those three is a rule about Z alone, and
