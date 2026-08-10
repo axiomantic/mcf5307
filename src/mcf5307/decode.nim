@@ -21,38 +21,20 @@
 ## Programmer's Reference Manual and the MCF5307 User's Manual (AGENTS.md
 ## section 11) and from this project's own measurements.
 
+import mcf5307/decode_types
 import mcf5307/ea
+import mcf5307/move
 
-# NOTE: A future commit should extract the shared types (Operation, Decoded,
-# MCF5307Ctx) from this module into a new mcf5307/decode_types.nim. This
-# breaks the decode.nim <-> move.nim module cycle that the current import
-# at line 236 only partially resolves. See the AGENTS.md section "Module
-# Cycle Prevention" in the spellbook repo for the full plan.
-
-# Import the instruction-group executor modules at the TOP so the symbols
-# they export (moveFamily, aluFamily, etc.) are visible to every function in
-# this module. The cycle (move <-> decode) is broken because by the time
-# `move.nim` is loaded, the types it needs from `decode.nim` (Operation, EA,
-# MCF5307Ctx, Decoded) are already defined as module-level types above.
-
-
-# ---------------------------------------------------------------------------
-# The bus-status values and the board callbacks, matching `include/mcf5307.h`
-# exactly. `Mcf5307BusStatus` has the width of a C `int` so that the
-# out-parameter the board writes has the ABI the header declares.
-
-type
-  Mcf5307BusStatus* {.size: sizeof(cint), pure.} = enum
-    busOk          = 0  ## the access completed
-    busUnmapped    = 1  ## no device answers at this address
-    busSizeIllegal = 2  ## the width is not one the device accepts
-    busFault       = 3  ## the device answers and reports a fault of its own
-
-  Mcf5307ReadFn* = proc(user: pointer; address: uint32; size: cint;
-                        status: ptr Mcf5307BusStatus): uint32 {.cdecl.}
-  Mcf5307WriteFn* = proc(user: pointer; address: uint32; size: cint;
-                         value: uint32; status: ptr Mcf5307BusStatus) {.cdecl.}
-  Mcf5307IackFn* = proc(user: pointer; level: cint; vector: uint8) {.cdecl.}
+# The shared types and the effective-address legality table live in
+# `decode_types`. That module exists to break the cycle between this module
+# and the instruction-group executors: the executors need the types, and this
+# module needs the executor entry points. The dependency now runs one way,
+# `decode` -> `move` -> `decode_types` -> `ea`.
+#
+# This module re-exports `decode_types` so that a caller which imports
+# `mcf5307/decode` still sees `Operation`, `Decoded`, `MCF5307Ctx`, the board
+# callback types and `eaIsLegalFor` under the names it used before.
+export decode_types
 
 # ---------------------------------------------------------------------------
 # The context. It is opaque to every caller: C sees `mcf5307_ctx` and never
@@ -71,22 +53,6 @@ type
 # effective address. The full opcode table with per-group semantics is the
 # work of CPU-7 to CPU-12; the decoder is structured so those tasks extend
 # the `case` below and the legality table rather than rewrite it.
-
-type
-  Operation* = enum
-    opIllegal     ## not a recognized ISA_A encoding (including line-A)
-    opNop
-    opMove        ## MOVE.<sz> <ea>,<ea> (destination Dn or memory)
-    opMovea       ## MOVEA.<sz> <ea>,An - MOVE whose destination is An
-    opAddq        ## ADDQ #imm,<ea>
-    opSubq        ## SUBQ #imm,<ea>
-    opLea         ## LEA <ea>,An
-    opMoveq       ## MOVEQ #imm,Dn
-    opMovem       ## MOVEM.L reglist,<ea> / MOVEM.L <ea>,reglist
-    opPea         ## PEA <ea>
-    opLink        ## LINK An,#<d16>
-    opUnlk        ## UNLK An
-
 
 
 proc decodeWord*(word: uint16): Decoded =
@@ -147,30 +113,6 @@ proc decodeWord*(word: uint16): Decoded =
   else:
     return Decoded(op: opIllegal)
 
-proc eaLegalityFor*(op: Operation): EaLegality =
-  ## The legality mask the opcode carries. Illegal for an opcode with no
-  ## effective address is meaningless (the empty mask).
-  case op
-  of opMove, opMovea, opAddq, opSubq:
-    # These take data addressing, which admits every mode including the
-    # mode-7 sub-variants. The reserved and invalid mode-7 encodings stay
-    # out of the mask, so they trap.
-    EaLegality(modes: eaDataModes, ea7: eaData7)
-  of opLea, opMovem, opPea:
-    # These take control addressing only: (An), (d16,An), (d8,An,Xn),
-    # (xxx).L, (d16,PC), (d8,PC,Xn). A data register direct (mode 0), an
-    # immediate (mode 7, sub 4), a postincrement or a predecrement are
-    # illegal and must trap. `MOVEM -(An)` is the CPU-13 negative case.
-    EaLegality(modes: eaControlModes, ea7: eaControl7)
-  else:
-    EaLegality(modes: {}, ea7: {})
-
-proc eaIsLegalFor*(op: Operation; ea: EA): bool =
-  ## True when `ea` is inside the opcode's legality mask. An opcode with no
-  ## effective address has no mask and therefore no illegal mode.
-  result = (op in {opMove, opMovea, opAddq, opSubq, opLea, opMovem, opPea}) and
-    isEaLegal(eaLegalityFor(op), ea)
-
 # ---------------------------------------------------------------------------
 # The instruction-cycle costs.
 #
@@ -223,14 +165,6 @@ proc mcf5307_reset*(ctx: MCF5307Ctx; initialSp: uint32; initialPc: uint32)
   ctx.halted = false
   ctx.fault = false
 
-# Import the instruction-group executor modules HERE, after mcf5307_create
-# is defined and the types it needs (MCF5307Ctx, Decoded, Operation, EA) are
-# fully resolved. This is the only place the import works: putting it earlier
-# creates a cycle (move.nim imports decode.nim), putting it later means `step`
-# can't see moveFamily. The cycle is broken because at this point decode.nim's
-# types are complete but its procs are not, and move.nim only needs the types.
-import mcf5307/move
-
 proc step(ctx: MCF5307Ctx): uint32 =
   ## Execute one instruction: fetch, decode, and either execute it or halt.
   ## Returns the cycles spent. Halts with `fault` set on a bus fault or an
@@ -246,7 +180,10 @@ proc step(ctx: MCF5307Ctx): uint32 =
     ctx.fault = true
     ctx.halted = true
     return 0
-  let decoded = decodeWord(uint16(word and 0xFFFF'u32))
+  # The board returns the fetch in the low 16 bits. The opcode word is that
+  # narrowed value, and the executors take it at its own width.
+  let opWord = uint16(word and 0xFFFF'u32)
+  let decoded = decodeWord(opWord)
   ctx.pc = ctx.pc + fetchCycles
   case decoded.op
   of opNop:
@@ -255,13 +192,25 @@ proc step(ctx: MCF5307Ctx): uint32 =
     # The data-movement group (CPU-7). `moveFamily` executes the instruction
     # and halts the context with `fault` on an illegal encoding or an
     # illegal effective address.
-    result = fetchCycles + moveFamily(ctx, word, decoded)
-  of opAddq, opSubq:
-    # Recognized at the decoder level. Their execution semantics arrive with
-    # the instruction-group tasks (CPU-8 to CPU-10), which extend the
-    # dispatch. Until then exec halts rather than pretend to have executed
-    # them. The legality of their effective address is asserted directly by
-    # the CPU-6 test through `eaIsLegalFor`.
+    result = fetchCycles + moveFamily(ctx, opWord, decoded)
+  of opAddq, opSubq,
+     opAdd, opSub, opAdda, opSuba,
+     opAddi, opSubi,
+     opClr, opExt, opNeg,
+     opMulu, opMuls, opDivu, opDivs,
+     opAnd, opOr, opExg,
+     opNot, opSwap, opTst,
+     opBtst, opBchg, opBclr, opBset,
+     opTas, opNbcd,
+     opScc,
+     opBcc, opBra:
+    # The `Operation` enum names every opcode the later instruction-group
+    # tasks decode. Their execution semantics arrive with those tasks
+    # (CPU-8 to CPU-10), which extend this dispatch. Until then exec halts
+    # rather than pretend to have executed them. `halted` is set and `fault`
+    # is not, because the encoding is valid and only the semantics are
+    # absent. The legality of the ADDQ and SUBQ effective address is asserted
+    # directly by the CPU-6 test through `eaIsLegalFor`.
     ctx.halted = true
     result = 0
   of opIllegal:

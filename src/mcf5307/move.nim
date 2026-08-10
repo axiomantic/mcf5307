@@ -8,7 +8,11 @@
 ##
 ## The decoder (`mcf5307/decode`, CPU-6) recognizes the instruction words and
 ## supplies the effective address in bits 5..0 of the word; this module
-## executes them. The extension words of an instruction (displacements,
+## executes them. This module imports `mcf5307/decode_types` and NOT
+## `mcf5307/decode`, because the decoder calls `moveFamily` below. The shared
+## types and the effective-address legality table live in `decode_types` so
+## that the dependency runs one way and the two modules make no cycle.
+## The extension words of an instruction (displacements,
 ## index words, immediate values, and the MOVEM register mask) live in the
 ## instruction stream after the opcode word, and are consumed here as the
 ## operand evaluation walks them. The MOVEM mask precedes the EA extension
@@ -26,7 +30,7 @@
 ## section 11) and from this project's own measurements.
 
 import std/bitops
-import mcf5307/decode
+import mcf5307/decode_types
 import mcf5307/ea
 
 # ---------------------------------------------------------------------------
