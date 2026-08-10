@@ -120,19 +120,23 @@
 ## failed`, exactly those two, and `mcf5307_conformance_logic` stayed
 ## `41 cases, 0 failed`. The corpus does not pin this question either way.
 ##
-## THE PC-RELATIVE CASES DO NOT PIN THE PC-RELATIVE BASE, and that is
-## deliberate. `machine.nim` computes a `(d16,PC)` address from the program
-## counter AFTER the displacement word is consumed; the assembler's own base is
-## the ADDRESS OF that word. Measured: `btst %d1,(target,%pc)` with the opcode
-## at 0 assembles to `033a 0004` and places `target` at 6, so the base is 2 and
-## not 4. That disagreement is a defect of `machine.nim` and it belongs to
-## whoever owns that module - it is not this task's, and every PC-relative
-## operand of MOVE and of the arithmetic group has it too. The cases below
-## therefore seed the SAME byte across both candidate addresses, so that they
-## assert the property this task owns - that a dynamic BTST reaches a
-## PC-relative operand at all and complements the bit it found into Z - and
-## stay green when the base is corrected. A case that read neither address
-## would read a zero byte and would still fail the Z-clear case.
+## THE PC-RELATIVE CASES NOW PIN THE PC-RELATIVE BASE, AND THEY USED NOT TO.
+## An earlier revision of this paragraph said they did not pin it "and that is
+## deliberate", because `machine.nim` computed a `(d16,PC)` address from the
+## program counter AFTER the displacement word was consumed while the
+## assembler's base is the ADDRESS OF that word. Measured: `btst
+## %d1,(target,%pc)` with the opcode at 0 assembles to `033a 0004` and places
+## `target` at 6, so the base is 2 and not 4, and
+## `m68k-elf-objdump -m m68k:5307` prints `btst %d1,%pc@(6 <target>)`. That was
+## a defect of `machine.nim` and it is repaired; `eaAddr` takes the base before
+## `fetchExt` advances the counter, and the comment on `fetchExt` that asserted
+## the wrong rule is gone.
+##
+## So the cases below no longer seed the same byte across both candidate
+## addresses. `pcWindow` gives the byte at the CORRECT address bit 7 set and
+## bit 6 clear, and the byte at the address the old base reached the opposite
+## pair, so each Z assertion separates the two bases. The exact addresses are
+## on `pcWindow` itself.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
 ## semantics, the condition-code rules and the encodings are facts about
@@ -272,6 +276,41 @@ proc runIns(words: openArray[uint16];
 
 proc mem32(address: uint32): uint32 =
   boardReadValue(board, address, 4)
+
+# ---------------------------------------------------------------------------
+# THE PC-RELATIVE WINDOW, AND THE ADDRESSES IT PINS.
+#
+# Every PC-relative case in this file places its opcode at `execBase` (0x100)
+# and its extension word at 0x102, so:
+#
+#   `btst %d1,(4,%pc)`      (`033a 0004`)  reads the BYTE at 0x106
+#   `btst %d1,(4,%pc,%d2)`  (`033b 2804`)  reads the BYTE at 0x106 + d2
+#   `and.l (4,%pc),%d1`     (`c2ba 0004`)  reads the LONGWORD at 0x106
+#
+# and a core that based the address AFTER the extension word - which this one
+# did until the `eaAddr` repair - reads two bytes higher in each.
+#
+# THE WINDOW IS NON-UNIFORM ON PURPOSE, and it used to be uniform on purpose.
+# The bytes it puts at the three addresses these cases can reach are:
+#
+#   0x106  0x80   bit 7 SET,   bit 6 CLEAR   the (4,%pc) operand
+#   0x108  0x40   bit 7 CLEAR, bit 6 SET     where the old base read instead
+#   0x10a  0x80   bit 7 SET,   bit 6 CLEAR   the (4,%pc,%d2) operand, d2 = 4
+#   0x10c  0x40   bit 7 CLEAR, bit 6 SET     where the old base read instead
+#
+# so every Z assertion below comes out the OPPOSITE way under the old base.
+#
+# WHAT THIS WINDOW STILL DOES NOT PIN IS THE INDEX WIDTH. `033b 2804` selects a
+# LONG index at bit 11 of its extension word, and a core reading that select at
+# bit 8 would narrow the index to its low word and sign-extend it. The two
+# readings agree on every value this board can hold: separating them needs an
+# index whose low word sign-extends to something the whole longword is not,
+# which is at least 0x10000 away from its other reading, and this board is
+# 0x1000 bytes. `conformance/corpus/logic_00.json`'s `btst_b_pc_index` and
+# `btst_b_an_index` pin it instead - the runner's board is 1 MiB.
+const pcWindow = @[(0x104'u32, 0xAABB80C3'u32),
+                   (0x108'u32, 0x40558022'u32),
+                   (0x10C'u32, 0x40AABBCC'u32)]
 
 # The assertions. Each compares ONE complete tuple.
 
@@ -421,33 +460,32 @@ block:
     "btst %d1,#5 traps: the immediate is not a dynamic BTST operand")
 
 block:
-  # The PC-relative operand. The window is 0x104 to 0x10f, every byte 0x80, so
-  # the case does not pin the PC-relative base - see the file header. Bit 7 of
-  # 0x80 is set and bit 6 is clear.
-  const window = @[(0x104'u32, 0x80808080'u32), (0x108'u32, 0x80808080'u32),
-                   (0x10C'u32, 0x80808080'u32)]
-
+  # The PC-relative operand, AND THE EXACT ADDRESS IT MUST REACH. `pcWindow`
+  # puts 0x80 at 0x106 - the byte `(4,%pc)` names - and 0x40 at 0x108, where
+  # the old base read instead, so each of the two cases below comes out the
+  # opposite way under the old base. See `pcWindow`.
   let oSet = runIns([0x033A'u16, 0x0004'u16],
                     d = [0'u32, 7, 0, 0, 0, 0, 0, 0], sr = bitDirty or ccrZ,
-                    mem = window)
+                    mem = pcWindow)
   let gotSet = (d1: oSet.d[1], mem: mem32(0x104'u32), mem2: mem32(0x108'u32),
                 sr: oSet.sr, fault: oSet.fault, cycles: oSet.cycles)
-  let wantSet = (d1: 7'u32, mem: 0x80808080'u32, mem2: 0x80808080'u32,
+  let wantSet = (d1: 7'u32, mem: 0xAABB80C3'u32, mem2: 0x40558022'u32,
                  sr: bitDirty, fault: false, cycles: 1'u32)
   check(gotSet == wantSet,
-    "btst %d1,(4,%pc) reaches the PC-relative operand, finds bit 7 set, " &
+    "btst %d1,(4,%pc) reads the byte at 0x106, finds bit 7 set, " &
     "clears Z and writes nothing",
     $gotSet, $wantSet)
 
   let oClear = runIns([0x033A'u16, 0x0004'u16],
                       d = [0'u32, 6, 0, 0, 0, 0, 0, 0], sr = bitDirty,
-                      mem = window)
+                      mem = pcWindow)
   let gotClear = (d1: oClear.d[1], mem: mem32(0x104'u32), sr: oClear.sr,
                   fault: oClear.fault, cycles: oClear.cycles)
-  let wantClear = (d1: 6'u32, mem: 0x80808080'u32, sr: bitDirty or ccrZ,
+  let wantClear = (d1: 6'u32, mem: 0xAABB80C3'u32, sr: bitDirty or ccrZ,
                    fault: false, cycles: 1'u32)
   check(gotClear == wantClear,
-    "btst %d1,(4,%pc) with a bit number of 6 finds a clear bit and sets Z",
+    "btst %d1,(4,%pc) with a bit number of 6 finds a clear bit at 0x106 " &
+    "and sets Z",
     $gotClear, $wantClear)
 
   # THE INDEXED PC-RELATIVE OPERAND BECAME REACHABLE BY THE SAME REPAIR, and
@@ -462,25 +500,32 @@ block:
   # `btst %d1,(4,%pc,%d2)` is `033b 2804`, assembled by `m68k-elf-as
   # -mcpu=5307`.
   #
-  # THE INDEX IS A SMALL POSITIVE NUMBER ON PURPOSE, for the same kind of
-  # reason the file header gives about the PC-relative base. `machine.nim`
-  # reads the index word's word/long select at BIT 8, and the assembler emits
-  # it at BIT 11, so the two readings of `2804` disagree about the WIDTH of
-  # the index. They cannot disagree about a d2 of 4, whose low word and whole
-  # longword are the same number. The case therefore asserts the property this
-  # task owns - that a dynamic BTST reaches an indexed PC-relative operand -
-  # and stays green when that disagreement is settled by whoever owns
-  # `machine.nim`. Both candidate bases put the operand inside the window.
+  # THE EXACT ADDRESS IS NOW PINNED AND THE INDEX WIDTH IS STILL NOT, and the
+  # two halves of that sentence have different reasons. An earlier revision of
+  # this comment said the index is "a small positive number on purpose" so that
+  # the case would stay green whichever way `machine.nim` read the word/long
+  # select, and that select is now repaired - it is bit 11, not bit 8.
+  #
+  # With d2 = 4 the operand is the byte at 0x10a, which `pcWindow` seeds 0x80,
+  # while the old base reached 0x10c, seeded 0x40. So this case now separates
+  # the two BASES exactly as the two above it do.
+  #
+  # IT STILL CANNOT SEPARATE THE TWO WIDTHS, and no case on this 0x1000-byte
+  # board can: the readings differ only for an index whose low word
+  # sign-extends to something the whole longword is not, and those two
+  # addresses are at least 0x10000 apart. `btst_b_pc_index` and
+  # `btst_b_an_index` in `conformance/corpus/logic_00.json` pin the width on
+  # the runner's 1 MiB board.
   let oIndex = runIns([0x033B'u16, 0x2804'u16],
                       d = [0'u32, 7, 4, 0, 0, 0, 0, 0], sr = bitDirty or ccrZ,
-                      mem = window)
+                      mem = pcWindow)
   let gotIndex = (d1: oIndex.d[1], d2: oIndex.d[2], mem: mem32(0x108'u32),
                   sr: oIndex.sr, fault: oIndex.fault, cycles: oIndex.cycles)
-  let wantIndex = (d1: 7'u32, d2: 4'u32, mem: 0x80808080'u32, sr: bitDirty,
+  let wantIndex = (d1: 7'u32, d2: 4'u32, mem: 0x40558022'u32, sr: bitDirty,
                    fault: false, cycles: 1'u32)
   check(gotIndex == wantIndex,
-    "btst %d1,(4,%pc,%d2) reaches the indexed PC-relative operand, finds " &
-    "bit 7 set, clears Z and writes nothing",
+    "btst %d1,(4,%pc,%d2) reads the byte at 0x10a, finds bit 7 set, " &
+    "clears Z and writes nothing",
     $gotIndex, $wantIndex)
 
 block:
@@ -746,16 +791,19 @@ block:
   # immediate effective address, so that word is not a measured encoding and
   # is not asserted here. `and.l (4,%pc),%d1` IS one: `c2ba 0004`.
   #
-  # The source is a LONGWORD, so the window covers both candidate PC-relative
-  # bases with the same four bytes - see the file header.
+  # THE SOURCE IS THE LONGWORD AT 0x106, and `pcWindow` makes that a different
+  # longword from the one at 0x108 that the old PC-relative base reached:
+  # 0x80c34055 against 0x40558022. An earlier revision seeded both with
+  # 0x0f0f0f0f so that the case could not tell them apart.
+  #
+  #   0x12345678 and 0x80c34055 = 0x00004050   (this case)
+  #   0x12345678 and 0x40558022 = 0x00140020   (the old base)
   expectD(runIns([0xC2BA'u16, 0x0004'u16],
                  d = [0'u32, 0x12345678'u32, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrX,
-                 mem = @[(0x104'u32, 0x0F0F0F0F'u32),
-                         (0x108'u32, 0x0F0F0F0F'u32),
-                         (0x10C'u32, 0x0F0F0F0F'u32)]),
-    1, 0x02040608'u32, srBase or ccrX,
-    "and.l (4,%pc),%d1 reads the PC-relative source and leaves X alone")
+                 mem = pcWindow),
+    1, 0x00004050'u32, srBase or ccrX,
+    "and.l (4,%pc),%d1 reads the longword at 0x106 and leaves X alone")
   expectTrapD(runIns([0xC288'u16],
                      d = [0'u32, 0x12345678'u32, 0, 0, 0, 0, 0, 0],
                      a = [0x1234'u32, 0, 0, 0, 0, 0, 0, 0]),

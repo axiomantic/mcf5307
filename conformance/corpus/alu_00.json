@@ -319,6 +319,596 @@
       "instruction": "ext.l %d0",
       "mnemonic": "ext.l",
       "name": "ext_l_d0_word"
+    },
+    {
+      "encoding": [
+        "d2b8",
+        "2000"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 8193,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 8194,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 8195,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 8196,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 8197,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 8198,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 8199,
+            "size": 1,
+            "value": 119
+          }
+        ],
+        "regs": {
+          "d1": 2454026411,
+          "pc": 65540,
+          "sr": 9992
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 8193,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 8194,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 8195,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 8196,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 8197,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 8198,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 8199,
+            "size": 1,
+            "value": 119
+          }
+        ],
+        "regs": {
+          "d1": 305419896,
+          "pc": 65536,
+          "sr": 10015
+        }
+      },
+      "instruction": "add.l 0x2000.w,%d1",
+      "mnemonic": "add.l",
+      "name": "add_l_abs_w_to_d1"
+    },
+    {
+      "encoding": [
+        "d2b9",
+        "0003",
+        "0004"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 196612,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 196613,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 196614,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 196615,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 196616,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 196617,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 196618,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 196619,
+            "size": 1,
+            "value": 119
+          },
+          {
+            "addr": 262147,
+            "size": 1,
+            "value": 11
+          },
+          {
+            "addr": 262148,
+            "size": 1,
+            "value": 173
+          },
+          {
+            "addr": 262149,
+            "size": 1,
+            "value": 192
+          },
+          {
+            "addr": 262150,
+            "size": 1,
+            "value": 222
+          },
+          {
+            "addr": 262151,
+            "size": 1,
+            "value": 31
+          },
+          {
+            "addr": 262152,
+            "size": 1,
+            "value": 46
+          },
+          {
+            "addr": 262153,
+            "size": 1,
+            "value": 61
+          },
+          {
+            "addr": 262154,
+            "size": 1,
+            "value": 76
+          }
+        ],
+        "regs": {
+          "d1": 2454026411,
+          "pc": 65542,
+          "sr": 9992
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 196612,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 196613,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 196614,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 196615,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 196616,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 196617,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 196618,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 196619,
+            "size": 1,
+            "value": 119
+          },
+          {
+            "addr": 262147,
+            "size": 1,
+            "value": 11
+          },
+          {
+            "addr": 262148,
+            "size": 1,
+            "value": 173
+          },
+          {
+            "addr": 262149,
+            "size": 1,
+            "value": 192
+          },
+          {
+            "addr": 262150,
+            "size": 1,
+            "value": 222
+          },
+          {
+            "addr": 262151,
+            "size": 1,
+            "value": 31
+          },
+          {
+            "addr": 262152,
+            "size": 1,
+            "value": 46
+          },
+          {
+            "addr": 262153,
+            "size": 1,
+            "value": 61
+          },
+          {
+            "addr": 262154,
+            "size": 1,
+            "value": 76
+          }
+        ],
+        "regs": {
+          "d1": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "add.l 0x00030004,%d1",
+      "mnemonic": "add.l",
+      "name": "add_l_abs_l_to_d1"
+    },
+    {
+      "encoding": [
+        "d2ba",
+        "001e"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 65568,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 65569,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 65570,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 65571,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 65572,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 65573,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 65574,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 65575,
+            "size": 1,
+            "value": 119
+          }
+        ],
+        "regs": {
+          "d1": 2454026411,
+          "pc": 65540,
+          "sr": 9992
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 65568,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 65569,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 65570,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 65571,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 65572,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 65573,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 65574,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 65575,
+            "size": 1,
+            "value": 119
+          }
+        ],
+        "regs": {
+          "d1": 305419896,
+          "pc": 65536,
+          "sr": 10015
+        }
+      },
+      "instruction": "add.l (0x1e,%pc),%d1",
+      "mnemonic": "add.l",
+      "name": "add_l_pc_disp_to_d1"
+    },
+    {
+      "encoding": [
+        "d2bb",
+        "2804"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 131062,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 131063,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 131064,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 131065,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 131066,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 131067,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 131068,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 131069,
+            "size": 1,
+            "value": 119
+          },
+          {
+            "addr": 65526,
+            "size": 1,
+            "value": 11
+          },
+          {
+            "addr": 65527,
+            "size": 1,
+            "value": 173
+          },
+          {
+            "addr": 65528,
+            "size": 1,
+            "value": 192
+          },
+          {
+            "addr": 65529,
+            "size": 1,
+            "value": 222
+          },
+          {
+            "addr": 65530,
+            "size": 1,
+            "value": 31
+          },
+          {
+            "addr": 65531,
+            "size": 1,
+            "value": 46
+          },
+          {
+            "addr": 65532,
+            "size": 1,
+            "value": 61
+          },
+          {
+            "addr": 65533,
+            "size": 1,
+            "value": 76
+          }
+        ],
+        "regs": {
+          "d1": 2454026411,
+          "d2": 65520,
+          "pc": 65540,
+          "sr": 9992
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 131062,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 131063,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 131064,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 131065,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 131066,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 131067,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 131068,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 131069,
+            "size": 1,
+            "value": 119
+          },
+          {
+            "addr": 65526,
+            "size": 1,
+            "value": 11
+          },
+          {
+            "addr": 65527,
+            "size": 1,
+            "value": 173
+          },
+          {
+            "addr": 65528,
+            "size": 1,
+            "value": 192
+          },
+          {
+            "addr": 65529,
+            "size": 1,
+            "value": 222
+          },
+          {
+            "addr": 65530,
+            "size": 1,
+            "value": 31
+          },
+          {
+            "addr": 65531,
+            "size": 1,
+            "value": 46
+          },
+          {
+            "addr": 65532,
+            "size": 1,
+            "value": 61
+          },
+          {
+            "addr": 65533,
+            "size": 1,
+            "value": 76
+          }
+        ],
+        "regs": {
+          "d1": 305419896,
+          "d2": 65520,
+          "pc": 65536,
+          "sr": 10015
+        }
+      },
+      "instruction": "add.l (4,%pc,%d2),%d1",
+      "mnemonic": "add.l",
+      "name": "add_l_pc_index_to_d1"
     }
   ],
   "format": 1,

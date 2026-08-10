@@ -224,6 +224,119 @@ MEM_BASE = 0x2000
 MEM_SEED_BYTES = (0x02, 0x5A, 0x3C, 0xC1)
 MEM_GUARD = 0x0BADC0DE   # the longword after a longword memory destination
 
+# ---------------------------------------------------------------------------
+# THE ADDRESSING MODES THIS CORPUS DID NOT REACH, AND THE SEEDS THAT SEPARATE
+# A CORRECT EVALUATOR FROM A WRONG ONE.
+#
+# Before these cases, NO case in any group used `(xxx).W`, `(xxx).L`,
+# `(d16,PC)` or `(d8,PC,Xn)`. Three groups shipped green over a third of
+# `eaAddr`, and all three defects that lived there were found by accident.
+# Every case below therefore does two things: it reaches the mode at all, and
+# it PINS THE EXACT ADDRESS, so that an evaluator which reaches a NEIGHBOURING
+# address answers differently.
+#
+# THE TWO WINDOWS ARE THE MECHANISM. `EA_WINDOW` is seeded at the address the
+# instruction names and `EA_DECOY_WINDOW` at the address a defective evaluator
+# reaches. Every byte of each differs from every byte of the other, and neither
+# window is symmetric, so a byte read, a longword read and a longword read two
+# bytes off all give three different answers:
+#
+#   EA_WINDOW       byte at +0 = 0x80 (bit 7 SET), long at +0 = 0x80112233,
+#                   long at +2 = 0x22334455
+#   EA_DECOY_WINDOW byte at +0 = 0x0b (bit 7 CLEAR), long at +0 = MEM_GUARD
+#
+# The bit-7 disagreement is what the BTST cases read and what puts N in the
+# MOVE and ADD cases' status words, so the destination AND the condition codes
+# both separate the readings.
+EA_WINDOW = (0x80, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77)
+EA_DECOY_WINDOW = (0x0B, 0xAD, 0xC0, 0xDE, 0x1F, 0x2E, 0x3D, 0x4C)
+
+# THE ABSOLUTE-LONG ADDRESS, AND THE ADDRESS ITS TWO HALVES SWAPPED.
+#
+# `(xxx).L` carries its address in TWO extension words. MCF5307 User's Manual
+# section 3.7.2, "Organization of Integer Data Formats in Memory", page 3-19:
+# "The address N of a longword data item corresponds to the address of the high
+# order word. The lower order word is located at address N + 2." The FIRST
+# extension word is therefore the HIGH half. `m68k-elf-as -mcpu=5307` agrees:
+# `btst %d1,0x00030004` assembles to `0339 0003 0004`.
+#
+# `ABS_L_ADDR` and `ABS_L_SWAPPED` are each other's halves exchanged, both are
+# inside the runner's 1 MiB board, and neither overlaps the other's window, so
+# a core that combined the two words the wrong way round reads or writes the
+# decoy and fails on a value the case names.
+ABS_L_ADDR = 0x00030004
+ABS_L_SWAPPED = 0x00040003
+
+# THE ABSOLUTE-SHORT ADDRESS. `(xxx).W` carries ONE extension word,
+# sign-extended. Every case that uses it also names `pc`, so a core that read
+# two words for it - the `(xxx).L` shape - fails on the program counter even
+# when the operand value happens to survive.
+#
+# THE SIGN EXTENSION ITSELF IS NOT PINNED HERE and cannot be: a negative
+# `(xxx).W` addresses 0xFFFF8000 upward, the runner's board is 1 MiB, and a
+# case whose operand access reports `busUnmapped` traps and fails on the run
+# state rather than on the address. See the uncertainty note in
+# `src/mcf5307/machine.nim`.
+ABS_W_ADDR = MEM_BASE
+
+# WHERE THE ENCODING IS PLACED. The runner defaults to this, and every
+# PC-RELATIVE case NAMES IT in `initial.regs` anyway, so the operand addresses
+# those cases assert are derived from a value the case states rather than from
+# a constant inside the runner.
+EXEC_BASE = 0x10000
+
+# THE PC-RELATIVE BASE IS THE ADDRESS *OF* THE DISPLACEMENT WORD, not the
+# address after it. Every instruction below puts its opcode at `EXEC_BASE` and
+# its displacement word at `EXEC_BASE + 2`, so the operand is at
+# `EXEC_BASE + 2 + PC_DISP`.
+#
+# THE MANUAL DOES NOT STATE THIS - it gives `(d16,PC)` a row in Table 3-5 and
+# no effective-address equation anywhere - so the authority is the pinned
+# assembler. Measured: `btst %d1,(target,%pc)` with the opcode at 0 assembles
+# to `033a 0004` and the linker places `target` at 6, and
+# `m68k-elf-objdump -m m68k:5307` prints `btst %d1,%pc@(6 <target>)`. Base
+# plus 4 is 6, so the base is 2 - the address of the displacement word.
+#
+# A CORE THAT TOOK THE BASE AFTER THE WORD IS EXACTLY TWO BYTES HIGH, which is
+# why `EA_WINDOW` is eight bytes and no two of them are equal: the byte the
+# instruction names and the byte two along are different, and so are the
+# longwords starting at each.
+PC_DISP = 0x1E
+PC_OPERAND = EXEC_BASE + 2 + PC_DISP
+
+# THE INDEX REGISTER'S WIDTH, AND THE ONE VALUE THAT CAN SEE IT.
+#
+# An indexed extension word selects a WORD or a LONG index. The pinned
+# assembler puts that select at BIT 11: `btst %d1,(4,%pc,%d2)` assembles to
+# `033b 2804`, whose extension word `2804` has bit 11 SET and bit 8 CLEAR, and
+# `m68k-elf-objdump -m m68k:5307` prints `%pc@(0x6,%d2:l)` - `:l`, a LONG
+# index. Bit 8 is the brief-format marker and is always zero; a core that read
+# the select there answers WORD for every instruction the assembler emits.
+#
+# A SMALL POSITIVE INDEX CANNOT TELL THE TWO READINGS APART, which is why the
+# existing `tests/t_logic.nim` case used one and was explicitly agnostic.
+# `INDEX_VALUE` is the value that can: its low word is 0xfff0, which
+# sign-extends to -16, while the whole longword is +65520. The two readings
+# therefore land 65536 bytes apart, both inside the runner's 1 MiB board, and
+# each case seeds `EA_WINDOW` at one and `EA_DECOY_WINDOW` at the other.
+#
+# THE MANUAL DOES NOT PRINT THE EXTENSION WORD'S LAYOUT - there is no
+# brief-format figure anywhere in it - so the assembler is the authority for
+# the bit position. What the manual DOES say is section 3.5.2, "Address Error
+# Exception", page 3-15: "Any attempted use of a word-sized index register
+# (Xi.w) ... generates an address error". `m68k-elf-as -mcpu=5307` agrees and
+# REJECTS `btst %d1,(4,%pc,%d2.w)`, so on this part the select is always LONG
+# and a core reading bit 8 is wrong for every legal encoding.
+INDEX_D8 = 4
+INDEX_VALUE = 0x0000FFF0
+INDEX_WORD_READING = -0x10          # what INDEX_VALUE's low word sign-extends to
+
+PC_INDEX_OPERAND = EXEC_BASE + 2 + INDEX_D8 + INDEX_VALUE
+PC_INDEX_DECOY = EXEC_BASE + 2 + INDEX_D8 + INDEX_WORD_READING
+
+AN_INDEX_OPERAND = MEM_BASE + INDEX_D8 + INDEX_VALUE
+AN_INDEX_DECOY = MEM_BASE + INDEX_D8 + INDEX_WORD_READING
+
 
 def mem_bytes(base, values):
     """The `mem` list that seeds or asserts consecutive single bytes."""
@@ -489,6 +602,117 @@ CASES = {
             "expected": {"regs": {"a5": 0x500, "a7": 0x1000,
                                   "sr": SR_DIRTY}},
         },
+
+        # -------------------------------------------------------- (xxx).W
+        #
+        # ONE EXTENSION WORD, AND THE PROGRAM COUNTER SAYS SO. A core that read
+        # two words here - the `(xxx).L` shape - would end four bytes past this
+        # instruction rather than two, and the `pc` expectation is what catches
+        # it. `EA_WINDOW` at the named address gives a value whose bit 31 is
+        # set, so the N bit is asserted rather than defaulted.
+        {
+            "name": "move_l_abs_w_to_d0",
+            "mnemonic": "move.l",
+            "instruction": "move.l 0x2000.w,%d0",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "d0": DIRTY_D, "sr": SR_DIRTY},
+                "mem": mem_bytes(ABS_W_ADDR, EA_WINDOW),
+            },
+            "expected": {
+                "regs": {"d0": 0x80112233, "pc": EXEC_BASE + 4,
+                         "sr": SR_BASE | CCR_X | CCR_N},
+                "mem": mem_bytes(ABS_W_ADDR, EA_WINDOW),
+            },
+        },
+
+        # -------------------------------------------------------- (xxx).L
+        #
+        # THE TWO EXTENSION WORDS ARE HIGH HALF FIRST. See `ABS_L_ADDR` above
+        # for the manual section and the assembler measurement. These two cases
+        # are the read path and the write path, and each one names the address
+        # the OTHER reading would reach and asserts that window untouched.
+        {
+            "name": "move_l_abs_l_to_d0",
+            "mnemonic": "move.l",
+            "instruction": "move.l 0x00030004,%d0",
+            "initial": {
+                "regs": {"d0": DIRTY_D, "sr": SR_DIRTY},
+                "mem": (mem_bytes(ABS_L_ADDR, EA_WINDOW)
+                        + mem_bytes(ABS_L_SWAPPED, EA_DECOY_WINDOW)),
+            },
+            "expected": {
+                "regs": {"d0": 0x80112233, "pc": EXEC_BASE + 6,
+                         "sr": SR_BASE | CCR_X | CCR_N},
+                "mem": (mem_bytes(ABS_L_ADDR, EA_WINDOW)
+                        + mem_bytes(ABS_L_SWAPPED, EA_DECOY_WINDOW)),
+            },
+        },
+        {
+            "name": "move_l_d0_to_abs_l",
+            "mnemonic": "move.l",
+            "instruction": "move.l %d0,0x00030004",
+            "initial": {
+                "regs": {"d0": 0xDEADBEEF, "sr": SR_DIRTY},
+                "mem": ([{"addr": ABS_L_ADDR, "size": 4, "value": 0x80112233},
+                         {"addr": ABS_L_ADDR + 4, "size": 4,
+                          "value": MEM_GUARD}]
+                        + mem_bytes(ABS_L_SWAPPED, EA_DECOY_WINDOW)),
+            },
+            "expected": {
+                "regs": {"pc": EXEC_BASE + 6,
+                         "sr": SR_BASE | CCR_X | CCR_N},
+                "mem": ([{"addr": ABS_L_ADDR, "size": 4, "value": 0xDEADBEEF},
+                         {"addr": ABS_L_ADDR + 4, "size": 4,
+                          "value": MEM_GUARD}]
+                        + mem_bytes(ABS_L_SWAPPED, EA_DECOY_WINDOW)),
+            },
+        },
+
+        # ------------------------------------------------------- (d16,PC)
+        #
+        # THE OPERAND IS ONE BYTE AND IT IS THE ONE THE INSTRUCTION NAMES. The
+        # byte at `PC_OPERAND` is 0x80 and the byte two along - where a core
+        # that based the address after the displacement word would read - is
+        # 0x22. The two differ in bit 7, so the merged destination AND the N
+        # bit both separate the two readings.
+        {
+            "name": "move_b_pc_disp_to_d0",
+            "mnemonic": "move.b",
+            "instruction": "move.b (0x1e,%pc),%d0",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "d0": DIRTY_D, "sr": SR_DIRTY},
+                "mem": mem_bytes(PC_OPERAND, EA_WINDOW),
+            },
+            "expected": {
+                "regs": {"d0": 0x12345680, "pc": EXEC_BASE + 4,
+                         "sr": SR_BASE | CCR_X | CCR_N},
+                "mem": mem_bytes(PC_OPERAND, EA_WINDOW),
+            },
+        },
+
+        # ----------------------------------------------------- (d8,PC,Xn)
+        #
+        # THE INDEX IS A LONGWORD, and `INDEX_VALUE` is the value that says so:
+        # a core that took the low word and sign-extended it reads 65536 bytes
+        # lower, where `EA_DECOY_WINDOW` sits. See `INDEX_VALUE` above.
+        {
+            "name": "move_b_pc_index_to_d0",
+            "mnemonic": "move.b",
+            "instruction": "move.b (4,%pc,%d2),%d0",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "d0": DIRTY_D, "d2": INDEX_VALUE,
+                         "sr": SR_DIRTY},
+                "mem": (mem_bytes(PC_INDEX_OPERAND, EA_WINDOW)
+                        + mem_bytes(PC_INDEX_DECOY, EA_DECOY_WINDOW)),
+            },
+            "expected": {
+                "regs": {"d0": 0x12345680, "d2": INDEX_VALUE,
+                         "pc": EXEC_BASE + 4,
+                         "sr": SR_BASE | CCR_X | CCR_N},
+                "mem": (mem_bytes(PC_INDEX_OPERAND, EA_WINDOW)
+                        + mem_bytes(PC_INDEX_DECOY, EA_DECOY_WINDOW)),
+            },
+        },
     ],
 
     # THE CONDITION-CODE RULES OF THIS GROUP. `ADD`, `SUB`, `ADDQ`, `SUBQ`,
@@ -639,6 +863,84 @@ CASES = {
             "initial": {"regs": {"d0": 0xAAAA8000, "sr": SR_DIRTY}},
             "expected": {"regs": {"d0": -32768,
                                   "sr": SR_BASE | CCR_N | CCR_X}},
+        },
+
+        # -------------------------------------------------------- (xxx).W
+        {
+            "name": "add_l_abs_w_to_d1",
+            "mnemonic": "add.l",
+            "instruction": "add.l 0x2000.w,%d1",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "d1": DIRTY_D, "sr": SR_DIRTY},
+                "mem": mem_bytes(ABS_W_ADDR, EA_WINDOW),
+            },
+            "expected": {
+                "regs": {"d1": 0x924578AB, "pc": EXEC_BASE + 4,
+                         "sr": SR_BASE | CCR_N},
+                "mem": mem_bytes(ABS_W_ADDR, EA_WINDOW),
+            },
+        },
+
+        # -------------------------------------------------------- (xxx).L
+        #
+        # ADD's `<ea>` operand takes DATA addressing, so the absolute modes are
+        # in. The addend at the swapped address is `MEM_GUARD`, whose sum with
+        # the seed is neither the expected value nor negative, so the register
+        # and the status word both separate the two readings.
+        {
+            "name": "add_l_abs_l_to_d1",
+            "mnemonic": "add.l",
+            "instruction": "add.l 0x00030004,%d1",
+            "initial": {
+                "regs": {"d1": DIRTY_D, "sr": SR_DIRTY},
+                "mem": (mem_bytes(ABS_L_ADDR, EA_WINDOW)
+                        + mem_bytes(ABS_L_SWAPPED, EA_DECOY_WINDOW)),
+            },
+            "expected": {
+                "regs": {"d1": 0x924578AB, "pc": EXEC_BASE + 6,
+                         "sr": SR_BASE | CCR_N},
+                "mem": (mem_bytes(ABS_L_ADDR, EA_WINDOW)
+                        + mem_bytes(ABS_L_SWAPPED, EA_DECOY_WINDOW)),
+            },
+        },
+
+        # ------------------------------------------------------- (d16,PC)
+        #
+        # THE LONGWORD READ, where the byte cases above read a byte. The
+        # longword at `PC_OPERAND` is 0x80112233 and the one two bytes along is
+        # 0x22334455, so the sum and the N bit both separate the two readings.
+        {
+            "name": "add_l_pc_disp_to_d1",
+            "mnemonic": "add.l",
+            "instruction": "add.l (0x1e,%pc),%d1",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "d1": DIRTY_D, "sr": SR_DIRTY},
+                "mem": mem_bytes(PC_OPERAND, EA_WINDOW),
+            },
+            "expected": {
+                "regs": {"d1": 0x924578AB, "pc": EXEC_BASE + 4,
+                         "sr": SR_BASE | CCR_N},
+                "mem": mem_bytes(PC_OPERAND, EA_WINDOW),
+            },
+        },
+
+        # ----------------------------------------------------- (d8,PC,Xn)
+        {
+            "name": "add_l_pc_index_to_d1",
+            "mnemonic": "add.l",
+            "instruction": "add.l (4,%pc,%d2),%d1",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "d1": DIRTY_D, "d2": INDEX_VALUE,
+                         "sr": SR_DIRTY},
+                "mem": (mem_bytes(PC_INDEX_OPERAND, EA_WINDOW)
+                        + mem_bytes(PC_INDEX_DECOY, EA_DECOY_WINDOW)),
+            },
+            "expected": {
+                "regs": {"d1": 0x924578AB, "d2": INDEX_VALUE,
+                         "pc": EXEC_BASE + 4, "sr": SR_BASE | CCR_N},
+                "mem": (mem_bytes(PC_INDEX_OPERAND, EA_WINDOW)
+                        + mem_bytes(PC_INDEX_DECOY, EA_DECOY_WINDOW)),
+            },
         },
     ],
 
@@ -1190,6 +1492,160 @@ CASES = {
             "initial": {"regs": {"d0": DIRTY_D, "d1": 2, "sr": SR_DIRTY}},
             "expected": {"regs": {"d0": 0x48D159E0, "d1": 2,
                                   "sr": SR_BASE}},
+        },
+
+        # -------------------------------------------------------- (xxx).W
+        #
+        # AN ABSOLUTE-SHORT MEMORY DESTINATION. `eaMemoryAlterable` admits
+        # `(xxx).W`, and the `Dn op <ea> -> <ea>` direction of OR is the path
+        # that writes one. The guard longword after it is asserted unchanged,
+        # so a store that was too wide fails.
+        {
+            "name": "or_l_d1_to_abs_w",
+            "mnemonic": "or.l",
+            "instruction": "or.l %d1,0x2000.w",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "d1": DIRTY_D, "sr": SR_DIRTY},
+                "mem": [{"addr": ABS_W_ADDR, "size": 4, "value": 0x0F0F0F0F},
+                        {"addr": ABS_W_ADDR + 4, "size": 4,
+                         "value": MEM_GUARD}],
+            },
+            "expected": {
+                "regs": {"d1": DIRTY_D, "pc": EXEC_BASE + 4,
+                         "sr": SR_BASE | CCR_X},
+                "mem": [{"addr": ABS_W_ADDR, "size": 4, "value": 0x1F3F5F7F},
+                        {"addr": ABS_W_ADDR + 4, "size": 4,
+                         "value": MEM_GUARD}],
+            },
+        },
+
+        # -------------------------------------------------------- (xxx).L
+        #
+        # BOTH DIRECTIONS OF AND REACH THE ABSOLUTE MODES and they are separate
+        # code paths: the `<ea>,Dn` direction READS through `eaRead` and the
+        # `Dn,<ea>` direction resolves a writable reference through
+        # `eaResolve`. Each path gets its own case, and each names the swapped
+        # address and asserts that window untouched.
+        {
+            "name": "and_l_abs_l_to_d1",
+            "mnemonic": "and.l",
+            "instruction": "and.l 0x00030004,%d1",
+            "initial": {
+                "regs": {"d1": DIRTY_D, "sr": SR_DIRTY},
+                "mem": (mem_bytes(ABS_L_ADDR, EA_WINDOW)
+                        + mem_bytes(ABS_L_SWAPPED, EA_DECOY_WINDOW)),
+            },
+            "expected": {
+                "regs": {"d1": 0x00100230, "pc": EXEC_BASE + 6,
+                         "sr": SR_BASE | CCR_X},
+                "mem": (mem_bytes(ABS_L_ADDR, EA_WINDOW)
+                        + mem_bytes(ABS_L_SWAPPED, EA_DECOY_WINDOW)),
+            },
+        },
+        {
+            "name": "and_l_d1_to_abs_l",
+            "mnemonic": "and.l",
+            "instruction": "and.l %d1,0x00030004",
+            "initial": {
+                "regs": {"d1": DIRTY_D, "sr": SR_DIRTY},
+                "mem": ([{"addr": ABS_L_ADDR, "size": 4, "value": 0x80112233},
+                         {"addr": ABS_L_ADDR + 4, "size": 4,
+                          "value": MEM_GUARD}]
+                        + mem_bytes(ABS_L_SWAPPED, EA_DECOY_WINDOW)),
+            },
+            "expected": {
+                "regs": {"d1": DIRTY_D, "pc": EXEC_BASE + 6,
+                         "sr": SR_BASE | CCR_X},
+                "mem": ([{"addr": ABS_L_ADDR, "size": 4, "value": 0x00100230},
+                         {"addr": ABS_L_ADDR + 4, "size": 4,
+                          "value": MEM_GUARD}]
+                        + mem_bytes(ABS_L_SWAPPED, EA_DECOY_WINDOW)),
+            },
+        },
+        {
+            "name": "btst_b_abs_l",
+            "mnemonic": "btst",
+            "instruction": "btst %d1,0x00030004",
+            "initial": {
+                "regs": {"d1": 7, "sr": SR_DIRTY},
+                "mem": (mem_bytes(ABS_L_ADDR, EA_WINDOW)
+                        + mem_bytes(ABS_L_SWAPPED, EA_DECOY_WINDOW)),
+            },
+            # The operand is ONE BYTE: 0x80 at ABS_L_ADDR, whose bit 7 is SET,
+            # so Z clears. The byte at the swapped address is 0x0b, whose bit 7
+            # is CLEAR, so the other reading sets Z instead.
+            "expected": {
+                "regs": {"d1": 7, "pc": EXEC_BASE + 6,
+                         "sr": SR_DIRTY & ~CCR_Z},
+                "mem": (mem_bytes(ABS_L_ADDR, EA_WINDOW)
+                        + mem_bytes(ABS_L_SWAPPED, EA_DECOY_WINDOW)),
+            },
+        },
+
+        # ------------------------------------------------------- (d16,PC)
+        #
+        # A DYNAMIC BTST IS THE ONE OPERATION IN THIS GROUP WHOSE MASK ADMITS A
+        # PC-RELATIVE OPERAND - it reads and never writes. Bit 7 of the byte at
+        # `PC_OPERAND` is SET and bit 7 of the byte two along is CLEAR, so Z
+        # comes out the opposite way under the two readings of the base.
+        # `tests/t_logic.nim` executes the same instruction and, until this
+        # commit, deliberately seeded both candidate addresses alike so that it
+        # would not pin the base; it now pins it.
+        {
+            "name": "btst_b_pc_disp",
+            "mnemonic": "btst",
+            "instruction": "btst %d1,(0x1e,%pc)",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "d1": 7, "sr": SR_DIRTY},
+                "mem": mem_bytes(PC_OPERAND, EA_WINDOW),
+            },
+            "expected": {
+                "regs": {"d1": 7, "pc": EXEC_BASE + 4,
+                         "sr": SR_DIRTY & ~CCR_Z},
+                "mem": mem_bytes(PC_OPERAND, EA_WINDOW),
+            },
+        },
+
+        # ----------------------------------------------------- (d8,PC,Xn)
+        {
+            "name": "btst_b_pc_index",
+            "mnemonic": "btst",
+            "instruction": "btst %d1,(4,%pc,%d2)",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "d1": 7, "d2": INDEX_VALUE,
+                         "sr": SR_DIRTY},
+                "mem": (mem_bytes(PC_INDEX_OPERAND, EA_WINDOW)
+                        + mem_bytes(PC_INDEX_DECOY, EA_DECOY_WINDOW)),
+            },
+            "expected": {
+                "regs": {"d1": 7, "d2": INDEX_VALUE, "pc": EXEC_BASE + 4,
+                         "sr": SR_DIRTY & ~CCR_Z},
+                "mem": (mem_bytes(PC_INDEX_OPERAND, EA_WINDOW)
+                        + mem_bytes(PC_INDEX_DECOY, EA_DECOY_WINDOW)),
+            },
+        },
+        {
+            # THE SAME EXTENSION WORD ON AN ADDRESS-REGISTER BASE. `eaAnIndex`
+            # and `ea7PCIndex` share `indexOperand`, so the width rule is one
+            # line of code serving two addressing modes; a case that covered
+            # only the PC form would leave the other half of that line
+            # unguarded. This is the only case in the corpus that reaches
+            # `(d8,An,Xn)` at all.
+            "name": "btst_b_an_index",
+            "mnemonic": "btst",
+            "instruction": "btst %d1,(4,%a0,%d2)",
+            "initial": {
+                "regs": {"pc": EXEC_BASE, "a0": MEM_BASE, "d1": 7,
+                         "d2": INDEX_VALUE, "sr": SR_DIRTY},
+                "mem": (mem_bytes(AN_INDEX_OPERAND, EA_WINDOW)
+                        + mem_bytes(AN_INDEX_DECOY, EA_DECOY_WINDOW)),
+            },
+            "expected": {
+                "regs": {"a0": MEM_BASE, "d1": 7, "d2": INDEX_VALUE,
+                         "pc": EXEC_BASE + 4, "sr": SR_DIRTY & ~CCR_Z},
+                "mem": (mem_bytes(AN_INDEX_OPERAND, EA_WINDOW)
+                        + mem_bytes(AN_INDEX_DECOY, EA_DECOY_WINDOW)),
+            },
         },
     ],
 
