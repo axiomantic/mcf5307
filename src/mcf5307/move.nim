@@ -142,11 +142,23 @@ proc fetchExt(ctx: MCF5307Ctx): uint16 =
   ctx.pc = ctx.pc + 2'u32
   uint16(v and 0xFFFF'u32)
 
+# Sign extension of a displacement or an immediate value.
+#
+# THE CASTS ARE CORRECT AND A CONVERSION IS NOT. Sign extension REINTERPRETS
+# the bits of an unsigned value as a two's-complement signed value of the same
+# width. It does not narrow the value, so there is no range to check. A
+# conversion `int16(x)` is a CHECKED narrowing conversion: the library is
+# built with `--panics:on -d:release`, thus every `x` from 0x8000 to 0xFFFF -
+# that is, every negative displacement - ends the process with a `RangeDefect`
+# that no caller can catch. `cast` keeps the bit pattern and gives the signed
+# value the silicon uses. The widening to `int32` that follows is safe: each
+# `int32` holds all the values of an `int16` and of an `int8`.
+
 func s16(x: uint16): int32 =
-  int32(int16(x))
+  int32(cast[int16](x))
 
 func s8(x: uint16): int32 =
-  int32(int8(uint8(x and 0xFF'u16)))
+  int32(cast[int8](uint8(x and 0xFF'u16)))
 
 proc indexOperand(ctx: MCF5307Ctx; ext: uint16): uint32 =
   ## The scaled index operand of an indexed extension word. Bit 15 selects
