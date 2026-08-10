@@ -137,20 +137,101 @@ const eaDataAddressing* = EaLegality(modes: eaDataAlterableModes,
   ## writable. The `ea7` set is what separates them and it is spelled out
   ## above.
 
+const eaBitDynamic* = EaLegality(modes: eaDataAlterableModes,
+                                 ea7: eaData7 - {ea7Imm})
+  ## THE OPERAND OF A DYNAMIC BIT TEST: the manual's DATA class WITHOUT the
+  ## immediate. It is `eaDataAddressing` minus one sub-variant, and the whole
+  ## of the difference between them is this paragraph.
+  ##
+  ## THE MANUAL PUTS THE IMMEDIATE OUT. MCF5307 User's Manual Table 3-13,
+  ## "Two Operand Instruction Execution Times", page 3-28: the row
+  ## `btst | Dy,<ea>` reads `Rn 1(0/0)`, `(An) 4(1/0)`, `(An)+ 4(1/0)`,
+  ## `-(An) 4(1/0)`, `(d16,An)/(d16,PC) 4(1/0)`,
+  ## `(d8,An,Xi*SF)/(d8,PC,Xi*SF) 5(1/0)`, `xxx.wl 4(1/0)` and, in the last
+  ## column, `#xxx` - A DASH.
+  ##
+  ## THE DASH IS THE TABLE'S MARK FOR A FORM THIS PART DOES NOT HAVE, and not
+  ## a gap in the timing data. Two rows settle that on their own:
+  ##
+  ##   - Table 3-12, page 3-27, gives `tst.l <ea>` a `#xxx` of `1(0/0)`.
+  ##     `tst.l #5` computes nothing a compiler could want, and the manual
+  ##     times it anyway. A read-only operand does not lose its row for being
+  ##     useless, so `btst Dy,<ea>`'s missing one is not that.
+  ##
+  ##   - Table 3-13 uses the dash for restrictions that are demonstrably real.
+  ##     The `btst | #imm,<ea>` row dashes `(d8,An,Xi*SF)`, `xxx.wl` and
+  ##     `#xxx` and keeps the other five, which is `eaBitStatic` mode for
+  ##     mode; the `divs.l`, `divu.l`, `muls.l` and `mulu.l` rows dash the
+  ##     same indexed, absolute and immediate columns; `and.l Dy,<ea>` dashes
+  ##     `Rn`. Every one of those was offered to `m68k-elf-as -mcpu=5307` and
+  ##     REJECTED, and `and.l Dy,<ea>` with `Rn` - the word `c380` -
+  ##     disassembles as `.short 0xc380` on `-m m68k:5307`. Fifteen dashes
+  ##     checked, fifteen illegal; and every column that carries a time
+  ##     (`and.l <ea>,Rx` with `#xxx`, whose word `c0bc` DOES disassemble as
+  ##     `andl`) is accepted.
+  ##
+  ## THE ASSEMBLER IS THE ONE SOURCE THAT DISAGREES, AND IT IS NOT SPEAKING
+  ## ABOUT THIS PART. `m68k-elf-as -mcpu=5307` assembles `btst %d1,#5` to
+  ## `033c 0005`. Measured on the same binutils: that form is accepted
+  ## IDENTICALLY under `-m68000` and under `-mcpu=5307`, while
+  ## `btst #3,0x12345678` is accepted under `-m68000` and REJECTED under
+  ## `-mcpu=5307`. The ColdFire tables were narrowed for the static form and
+  ## left alone for this one, so the acceptance carries the 68000 rule
+  ## forward rather than asserting anything about a 5307. The 68000 does
+  ## permit it - BTST is that architecture's one bit operation that reads an
+  ## immediate - which is exactly the rule an untouched entry would keep.
+  ##
+  ## `bset %d1,#5`, `bclr %d1,#5` and `bchg %d1,#5` are rejected under BOTH,
+  ## so that rejection distinguishes nothing either.
+  ##
+  ## WHAT WOULD OVERTURN THIS is the ColdFire Family Programmer's Reference
+  ## Manual, whose per-instruction operand table names the modes directly. It
+  ## is not on this machine (AGENTS.md section 11) and the network is closed.
+  ## Uncertainty 4 in the `logic.nim` header is this one.
+  ##
+  ## IT IS A CONSTANT OF ITS OWN AND NOT A NARROWED `eaDataAddressing`,
+  ## because AND and OR keep the immediate: Table 3-13's `and.l <ea>,Rx` and
+  ## `or.l <ea>,Rx` rows both give `#xxx` a time of `1(0/0)`.
+
 const eaBitStatic* = EaLegality(
   modes: {eaDn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp}, ea7: {})
   ## THE OPERAND OF A STATIC BIT OPERATION, WHICH IS NARROWER THAN THE
   ## DYNAMIC ONE. `0000 1000 tt <ea>` takes a data register or one of four
-  ## address-register indirect modes and NOTHING ELSE on this part: measured,
-  ## `m68k-elf-as -mcpu=5307` rejects `btst #3,(4,%a0,%d2)`,
-  ## `btst #3,0x12345678`, `btst #3,0x1234.w` and `btst #3,(4,%pc)`, and
-  ## `m68k-elf-objdump -m m68k:5307` decodes none of `0830`, `0838`, `0839`,
-  ## `083a`, `08f8` or `08f9` as an instruction.
+  ## address-register indirect modes and NOTHING ELSE on this part.
   ##
-  ## The DYNAMIC form has no such restriction: `btst %d1,0x12345678`,
-  ## `btst %d1,(4,%pc)` and `btst %d1,#5` all assemble. It reads
-  ## `eaDataAddressing` (for BTST) or the data-alterable mask (for BCHG, BCLR
-  ## and BSET) through `eaLegalityFor` instead.
+  ## THE MANUAL PRINTS THIS MASK, MODE FOR MODE. MCF5307 User's Manual
+  ## Table 3-13, "Two Operand Instruction Execution Times", page 3-28. Four
+  ## rows read `#imm,<ea>` in the `<EA>` column - `bchg`, `bclr`, `bset` and
+  ## `btst` - and all four carry a time under exactly five columns and a dash
+  ## under the rest:
+  ##
+  ##            Rn      (An)    (An)+   -(An)   (d16,An) (d8,An,Xi*SF) xxx.wl #xxx
+  ##   bchg   2(0/0)  5(1/1)  5(1/1)  5(1/1)  5(1/1)         -            -     -
+  ##   bclr   2(0/0)  5(1/1)  5(1/1)  5(1/1)  5(1/1)         -            -     -
+  ##   bset   2(0/0)  5(1/1)  5(1/1)  5(1/1)  5(1/1)         -            -     -
+  ##   btst   1(0/0)  4(1/0)  4(1/0)  4(1/0)  4(1/0)         -            -     -
+  ##
+  ## The five timed columns are `{eaDn, eaAnInd, eaAnPost, eaAnPre,
+  ## eaAnDisp}`, which is this constant. The `Dy,<ea>` rows of the same four
+  ## operations, two lines above each of these, DO carry times under
+  ## `(d8,An,Xi*SF)` and `xxx.wl` - so the dashes separate the static form
+  ## from the dynamic one and are not a property of the bit operations as a
+  ## family.
+  ##
+  ## AN EARLIER REVISION SAID THE MANUAL'S TABLE DOES NOT SHOW THESE
+  ## RESTRICTIONS AND THAT ONLY BINUTILS ENFORCED THEM. It shows every one of
+  ## them, in the rows printed above. The assembler measurement stands as
+  ## CORROBORATION and no longer as the authority: `m68k-elf-as -mcpu=5307`
+  ## rejects `btst #3,(4,%a0,%d2)`, `btst #3,0x12345678`, `btst #3,0x1234.w`
+  ## and `btst #3,(4,%pc)`, and `m68k-elf-objdump -m m68k:5307` decodes none
+  ## of `0830`, `0838`, `0839`, `083a`, `08f8` or `08f9` as an instruction.
+  ##
+  ## The DYNAMIC form is wider in the two columns above and in the
+  ## PC-relative pair folded into the `(d16,An)` and `(d8,An,Xi*SF)` headings:
+  ## `btst %d1,0x12345678` and `btst %d1,(4,%pc)` both assemble. It reads
+  ## `eaBitDynamic` (for BTST) or the data-alterable mask (for BCHG, BCLR and
+  ## BSET) through `eaLegalityFor` instead. It is NOT wider in the `#xxx`
+  ## column - see `eaBitDynamic`.
   ##
   ## IT IS A CONSTANT AND NOT A TABLE ENTRY for the reason `eaMemoryAlterable`
   ## gives above: static and dynamic are the same four operations and the
@@ -179,17 +260,24 @@ proc eaLegalityFor*(op: Operation): EaLegality =
   of opClr, opMulu, opMuls, opDivu, opDivs:
     # Data alterable: no An, no PC-relative, no immediate.
     EaLegality(modes: eaDataAlterableModes, ea7: eaDataAlterable7)
-  of opAnd, opOr, opBtst:
-    # THE SOURCE OF THE `<ea> op Dn -> Dn` DIRECTION of AND and OR, and the
-    # operand of a DYNAMIC BTST. All three read and none of them writes, so
-    # the class is DATA addressing: no An, and the PC-relative pair and the
-    # immediate are in.
+  of opAnd, opOr:
+    # THE SOURCE OF THE `<ea> op Dn -> Dn` DIRECTION of AND and OR. It reads
+    # and does not write, so the class is DATA addressing: no An, and the
+    # PC-relative pair and the immediate are in. MCF5307 User's Manual
+    # Table 3-13, page 3-28: the `and.l <ea>,Rx` and `or.l <ea>,Rx` rows both
+    # give `#xxx` a time of `1(0/0)`, and `c0bc 0000 0005` disassembles as
+    # `andl #5,%d0` on `m68k-elf-objdump -m m68k:5307`.
     #
     # The OTHER direction of AND and OR writes memory and carries
     # `eaMemoryAlterable`, which this table cannot hold because the direction
     # is a property of the instruction word. `logic.nim` names it directly,
     # exactly as `alu.nim` does for ADD and SUB.
     eaDataAddressing
+  of opBtst:
+    # A DYNAMIC BTST READS AND DOES NOT WRITE, SO ITS CLASS IS ALSO A READING
+    # ONE - BUT IT STOPS SHORT OF THE IMMEDIATE. The manual rows and the
+    # toolchain measurements behind that difference are on `eaBitDynamic`.
+    eaBitDynamic
   of opEor, opBchg, opBclr, opBset:
     # EOR HAS ONE DIRECTION on this part - `Dn ^ <ea> -> <ea>` - and the three
     # bit operations that WRITE their operand share its class: data alterable.
@@ -200,14 +288,35 @@ proc eaLegalityFor*(op: Operation): EaLegality =
     # nor `03fa`.
     EaLegality(modes: eaDataAlterableModes, ea7: eaDataAlterable7)
   of opNot, opAndi, opOri, opEori, opAsl, opAsr, opLsl, opLsr:
-    # A DATA REGISTER AND NOTHING ELSE. The immediate forms of the logic
-    # group reach only a data register on this part (`andi.l #5,(%a0)` is
-    # rejected), NOT lost the memory forms the 68000 had (`not.l (%a0)` is
-    # rejected, and objdump decodes no `4690`), and EVERY SHIFT IS
-    # REGISTER-ONLY: the `1110 0tt d 11 <ea>` memory-shift encodings are not
-    # instructions here, which objdump confirms by decoding neither `e0c0`
-    # nor `e2d0`. The memory shift's negative case is CPU-13's; this mask is
-    # the mechanism it asserts through.
+    # A DATA REGISTER AND NOTHING ELSE, AND THE MANUAL'S TIMING TABLES SAY SO
+    # ROW BY ROW. All eight rows carry `Dx` or `#imm,Dx` in the `<EA>` column,
+    # a time under `Rn`, and a DASH under every memory column:
+    #
+    #   - MCF5307 User's Manual Table 3-12, page 3-27: `not.l | Dx |
+    #     Rn 1(0/0)` and a dash under `(An)`, `(An)+`, `-(An)`, `(d16,An)`,
+    #     `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`. The `clr.l` row above it and
+    #     the `tst.l` row below it carry times in those columns, so the
+    #     dashes belong to this row.
+    #   - Table 3-13, page 3-28: `andi.l | #imm,Dx`, `ori.l | #imm,Dx` and
+    #     `eori.l | #imm,Dx` each read `1(0/0)` under `Rn` and a dash
+    #     everywhere else, `#xxx` included.
+    #   - Table 3-13 again: `asl.l`, `asr.l`, `lsl.l` and `lsr.l` all read
+    #     `<ea>,Dx` with `1(0/0)` under `Rn` AND under `#xxx` - the immediate
+    #     COUNT - and a dash under all six memory columns.
+    #
+    # `m68k-elf-as -mcpu=5307` corroborates every one: it rejects
+    # `andi.l #5,(%a0)`, `ori.l #5,(%a0)`, `eori.l #5,(%a0)`, `not.l (%a0)`
+    # and `lsr.l (%a0)`.
+    #
+    # TWO OBJDUMP CITATIONS WERE REMOVED FROM THIS COMMENT AND NEITHER IS
+    # MISSED. `4690` DOES decode on `-m m68k:5307`, as `notl %d0` - a laxity
+    # of the disassembler, since the word's low six bits are mode 010 and
+    # `-m m68k:68000` prints `notl %a0@`. `e0c0` decodes on NEITHER
+    # architecture, because its low six bits are a data register and so it is
+    # not a well-formed memory shift anywhere; the memory-shift witness that
+    # does work is `e2d0`, `lsrw %a0@` on 68000 and `.short` on 5307. See
+    # `logic.nim`'s header. The memory shift's negative case is CPU-13's;
+    # this mask is the mechanism it asserts through.
     EaLegality(modes: {eaDn}, ea7: {})
   of opAddi, opSubi, opNeg, opNegx, opExt, opExtb, opAddx, opSubx:
     # A DATA REGISTER AND NOTHING ELSE on this part. The 68000 forms that

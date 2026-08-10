@@ -24,13 +24,25 @@
 ## and word form of everything else TRAPS here; CPU-13 carries them as
 ## negative cases.
 ##
-## EVERY SHIFT IS REGISTER-ONLY AND A MEMORY SHIFT TRAPS. The 68000's
-## `1110 0tt d 11 <ea>` memory shifts are not instructions on this part -
-## `m68k-elf-objdump -m m68k:5307` decodes neither `e0c0` nor `e2d0` - and the
-## `{Dn}` mask in `decode_types` refuses their operand. THE ROTATES ARE GONE
-## TOO: manual section 3.9 lists "logical rotate" among the removed
-## instructions, and `decode.nim` never produces an operation for them.
-## CPU-13 owns both negative cases; this module and that mask are the
+## EVERY SHIFT IS REGISTER-ONLY AND A MEMORY SHIFT TRAPS. MCF5307 User's
+## Manual Table 3-13, page 3-28: the `asl.l`, `asr.l`, `lsl.l` and `lsr.l`
+## rows all read `<ea>,Dx` and carry a time under `Rn` and under `#xxx` ALONE
+## - `1(0/0)` in each - with A DASH under `(An)`, `(An)+`, `-(An)`,
+## `(d16,An)`, `(d8,An,Xi*SF)` and `xxx.wl`. A shift on this part reaches a
+## data register and an immediate COUNT and no memory operand at all, and the
+## `{Dn}` mask in `decode_types` refuses that operand.
+##
+## THE WITNESS IS `e2d0` AND NOT `e0c0`. `e2d0` is `1110 001 0 11 010 000` -
+## a memory shift whose operand is `(%a0)` - and it decodes as `lsrw %a0@` on
+## `m68k-elf-objdump -m m68k:68000` and as `.short 0xe2d0` on `-m m68k:5307`,
+## which is the whole demonstration. An earlier revision cited `e0c0` beside
+## it. THAT WORD DEMONSTRATES NOTHING: it decodes on NEITHER architecture,
+## because its low six bits are mode 000 - a data register - which is not a
+## memory operand on the 68000 either, so its refusal is not ColdFire's doing.
+##
+## THE ROTATES ARE GONE TOO: manual section 3.9 lists "logical rotate" among
+## the removed instructions, and `decode.nim` never produces an operation for
+## them. CPU-13 owns both negative cases; this module and that mask are the
 ## mechanism they assert through.
 ##
 ## THE CONDITION CODES, AND WHERE EACH RULE COMES FROM.
@@ -53,8 +65,21 @@
 ##       X AND C BOTH TAKE THE LAST BIT SHIFTED OUT, which Table 3-7 states
 ##       for all four (`X/C <- (Dy << Dx) <- 0` and the two right-shift
 ##       forms). N and Z come from the result. V is cleared by LSL, LSR and
-##       ASR, none of which can produce a value the operand size cannot hold,
-##       and ASL sets it when the sign changes.
+##       ASR and set by ASL when the sign changes, AND THE REASON IS THE WORD
+##       "ARITHMETIC" IN SECTION 3.2.1.5 - the same clause the logic block
+##       above rests on. That section reads "V - overflow condition code bit:
+##       Set if an ARITHMETIC overflow occurs implying that the result cannot
+##       be represented in the operand size; otherwise cleared". LSL and LSR
+##       are LOGICAL shifts, so no arithmetic overflow occurs and V is
+##       cleared; ASR is arithmetic but a right shift moves every bit toward
+##       the LSB and cannot leave the operand size; ASL is arithmetic and can,
+##       and it is the one that sets V.
+##
+##       AN EARLIER REVISION GAVE THE REASON AS "none of which can produce a
+##       value the operand size cannot hold". THAT IS FALSE FOR LSL:
+##       `lsl.l #1` of `0x87654321` carries a one out of bit 31 and the
+##       32-bit result does not hold the value. LSL's V stays clear because
+##       LSL is not an arithmetic operation, not because nothing overflows.
 ##
 ## THE SHIFT IS PERFORMED ONE BIT AT A TIME, ON PURPOSE. A count is at most 63
 ## and the loop costs nothing, and it makes two rules that are easy to get
@@ -76,13 +101,74 @@
 ##
 ## A SHIFT COUNT OF ZERO IS REACHABLE THROUGH THE REGISTER FORM ALONE, because
 ## the immediate form spends its zero slot on the value eight. It shifts
-## nothing, clears C, and LEAVES X ALONE - a shift that moved no bit produced
-## no carry to copy into X. The corpus asserts the destination of that case
-## and not its status word, for the reason the paragraph above gives.
+## nothing. ONE OF THE FIVE FLAGS HAS A REASON AND FOUR ARE A CHOICE, and the
+## code and this paragraph now say the same thing about which is which:
+##
+##   X IS LEFT ALONE, AND THAT ONE IS REASONED. Section 3.2.1.5 gives X the
+##   value of C "for arithmetic operations; otherwise not affected", and a
+##   shift that moved no bit produced no carry to copy. `execShift` guards X
+##   with `count != 0` for exactly this.
+##
+##   N, Z, V AND C ARE WRITTEN ANYWAY - N and Z from the unmoved operand, V
+##   and C cleared - AND THAT IS THIS MODULE'S CHOICE AND NOT A RULE ANY
+##   DOCUMENT ON THIS MACHINE STATES. An earlier revision of this paragraph
+##   asserted "clears C" as a fact while also saying the status word of that
+##   case cannot be decided; both cannot be true. It is undecided, the code
+##   still has to do something, and what it does is written here so that a
+##   reader is not left to infer it. THE CORPUS ASSERTS THE DESTINATION OF
+##   THAT CASE AND NOT ITS STATUS WORD, which is what keeps the choice
+##   unpinned.
 ##
 ## CYCLES ARE NOMINAL, for the reason `move.nim`, `alu.nim` and `cpu.nim` all
 ## give: the per-instruction budget needs the clock work of open question 6 in
 ## AGENTS.md and no exact cost is asserted anywhere.
+##
+## WHAT THIS MODULE DOES NOT KNOW. Six things, and the rule for every one of
+## them is the same: THE IMPLEMENTATION PICKS A BEHAVIOUR AND NOTHING ASSERTS
+## IT. The document that would settle numbers 1, 2, 4, 5 and 6 is the ColdFire
+## Family Programmer's Reference Manual, whose per-instruction pages give the
+## operand table and the flag rules directly. It is named in AGENTS.md section
+## 11, it is NOT on this machine - searched for by name across the scratchpad
+## and the development tree, and by content across the scratchpad; the only
+## ColdFire documents present are two byte-identical copies of the MCF5307
+## User's Manual - and the network is closed.
+##
+##   1. ASL'S OVERFLOW READING. "The sign changed at any point" against "the
+##      sign of the result differs from the sign of the operand". See the
+##      paragraph above; no case pins a count at which they disagree.
+##
+##   2. THE STATUS WORD OF A SHIFT BY ZERO. See the paragraph above.
+##
+##   3. THE EXACT CYCLE COUNT of every instruction in this group.
+##
+##   4. WHETHER A DYNAMIC BTST MAY READ AN IMMEDIATE OPERAND. User's Manual
+##      Table 3-13 dashes the `#xxx` column of the `btst Dy,<ea>` row, and
+##      `m68k-elf-as -mcpu=5307` assembles `btst %d1,#5` anyway. The mask
+##      follows the manual and traps it; the full evidence, including why the
+##      assembler's acceptance is the 68000's rule rather than this part's, is
+##      on `eaBitDynamic` in `decode_types.nim`. THIS ONE IS ASSERTED, in
+##      `tests/t_logic.nim`, because a mask must be one thing or the other and
+##      a trap that no case covers is a trap nothing measures. It is the one
+##      entry on this list that a future reader may have to REVERSE rather
+##      than merely fill in.
+##
+##   5. THE BIT NUMBER'S MODULUS. `execBitOp` reduces the number modulo the
+##      operand width - 32 for a data register, 8 for memory. Table 3-7 gives
+##      the two WIDTHS ("8,32") and states no modulus anywhere, and no other
+##      passage does either. Figure 3-8 on page 3-18 is the closest thing and
+##      it does not carry the weight: its `BIT` row reads "BIT (0 <= MODULO
+##      (OFFSET) < 31, OFFSET OF 0 = MSB)", which numbers from the MSB where
+##      every bit operation here numbers from the LSB, stops at 31 rather than
+##      including it, and uses the word OFFSET, which belongs to the bit-field
+##      instructions section 3.9 lists among the REMOVED ones. The corpus
+##      asserts the two widths, which the manual does give, and asserts no
+##      out-of-range bit number.
+##
+##   6. THE REGISTER SHIFT COUNT'S MODULUS. `execShift` takes it modulo 64.
+##      Table 3-7 gives the shift operations as `X/C <- (Dy << Dx) <- 0` and
+##      states no modulus, and no other passage does. No case in the corpus or
+##      in `tests/t_logic.nim` uses a count above 31, so nothing distinguishes
+##      modulo 64 from modulo 256 or from no reduction at all.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
 ## semantics, the condition-code rules and the encodings are facts about
@@ -199,10 +285,22 @@ proc execImmediate(ctx: MCF5307Ctx; d: Decoded): uint32 =
   6'u32
 
 proc execNot(ctx: MCF5307Ctx; d: Decoded): uint32 =
-  ## NOT.L Dn. THE MEMORY FORMS OF THE 68000 ARE GONE: `not.l (%a0)` is
-  ## rejected by `m68k-elf-as -mcpu=5307` and `4690` is not an instruction
-  ## `m68k-elf-objdump -m m68k:5307` decodes, so the operand mask is `{Dn}`
-  ## and every other addressing mode traps.
+  ## NOT.L Dn. THE MEMORY FORMS OF THE 68000 ARE GONE, AND THE MANUAL IS WHAT
+  ## SAYS SO. MCF5307 User's Manual Table 3-12, "One Operand Instruction
+  ## Execution Times", page 3-27: the `not.l` row carries `Dx` in the `<EA>`
+  ## column, `1(0/0)` under `Rn`, and A DASH under every one of `(An)`,
+  ## `(An)+`, `-(An)`, `(d16,An)`, `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`. The
+  ## `clr.l` and `tst.l` rows directly above and below it carry times in those
+  ## same columns, so the dashes are this row's and not the table's.
+  ## `m68k-elf-as -mcpu=5307` agrees: it rejects `not.l (%a0)`. So the operand
+  ## mask is `{Dn}` and every other addressing mode traps.
+  ##
+  ## DO NOT CITE OBJDUMP HERE. An earlier revision said `4690` is not an
+  ## instruction `m68k-elf-objdump -m m68k:5307` decodes. IT DECODES IT, as
+  ## `notl %d0` - measured - which is a laxity of that disassembler and not a
+  ## fact about the part: `4690` has mode 010 (address-register indirect) in
+  ## its low six bits, which `-m m68k:68000` prints correctly as `notl %a0@`.
+  ## The conclusion is unchanged; only its ground is.
   if d.size != 4'u8:
     return trap(ctx)
   if not eaIsLegalFor(opNot, d.ea):
@@ -218,13 +316,22 @@ proc execNot(ctx: MCF5307Ctx; d: Decoded): uint32 =
 proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## One bit operation, in either of its two forms.
   ##
-  ## THE OPERAND WIDTH DECIDES THE BIT NUMBER'S MODULUS AND THE WIDTH OF THE
-  ## ACCESS, AND IT IS ONE DECISION. A data register operand is 32 bits and
-  ## the bit number is taken modulo 32; every memory operand is 8 bits and the
-  ## number is taken modulo 8 AND THE ACCESS IS ONE BYTE. A core that read or
-  ## wrote a longword in memory here would answer a different question and
-  ## would also disturb the three bytes beside the operand; the conformance
-  ## corpus seeds those three bytes with distinct values and asserts them.
+  ## THE OPERAND WIDTH DECIDES THE WIDTH OF THE ACCESS, AND THE MANUAL GIVES
+  ## THE TWO WIDTHS. A data register operand is 32 bits and every memory
+  ## operand is 8 bits AND THE ACCESS IS ONE BYTE - the "8,32" of Table 3-7's
+  ## OPERAND SIZE column, which carries that pair for all four bit operations
+  ## and for no other instruction in this group. A core that read or wrote a
+  ## longword in memory here would answer a different question and would also
+  ## disturb the three bytes beside the operand; the conformance corpus seeds
+  ## those three bytes with distinct values and asserts them.
+  ##
+  ## THE MODULUS BELOW IS A CHOICE AND NOT A CITATION. Taking the bit number
+  ## modulo the operand width - 32 for a register, 8 for memory - is what this
+  ## core does with a number that does not fit, and NO PASSAGE IN THE USER'S
+  ## MANUAL STATES IT. It is uncertainty 5 in this module's header, which
+  ## says why Figure 3-8's `MODULO (OFFSET)` annotation does not settle it.
+  ## Nothing asserts it: the corpus asks for no bit number outside the range
+  ## its operand holds.
   ##
   ## THE STATIC FORM IS NARROWER THAN THE DYNAMIC ONE. `eaBitStatic` is its
   ## mask and the measurement behind it is beside that constant; the dynamic
@@ -249,18 +356,24 @@ proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # `eaResolve` returns a reference a later write can reach, so it refuses
   # every operand that cannot be written: the PC-relative pair, the immediate
   # and the reserved mode-7 encodings. That is CORRECT FOR BSET, BCLR AND BCHG
-  # and WRONG FOR BTST, whose mask is `eaDataAddressing` and which admits all
-  # three of the readable mode-7 sub-variants. Measured: `btst %d1,(4,%pc)`
-  # (`033a 0004`) and `btst %d1,#5` (`033c 0005`) both assemble on
-  # `-mcpu=5307`, and both halted with `fault` while this procedure resolved
-  # every operand through `eaResolve`.
+  # and WRONG FOR BTST, whose mask is `eaBitDynamic` and which admits the two
+  # PC-RELATIVE sub-variants. Measured: `btst %d1,(4,%pc)` (`033a 0004`) and
+  # `btst %d1,(4,%pc,%d2)` (`033b 2804`) both assemble on `-mcpu=5307`, and
+  # both halted with `fault` while this procedure resolved every operand
+  # through `eaResolve`.
+  #
+  # THE IMMEDIATE IS NOT ONE OF THEM. `eaBitDynamic` excludes it, so the mask
+  # check above refuses `btst %d1,#5` before either evaluator is reached. See
+  # that constant in `decode_types.nim` for the manual rows behind it, and
+  # uncertainty 4 in this module's header for what would overturn it.
   #
   # THE FIX IS HERE AND NOT IN `eaResolve`. Widening that procedure would let
   # a WRITE reach a PC-relative or an immediate operand, and the three bit
   # operations that write are not the only callers it has. BTST never writes,
   # so it reads through `eaRead`, which serves every mode its mask admits.
-  # `tests/t_logic.nim` asserts both halves: that BTST reaches those operands
-  # and that BSET, BCLR and BCHG still refuse them.
+  # `tests/t_logic.nim` asserts all three halves: that BTST reaches the
+  # PC-relative operands, that it refuses the immediate, and that BSET, BCLR
+  # and BCHG refuse all three.
   var value: uint32
   if d.op == opBtst:
     value = eaRead(ctx, d.ea, d.size)
@@ -302,10 +415,18 @@ proc execShift(ctx: MCF5307Ctx; d: Decoded): uint32 =
     return trap(ctx)
   if d.size != 4'u8:
     return trap(ctx)
-  # A REGISTER COUNT IS TAKEN MODULO 64 and an immediate one is 1 to 8. The
-  # modulus is a property of the silicon's shift unit and not of the operand
-  # width, so a count of 40 shifts a 32-bit register 40 times and leaves zero
-  # rather than shifting it 8.
+  # AN IMMEDIATE COUNT IS 1 TO 8, which the encoding itself fixes. A REGISTER
+  # COUNT IS TAKEN MODULO 64 - AND THAT NUMBER IS A CHOICE, NOT A CITATION.
+  # Table 3-7 gives the four shifts as `X/C <- (Dy << Dx) <- 0` and the two
+  # right-hand forms and STATES NO MODULUS, and no other passage of the
+  # User's Manual does either. It is uncertainty 6 in this module's header.
+  #
+  # What the choice means, so that a reader can see what would change: the
+  # modulus is treated as a property of the shift unit rather than of the
+  # operand width, so a count of 40 shifts a 32-bit register 40 times and
+  # leaves zero rather than shifting it 8. NOTHING ASSERTS IT - no case in
+  # the corpus or in `tests/t_logic.nim` uses a count above eight, so modulo
+  # 64, modulo 256 and no reduction at all are indistinguishable here.
   let count = if d.regOperand: regD(ctx, d.destReg) and 63'u32
               else: uint32(d.imm)
   let toLeft = d.op == opAsl or d.op == opLsl

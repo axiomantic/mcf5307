@@ -467,7 +467,7 @@
     {
       "encoding": [
         "0800",
-        "0029"
+        "0009"
       ],
       "expected": {
         "mem": [],
@@ -483,14 +483,14 @@
           "sr": 10015
         }
       },
-      "instruction": "btst #41,%d0",
+      "instruction": "btst #9,%d0",
       "mnemonic": "btst",
-      "name": "btst_l_bit_number_is_modulo_32"
+      "name": "btst_l_bit_number_above_a_byte"
     },
     {
       "encoding": [
         "0810",
-        "0009"
+        "0001"
       ],
       "expected": {
         "mem": [
@@ -548,9 +548,9 @@
           "sr": 10015
         }
       },
-      "instruction": "btst #9,(%a0)",
+      "instruction": "btst #1,(%a0)",
       "mnemonic": "btst",
-      "name": "btst_b_memory_bit_number_is_modulo_8"
+      "name": "btst_b_memory_operand_is_one_byte"
     },
     {
       "encoding": [
