@@ -26,8 +26,14 @@
 add_executable(t0_corpus_parses ${PROJECT_SOURCE_DIR}/conformance/parse_check.cpp)
 target_compile_features(t0_corpus_parses PRIVATE cxx_std_17)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    # `MCF5307_TEST_WARNING_RELAXATIONS` is the root list's probe result. It is
+    # empty for a standalone configure and for every compiler that does not
+    # know the diagnostic; it demotes ONLY a diagnostic a consumer's own flags
+    # produce, and never a warning in this project's source. See the root
+    # `CMakeLists.txt` for the measurement.
     target_compile_options(t0_corpus_parses PRIVATE
-        -Wall -Wextra -pedantic -Werror)
+        -Wall -Wextra -pedantic -Werror
+        ${MCF5307_TEST_WARNING_RELAXATIONS})
 endif()
 add_test(NAME t0_corpus_parses
     COMMAND t0_corpus_parses "${PROJECT_SOURCE_DIR}/conformance/corpus")
@@ -65,8 +71,10 @@ target_include_directories(mcf5307_conformance PRIVATE
 target_link_libraries(mcf5307_conformance PRIVATE mcf5307)
 target_compile_features(mcf5307_conformance PRIVATE cxx_std_17)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    # See `t0_corpus_parses` above and the root `CMakeLists.txt`.
     target_compile_options(mcf5307_conformance PRIVATE
-        -Wall -Wextra -pedantic -Werror)
+        -Wall -Wextra -pedantic -Werror
+        ${MCF5307_TEST_WARNING_RELAXATIONS})
 endif()
 
 set(MCF5307_CONFORMANCE_CORPUS "${PROJECT_SOURCE_DIR}/conformance/corpus")
