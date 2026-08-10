@@ -98,7 +98,7 @@ abi_end_case()
 # Case 3. The stub is compiled as C, linked with the C assertions, and run.
 # Each case compiles its OWN copy of the stub, so that neither case can fail
 # because of a step the other one owns.
-abi_begin_case("case 3: the C surface links against the stub and finds eighteen")
+abi_begin_case("case 3: the C surface links against the stub and runs")
 abi_step("${ABI_C_COMPILER}" -std=c11 ${abi_flags} "-I${ABI_INCLUDE_DIR}"
          -c -o "${ABI_WORK_DIR}/abi_stub_for_c.o" "${ABI_SRC_DIR}/abi_stub.c")
 abi_step("${ABI_C_COMPILER}" -std=c11 ${abi_flags} "-I${ABI_INCLUDE_DIR}"
@@ -112,7 +112,7 @@ abi_end_case()
 # that link resolve, so a header that lost it fails here on a mangled name.
 # The two compilers are invoked separately because one command cannot carry
 # both `-std=c11` and `-std=c++17`.
-abi_begin_case("case 4: the C++ surface links against the stub and finds eighteen")
+abi_begin_case("case 4: the C++ surface links against the stub and runs")
 abi_step("${ABI_C_COMPILER}" -std=c11 ${abi_flags} "-I${ABI_INCLUDE_DIR}"
          -c -o "${ABI_WORK_DIR}/abi_stub_for_cpp.o" "${ABI_SRC_DIR}/abi_stub.c")
 abi_step("${ABI_CXX_COMPILER}" -std=c++17 ${abi_flags} "-I${ABI_INCLUDE_DIR}"

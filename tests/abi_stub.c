@@ -38,14 +38,23 @@
  * about a `static` name the contract never declared.
  *
  * WHAT THIS FILE CANNOT DO ON ITS OWN. A link error needs a reference as well
- * as a definition. `t0_abi_header.c` and `t0_abi_header.cpp` take EIGHTEEN
- * addresses each, from a fixed list of their own, and neither one names
+ * as a definition. `t0_abi_header.c` and `t0_abi_header.cpp` take their
+ * addresses from a fixed list of their own, and neither one names
  * `mcf5307_set_reg`, `mcf5307_get_reg`, `mcf5307_halted` or
  * `mcf5307_faulted`. A rename of those four is therefore still caught by
  * nothing in `t0_abi_header`, whatever this file defines. That gap belongs to
- * those two files and is not this one's to close. `tests/abi_smoke.cpp` does
- * take the address of all twenty-two, through `tests/abi_smoke_symbols.inc`,
- * and step 4a holds that list against the contract in both directions.
+ * those two files and is not this one's to close.
+ *
+ * THE FOUR NAMES ARE WRITTEN HERE AND THE SIZE OF THAT LIST IS NOT. A name is
+ * falsifiable against the two files that hold it - `grep -c mcf5307_halted
+ * tests/t0_abi_header.c` answers this paragraph. A count answers nothing about
+ * itself: it is a third number beside the header and the code, and it falls
+ * behind them both, which is exactly what the word `eighteen` did above.
+ *
+ * `tests/abi_smoke.cpp` does take the address of EVERY published name, through
+ * `tests/abi_smoke_symbols.inc`, and step 4a holds that list against the
+ * contract in both directions. That gate is what keeps the word `every` true,
+ * and it is why no number is written beside it.
  */
 
 #include <stddef.h>
