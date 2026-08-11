@@ -286,11 +286,49 @@ add_test(NAME t_checks_on
 # ---------------------------------------------------------------------------
 # `t_ea_masks` - the decoder and effective-address legality masks.
 #
-# One registered name, and each case can fail:
+# ONE REGISTERED NAME, AND EVERY CASE CAN FAIL.
 #
-#   `exec` runs a NOP fetch and returns a non-zero cycle count, driving
-#   `mcf5307_create`/`mcf5307_reset`/`mcf5307_exec`/`mcf5307_destroy`
-#   through the real ABI against a board that answers `MCF5307_BUS_OK`.
+# THE CASE COUNT AND THE OPCODE ROSTER ARE DELIBERATELY NOT WRITTEN DOWN HERE.
+# This block used to name FIFTEEN cases over a hand-maintained list of four
+# opcodes, and that hand-maintained list is precisely the defect
+# `tests/t_ea_masks.nim` was rewritten to abolish: an opcode that gained a
+# legality mask went SILENTLY UNCOVERED instead of LOUDLY MISSING, and the
+# stated count went stale without anything turning red. A count restated here
+# would decay the same silent way. The program prints its own count and its own
+# attribution figure on the summary line the driver below matches, and THAT
+# LINE IS THE LIVE FIGURE. In case order:
+#
+#   FIRST  `exec` runs a NOP fetch and returns a non-zero cycle count - the
+#      assertion that moved here from CPU-3 (W3-7). Drives
+#      `mcf5307_create`/`mcf5307_reset`/`mcf5307_exec`/`mcf5307_destroy`
+#      through the real ABI against a board that answers `MCF5307_BUS_OK`.
+#   THEN  EA legality, ENUMERATED OVER `Operation` AND NOT OVER A ROSTER OF
+#      OPCODE NAMES. Every operation whose `eaLegalityFor` mask is NON-EMPTY
+#      carries FOUR assertions: the mask REJECTS an illegal mode cited from the
+#      MCF5307 User's Manual and never derived from the mask itself, the mask
+#      ACCEPTS a legal mode, the executor RUNS the legal operand, and the
+#      executor TRAPS the illegal one. Every operation whose mask is EMPTY
+#      carries ONE assertion instead - that no stale coverage entry names it.
+#      Both directions are therefore red-on-drift: an operation that gains a
+#      mask with no coverage entry fails in the wave that adds it, and an entry
+#      whose mask has gone empty fails as a stale entry.
+#   LAST  the decoder recognizes each of a handful of implemented opcodes from
+#      a representative word, so the legality assertions are attached to the
+#      code that runs and not to a table the decoder never reads.
+#
+# THE TRAP IS NOT EQUALLY ATTRIBUTABLE FOR EVERY OPERATION, AND THE SUMMARY
+# LINE SAYS SO RATHER THAN LETTING A BARE COUNT IMPLY OTHERWISE. A minority of
+# operations carry a mask WHOSE COMPLEMENT THE MACHINE LAYER ALREADY REFUSES -
+# the reserved mode-7 encodings, which `machine.nim`'s `eaAddr` and `eaRead`
+# fault on independently of any mask, and the `(d16,PC)` destination of ADDQ
+# and SUBQ, whose `eaResolve` accepts exactly the two mode-7 encodings the mask
+# admits and faults on every other. For those the trap is real but cannot be
+# attributed to the guard: deleting the guard leaves a MACHINE-LAYER FALLBACK
+# to fault in its place, so the case stays GREEN; `tests/t_ea_masks.nim` marks
+# each such entry `discriminating: false`, and the first assertion is what
+# covers a widened mask for them. The program prints `<N> of <M> operations
+# attribute the refusal to their own guard` beside the case count. Read that
+# figure from the run and not from this comment.
 #
 #   EA legality, with the positive control and the negative control for
 #   every opcode the decoder recognizes that carries an effective-address
@@ -776,6 +814,21 @@ add_test(NAME t_move
 # declared mask - which admits the PC-relative pair - and the executor is
 # invisible there.
 #
+# AND NO REGISTERED TEST ENTERED `logic.nim` AT ALL BEFORE THIS ONE.
+# `t_ea_masks` HAS SINCE BEEN REWRITTEN TO ENUMERATE OVER `Operation`, so it
+# now enters `logicFamily` for every logic operation carrying a legality mask -
+# BUT IT ENTERS THROUGH THE EFFECTIVE-ADDRESS DOOR ALONE. It asserts that a
+# legal operand runs and that an illegal one traps whole, and it asserts
+# NOTHING about the COMPUTED RESULT of a legal run and NOTHING about the
+# ENCODING of any logic word - it hand-builds its `Decoded` objects, and the
+# six words it does put through `decodeWord` are NOP, MOVE, ADDQ, SUBQ, LEA and
+# MOVEQ, not one logic opcode among them. Its `opBtst` entry offers `Dn` and
+# `An` and no other mode, so the PC-relative and immediate operands named above
+# are never presented to it. That leaves both defects above out of its reach
+# and leaves this file's reason to exist unchanged. (It does assert a cycle
+# count and the status register, but only as part of `traps whole`: a non-zero
+# count for the legal run and zero cycles with an unchanged SR for the trap.)
+# `t_move` and `t_alu` cover their own groups.
 # `tests/t_logic.nim` gives the case list and the measurement behind every
 # encoding it names.
 #
