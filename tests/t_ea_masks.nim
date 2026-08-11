@@ -12,9 +12,27 @@
 ## each assertion, and what a reader of the CODE needs in order to change it.
 ##
 ## THE COVERAGE DOMAIN IS THE LEGALITY TABLE ITSELF, AND THAT IS THE WHOLE
-## POINT OF THE FILE. `eaLegalityFor` names FORTY-SEVEN operations across
-## fifteen `of` arms, and the `Check:` line of CPU-6 claims a trap for at least
-## one illegal mode for EACH implemented opcode.
+## POINT OF THE FILE. `eaLegalityFor` spreads its operations across SIXTEEN
+## `of` arms, and the `Check:` line of CPU-6 claims a trap for at least one
+## illegal mode for EACH implemented opcode.
+##
+## THAT ARM COUNT IS HAND-MAINTAINED AND NOTHING CHECKS IT. It read "fifteen"
+## until 2026-08-11, when the multiply-and-divide size split added the
+## sixteenth arm and no run went red. It is kept because it tells a reader how
+## large the table is, and it is LABELLED because this project has measured
+## eleven stale hand-written counts, three of them created inside fixes for
+## other stale counts. Nothing here can derive it: an `of` arm is a syntactic
+## property of another module with no runtime witness, and a count recovered
+## by reading that module's TEXT would go silently wrong rather than red the
+## first time the file grew a second `case` statement - which is the failure
+## this label exists to avoid repeating.
+##
+## THE OPERATION COUNT IS NOT HAND-MAINTAINED AND IS DELIBERATELY ABSENT FROM
+## THIS SENTENCE, which named FORTY-SEVEN of them until the same date. The
+## summary line at the foot of this file counts the domain in the run that
+## prints it, and the driver reds when an operation joins the domain without a
+## coverage entry, so the figure is available from a run and no copy of it is
+## kept here to go stale.
 ##
 ## THE MECHANISM OF THE MISS IS WORTH MORE THAN THE ARITHMETIC. When `SWAP`
 ## was implemented, adding `opSwap` to `eaLegalityFor` did not turn this file
@@ -983,6 +1001,125 @@ block:
   checkDetail(uncited.len == 0,
     "every `coverage` row cites a manual table for its `illegal` mode",
     "these do not: " & $uncited)
+
+# ---------------------------------------------------------------------------
+# (12) THE MULTIPLY AND DIVIDE CARRY TWO MASKS, ONE PER SIZE, AND THE FOUR
+# `coverage` ROWS ABOVE CANNOT SEE THE SPLIT. Those rows cite the `An` row of
+# Table 3-5, which is dashed at BOTH sizes, so widening or narrowing either
+# mask anywhere else leaves all four green. This block is the guard for the
+# split itself.
+#
+# WHAT COLLAPSING THE ARM ACTUALLY REDS IS A QUARTER OF THIS BLOCK, AND AN
+# EARLIER REVISION OF THIS COMMENT CLAIMED ALL OF IT. It read "each assertion
+# below goes RED on the single data-alterable mask the four operations shared
+# before it existed". Measured 2026-08-11: with the arm collapsed back to that
+# single mask, 24 of the 96 cell assertions below go RED and the other 72
+# PASS.
+#
+# THE 24 ARE THE SAME SIX IN EACH OF THE FOUR OPERATIONS: the `.L` REJECTS
+# half of `(d8,Ay,Xi)`, `(xxx).W` and `(xxx).L`, and the `.W` accepts half of
+# `(d16,PC)`, `(d8,PC,Xi)` and `#<data>`.
+#
+# THE OTHER 72 CANNOT SEE THE COLLAPSE, for one reason in two shapes. The ten
+# shared-mode assertions and the two `Ay` assertions of each operation name
+# cells where the collapsed mask AGREES with both real masks, and A MODE BOTH
+# MASKS SHARE IS NOT EVIDENCE ABOUT THE SPLIT. Within each of the six split
+# pairs the collapsed mask matches exactly ONE column - the three modes it
+# holds satisfy the word half, the three it lacks satisfy the long half - so
+# one assertion of every pair reds and its partner passes. The four
+# size-less-overload assertions at the foot of the block stay green as well,
+# because both sides of that equality read whatever single mask the arm
+# returns.
+#
+# THE SOURCE IS THE CFPRM AND THE ASSEMBLER, AND THEY AGREE ON ALL 96 CELLS.
+# The "Instruction Fields (Word)" addressing-mode table is on folios 4-32
+# (DIVS), 4-34 (DIVU), 4-55 (MULS) and 4-57 (MULU); the "Instruction Fields
+# (Longword)" one is on folios 4-32, 4-34, 4-56 (MULS) and 4-58 (MULU). The
+# DIVS and DIVU entries carry both tables on one continuation folio; the MULS
+# and MULU entries split them, the word table under the WORD instruction
+# format on the first folio and the longword table alone on the continuation
+# page. Read as RENDERED IMAGES:
+#
+#   WORD     every mode but `Ay` - `(xxx).W`, `(xxx).L`, `#<data>`,
+#            `(d16,PC)` and `(d8,PC,Xi)` all carry a mode and register value.
+#            That is the manual's DATA class exactly.
+#   LONGWORD `Dy`, `(Ay)`, `(Ay)+`, `-(Ay)` and `(d16,Ay)` ONLY. `Ay`,
+#            `(d8,Ay,Xi)` and EVERY mode-7 sub-variant are dashed.
+#
+# `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726) was offered all twelve
+# modes of all eight forms and answered the same 96 cells.
+#
+# `(d8,Ay,Xi)` IS THE CELL THE BRIEF FOR THIS WORK DID NOT NAME. The long form
+# was described as data-alterable-minus-absolute; the manual and the assembler
+# both drop the INDEXED mode as well, so the long mask is narrower again than
+# that. It is asserted here because a mask corrected only as far as the
+# description would still be wrong and nothing else would say so.
+
+block:
+  const
+    wordSize = 2'u8
+    longSize = 4'u8
+    mulDivOps = [opMulu, opMuls, opDivu, opDivs]
+    # The five modes both sizes share, as the LONGWORD table prints them.
+    sharedLegal = [
+      ("Dy", EA(mode: eaDn, reg: 0)),
+      ("(Ay)", EA(mode: eaAnInd, reg: 1)),
+      ("(Ay)+", EA(mode: eaAnPost, reg: 1)),
+      ("-(Ay)", EA(mode: eaAnPre, reg: 1)),
+      ("(d16,Ay)", EA(mode: eaAnDisp, reg: 1))]
+    # The modes the WORD table carries and the LONGWORD table dashes.
+    wordOnly = [
+      ("(d8,Ay,Xi)", EA(mode: eaAnIndex, reg: 1)),
+      ("(xxx).W", EA(mode: eaMode7, reg: uint8(ord(ea7AbsW)))),
+      ("(xxx).L", EA(mode: eaMode7, reg: uint8(ord(ea7AbsL)))),
+      ("(d16,PC)", EA(mode: eaMode7, reg: uint8(ord(ea7PCDisp)))),
+      ("(d8,PC,Xi)", EA(mode: eaMode7, reg: uint8(ord(ea7PCIndex)))),
+      ("#<data>", EA(mode: eaMode7, reg: uint8(ord(ea7Imm))))]
+
+  for op in mulDivOps:
+    let name = $op
+
+    # The five shared modes are legal at BOTH sizes. This is the positive
+    # control: a mask emptied at either size fails here rather than passing
+    # the negatives below by vacuous refusal.
+    for (label, ea) in sharedLegal:
+      check(eaIsLegalFor(op, ea, wordSize),
+        name & ".W: the mask accepts " & label &
+        " (folio word table: a mode and register value)")
+      check(eaIsLegalFor(op, ea, longSize),
+        name & ".L: the mask accepts " & label &
+        " (folio longword table: a mode and register value)")
+
+    # THE SPLIT. Each of these six is LEGAL at the word size and ILLEGAL at
+    # the long one, and the single shared mask could satisfy at most one
+    # column of the pair.
+    for (label, ea) in wordOnly:
+      check(eaIsLegalFor(op, ea, wordSize),
+        name & ".W: the mask accepts " & label &
+        " (folio word table carries it; the longword table dashes it)")
+      check(not eaIsLegalFor(op, ea, longSize),
+        name & ".L: the mask REJECTS " & label &
+        " (folio longword table: a dash)")
+
+    # `Ay` is dashed on BOTH tables, which is what the four `coverage` rows
+    # above cite. Repeated here at both sizes so that the split cannot be
+    # implemented by widening the word mask to EVERY mode.
+    let ay = EA(mode: eaAn, reg: 1)
+    check(not eaIsLegalFor(op, ay, wordSize),
+      name & ".W: the mask REJECTS Ay (folio word table: a dash)")
+    check(not eaIsLegalFor(op, ay, longSize),
+      name & ".L: the mask REJECTS Ay (folio longword table: a dash)")
+
+  # THE SIZE-LESS ENTRY POINT ANSWERS THE LONG MASK, and that is asserted
+  # rather than left to the reader of `decode_types.nim`. Every one of the
+  # twenty-odd call sites that does not pass a size reaches this overload, so
+  # which of the two masks it picks is a property the tests must pin: the
+  # narrow one traps a word operand it should have allowed, which is loud,
+  # and the wide one executes a long operand the silicon rejects, which is
+  # silent.
+  for op in mulDivOps:
+    check(eaLegalityFor(op) == eaLegalityFor(op, 4'u8),
+      $op & ": the size-less `eaLegalityFor` answers the LONGWORD mask")
 
 # ---------------------------------------------------------------------------
 # (6) The decoder recognizes each implemented opcode from a representative

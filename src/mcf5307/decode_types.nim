@@ -361,9 +361,13 @@ const table313LastRowOnPage328* = "mulu"
   ## 3-29. An earlier revision of the `opAnd, opOr` arm below put both rows on
   ## the first page, which is why the break is recorded.
 
-proc eaLegalityFor*(op: Operation): EaLegality =
+proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
   ## The legality mask the opcode carries. An opcode with no effective
   ## address carries the empty mask.
+  ##
+  ## THE SIZE IS PART OF THE KEY FOR THE MULTIPLY AND DIVIDE ALONE. Every
+  ## other operation on this part has one operand class across every size it
+  ## has, and ignores the parameter.
   case op
   of opMove, opMovea:
     # These take data addressing, which admits every mode including the
@@ -381,9 +385,52 @@ proc eaLegalityFor*(op: Operation): EaLegality =
     # `addq.l #1,(4,%pc)`. An address register IS allowed, which is why this
     # is `alterable` and not `data alterable`.
     EaLegality(modes: eaAlterableModes, ea7: eaAlterable7)
-  of opClr, opMulu, opMuls, opDivu, opDivs:
+  of opClr:
     # Data alterable: no An, no PC-relative, no immediate.
     EaLegality(modes: eaDataAlterableModes, ea7: eaDataAlterable7)
+  of opMulu, opMuls, opDivu, opDivs:
+    # THE ONE ARM WHOSE MASK DEPENDS ON THE SIZE, AND IT DEPENDS ON IT IN BOTH
+    # DIRECTIONS. Until this split the four shared the data-alterable mask
+    # above, which is too NARROW for the word form and too WIDE for the long
+    # one; no single class is right for both and the arm cannot be collapsed.
+    #
+    #   WORD  the manual's DATA class - but THE COMPOSITION BELOW NAMES NO SET
+    #         CALLED "DATA", and reading it as one is the `eaControl7` mistake
+    #         waiting to happen again. It pairs `eaDataAlterableModes`, which
+    #         is every mode but `An`, with `eaData7`, and it is that SECOND
+    #         half that puts the PC-relative pair and the immediate back IN,
+    #         because the word form only READS its source. The mode lists of
+    #         DATA and DATA ALTERABLE are identical on this part and the two
+    #         classes differ in the mode-7 sub-variants alone, so the
+    #         alterable mode set is the correct half of a DATA mask rather
+    #         than a near-miss. `eaDataAddressing` above is that same pair
+    #         under a name and carries the manual rows behind it.
+    #   LONG  narrower than data alterable: the indexed mode and the whole of
+    #         mode 7 are out, leaving five modes.
+    #
+    # BOTH COLUMNS ARE MEASURED TWICE. The CFPRM prints an "Instruction Fields
+    # (Word)" table on folios 4-32 (DIVS), 4-34 (DIVU), 4-55 (MULS) and 4-57
+    # (MULU), and an "Instruction Fields (Longword)" table on folios 4-32,
+    # 4-34, 4-56 (MULS) and 4-58 (MULU). The DIVS and DIVU entries carry both
+    # tables on one continuation folio; the MULS and MULU entries split them,
+    # the word table under the WORD instruction format on the first folio and
+    # the longword table alone on the continuation page. Read as RENDERED
+    # IMAGES. `m68k-elf-as -mcpu=5307` (GNU Binutils
+    # 2.47.20260726) was offered all twelve modes of all eight forms and
+    # agreed on every cell. `tests/t_ea_masks.nim` block (12) asserts the
+    # split. COLLAPSING THIS ARM TO THE SINGLE SHARED MASK REDS 24 OF THAT
+    # BLOCK'S 96 CELL ASSERTIONS AND LEAVES 72 GREEN - measured 2026-08-11;
+    # an earlier revision of this line said EACH of them reds. The block
+    # names which 24 and why the rest cannot see the collapse.
+    #
+    # THE SIZE REACHING HERE IS `Decoded.size`, which `decodeLogicLine` sets
+    # to 2 for the single-word forms and `decodeWord` sets to 4 for the
+    # two-word ones. A size this arm does not expect takes the LONG mask,
+    # which refuses more than it allows.
+    if size == 2'u8:
+      EaLegality(modes: eaDataAlterableModes, ea7: eaData7)
+    else:
+      EaLegality(modes: eaMulDivLongModes, ea7: eaMulDivLong7)
   of opAnd, opOr:
     # THE SOURCE OF THE `<ea> op Dn -> Dn` DIRECTION of AND and OR. It reads
     # and does not write, so the class is DATA addressing: no An, and the
@@ -527,14 +574,38 @@ proc eaLegalityFor*(op: Operation): EaLegality =
   else:
     EaLegality(modes: {}, ea7: {})
 
-proc eaIsLegalFor*(op: Operation; ea: EA): bool =
-  ## True when `ea` is inside the opcode's legality mask. An opcode with no
-  ## effective address carries the empty mask and no mode is inside it.
+proc eaLegalityFor*(op: Operation): EaLegality =
+  ## The legality mask of an operation whose class does not depend on the
+  ## size. It answers the LONGWORD mask, which for the multiply and divide is
+  ## the NARROWER of the two.
+  ##
+  ## THE NARROW MASK IS THE SAFE DEFAULT AND THE CHOICE IS DELIBERATE. A call
+  ## site that should have passed a size and did not gets a mask that REFUSES
+  ## operands the word form allows, so the instruction traps and the omission
+  ## is loud. The opposite default would ACCEPT operands the long form
+  ## forbids, and a permissive core executing an addressing mode the silicon
+  ## rejects is the exact failure design section 6.1 exists to prevent - it
+  ## would be silent.
+  eaLegalityFor(op, 4'u8)
+
+proc eaIsLegalFor*(op: Operation; ea: EA; size: uint8): bool =
+  ## True when `ea` is inside the opcode's legality mask at `size`. An opcode
+  ## with no effective address carries the empty mask and no mode is inside
+  ## it.
   ##
   ## THE EMPTY MASK IS THE TEST, and it used to be a second list of the
   ## operations `eaLegalityFor` names. Two lists drift: an operation added to
   ## the table above and forgotten here would have had every effective
   ## address rejected, which reads as "the opcode is strict" and is really
   ## "the opcode is unreachable".
-  let legality = eaLegalityFor(op)
+  let legality = eaLegalityFor(op, size)
   result = legality.modes != {} and isEaLegal(legality, ea)
+
+proc eaIsLegalFor*(op: Operation; ea: EA): bool =
+  ## The size-less form, for the call sites whose operand class does not
+  ## depend on the size. It FORWARDS rather than repeating the emptiness test
+  ## above, for the reason that test's own comment gives: two copies drift,
+  ## and a second copy of this one would drift SILENTLY, because a mask that
+  ## wrongly answered "legal" here reads at the call site exactly like a mask
+  ## that is right.
+  eaIsLegalFor(op, ea, 4'u8)

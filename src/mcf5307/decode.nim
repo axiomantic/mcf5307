@@ -100,10 +100,32 @@ proc decodeLogicLine(word: uint16; opBase: Operation): Decoded =
   ##
   ##   opmode 000 001 010   `<ea> op Dn -> Dn`, byte word long
   ##   opmode 100 101 110   `Dn op <ea> -> <ea>`, byte word long
-  ##   opmode 011 111       the WORD multiply and divide of the 68000, which
-  ##                        this part does not have. They are NOT decoded, so
-  ##                        the encodings stay illegal rather than become a
-  ##                        logic operation of the wrong size.
+  ##   opmode 011 111       THE WORD MULTIPLY AND DIVIDE, WHICH THIS PART HAS.
+  ##                        Line 1100 gives MULU.W (011) and MULS.W (111);
+  ##                        line 1000 gives DIVU.W (011) and DIVS.W (111).
+  ##
+  ## THE WORD MULTIPLY AND DIVIDE ARE REAL INSTRUCTIONS ON THIS PART AND AN
+  ## EARLIER REVISION OF THIS PROCEDURE RETURNED `opIllegal` FOR BOTH OPMODES.
+  ## The comment justifying that read "the WORD multiply and divide of the
+  ## 68000, which this part does not have". Two independent oracles contradict
+  ## it and no oracle supports it:
+  ##
+  ##   - `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726) assembles
+  ##     `mulu.w %d1,%d0` to `c0c1`, `muls.w %d1,%d0` to `c1c1`,
+  ##     `divu.w %d1,%d0` to `80c1` and `divs.w %d1,%d0` to `81c1`. It rejects
+  ##     the two DIVIDES at `-mcpu=5206` and `-mcpu=5202` - the parts with no
+  ##     divide unit, which is a fact about those parts and not about the word
+  ##     size - and accepts the two multiplies everywhere.
+  ##   - CFPRM folios 4-31 (DIVS), 4-33 (DIVU), 4-55 (MULS) and 4-57 (MULU)
+  ##     each carry `Attributes: Size = word, longword` and print an
+  ##     `Instruction Format: (Word)` diagram that IS the encoding above.
+  ##     MCF5307 User's Manual Table 3-13 p.3-28 times `mulu.w`, `muls.w`,
+  ##     `divu.w` and `divs.w` across all eight effective-address columns.
+  ##
+  ## THE SIZE IS 2 AND THAT IS WHAT THE EXECUTOR BRANCHES ON. The word form is
+  ## ONE word: Dx is bits 11..9 of this word and signedness is bits 8..6,
+  ## where the long form takes both from a second word it fetches. An executor
+  ## that fetched an extension word here would consume the NEXT INSTRUCTION.
   ##
   ## THE BYTE AND WORD OPMODES ARE DECODED AND THEY CARRY THEIR OWN SIZE.
   ## They are not instructions on this part - `m68k-elf-as -mcpu=5307` rejects
@@ -121,7 +143,15 @@ proc decodeLogicLine(word: uint16; opBase: Operation): Decoded =
   ## rejects it. EXG is one of CPU-13's negative cases and it traps either way.
   let opmode = (word shr 6) and 0x7'u16
   if opmode == 3'u16 or opmode == 7'u16:
-    return Decoded(op: opIllegal)
+    # THE LINE SELECTS THE FAMILY AND THE OPMODE SELECTS THE SIGN. `opBase` is
+    # the only thing distinguishing the two lines here, exactly as it is for
+    # the logic opmodes below.
+    let signed = opmode == 7'u16
+    let op =
+      if opBase == opAnd: (if signed: opMuls else: opMulu)
+      else: (if signed: opDivs else: opDivu)
+    return Decoded(op: op, ea: decodeEa(word), size: 2'u8,
+                   destReg: uint8((word shr 9) and 0x7'u16))
   Decoded(op: opBase, ea: decodeEa(word),
           destReg: uint8((word shr 9) and 0x7'u16),
           size: opmodeSize(opmode), dirToEa: opmode >= 4'u16)

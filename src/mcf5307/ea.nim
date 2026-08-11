@@ -82,13 +82,48 @@ const
                        eaAnIndex, eaMode7}
   eaAlterable7* = {ea7AbsW, ea7AbsL}
 
-  # Data alterable: alterable without An. CLR takes this class, and so does
-  # the source of the ColdFire 32-bit multiply and divide - measured against
-  # `m68k-elf-as -mcpu=5307`, which rejects `clr.l %a0`, `mulu.l %a0,%d1`,
-  # `mulu.l (4,%pc),%d1` and `mulu.l #5,%d1` and accepts the rest.
+  # Data alterable: alterable without An. CLR takes this class - measured
+  # against `m68k-elf-as -mcpu=5307`, which rejects `clr.l %a0` and accepts
+  # every other mode this set names.
+  #
+  # THE MULTIPLY AND DIVIDE DO NOT TAKE THIS CLASS AT EITHER SIZE, AND AN
+  # EARLIER REVISION OF THIS COMMENT SAID THEY DID. It read "and so does the
+  # source of the ColdFire 32-bit multiply and divide ... rejects `clr.l %a0`,
+  # `mulu.l %a0,%d1`, `mulu.l (4,%pc),%d1` and `mulu.l #5,%d1` AND ACCEPTS THE
+  # REST". The last four words were wrong: the assembler also rejects
+  # `mulu.l 0x1234.w,%d1`, `mulu.l 0x12345678,%d1` and
+  # `mulu.l (4,%a0,%d2),%d1`. The two masks those four operations really carry
+  # are below.
   eaDataAlterableModes* = {eaDn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp,
                            eaAnIndex, eaMode7}
   eaDataAlterable7* = {ea7AbsW, ea7AbsL}
+
+  # THE SOURCE OF THE LONGWORD MULTIPLY AND DIVIDE. Narrower than data
+  # alterable by the INDEXED mode and by the whole of mode 7, so its `ea7` set
+  # is empty and no mode-7 sub-variant can be legal.
+  #
+  # CFPRM folios 4-32, 4-34, 4-56 and 4-58, "Instruction Fields (Longword)":
+  # each prints a mode and register value for `Dy`, `(Ay)`, `(Ay)+`, `-(Ay)`
+  # and `(d16,Ay)` and a DASH for `Ay`, `(d8,Ay,Xi)`, `(xxx).W`, `(xxx).L`,
+  # `#<data>`, `(d16,PC)` and `(d8,PC,Xi)`. `m68k-elf-as -mcpu=5307` answers
+  # the same twelve cells for all four operations.
+  #
+  # `eaMulDivLong7` IS DEAD FOR THESE OPERATIONS. IT RECORDS THE FOLIOS; IT
+  # CONSTRAINS NOTHING, AND IT MUST NOT BE READ AS A CHECKED MASK. `isEaLegal`
+  # below returns at `ea.mode notin leg.modes` before it reaches `ea7`, and
+  # the mode set on the line above has no `eaMode7`, so the ONLY read of the
+  # field anywhere in the core - `EA7(ea.reg) in leg.ea7` - is unreachable
+  # through this mask. The emptiness is therefore not what rejects a mode-7
+  # operand here; the absent `eaMode7` is.
+  #
+  # MEASURED 2026-08-11, AND BOTH HALVES ARE INDIVIDUALLY UNGUARDED. Widening
+  # this set to all EIGHT mode-7 sub-variants leaves the whole suite green.
+  # Adding `eaMode7` to the mode set while leaving this set empty ALSO leaves
+  # the whole suite green. Only widening BOTH is caught, and then 28 cases
+  # red. A reader who takes either line alone for a tested constraint has the
+  # same wrong picture that the defect this split was written to close had.
+  eaMulDivLongModes* = {eaDn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp}
+  eaMulDivLong7*: set[EA7] = {}
 
   # Memory alterable: data alterable without Dn. It is the destination class
   # of the `Dn op <ea> -> <ea>` direction of ADD and SUB; the Dn and An
