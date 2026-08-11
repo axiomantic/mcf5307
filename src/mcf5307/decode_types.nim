@@ -355,6 +355,12 @@ const eaLeaPeaTarget* = EaLegality(
   ## there, which is the case that fails if this constant is ever wired to
   ## the MOVEM arm of `eaLegalityFor`.
 
+const table313LastRowOnPage328* = "mulu"
+  ## The last opcode row Table 3-13 prints on page 3-28; `or.l`, `ori.l`,
+  ## `sub.l`, `subi.l`, `subq.l` and `subx.l` are on the continuation page
+  ## 3-29. An earlier revision of the `opAnd, opOr` arm below put both rows on
+  ## the first page, which is why the break is recorded.
+
 proc eaLegalityFor*(op: Operation): EaLegality =
   ## The legality mask the opcode carries. An opcode with no effective
   ## address carries the empty mask.
@@ -387,9 +393,8 @@ proc eaLegalityFor*(op: Operation): EaLegality =
     # and `c0bc 0000 0005` disassembles as `andl #5,%d0` on
     # `m68k-elf-objdump -m m68k:5307`.
     #
-    # THE TABLE SPANS TWO PAGES AND AN EARLIER REVISION PUT BOTH ROWS ON THE
-    # FIRST. Page 3-28 ends after the `mulu.l` row; `or.l`, `ori.l`, `sub.l`,
-    # `subi.l`, `subq.l` and `subx.l` are on 3-29.
+    # THE TABLE SPANS TWO PAGES; `table313LastRowOnPage328` above records where
+    # the break falls.
     #
     # The OTHER direction of AND and OR writes memory and carries
     # `eaMemoryAlterable`, which this table cannot hold because the direction
