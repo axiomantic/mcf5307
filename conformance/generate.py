@@ -1007,6 +1007,173 @@ CASES = {
                                   "sr": SR_BASE | CCR_N | CCR_X}},
         },
 
+        # ---------------------------------- THE WORD MULTIPLY AND DIVIDE
+        #
+        # THE CORPUS CARRIED NO WORD-FORM CASE OF ANY KIND before these, for
+        # the same reason the core had no word form: `decodeLogicLine` called
+        # opmodes 011 and 111 of lines 1000 and 1100 illegal. They are real
+        # instructions - `m68k-elf-as -mcpu=5307` assembles all four, CFPRM
+        # folios 4-31, 4-33, 4-55 and 4-57 each print a "(Word)" instruction
+        # format, and MCF5307 User's Manual Table 3-13 p.3-28 times all four.
+        #
+        # EVERY EXPECTED VALUE BELOW IS DERIVED FROM THE FOLIOS AND NOT FROM
+        # THIS PROJECT'S CORE. This generator takes only the ENCODING from the
+        # assembler; the register and status words are hand-written here, so
+        # a case that merely echoed the implementation would ratify it.
+        {
+            # THE UPPER WORD OF EITHER OPERAND IS IGNORED ON INPUT. CFPRM
+            # folio 4-57: "A register operand is the low-order word; the upper
+            # word of the register is ignored." Both registers carry a
+            # distinctive upper half, so a core multiplying the full 32 bits
+            # writes neither 12 nor anything close to it.
+            "name": "mulu_w_ignores_the_upper_words",
+            "mnemonic": "mulu.w",
+            "instruction": "mulu.w %d0,%d1",
+            "initial": {"regs": {"d0": 0xDEAD0003, "d1": 0xBEEF0004,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 12, "sr": SR_BASE | CCR_X}},
+        },
+        {
+            # THE WORD FORM CONSUMES NO EXTENSION WORD, AND THE PROGRAM
+            # COUNTER IS THE ONLY PLACE THAT SHOWS IT. The word form is ONE
+            # instruction word - Dx is bits 11..9 of that word and the
+            # signedness is bits 8..6 - where the long form takes both from a
+            # second word it fetches. `src/mcf5307/decode.nim` states the
+            # hazard ("an executor that fetched an extension word here would
+            # consume the NEXT INSTRUCTION") and nothing asserted it.
+            #
+            # WITH A REGISTER SOURCE THERE IS NOTHING ELSE TO SEE. A memory
+            # source would move the operand address and change the product
+            # too, so the over-fetch would be caught by the register value
+            # and the PC would prove nothing on its own. `%d0` reads no
+            # memory, so an executor that fetched an extension word here
+            # writes the SAME 42 into `d1` and the SAME status word, and
+            # leaves the program counter at EXEC_BASE + 4 instead of
+            # EXEC_BASE + 2. That single difference is the whole case.
+            #
+            # `d0` IS PINNED IN THE EXPECTED STATE as the control: the source
+            # register must survive unchanged, so an executor that wrote the
+            # product to the wrong register cannot pass by leaving `d1`
+            # alone. `mulu.w %d0,%d1` is `c2c0`, two bytes.
+            "name": "mulu_w_reg_source_takes_no_extension_word",
+            "mnemonic": "mulu.w",
+            "instruction": "mulu.w %d0,%d1",
+            "initial": {"regs": {"pc": EXEC_BASE, "d0": 6, "d1": 7,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d0": 6, "d1": 42, "pc": EXEC_BASE + 2,
+                                  "sr": SR_BASE | CCR_X}},
+        },
+        {
+            # ALL 32 BITS OF THE PRODUCT ARE SAVED - folio 4-57's own
+            # sentence - so a 16x16 product keeps its whole width. A core that
+            # wrote only the low word gives 0x0000FFFD.
+            "name": "muls_w_sign_extends_both_word_operands",
+            "mnemonic": "muls.w",
+            "instruction": "muls.w %d0,%d1",
+            "initial": {"regs": {"d0": 0xFFFF, "d1": 3, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0xFFFFFFFD,
+                                  "sr": SR_BASE | CCR_N | CCR_X}},
+        },
+        {
+            # THE SAME TWO WORDS UNSIGNED. The signed bit is UNOBSERVABLE in
+            # the longword multiply - the low 32 bits of a 32x32 product do
+            # not depend on how the sign bits are read - and it IS observable
+            # here, because a 16x16 product is kept whole. This pair is what
+            # separates the two opcodes on the result itself.
+            "name": "mulu_w_of_the_same_two_words_is_unsigned",
+            "mnemonic": "mulu.w",
+            "instruction": "mulu.w %d0,%d1",
+            "initial": {"regs": {"d0": 0xFFFF, "d1": 3, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0x0002FFFD, "sr": SR_BASE | CCR_X}},
+        },
+        {
+            # ONE LONGWORD HOLDING TWO HALVES. CFPRM folios 4-31 and 4-33:
+            # "the 16-bit quotient is in the lower word and the 16-bit
+            # remainder is in the upper word of the destination".
+            "name": "divu_w_packs_remainder_high_and_quotient_low",
+            "mnemonic": "divu.w",
+            "instruction": "divu.w %d0,%d1",
+            "initial": {"regs": {"d0": 3, "d1": 17, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0x00020005, "sr": SR_BASE | CCR_X}},
+        },
+        {
+            # THE REMAINDER TAKES THE DIVIDEND'S SIGN - "Note that the sign of
+            # the remainder is the same as the sign of the dividend" - and the
+            # quotient truncates TOWARD ZERO. -17 / 3 is -5 remainder -2. A
+            # core using a flooring division gives -6 remainder +1, which is
+            # 0x0001FFFA, and fails on both halves at once.
+            "name": "divs_w_remainder_takes_the_dividend_sign",
+            "mnemonic": "divs.w",
+            "instruction": "divs.w %d0,%d1",
+            "initial": {"regs": {"d0": 3, "d1": 0xFFFFFFEF, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0xFFFEFFFB,
+                                  "sr": SR_BASE | CCR_N | CCR_X}},
+        },
+        {
+            # N COMES FROM THE QUOTIENT AND NOT FROM THE LONGWORD WRITTEN.
+            # Folios 4-31 and 4-33: "N ... set if the QUOTIENT is negative".
+            # -17 / -5 is quotient +3 with remainder -2, so the register's bit
+            # 31 is SET while the quotient is positive; a core taking N from
+            # the register it just wrote reports the remainder's sign and
+            # fails on the status word alone.
+            "name": "divs_w_n_comes_from_the_quotient_not_bit31",
+            "mnemonic": "divs.w",
+            "instruction": "divs.w %d0,%d1",
+            "initial": {"regs": {"d0": 0xFFFB, "d1": 0xFFFFFFEF,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0xFFFE0003, "sr": SR_BASE | CCR_X}},
+        },
+        {
+            # THE WORD OVERFLOW. "An overflow occurs if the quotient is larger
+            # than a 16-bit (.W) ... signed integer", and "if overflow is
+            # detected, the destination register is unaffected". 65536 / 1 is
+            # 65536, which no 16-bit signed integer holds. SR_DIRTY enters
+            # with N, Z and C SET, so this pins V set, N and Z CLEARED, C
+            # cleared and X carried through.
+            "name": "divs_w_overflow_clears_n_and_z",
+            "mnemonic": "divs.w",
+            "instruction": "divs.w %d0,%d1",
+            "initial": {"regs": {"d0": 1, "d1": 0x00010000, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0x00010000,
+                                  "sr": SR_BASE | CCR_V | CCR_X}},
+        },
+        {
+            # THIS CASE IS AN INFERENCE AND NOT A MEASUREMENT, AND IT IS THE
+            # ONLY ONE IN THE DIVIDE PATH. The folios say an overflow occurs
+            # if the quotient is "larger than a 16-bit (.W) signed integer"
+            # and do not define "larger" at the asymmetric end of the range.
+            # -32768 IS a 16-bit signed integer, so under the reading taken by
+            # `src/mcf5307/alu.nim` - which marks it at the comparison that
+            # decides it - -65536 / 2 does NOT overflow and writes a quotient
+            # of 0x8000 with a remainder of 0.
+            #
+            # THE OTHER READING is that "larger" means larger in MAGNITUDE
+            # than the largest positive value, under which this case would set
+            # V and leave d1 at 0xFFFF0000. WHAT WOULD SETTLE IT: this exact
+            # case run on silicon or a hardware model, or an erratum. IF THIS
+            # CORPUS IS EVER RUN AGAINST REAL HARDWARE, THIS IS THE CASE TO
+            # READ FIRST.
+            "name": "divs_w_quotient_of_minus_32768_does_not_overflow",
+            "mnemonic": "divs.w",
+            "instruction": "divs.w %d0,%d1",
+            "initial": {"regs": {"d0": 2, "d1": 0xFFFF0000, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0x00008000,
+                                  "sr": SR_BASE | CCR_N | CCR_X}},
+        },
+        {
+            # THE WORD FORM'S OPERAND CLASS IS WIDER THAN THE LONG FORM'S. An
+            # immediate source is dashed on every "(Longword)" table (folios
+            # 4-32, 4-34, 4-56, 4-58) and carried on every "(Word)" table
+            # (folios 4-32, 4-34, 4-55, 4-57),
+            # and `m68k-elf-as -mcpu=5307` agrees: it assembles
+            # `mulu.w #5,%d1` and rejects `mulu.l #5,%d1`.
+            "name": "mulu_w_takes_an_immediate_source",
+            "mnemonic": "mulu.w",
+            "instruction": "mulu.w #5,%d1",
+            "initial": {"regs": {"d1": 4, "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 20, "sr": SR_BASE | CCR_X}},
+        },
+
         # -------------------------------------------- DIVS, REMU and REMS
         #
         # THE CORPUS CARRIED NO DIVIDE CASE OF ANY KIND before these three, so

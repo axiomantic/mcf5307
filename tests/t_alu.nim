@@ -35,7 +35,9 @@
 ## User's Manual, and from this project's own measurements with the pinned
 ## cross assembler.
 
+import std/strutils
 import mcf5307/cpu
+import mcf5307/decode
 import mcf5307/decode_types
 import mcf5307/ea
 import mcf5307/machine
@@ -567,6 +569,288 @@ block:
     1, 17'u32, "divs.l by zero traps")
 
 # ---------------------------------------------------------------------------
+# MULU.W, MULS.W, DIVU.W and DIVS.W - THE SINGLE-WORD FORMS.
+#
+# THIS PART HAS THEM AND AN EARLIER REVISION OF `decodeLogicLine` SAID IT DID
+# NOT. That procedure answered `opIllegal` for opmodes 011 and 111 of lines
+# 1000 and 1100, with the comment "the WORD multiply and divide of the 68000,
+# which this part does not have". Both oracles contradict it:
+#
+#   - `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726) assembles
+#     `mulu.w %d1,%d0` to `c0c1`, `muls.w %d1,%d0` to `c1c1`,
+#     `divu.w %d1,%d0` to `80c1` and `divs.w %d1,%d0` to `81c1`. It REJECTS
+#     the two divides at `-mcpu=5206` and `-mcpu=5202`, which is the part
+#     without a divide unit and not the absence of a word form.
+#   - CFPRM folios 4-55 (MULS) and 4-57 (MULU) give the word form
+#     `16 x 16 -> 32`; folios 4-31 (DIVS) and 4-33 (DIVU) give
+#     `32-bit Dx / 16-bit <ea>y -> (16r:16q) in Dx`. Each folio prints an
+#     `Instruction Format: (Word)` diagram that IS the encoding above.
+#
+# THE WORD FORM CARRIES NO EXTENSION WORD. The long form is the 68020 two-word
+# encoding whose second word names the registers and selects signedness; the
+# word form names Dx in bits 11..9 of the opcode and selects signedness in
+# bits 8..6. An executor that fetches an extension word unconditionally
+# consumes the NEXT INSTRUCTION as its own operand register field.
+
+block:
+  # (a) THE DECODER. Asserted directly rather than inferred from a mask,
+  # because a decoder that still answers `opIllegal` makes every execution
+  # case below fail for a reason that says nothing about the executor.
+  #
+  # The tuple carries the SIZE, which is what separates the word form from the
+  # long one and what the executor branches on, and `destReg`, which is where
+  # the word form's Dx comes from.
+  for (word, wantOp, name) in [
+      (0xC0C1'u16, opMulu, "mulu.w %d1,%d0"),
+      (0xC1C1'u16, opMuls, "muls.w %d1,%d0"),
+      (0x80C1'u16, opDivu, "divu.w %d1,%d0"),
+      (0x81C1'u16, opDivs, "divs.w %d1,%d0")]:
+    let dec = decodeWord(word)
+    let got = (op: dec.op, size: dec.size, destReg: dec.destReg)
+    let want = (op: wantOp, size: 2'u8, destReg: 0'u8)
+    check(got == want,
+      "decodes " & name & " (0x" & word.toHex(4) & ") as a WORD form", $got,
+      $want)
+
+block:
+  # (b) MULU.W. `mulu.w %d0,%d1` is `c2c0`.
+  expectD(runIns([0xC2C0'u16], d = [3'u32, 4, 0, 0, 0, 0, 0, 0]),
+    1, 12'u32, srBase, "mulu.w 3 * 4 = 12")
+
+  # THE UPPER WORD OF EITHER OPERAND IS IGNORED ON INPUT. CFPRM folio 4-57:
+  # "A register operand is the low-order word; the upper word of the register
+  # is ignored." Both registers carry a distinctive upper half here, so a core
+  # that multiplied the full 32 bits gives neither 12 nor anything near it.
+  expectD(runIns([0xC2C0'u16],
+                 d = [0xDEAD0003'u32, 0xBEEF0004'u32, 0, 0, 0, 0, 0, 0]),
+    1, 12'u32, srBase,
+    "mulu.w IGNORES the upper word of the source AND of the destination")
+
+  # ALL 32 BITS OF THE PRODUCT ARE SAVED - folio 4-57's own sentence. A core
+  # that wrote only the low word, or that widened a 16-bit result, gives
+  # 0x0000FFFD here.
+  expectD(runIns([0xC2C0'u16], d = [0xFFFF'u32, 3, 0, 0, 0, 0, 0, 0]),
+    1, 0x0002FFFD'u32, srBase,
+    "mulu.w 0xFFFF * 3 = 0x2FFFD - all 32 bits of the product are written")
+
+  # (c) MULS.W. `muls.w %d0,%d1` is `c3c0`. THE SAME TWO WORDS, SIGNED: 0xFFFF
+  # is -1 as a word, so the product is -3.
+  #
+  # THE SIGNED BIT IS OBSERVABLE HERE AND IT IS NOT IN THE LONG FORM. The
+  # block above records why MULS.L and MULU.L are indistinguishable on this
+  # part - the low 32 bits of a 32x32 product do not depend on how the sign
+  # bits are read, and V is always cleared. A 16x16 product is kept WHOLE in
+  # 32 bits, so the sign extension of the two word operands survives into the
+  # result and this pair separates the two opcodes on the RESULT itself.
+  expectD(runIns([0xC3C0'u16], d = [0xFFFF'u32, 3, 0, 0, 0, 0, 0, 0]),
+    1, 0xFFFFFFFD'u32, srBase or ccrN,
+    "muls.w -1 * 3 = -3, sign-extending both word operands")
+
+  expectD(runIns([0xC3C0'u16],
+                 d = [0xDEADFFFF'u32, 0xBEEF0003'u32, 0, 0, 0, 0, 0, 0]),
+    1, 0xFFFFFFFD'u32, srBase or ccrN,
+    "muls.w IGNORES the upper word of the source AND of the destination")
+
+  # V IS ALWAYS CLEARED ON THIS PART, and the word form inherits that from the
+  # same condition-code table the long form reads: folios 4-55 and 4-57 print
+  # ONE table each, above the word Instruction Format, and neither
+  # continuation page (4-56, 4-58) carries a second. THE CASE ENTERS WITH V
+  # SET so that a core which never writes V fails it too.
+  expectD(runIns([0xC2C0'u16], d = [0'u32, 5, 0, 0, 0, 0, 0, 0],
+                 sr = srBase or ccrV),
+    1, 0'u32, srBase or ccrZ, "mulu.w by zero CLEARS V and sets Z")
+  expectD(runIns([0xC3C0'u16], d = [0'u32, 5, 0, 0, 0, 0, 0, 0],
+                 sr = srBase or ccrV),
+    1, 0'u32, srBase or ccrZ, "muls.w by zero CLEARS V and sets Z")
+
+block:
+  # (d) DIVU.W. `divu.w %d0,%d1` is `82c0`. THE RESULT IS ONE LONGWORD HOLDING
+  # TWO HALVES: folios 4-31 and 4-33 both read "the 16-bit quotient is in the
+  # lower word and the 16-bit remainder is in the upper word of the
+  # destination".
+  expectD(runIns([0x82C0'u16], d = [3'u32, 17, 0, 0, 0, 0, 0, 0]),
+    1, 0x00020005'u32, srBase,
+    "divu.w 17 / 3 writes quotient 5 low and remainder 2 high")
+
+  # THE DIVISOR IS A WORD. The same operands read as a longword divisor give
+  # 17 / 0x0000FFFD = 0, so a core reading four bytes writes 0x00110000 and a
+  # core reading two writes the quotient of 17 / 65533, which is also 0 - the
+  # two agree, which is why the SEPARATING case is the zero-divisor one below
+  # and not this one. This case pins the layout when the quotient is zero:
+  # the whole dividend survives as the remainder.
+  expectD(runIns([0x82C0'u16], d = [0xFFFD'u32, 17, 0, 0, 0, 0, 0, 0]),
+    1, 0x00110000'u32, srBase or ccrZ,
+    "divu.w 17 / 65533 = 0 remainder 17, and Z comes from the QUOTIENT")
+
+  # (e) DIVS.W. `divs.w %d0,%d1` is `83c0`. 0xFFFD is -3 as a word, and the
+  # quotient truncates TOWARD ZERO: 17 / -3 is -5 and not -6.
+  expectD(runIns([0x83C0'u16], d = [0xFFFD'u32, 17, 0, 0, 0, 0, 0, 0]),
+    1, 0x0002FFFB'u32, srBase or ccrN,
+    "divs.w 17 / -3 = -5 remainder +2, truncating toward zero")
+
+  # THE REMAINDER TAKES THE DIVIDEND'S SIGN - folios 4-31 and 4-33: "Note that
+  # the sign of the remainder is the same as the sign of the dividend." A core
+  # using a FLOORING division gives quotient -6 and remainder +1 here, which
+  # is 0x0001FFFA and fails on both halves at once.
+  expectD(runIns([0x83C0'u16],
+                 d = [3'u32, 0xFFFFFFEF'u32, 0, 0, 0, 0, 0, 0]),
+    1, 0xFFFEFFFB'u32, srBase or ccrN,
+    "divs.w -17 / 3 = -5 remainder -2: the remainder takes the DIVIDEND's sign")
+
+  # N COMES FROM THE QUOTIENT AND NOT FROM THE LONGWORD WRITTEN. Here the
+  # remainder's high word has bit 15 set while the quotient is positive, so a
+  # core taking N from bit 31 of the written longword sets N and fails.
+  expectD(runIns([0x83C0'u16],
+                 d = [0xFFFB'u32, 0xFFFFFFEF'u32, 0, 0, 0, 0, 0, 0]),
+    1, 0xFFFE0003'u32, srBase,
+    "divs.w -17 / -5 = +3 remainder -2: N comes from the QUOTIENT, not bit 31")
+
+block:
+  # (f) THE WORD-FORM OVERFLOW. Folios 4-31 and 4-33: "An overflow occurs if
+  # the quotient is larger than a 16-bit (.W) or 32-bit (.L) signed integer"
+  # (unsigned, on DIVU). "If overflow is detected, the destination register is
+  # unaffected."
+  #
+  # EACH CASE ENTERS WITH N, Z AND C SET AND X SET, so it pins all five bits:
+  # V set, N and Z CLEARED ("Cleared if overflow is detected"), C cleared
+  # ("Always cleared") and X carried through ("Not affected").
+  expectD(runIns([0x82C0'u16], d = [1'u32, 0x00100000'u32, 0, 0, 0, 0, 0, 0],
+                 sr = srBase or ccrN or ccrZ or ccrC or ccrX),
+    1, 0x00100000'u32, srBase or ccrV or ccrX,
+    "divu.w whose quotient exceeds 16 bits sets V and writes nothing")
+
+  expectD(runIns([0x83C0'u16], d = [1'u32, 0x00010000'u32, 0, 0, 0, 0, 0, 0],
+                 sr = srBase or ccrN or ccrZ or ccrC or ccrX),
+    1, 0x00010000'u32, srBase or ccrV or ccrX,
+    "divs.w whose quotient exceeds 15 bits and a sign sets V and writes nothing")
+
+  # THE POSITIVE BOUNDARY IS NOT AMBIGUOUS. +32767 is the largest 16-bit
+  # signed integer, so a quotient of +32767 must NOT overflow and one of
+  # +32768 must. 65534 / 2 is 32767 and 65536 / 2 is 32768.
+  expectD(runIns([0x83C0'u16], d = [2'u32, 0x0000FFFE'u32, 0, 0, 0, 0, 0, 0]),
+    1, 0x00007FFF'u32, srBase,
+    "divs.w whose quotient is exactly +32767 does NOT overflow")
+  expectD(runIns([0x83C0'u16], d = [2'u32, 0x00010000'u32, 0, 0, 0, 0, 0, 0],
+                 sr = srBase or ccrX),
+    1, 0x00010000'u32, srBase or ccrV or ccrX,
+    "divs.w whose quotient is exactly +32768 DOES overflow")
+
+  # THE NEGATIVE BOUNDARY IS THE ONE INFERENCE IN THIS WHOLE PATH, and
+  # `alu.nim` marks it at the line that decides it. -32768 IS a 16-bit signed
+  # integer, so under the folios' wording - "larger than a 16-bit (.W) signed
+  # integer" - it does not overflow. -65536 / 2 is -32768 and -65538 / 2 is
+  # -32769, which is one step outside and overflows under every reading.
+  #
+  # IF THE INFERENCE IS WRONG, THIS PAIR IS WHERE IT SHOWS IN THIS FILE: the
+  # first case goes red and the second stays green. Measured 2026-08-11 by
+  # moving the boundary in `alu.nim` to the other reading - exactly one case
+  # in `t_alu` reds and it is the labelled one. IT IS NOT THE ONLY PLACE IN
+  # THE SUITE: the conformance corpus carries the same boundary as
+  # `divs_w_quotient_of_minus_32768_does_not_overflow` and reds beside it.
+  expectD(runIns([0x83C0'u16], d = [2'u32, 0xFFFF0000'u32, 0, 0, 0, 0, 0, 0]),
+    1, 0x00008000'u32, srBase or ccrN,
+    "divs.w whose quotient is exactly -32768 does NOT overflow [INFERENCE]")
+  expectD(runIns([0x83C0'u16], d = [2'u32, 0xFFFEFFFE'u32, 0, 0, 0, 0, 0, 0],
+                 sr = srBase or ccrX),
+    1, 0xFFFEFFFE'u32, srBase or ccrV or ccrX,
+    "divs.w whose quotient is -32769 DOES overflow")
+
+block:
+  # (g) DIVISION BY ZERO IS A TRAP. CFPRM folios 4-31 and 4-33: "An attempt to
+  # divide by zero results in a divide-by-zero exception and NO REGISTERS ARE
+  # AFFECTED." Table 11-1 on folio 11-2 assigns it VECTOR 5 at offset 0x014,
+  # of class Fault - the PC of the faulting instruction. THERE IS NO EXCEPTION
+  # MODEL YET (CPU-14 owns the vector table), so the core halts with `fault`,
+  # which is the channel the long form already uses.
+  expectTrapD(runIns([0x82C0'u16], d = [0'u32, 17, 0, 0, 0, 0, 0, 0]),
+    1, 17'u32, "divu.w by zero traps")
+  expectTrapD(runIns([0x83C0'u16], d = [0'u32, 17, 0, 0, 0, 0, 0, 0]),
+    1, 17'u32, "divs.w by zero traps")
+
+  # THE DIVISOR IS READ AS A WORD, AND THIS IS THE CASE THAT SAYS SO. The low
+  # word of the source is zero and its upper word is not, so a core reading
+  # four bytes divides by 0x00010000 and returns a quotient of 0 instead of
+  # trapping.
+  expectTrapD(runIns([0x82C0'u16],
+                     d = [0x00010000'u32, 17, 0, 0, 0, 0, 0, 0]),
+    1, 17'u32, "divu.w by a source whose LOW WORD is zero traps")
+  expectTrapD(runIns([0x83C0'u16],
+                     d = [0x00010000'u32, 17, 0, 0, 0, 0, 0, 0]),
+    1, 17'u32, "divs.w by a source whose LOW WORD is zero traps")
+
+block:
+  # (h) THE WORD FORM'S OPERAND CLASS IS WIDER THAN THE LONG FORM'S, and these
+  # cases execute the three modes that separate them. The CFPRM prints an
+  # "Instruction Fields (Word)" table on folios 4-32 (DIVS), 4-34 (DIVU),
+  # 4-55 (MULS) and 4-57 (MULU) and an "Instruction Fields (Longword)" table
+  # on folios 4-32, 4-34, 4-56 (MULS) and 4-58 (MULU) - the DIVS and DIVU
+  # entries carry both on one continuation folio, the MULS and MULU entries
+  # split them across the entry's two folios - and the word table carries
+  # `(xxx).W`, `(xxx).L`, `#<data>`, `(d16,PC)`
+  # and `(d8,PC,Xi)` where the longword table prints a dash for every one.
+  # `m68k-elf-as -mcpu=5307` agrees on all twelve modes of all eight forms.
+  #
+  # `mulu.w #5,%d1` is `c2fc 0005`.
+  expectD(runIns([0xC2FC'u16, 0x0005'u16], d = [0'u32, 4, 0, 0, 0, 0, 0, 0]),
+    1, 20'u32, srBase, "mulu.w takes an IMMEDIATE source")
+  # `divs.w #3,%d1` is `83fc 0003`.
+  expectD(runIns([0x83FC'u16, 0x0003'u16], d = [0'u32, 17, 0, 0, 0, 0, 0, 0]),
+    1, 0x00020005'u32, srBase, "divs.w takes an IMMEDIATE source")
+  # `mulu.w (4,%pc),%d1` is `c2fa 0004`. The PC-relative base is the address
+  # OF the displacement word - `machine.nim` says so at `fetchExt` - which is
+  # 0x102 here, so the operand word is at 0x106.
+  expectD(runIns([0xC2FA'u16, 0x0004'u16], d = [0'u32, 4, 0, 0, 0, 0, 0, 0],
+                 mem = @[(0x104'u32, 0x00000007'u32)]),
+    1, 28'u32, srBase, "mulu.w takes a PC-RELATIVE source")
+  # `mulu.w 0x200.w,%d1` is `c2f8 0200`.
+  expectD(runIns([0xC2F8'u16, 0x0200'u16], d = [0'u32, 4, 0, 0, 0, 0, 0, 0],
+                 mem = @[(0x200'u32, 0x00060000'u32)]),
+    1, 24'u32, srBase, "mulu.w takes an ABSOLUTE SHORT source")
+
+  # A MEMORY SOURCE IS READ TWO BYTES WIDE, AND THE DIVIDE NEEDS ITS OWN CASE
+  # FOR THAT. The `and 0xFFFF` narrowing inside each executor hides the read
+  # width for a DATA REGISTER source - `eaRead` hands back the whole register
+  # at either size - so only a MEMORY operand separates a two-byte read from a
+  # four-byte one. `divu.w 0x200.w,%d1` is `82f8 0200`; the seed puts the
+  # divisor in the HIGH half of the longword at 0x200, so a four-byte read
+  # yields 0x00030000, narrows to zero and TRAPS instead of dividing.
+  #
+  # THAT MUTATION DOES NOT NEED THIS CASE TO BE CAUGHT, AND AN EARLIER
+  # REVISION OF THIS COMMENT SAID IT DID. It read "Measured: with the divide's
+  # `eaRead` size mutated from 2 to 4 and this case absent, the whole suite
+  # stayed green. It is here because of that run." Measured 2026-08-11: with
+  # that mutation and this case absent the suite goes RED, on
+  # `divs.w takes an IMMEDIATE source` and `divs.w takes an INDIRECT source`.
+  # Both read their operand from outside a register - one from the
+  # instruction stream, one from memory - so both widen exactly the way this
+  # one does, and neither needs a seed in the high half to show it.
+  #
+  # IT EARNS ITS PLACE ON COVERAGE INSTEAD, WHICH IS A WEAKER CLAIM HONESTLY
+  # STATED. It is the only case in this file that runs DIVU.W - as against
+  # DIVS.W - over a source that is not a data register: every other `divu.w`
+  # here is `0x82C0`, a `Dn` source. Deleting it would leave the UNSIGNED word
+  # divide with no memory operand at any addressing mode. With it present the
+  # same mutation reds three cases rather than two, this one among them.
+  expectD(runIns([0x82F8'u16, 0x0200'u16], d = [0'u32, 17, 0, 0, 0, 0, 0, 0],
+                 mem = @[(0x200'u32, 0x00030000'u32)]),
+    1, 0x00020005'u32, srBase, "divu.w takes an ABSOLUTE SHORT source")
+  # `divs.w (%a0),%d1` is `83d0` - an indirect source, the commonest memory
+  # mode and one no word-form case above reaches.
+  expectD(runIns([0x83D0'u16], d = [0'u32, 17, 0, 0, 0, 0, 0, 0],
+                 a = [0x200'u32, 0, 0, 0, 0, 0, 0, 0],
+                 mem = @[(0x200'u32, 0xFFFD0000'u32)]),
+    1, 0x0002FFFB'u32, srBase or ccrN, "divs.w takes an INDIRECT source")
+
+  # AND AN ADDRESS REGISTER IS OUTSIDE BOTH TABLES. `mulu.w %a0,%d1` is
+  # `c2c8`; the `Ay` row is dashed on every one of the eight tables and the
+  # assembler rejects it at every size.
+  let o = runIns([0xC2C8'u16], d = [0'u32, 4, 0, 0, 0, 0, 0, 0],
+                 a = [7'u32, 0, 0, 0, 0, 0, 0, 0])
+  let got = (d1: o.d[1], fault: o.fault, halted: o.halted, cycles: o.cycles)
+  let want = (d1: 4'u32, fault: true, halted: true, cycles: 0'u32)
+  check(got == want, "mulu.w from an address register traps", $got, $want)
+
+# ---------------------------------------------------------------------------
 # The encodings this part does not have. Every one below was offered to
 # `m68k-elf-as -mcpu=5307` and rejected. A permissive core executes them and
 # hides a real firmware fault.
@@ -624,6 +908,38 @@ block:
   # mulu.l (4,%pc),%d1 - the multiply source admits no PC-relative mode.
   expectTrapD(runIns([0x4C3A'u16, 0x1000'u16, 0x0004'u16], d = two), 1, 2'u32,
     "mulu.l from a PC-relative source traps")
+  # THE LONG FORM IS NARROWER THAN DATA ALTERABLE, AND THESE TWO ARE THE
+  # DIFFERENCE. CFPRM folio 4-56's "Instruction Fields (Longword)" table
+  # dashes `(xxx).W`, `(xxx).L` AND `(d8,Ay,Xi)`, keeping only `Dy`, `(Ay)`,
+  # `(Ay)+`, `-(Ay)` and `(d16,Ay)`; folios 4-34, 4-58 and 4-32 print the same
+  # five for DIVU, MULU and DIVS. `m68k-elf-as -mcpu=5307` rejects
+  # `mulu.l 0x1234.w,%d1`, `mulu.l 0x12345678,%d1` and
+  # `mulu.l (4,%a0,%d2),%d1` and accepts the five.
+  #
+  # THE WORD FORM ADMITS BOTH OF THESE, which is why one mask cannot serve
+  # both sizes and `eaLegalityFor` takes the size.
+  #
+  # mulu.l 0x200.w,%d1 = 4c38 1000 0200.
+  expectTrapD(runIns([0x4C38'u16, 0x1000'u16, 0x0200'u16], d = two), 1, 2'u32,
+    "mulu.l from an ABSOLUTE SHORT source traps")
+  # mulu.l 0x00000200,%d1 = 4c39 1000 0000 0200.
+  expectTrapD(runIns([0x4C39'u16, 0x1000'u16, 0x0000'u16, 0x0200'u16],
+                     d = two), 1, 2'u32,
+    "mulu.l from an ABSOLUTE LONG source traps")
+  # mulu.l (4,%a0,%d2),%d1 = 4c30 1000 2004.
+  expectTrapD(runIns([0x4C30'u16, 0x1000'u16, 0x2004'u16], d = two,
+                     a = [0x200'u32, 0, 0, 0, 0, 0, 0, 0]), 1, 2'u32,
+    "mulu.l from an INDEXED source traps")
+  # divu.l 0x200.w,%d1 = 4c78 1001 0200 - the divide narrows identically.
+  #
+  # THE DIVISOR AT 0x200 IS NON-ZERO AND THAT IS LOAD-BEARING. `runIns` zeroes
+  # the board, so without the `mem` seed this case trapped on a DIVIDE BY ZERO
+  # and passed both before and after the mask was split - a green that said
+  # nothing about the operand class it names. Measured: it was the one case in
+  # this task's first red run that passed for the wrong reason.
+  expectTrapD(runIns([0x4C78'u16, 0x1001'u16, 0x0200'u16], d = two,
+                     mem = @[(0x200'u32, 4'u32)]), 1, 2'u32,
+    "divu.l from an ABSOLUTE SHORT source traps")
   # The 64-bit product form: bit 10 of the second word. It is a 68020
   # instruction and this part has only the 32-bit form.
   expectTrapD(runIns([0x4C00'u16, 0x1400'u16], d = two), 1, 2'u32,

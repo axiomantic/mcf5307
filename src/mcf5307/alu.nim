@@ -279,9 +279,53 @@ const
   mulDivSignedBit = 0x0800'u16   ## bit 11: MULS/DIVS rather than MULU/DIVU
   mulDivWideBit = 0x0400'u16     ## bit 10: the 68020 64-bit form
 
+proc execMulWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
+  ## MULU.W and MULS.W: `16 x 16 -> 32`, one instruction word, no extension.
+  ##
+  ## CFPRM folios 4-55 (MULS) and 4-57 (MULU), word form: "the multiplier and
+  ## multiplicand are both word operands, and the result is a longword
+  ## operand. A REGISTER OPERAND IS THE LOW-ORDER WORD; THE UPPER WORD OF THE
+  ## REGISTER IS IGNORED. ALL 32 BITS OF THE PRODUCT ARE SAVED in the
+  ## destination data register."
+  let src = eaRead(ctx, d.ea, 2)
+  if ctx.halted: return 0'u32
+  let dst = regD(ctx, d.destReg)
+  # BOTH OPERANDS ARE NARROWED TO 16 BITS BEFORE THE MULTIPLY. `eaRead`
+  # returns the WHOLE register for a `Dn` operand and leaves the narrowing to
+  # the caller - `machine.nim` says so at its declaration - and the
+  # destination is read with `regD`, which does no narrowing either. Without
+  # both masks a data-register source would multiply 32 bits by 16.
+  let srcW = uint16(src and 0xFFFF'u32)
+  let dstW = uint16(dst and 0xFFFF'u32)
+  # THE SIGNED BIT IS OBSERVABLE IN THIS FORM, UNLIKE THE LONG ONE BELOW. A
+  # 16x16 product is kept WHOLE in 32 bits, so the sign extension of the two
+  # word operands reaches the result; the long form keeps only the low 32 bits
+  # of a 32x32 product, where it cannot. `0xFFFF * 3` is `0x0002FFFD` unsigned
+  # and `0xFFFFFFFD` signed.
+  let res =
+    if d.op == opMuls:
+      cast[uint32](int32(cast[int16](srcW)) * int32(cast[int16](dstW)))
+    else:
+      uint32(srcW) * uint32(dstW)
+  setRegD(ctx, d.destReg, res)
+  # V AND C ARE CLEARED AND N AND Z COME FROM ALL 32 BITS, which is the same
+  # rule the long form uses and for the same reason: folios 4-55 and 4-57
+  # print ONE condition-code table each, above the WORD instruction format,
+  # and neither continuation page (4-56, 4-58) carries a second. The word
+  # table therefore governs both sizes.
+  setNzClearVc(ctx, res, 4)
+  # MCF5307 User's Manual Table 3-13 p.3-28, `muls.w`/`mulu.w <ea>,Dx`, the
+  # `Rn` column: `3(0/0)`. THIS CORE RETURNS ONE NOMINAL FIGURE PER FORM AND
+  # DOES NOT MODEL THE PER-OPERAND COLUMNS - the row also carries `6(1/0)` for
+  # the four memory modes, `7(1/0)` for `(d8,An,Xi*SF)`, `6(1/0)` for `xxx.wl`
+  # and `3(0/0)` for `#xxx`, and none of those is returned here.
+  3'u32
+
 proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
-  if not eaIsLegalFor(opMulu, d.ea):
+  if not eaIsLegalFor(d.op, d.ea, d.size):
     return trap(ctx)
+  if d.size == 2'u8:
+    return execMulWord(ctx, d)
   let ext = fetchExt(ctx)
   if ctx.halted: return 0'u32
   if (ext and mulDivWideBit) != 0'u16:
@@ -321,9 +365,113 @@ proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
   setNzClearVc(ctx, res, 4)
   10'u32
 
-proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
-  if not eaIsLegalFor(opDivu, d.ea):
+const divWordCycles = 20'u32
+  ## MCF5307 User's Manual Table 3-13 p.3-28, `divs.w`/`divu.w <ea>,Dx`, the
+  ## `Rn` column: `20(0/0)`. As with the multiply above, this core returns one
+  ## nominal figure per form and does not model the per-operand columns.
+
+proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
+  ## DIVU.W and DIVS.W: a 32-bit dividend in Dx over a 16-bit source, with
+  ## BOTH halves of the answer packed into Dx.
+  ##
+  ## CFPRM folios 4-31 (DIVS) and 4-33 (DIVU): "For a word-sized operation,
+  ## the destination operand is a longword and the source is a word; THE
+  ## 16-BIT QUOTIENT IS IN THE LOWER WORD AND THE 16-BIT REMAINDER IS IN THE
+  ## UPPER WORD of the destination. Note that THE SIGN OF THE REMAINDER IS THE
+  ## SAME AS THE SIGN OF THE DIVIDEND."
+  let src = eaRead(ctx, d.ea, 2)
+  if ctx.halted: return 0'u32
+  # THE DIVISOR IS THE LOW WORD AND THE MASK IS LOAD-BEARING. `eaRead` hands
+  # back the whole register for a `Dn` source, so without it a source of
+  # `0x00010000` would divide by 65536 instead of trapping on a zero divisor.
+  let divisor = uint16(src and 0xFFFF'u32)
+  if divisor == 0'u16:
+    # A DIVIDE BY ZERO IS EXCEPTION VECTOR 5 AT VECTOR OFFSET 0x014, of class
+    # Fault - CFPRM Table 11-1, "Exception Vector Assignments", folio 11-2,
+    # whose footnote adds "if the divide unit is not present (5202, 5204,
+    # 5206), vector 5 is reserved". Folios 4-31 and 4-33 add that NO REGISTERS
+    # ARE AFFECTED and that the stack frame points at the offending opcode.
+    #
+    # THERE IS NO EXCEPTION MODEL YET and CPU-14 owns the vector table, so
+    # this halts with `fault` - the channel the LONG form already uses and the
+    # one every illegal operand in this module uses. The vector is recorded
+    # here so that CPU-14 does not have to re-derive it.
     return trap(ctx)
+  let dividend = regD(ctx, d.destReg)
+  var quotient: uint32
+  var remainder: uint32
+  var overflowed: bool
+  if d.op == opDivs:
+    let a = int64(cast[int32](dividend))
+    let b = int64(cast[int16](divisor))
+    # Nim's `div` truncates toward zero and `mod` takes the sign of the
+    # DIVIDEND, which is exactly the pair the folios describe: 17 / -3 is -5
+    # with remainder +2, and -17 / 3 is -5 with remainder -2. A flooring
+    # division gives -6 and +1 for the second and fails both halves.
+    let q = a div b
+    # THE OVERFLOW BOUNDARY AT EXACTLY -32768 IS THE ONE INFERENCE IN THIS
+    # PATH, AND IT IS MARKED HERE BECAUSE THIS COMPARISON IS WHAT DECIDES IT.
+    #
+    # The folios say "An overflow occurs if the quotient is larger than a
+    # 16-bit (.W) or 32-bit (.L) signed integer" and do not define "larger"
+    # for the asymmetric end of the range. -32768 IS a 16-bit signed integer -
+    # it is the smallest one - so under the reading taken here it does NOT
+    # overflow, and the range test below is the plain two-sided one. The other
+    # available reading is that "larger" means larger in MAGNITUDE than the
+    # largest positive value, under which -32768 WOULD overflow.
+    #
+    # NOTHING IN THE CFPRM SETTLES IT AND NO ORACLE AVAILABLE HERE DOES
+    # EITHER: `m68k-elf-as` decides what ASSEMBLES, not what a quotient does
+    # at run time, and Table 3-13 times the instruction without saying what it
+    # computes. WHAT WOULD SETTLE IT is a run on silicon or on a hardware
+    # model - `divs.w` with a dividend of -65536 and a divisor of 2, reading V
+    # afterwards - or an erratum or a later revision of the folio that states
+    # the boundary. Until then this is a READING and not a measurement.
+    #
+    # `tests/t_alu.nim` brackets it: the -32768 case is labelled [INFERENCE]
+    # and its -32769 neighbour overflows under either reading, so a reversal
+    # reds the labelled case and leaves the neighbour green. Measured
+    # 2026-08-11 by moving this boundary to the other reading: it reds TWO
+    # cases across the suite and not one, because the conformance corpus
+    # carries the same boundary as
+    # `divs_w_quotient_of_minus_32768_does_not_overflow`. Both name it.
+    if q < -32768'i64 or q > 32767'i64:
+      overflowed = true
+    else:
+      quotient = uint32(cast[uint64](q) and 0xFFFF'u64)
+      remainder = uint32(cast[uint64](a mod b) and 0xFFFF'u64)
+  else:
+    let q = dividend div uint32(divisor)
+    # THE UNSIGNED BOUNDARY IS NOT AMBIGUOUS: the folio says "larger than a
+    # 16-bit (.W) ... unsigned integer" and 0xFFFF is that integer.
+    if q > 0xFFFF'u32:
+      overflowed = true
+    else:
+      quotient = q
+      remainder = dividend mod uint32(divisor)
+  if overflowed:
+    # THE DESTINATION IS UNAFFECTED - "If overflow is detected, the
+    # destination register is unaffected" - and the status word is fully
+    # determined: V set, C cleared ("Always cleared"), N and Z CLEARED
+    # ("Cleared if overflow is detected"), X untouched ("Not affected"). This
+    # is the same rule and the same line the long form uses above.
+    ctx.sr = (ctx.sr and not (ccrC or ccrN or ccrZ)) or ccrV
+    return divWordCycles
+  setRegD(ctx, d.destReg, (remainder shl 16) or quotient)
+  # N AND Z COME FROM THE QUOTIENT AND THE SIZE IS 2, NOT FROM THE LONGWORD
+  # WRITTEN. The folios read "N ... set if the QUOTIENT is negative" and
+  # "Z ... set if the QUOTIENT is zero", and the quotient is 16 bits wide
+  # here, so N is bit 15 of it. A core taking N from bit 31 of the register it
+  # just wrote would report the REMAINDER's sign; `-17 / -5` is quotient +3
+  # with remainder -2 and separates the two.
+  setNzClearVc(ctx, quotient, 2)
+  divWordCycles
+
+proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
+  if not eaIsLegalFor(d.op, d.ea, d.size):
+    return trap(ctx)
+  if d.size == 2'u8:
+    return execDivWord(ctx, d)
   let ext = fetchExt(ctx)
   if ctx.halted: return 0'u32
   if (ext and mulDivWideBit) != 0'u16:

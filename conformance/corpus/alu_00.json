@@ -324,6 +324,239 @@
     },
     {
       "encoding": [
+        "c2c0"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 12,
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 3735879683,
+          "d1": 3203334148,
+          "sr": 10015
+        }
+      },
+      "instruction": "mulu.w %d0,%d1",
+      "mnemonic": "mulu.w",
+      "name": "mulu_w_ignores_the_upper_words"
+    },
+    {
+      "encoding": [
+        "c2c0"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 6,
+          "d1": 42,
+          "pc": 65538,
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 6,
+          "d1": 7,
+          "pc": 65536,
+          "sr": 10015
+        }
+      },
+      "instruction": "mulu.w %d0,%d1",
+      "mnemonic": "mulu.w",
+      "name": "mulu_w_reg_source_takes_no_extension_word"
+    },
+    {
+      "encoding": [
+        "c3c0"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 4294967293,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 65535,
+          "d1": 3,
+          "sr": 10015
+        }
+      },
+      "instruction": "muls.w %d0,%d1",
+      "mnemonic": "muls.w",
+      "name": "muls_w_sign_extends_both_word_operands"
+    },
+    {
+      "encoding": [
+        "c2c0"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 196605,
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 65535,
+          "d1": 3,
+          "sr": 10015
+        }
+      },
+      "instruction": "mulu.w %d0,%d1",
+      "mnemonic": "mulu.w",
+      "name": "mulu_w_of_the_same_two_words_is_unsigned"
+    },
+    {
+      "encoding": [
+        "82c0"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 131077,
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 3,
+          "d1": 17,
+          "sr": 10015
+        }
+      },
+      "instruction": "divu.w %d0,%d1",
+      "mnemonic": "divu.w",
+      "name": "divu_w_packs_remainder_high_and_quotient_low"
+    },
+    {
+      "encoding": [
+        "83c0"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 4294901755,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 3,
+          "d1": 4294967279,
+          "sr": 10015
+        }
+      },
+      "instruction": "divs.w %d0,%d1",
+      "mnemonic": "divs.w",
+      "name": "divs_w_remainder_takes_the_dividend_sign"
+    },
+    {
+      "encoding": [
+        "83c0"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 4294836227,
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 65531,
+          "d1": 4294967279,
+          "sr": 10015
+        }
+      },
+      "instruction": "divs.w %d0,%d1",
+      "mnemonic": "divs.w",
+      "name": "divs_w_n_comes_from_the_quotient_not_bit31"
+    },
+    {
+      "encoding": [
+        "83c0"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 65536,
+          "sr": 10002
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 1,
+          "d1": 65536,
+          "sr": 10015
+        }
+      },
+      "instruction": "divs.w %d0,%d1",
+      "mnemonic": "divs.w",
+      "name": "divs_w_overflow_clears_n_and_z"
+    },
+    {
+      "encoding": [
+        "83c0"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 32768,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 2,
+          "d1": 4294901760,
+          "sr": 10015
+        }
+      },
+      "instruction": "divs.w %d0,%d1",
+      "mnemonic": "divs.w",
+      "name": "divs_w_quotient_of_minus_32768_does_not_overflow"
+    },
+    {
+      "encoding": [
+        "c2fc",
+        "0005"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 20,
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d1": 4,
+          "sr": 10015
+        }
+      },
+      "instruction": "mulu.w #5,%d1",
+      "mnemonic": "mulu.w",
+      "name": "mulu_w_takes_an_immediate_source"
+    },
+    {
+      "encoding": [
         "4c40",
         "1801"
       ],
