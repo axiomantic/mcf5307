@@ -203,7 +203,7 @@
 ##      counter-case though its name reads like one: it is the return of
 ##      `mcf5307_exec(ctx, 1)`, which SATURATES at its budget, so the value is
 ##      1 for an instruction that ran and 0 for one that trapped and it cannot
-##      see a count at all. `logic.nim`'s uncertainty 3 measured the same
+##      see a count at all. `logic.nim`'s uncertainty 2 measured the same
 ##      thing for its own group by replacing all nine of its cycle returns
 ##      with wrong numbers and watching every case stay green.
 ##

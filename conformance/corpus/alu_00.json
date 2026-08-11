@@ -283,7 +283,7 @@
         "mem": [],
         "regs": {
           "d1": 0,
-          "sr": 10006
+          "sr": 10004
         }
       },
       "initial": {
@@ -296,7 +296,107 @@
       },
       "instruction": "mulu.l %d0,%d1",
       "mnemonic": "mulu.l",
-      "name": "mulu_l_overflow_sets_v"
+      "name": "mulu_l_truncation_clears_v"
+    },
+    {
+      "encoding": [
+        "4c00",
+        "1000"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 2684354560,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 2,
+          "d1": 1342177280,
+          "sr": 10015
+        }
+      },
+      "instruction": "mulu.l %d0,%d1",
+      "mnemonic": "mulu.l",
+      "name": "mulu_l_sets_n_from_bit31"
+    },
+    {
+      "encoding": [
+        "4c40",
+        "1801"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 2147483648,
+          "sr": 10002
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 4294967295,
+          "d1": 2147483648,
+          "sr": 10015
+        }
+      },
+      "instruction": "divs.l %d0,%d1",
+      "mnemonic": "divs.l",
+      "name": "divs_l_overflow_clears_n_and_z"
+    },
+    {
+      "encoding": [
+        "4c40",
+        "1002"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 20,
+          "d2": 0,
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 5,
+          "d1": 20,
+          "d2": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "remu.l %d0,%d2:%d1",
+      "mnemonic": "remu.l",
+      "name": "remu_l_z_from_quotient_not_remainder"
+    },
+    {
+      "encoding": [
+        "4c40",
+        "1802"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 17,
+          "d2": 2,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 4294967291,
+          "d1": 17,
+          "d2": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "rems.l %d0,%d2:%d1",
+      "mnemonic": "rems.l",
+      "name": "rems_l_n_from_quotient_not_remainder"
     },
     {
       "encoding": [

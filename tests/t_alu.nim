@@ -394,13 +394,27 @@ block:
   expectD(runIns([0x4C00'u16, 0x1000'u16], d = [3'u32, 4, 0, 0, 0, 0, 0, 0]),
     1, 12'u32, srBase, "mulu.l 3 * 4 = 12")
 
-  # V reports that the 32-bit result is not the whole product. 0x10000 squared
-  # is 0x1_0000_0000, whose low 32 bits are zero: without V this case is
-  # indistinguishable from a multiply by zero.
+  # V STAYS CLEAR EVEN WHEN THE 32 BITS WRITTEN ARE NOT THE WHOLE PRODUCT.
+  # 0x10000 squared is 0x1_0000_0000, whose low 32 bits are zero, so this case
+  # really is indistinguishable from a multiply by zero on this part - and
+  # CFPRM folio 4-57 says so: V "Always cleared", "Note that CCR[V] is always
+  # cleared by MULU, unlike the 68K family processors". THE CASE ENTERS WITH V
+  # SET so that a core which never writes V fails it too.
   expectD(runIns([0x4C00'u16, 0x1000'u16],
-                 d = [0x10000'u32, 0x10000'u32, 0, 0, 0, 0, 0, 0]),
-    1, 0'u32, srBase or ccrV or ccrZ,
-    "mulu.l overflow sets V with the truncated result")
+                 d = [0x10000'u32, 0x10000'u32, 0, 0, 0, 0, 0, 0],
+                 sr = srBase or ccrV),
+    1, 0'u32, srBase or ccrZ,
+    "mulu.l truncating to zero CLEARS V rather than reporting the loss")
+
+  # N COMES FROM BIT 31 OF THE UNSIGNED PRODUCT, so MULU's N is not always
+  # zero. 2 * 0x50000000 is 0xA0000000, which fits 32 bits unsigned - no part
+  # of the product is lost - and its bit 31 is set. CFPRM folio 4-57: "N Set
+  # if result is negative; cleared otherwise", the result being the 32 bits
+  # loaded into the register.
+  expectD(runIns([0x4C00'u16, 0x1000'u16],
+                 d = [0x2'u32, 0x50000000'u32, 0, 0, 0, 0, 0, 0]),
+    1, 0xA0000000'u32, srBase or ccrN,
+    "mulu.l sets N from bit 31 of the unsigned product")
 
   # muls.l %d0,%d1 = 4c00 1800. The signed flag is bit 11 of the second word.
   # -1 * 3 is -3 unsigned-wrong and signed-right, so a core that ignores the
@@ -410,24 +424,36 @@ block:
                  d = [0xFFFFFFFF'u32, 3, 0, 0, 0, 0, 0, 0]),
     1, 0xFFFFFFFD'u32, srBase or ccrN, "muls.l -1 * 3 = -3")
 
-  # -0x10000 * 0x10000 is -0x1_0000_0000, which does not fit a signed 32-bit
-  # result: V is set. The same operands read as unsigned overflow too, so the
-  # separating case is the pair below.
+  # MULS CLEARS V ON THE SAME TERMS. -0x10000 * 0x10000 is -0x1_0000_0000,
+  # which no signed 32-bit result holds, and V is STILL clear: CFPRM folio
+  # 4-55, V "Always cleared", "Note that CCR[V] is always cleared by MULS,
+  # unlike the 68K family processors". THE CASE ENTERS WITH V SET.
   expectD(runIns([0x4C00'u16, 0x1800'u16],
-                 d = [0xFFFF0000'u32, 0x10000'u32, 0, 0, 0, 0, 0, 0]),
-    1, 0'u32, srBase or ccrV or ccrZ, "muls.l overflow sets V")
+                 d = [0xFFFF0000'u32, 0x10000'u32, 0, 0, 0, 0, 0, 0],
+                 sr = srBase or ccrV),
+    1, 0'u32, srBase or ccrZ, "muls.l losing the whole product CLEARS V")
 
-  # The one case that separates signed from unsigned overflow. -1 * -1 is 1,
-  # which fits a signed 32-bit result, so MULS sets no V. The same two words
-  # read as unsigned are 0xFFFFFFFF * 0xFFFFFFFF, a 64-bit product, so MULU
-  # sets V. Same operands, same low 32 bits, opposite V.
+  # NOTHING SEPARATES MULS.L FROM MULU.L, AND THAT IS THE POINT OF THIS PAIR.
+  # An earlier revision called these two "THE ONE CASE THAT SEPARATES SIGNED
+  # FROM UNSIGNED OVERFLOW": -1 * -1 is 1 and sets no signed overflow, while
+  # the same two words read as unsigned are a 64-bit product, so the two
+  # differed in V alone. WITH V ALWAYS CLEARED THAT DIFFERENCE IS GONE. The low
+  # 32 bits of a 32x32 product do not depend on how the sign bits are read, and
+  # every flag comes from those 32 bits, so the signed bit is UNOBSERVABLE in
+  # this form and the pair now asserts exactly that. Both enter with V set.
+  #
+  # THE SIGNED BIT IS STILL MEASURED, by the DIVIDE cases in the next block,
+  # where the quotient itself differs. Nothing here is left unpinned by the
+  # collapse of these two.
   expectD(runIns([0x4C00'u16, 0x1800'u16],
-                 d = [0xFFFFFFFF'u32, 0xFFFFFFFF'u32, 0, 0, 0, 0, 0, 0]),
-    1, 1'u32, srBase, "muls.l -1 * -1 = 1 with no overflow")
+                 d = [0xFFFFFFFF'u32, 0xFFFFFFFF'u32, 0, 0, 0, 0, 0, 0],
+                 sr = srBase or ccrV),
+    1, 1'u32, srBase, "muls.l -1 * -1 = 1 with V clear")
   expectD(runIns([0x4C00'u16, 0x1000'u16],
-                 d = [0xFFFFFFFF'u32, 0xFFFFFFFF'u32, 0, 0, 0, 0, 0, 0]),
-    1, 1'u32, srBase or ccrV,
-    "mulu.l of the same two words DOES overflow")
+                 d = [0xFFFFFFFF'u32, 0xFFFFFFFF'u32, 0, 0, 0, 0, 0, 0],
+                 sr = srBase or ccrV),
+    1, 1'u32, srBase,
+    "mulu.l of the same two words gives the same result and the same V")
 
 block:
   # divu.l %d0,%d1 = 4c40 1001. The second word names Dq in bits 15..12 and
@@ -469,6 +495,41 @@ block:
   check(gotS == wantS, "rems.l -17 rem 5 = -2, signed by the dividend",
     $gotS, $wantS)
 
+  # N AND Z COME FROM THE QUOTIENT, NOT FROM THE REMAINDER THE INSTRUCTION
+  # WRITES. CFPRM folios 4-70 and 4-71: "N ... set if the quotient is negative,
+  # cleared if positive", "Z ... set if the quotient is zero, cleared if
+  # nonzero". The register still takes the REMAINDER - "Destination/Source ->
+  # Remainder" - so the two halves of each case below come from different
+  # numbers, which is the whole point.
+  #
+  # THE TWO CASES ABOVE CANNOT SEE THIS, BY ACCIDENT RATHER THAN BY DESIGN. In
+  # `remu.l 17 / 5` the quotient is 3 and the remainder 2, both nonzero and
+  # both positive; in `rems.l -17 rem 5` the quotient is -3 and the remainder
+  # -2, both nonzero and both negative. Quotient and remainder happen to agree
+  # on N and Z in each, so either rule passes them.
+
+  # Z SEPARATES THEM: 20 / 5 is a quotient of 4 with a remainder of ZERO. The
+  # remainder rule sets Z, the quotient rule clears it. d2 takes the remainder
+  # 0 either way, so ONLY the status word tells the two apart.
+  let oz = runIns([0x4C40'u16, 0x1002'u16],
+                  d = [5'u32, 20'u32, 0, 0, 0, 0, 0, 0])
+  let gotZ = (d1: oz.d[1], d2: oz.d[2], sr: oz.sr, fault: oz.fault)
+  let wantZ = (d1: 20'u32, d2: 0'u32, sr: srBase, fault: false)
+  check(gotZ == wantZ,
+    "remu.l 20 / 5 leaves Z CLEAR: the quotient is 4 though the remainder is 0",
+    $gotZ, $wantZ)
+
+  # N SEPARATES THEM: 17 / -5 is a quotient of -3 with a remainder of +2, the
+  # remainder taking the sign of the DIVIDEND. The remainder rule clears N, the
+  # quotient rule sets it.
+  let on = runIns([0x4C40'u16, 0x1802'u16],
+                  d = [0xFFFFFFFB'u32, 17'u32, 0, 0, 0, 0, 0, 0])
+  let gotN = (d1: on.d[1], d2: on.d[2], sr: on.sr, fault: on.fault)
+  let wantN = (d1: 17'u32, d2: 2'u32, sr: srBase or ccrN, fault: false)
+  check(gotN == wantN,
+    "rems.l 17 / -5 SETS N: the quotient is -3 though the remainder is +2",
+    $gotN, $wantN)
+
 block:
   # The one signed division overflow: the most negative value divided by -1
   # has no positive quotient. V is set and the operands are unchanged.
@@ -476,6 +537,24 @@ block:
                  d = [0xFFFFFFFF'u32, 0x80000000'u32, 0, 0, 0, 0, 0, 0]),
     1, 0x80000000'u32, srBase or ccrV,
     "divs.l of the most negative value by -1 sets V and writes nothing")
+
+  # AN OVERFLOW CLEARS N AND Z RATHER THAN LEAVING THEM AS IT FOUND THEM, and
+  # THE CASE ABOVE CANNOT SEE THE DIFFERENCE because it enters with both
+  # already clear. CFPRM folios 4-31 and 4-33: "N Cleared if overflow is
+  # detected; otherwise set if the quotient is negative, cleared if positive"
+  # and "Z Cleared if overflow is detected; otherwise set if the quotient is
+  # zero, cleared if nonzero".
+  #
+  # THIS CASE ENTERS WITH N, Z AND C SET AND X SET. It pins all five bits at
+  # once: V set, N cleared, Z cleared, C cleared ("C Always cleared" on both
+  # folios), and X CARRIED THROUGH UNCHANGED ("X Not affected"). A core that
+  # leaves N and Z alone fails on the status word while still writing the
+  # right register, which is exactly the shape the case above missed.
+  expectD(runIns([0x4C40'u16, 0x1801'u16],
+                 d = [0xFFFFFFFF'u32, 0x80000000'u32, 0, 0, 0, 0, 0, 0],
+                 sr = srBase or ccrN or ccrZ or ccrC or ccrX),
+    1, 0x80000000'u32, srBase or ccrV or ccrX,
+    "divs.l overflow CLEARS N and Z, clears C, sets V and leaves X alone")
 
   # A division by zero is a trap. There is no exception model yet, so the core
   # halts with `fault` rather than divide. It must not return a quotient of

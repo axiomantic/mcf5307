@@ -54,46 +54,37 @@
 ##   LSL, LSR, ASL, ASR
 ##       X and C both take the last bit shifted out, which Table 3-7 states
 ##       for all four (`X/C <- (Dy << Dx) <- 0` and the two right-shift
-##       forms). N and Z come from the result. V is cleared by LSL, LSR and
-##       ASR and set by ASL when the sign changes, and the reason is the word
-##       "arithmetic" in section 3.2.1.5: "V - overflow condition code bit:
-##       Set if an ARITHMETIC overflow occurs implying that the result cannot
-##       be represented in the operand size; otherwise cleared". LSL and LSR
-##       are logical shifts, so no arithmetic overflow occurs and V is
-##       cleared; ASR is arithmetic but a right shift moves every bit toward
-##       the LSB and cannot leave the operand size; ASL is arithmetic and can,
-##       and it is the one that sets V. LSL's V stays clear because LSL is not
-##       an arithmetic operation, not because nothing overflows: `lsl.l #1` of
-##       `0x87654321` carries a one out of bit 31 and the 32-bit result does
-##       not hold the value.
+##       forms). N and Z come from the result. V IS CLEARED BY ALL FOUR, ASL
+##       INCLUDED, and the ColdFire Family Programmer's Reference Manual says
+##       so in its own words rather than by inference from the word
+##       "arithmetic". Folio 4-12 gives V a flat "Always cleared" in the
+##       condition-code table and adds "Note that CCR[V] is always cleared by
+##       ASL and ASR, unlike on the 68K family processors"; folio 4-11 says
+##       "The overflow bit is always zero". THIS PART COMPUTES NO SHIFT
+##       OVERFLOW AT ALL.
 ##
-## The shift is performed one bit at a time, on purpose. A count is at most 63
-## and the loop costs nothing, and it makes two rules that are easy to get
-## wrong in closed form come out by construction: the carry is the last bit
-## that left the word rather than a bit of the result, and ASL's overflow is
-## "the sign changed at any point during the shift" rather than "the sign of
-## the result differs from the sign of the operand". Those two readings of the
-## overflow rule agree at a count of one and can differ above it, so the
-## conformance corpus asserts V only where every candidate reading agrees on
-## its value: every case at a count of one, and a case at a larger count whose
-## operand cannot change sign.
+##       AN EARLIER REVISION IMPLEMENTED THE 68000 RULE - V set when the sign
+##       changed - and reasoned its way there from section 3.2.1.5's
+##       definition of V as an ARITHMETIC overflow: LSL and LSR are logical so
+##       V is clear, ASR cannot leave the operand size, ASL can and therefore
+##       sets V. The reasoning is sound about the 68000 and wrong about this
+##       part, which is exactly what the CFPRM note calls out. The User's
+##       Manual never contradicted it; it simply does not carry the
+##       per-instruction flag table that settles it.
 ##
-## A shift count of zero is reachable through the register form alone, because
-## the immediate form spends its zero slot on the value eight. It shifts
-## nothing. X is left alone: section 3.2.1.5 gives X the value of C "for
-## arithmetic operations; otherwise not affected", and a shift that moved no
-## bit produced no carry to copy. N, Z, V and C are written anyway - N and Z
-## from the unmoved operand, V and C cleared - and that is this module's
-## choice and not a rule any document on this machine states.
+## THE SHIFT IS PERFORMED ONE BIT AT A TIME, ON PURPOSE. A count is at most 63
+## and the loop costs nothing, and it makes the carry rule that is easy to get
+## wrong in closed form come out by construction: the carry is THE LAST BIT
+## THAT LEFT THE WORD rather than a bit of the result.
 ##
-## Cycles are nominal: the per-instruction budget needs the clock work of open
-## question 6 in AGENTS.md and no exact cost is asserted anywhere.
-##
-## What this module does not know. The implementation picks a behaviour and
-## nothing asserts it. The document that would settle 1, 2, 4, 5 and 6 is the
-## ColdFire Family Programmer's Reference Manual, whose per-instruction pages
-## give the operand table and the flag rules directly; it is not on this
-## machine.
+## AN EARLIER REVISION OF THIS PARAGRAPH FRAMED A DICHOTOMY THAT DOES NOT
+## EXIST - "the sign changed AT ANY POINT during the shift" against "the sign
+## of the result differs from the sign of the operand" - and then held the
+## corpus back from asserting V at any count where the two readings disagree,
+## on the stated ground that the document separating them was unavailable.
+## BOTH HALVES WERE WRONG. The CFPRM is on disk, it names neither reading, and
+## it gives V a flat "Always cleared" for ASL (folios 4-11 and 4-12). There is
+## no reading to choose between and no count that separates anything.
 ##
 ##   1. ASL's overflow reading. "The sign changed at any point" against "the
 ##      sign of the result differs from the sign of the operand". No case pins
@@ -101,15 +92,50 @@
 ##
 ##   2. The status word of a shift by zero.
 ##
-##   3. The exact cycle count of every instruction in this group.
-##      `tests/t_logic.nim`'s `cycles` field is not a counter-case though its
-##      name reads like one. That field is the return of
-##      `mcf5307_exec(ctx, 1)`, and `mcf5307_exec` saturates at its budget: a
+##   N, Z, V AND C ARE WRITTEN ANYWAY - N and Z from the unmoved operand, V
+##   and C cleared - AND THAT IS THIS MODULE'S CHOICE AND NOT A RULE ANY
+##   DOCUMENT ON THIS MACHINE STATES. An earlier revision of this paragraph
+##   asserted "clears C" as a fact while also saying the status word of that
+##   case cannot be decided; both cannot be true. It is undecided, the code
+##   still has to do something, and what it does is written here so that a
+##   reader is not left to infer it. THE CORPUS ASSERTS THE DESTINATION OF
+##   THAT CASE AND NOT ITS STATUS WORD, which is what keeps the choice
+##   unpinned.
+##
+## CYCLES ARE NOMINAL, for the reason `move.nim`, `alu.nim` and `cpu.nim` all
+## give: the per-instruction budget needs the clock work of open question 6 in
+## AGENTS.md and no exact cost is asserted anywhere.
+##
+## WHAT THIS MODULE DOES NOT KNOW. Five things, and the rule for every one of
+## them is the same: THE IMPLEMENTATION PICKS A BEHAVIOUR AND NOTHING ASSERTS
+## IT.
+##
+## THE LIST WAS SIX AND THE CFPRM SETTLED ONE OF THEM. An earlier revision
+## recorded that the ColdFire Family Programmer's Reference Manual "is NOT on
+## this machine" and hung five of the six entries on that absence. THE RECORD
+## WAS FALSE. The manual is on disk at `~/Development/datasheets/CFPRM.pdf`
+## (Rev. 3), its per-instruction pages give the flag rules directly, and its
+## ASL page settled what was entry 1 - ASL'S OVERFLOW READING - by stating
+## that ColdFire computes no ASL overflow at all. That entry is gone and the
+## rest are renumbered.
+##
+## THE REMAINING FIVE HAVE NOT BEEN RE-CHECKED AGAINST IT. Entries 3, 4 and 5
+## below are per-instruction questions of exactly the kind the CFPRM answers,
+## and the change that deleted entry 1 did not open their pages. Treat "the
+## document is unavailable" as retracted and "these are still open" as
+## UNVERIFIED rather than as a standing finding.
+##
+##   1. THE STATUS WORD OF A SHIFT BY ZERO. See the paragraph above.
+##
+##   2. THE EXACT CYCLE COUNT of every instruction in this group. NOTHING
+##      ASSERTS IT, AND `tests/t_logic.nim`'s `cycles` FIELD IS NOT A COUNTER-
+##      CASE THOUGH ITS NAME READS LIKE ONE. That field is the return of
+##      `mcf5307_exec(ctx, 1)`, and `mcf5307_exec` SATURATES AT ITS BUDGET: a
 ##      cost of 2 for the fetch plus anything this module returns already
 ##      exceeds a budget of one, so the value is 1 for an instruction that ran
 ##      and 0 for one that trapped, and it cannot see a count at all.
 ##
-##   4. Whether a dynamic BTST may read an immediate operand. User's Manual
+##   3. WHETHER A DYNAMIC BTST MAY READ AN IMMEDIATE OPERAND. User's Manual
 ##      Table 3-13, page 3-28, dashes the `#xxx` column of the `btst Dy,<ea>`
 ##      row, and `m68k-elf-as -mcpu=5307` assembles `btst %d1,#5` anyway. The
 ##      mask follows the manual and traps it; the full evidence, including why
@@ -132,7 +158,7 @@
 ##      is the one entry on this list that a future reader may have to reverse
 ##      rather than merely fill in.
 ##
-##   5. The bit number's modulus. `execBitOp` reduces the number modulo the
+##   4. THE BIT NUMBER'S MODULUS. `execBitOp` reduces the number modulo the
 ##      operand width - 32 for a data register, 8 for memory. Table 3-7 gives
 ##      the two widths ("8,32") and states no modulus anywhere, and no other
 ##      passage does either. Figure 3-8 on page 3-18 is the closest thing and
@@ -160,7 +186,34 @@
 ##      holds, except the 9 above, so nothing separates modulo 32 from a wider
 ##      reduction or from no reduction at all for a register operand.
 ##
-##   6. The register shift count's modulus. `execShift` takes it modulo 64.
+##      MEASURED: `and (8 * size - 1)` in `execBitOp` replaced by `and 31`,
+##      confirmed in the generated C as
+##      `bit_1 = (NU32)(bitNumber_1 & ((NU32)31));`, rebuilt from a fresh
+##      configure of a fresh extract - `mcf5307_conformance_logic: 41 cases,
+##      1 failed`, that case, `sr differs: expected=0x271b actual=0x271f`.
+##
+##      BOTH HALVES OF THE CASE FAIL AND THE RUNNER SHOWS ONLY THE FIRST. It
+##      prints ONE mismatch per case and it compares the registers before the
+##      memory. With that case's expected `sr` deleted IN A SCRATCH COPY, so
+##      that the comparison reaches the byte, the same mutant reports
+##      `mem[8192:1] differs: expected=0x0 actual=0x2`. The destination and the
+##      status word are each the modulo-8 answer and each refuses the modulo-32
+##      one.
+##
+##      All 74 `t_logic` cases stayed GREEN under the same mutation, so THE
+##      CORPUS IS THE ONLY THING THAT HOLDS IT.
+##
+##      WHAT REMAINS UNPINNED IS THE 32-BIT MODULUS, and the bit numbers are
+##      enumerated here rather than summarised. The corpus holds ELEVEN
+##      bit-operation cases. The SEVEN with a DATA REGISTER operand use 4, 7,
+##      9, 9, 7, 4 and 7; the FOUR with a MEMORY operand use 1, 0, 1 and the 9
+##      above. `tests/t_logic.nim` executes bit numbers 3, 6 and 7 and every
+##      one is inside the width its operand holds. So nothing separates modulo
+##      32 from a wider reduction or from no reduction at all for a REGISTER
+##      operand, and nothing pins the MEMORY reduction at any bit number except
+##      9.
+##
+##   5. THE REGISTER SHIFT COUNT'S MODULUS. `execShift` takes it modulo 64.
 ##      Table 3-7 gives the shift operations as `X/C <- (Dy << Dx) <- 0` and
 ##      states no modulus, and no other passage does. No case in the corpus or
 ##      in `tests/t_logic.nim` uses a count above 31, so nothing distinguishes
@@ -314,13 +367,20 @@ proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ##
   ## The modulus below is a choice and not a citation. Taking the bit number
   ## modulo the operand width - 32 for a register, 8 for memory - is what this
-  ## core does with a number that does not fit, and no passage in the User's
-  ## Manual states it. It is uncertainty 5 in this module's header, which says
-  ## why Figure 3-8's `MODULO (OFFSET)` annotation does not settle it. The
-  ## memory half is asserted by `bchg_b_memory_dynamic_bit_number` in
-  ## `conformance/corpus/logic_00.json`; the 32-bit half is not.
+  ## core does with a number that does not fit, and NO PASSAGE IN THE USER'S
+  ## MANUAL STATES IT. It is uncertainty 4 in this module's header, which
+  ## says why Figure 3-8's `MODULO (OFFSET)` annotation does not settle it.
   ##
-  ## The static form is narrower than the dynamic one. `eaBitStatic` is its
+  ## THE MEMORY HALF OF IT IS ASSERTED, AND AN EARLIER REVISION OF THIS
+  ## PARAGRAPH SAID NOTHING WAS. `bchg_b_memory_dynamic_bit_number` in
+  ## `conformance/corpus/logic_00.json` is `bchg %d1,(%a0)` with d1 = 9 against
+  ## a BYTE operand, and it expects the modulo-8 answer - which is what makes
+  ## the sentence "the corpus asks for no bit number outside the range its
+  ## operand holds" false. THE 32-BIT HALF IS NOT asserted: no case in the
+  ## corpus or in `tests/t_logic.nim` uses a bit number of 32 or more. Both
+  ## halves are enumerated, case by case, in uncertainty 4.
+  ##
+  ## THE STATIC FORM IS NARROWER THAN THE DYNAMIC ONE. `eaBitStatic` is its
   ## mask and the measurement behind it is beside that constant; the dynamic
   ## form reads the ordinary per-operation mask.
   let mask = if d.regOperand: eaLegalityFor(d.op) else: eaBitStatic
@@ -352,7 +412,7 @@ proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # The immediate is not one of them. `eaBitDynamic` excludes it, so the mask
   # check above refuses `btst %d1,#5` before either evaluator is reached. See
   # that constant in `decode_types.nim` for the manual rows behind it, and
-  # uncertainty 4 in this module's header for what would overturn it.
+  # uncertainty 3 in this module's header for what would overturn it.
   #
   # The fix belongs here and not in `eaResolve`. Widening that procedure would
   # let a write reach a PC-relative or an immediate operand, and the three bit
@@ -402,8 +462,8 @@ proc execShift(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # An immediate count is 1 to 8, which the encoding itself fixes. A register
   # count is taken modulo 64, and that number is a choice, not a citation.
   # Table 3-7 gives the four shifts as `X/C <- (Dy << Dx) <- 0` and the two
-  # right-hand forms and states no modulus, and no other passage of the
-  # User's Manual does either. It is uncertainty 6 in this module's header.
+  # right-hand forms and STATES NO MODULUS, and no other passage of the
+  # User's Manual does either. It is uncertainty 5 in this module's header.
   #
   # The modulus is treated as a property of the shift unit rather than of the
   # operand width, so a count of 40 shifts a 32-bit register 40 times and
@@ -416,17 +476,16 @@ proc execShift(ctx: MCF5307Ctx; d: Decoded): uint32 =
   let arithmetic = d.op == opAsl or d.op == opAsr
   var value = regD(ctx, d.ea.reg)
   var carry = false
-  var overflow = false
   for _ in 0 ..< int(count):
     let before = value
     if toLeft:
       carry = (before and 0x80000000'u32) != 0'u32
       value = before shl 1
-      # ASL's overflow is a property of the whole shift and not of its last
-      # step: it is set if the sign changed at any point, so it is latched
-      # here and never cleared inside the loop.
-      if arithmetic and ((before xor value) and 0x80000000'u32) != 0'u32:
-        overflow = true
+      # NO OVERFLOW IS COMPUTED FOR ASL. CFPRM folio 4-12 gives V a flat
+      # "Always cleared" and adds "Note that CCR[V] is always cleared by ASL
+      # and ASR, unlike on the 68K family processors"; folio 4-11 says "The
+      # overflow bit is always zero". The clearing at the foot of this proc is
+      # the whole rule.
     else:
       carry = (before and 1'u32) != 0'u32
       value = before shr 1
@@ -441,7 +500,6 @@ proc execShift(ctx: MCF5307Ctx; d: Decoded): uint32 =
   var sr = ctx.sr and not (ccrN or ccrZ or ccrV or ccrC)
   if (value and 0x80000000'u32) != 0'u32: sr = sr or ccrN
   if value == 0'u32: sr = sr or ccrZ
-  if overflow: sr = sr or ccrV
   if carry: sr = sr or ccrC
   # X takes C, and a count of zero leaves X alone. A shift that moved no bit
   # produced no carry to copy, and X is the bit a multi-precision sequence is
