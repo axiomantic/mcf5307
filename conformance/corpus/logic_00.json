@@ -1095,7 +1095,7 @@
         "mem": [],
         "regs": {
           "d0": 3221225472,
-          "sr": 9994
+          "sr": 9992
         }
       },
       "initial": {
@@ -1107,7 +1107,7 @@
       },
       "instruction": "asl.l #1,%d0",
       "mnemonic": "asl.l",
-      "name": "asl_l_1_sign_change_sets_v"
+      "name": "asl_l_1_sign_change_clears_v"
     },
     {
       "encoding": [
@@ -1117,7 +1117,7 @@
         "mem": [],
         "regs": {
           "d0": 248153666,
-          "sr": 10003
+          "sr": 10001
         }
       },
       "initial": {

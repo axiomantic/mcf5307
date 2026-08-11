@@ -219,7 +219,7 @@ DIRTY_A = 0x0BADC0DE   # the address-register destination seed
 # bit 1 clear too, so a core that read the wrong end of the longword also
 # answers differently. THE BIT NUMBER IS INSIDE A BYTE, so the separation is
 # of the ACCESS WIDTH alone and does not depend on how an out-of-range bit
-# number is reduced - see uncertainty 5 in `logic.nim`'s header.
+# number is reduced - see uncertainty 4 in `logic.nim`'s header.
 MEM_BASE = 0x2000
 MEM_SEED_BYTES = (0x02, 0x5A, 0x3C, 0xC1)
 MEM_GUARD = 0x0BADC0DE   # the longword after a longword memory destination
@@ -1000,18 +1000,87 @@ CASES = {
             "expected": {"regs": {"d1": 12, "sr": SR_BASE | CCR_X}},
         },
         {
-            # V REPORTS THAT THE 32 BITS WRITTEN ARE NOT THE WHOLE PRODUCT.
-            # 0x10000 squared is 0x1_0000_0000, whose low 32 bits are zero:
-            # WITHOUT V THIS CASE IS INDISTINGUISHABLE FROM A MULTIPLY BY
-            # ZERO, so the register expectation alone cannot catch a core that
-            # never reports the overflow.
-            "name": "mulu_l_overflow_sets_v",
+            # V STAYS CLEAR WHEN THE 32 BITS WRITTEN ARE NOT THE WHOLE PRODUCT.
+            # 0x10000 squared is 0x1_0000_0000, whose low 32 bits are zero, so
+            # on this part the case really is indistinguishable from a multiply
+            # by zero. CFPRM folio 4-57 gives V "Always cleared" and adds "Note
+            # that CCR[V] is always cleared by MULU, unlike the 68K family
+            # processors". The initial SR_DIRTY carries V SET, so a core that
+            # never writes V fails on the status word.
+            "name": "mulu_l_truncation_clears_v",
             "mnemonic": "mulu.l",
             "instruction": "mulu.l %d0,%d1",
             "initial": {"regs": {"d0": 0x10000, "d1": 0x10000,
                                  "sr": SR_DIRTY}},
             "expected": {"regs": {"d1": 0,
-                                  "sr": SR_BASE | CCR_V | CCR_Z | CCR_X}},
+                                  "sr": SR_BASE | CCR_Z | CCR_X}},
+        },
+        {
+            # N COMES FROM BIT 31 OF THE UNSIGNED PRODUCT, so MULU's N is not
+            # always zero. 2 * 0x50000000 is 0xA0000000: no part of the product
+            # is lost and bit 31 is set. CFPRM folio 4-57: "N Set if result is
+            # negative; cleared otherwise". SR_DIRTY carries Z set, so a core
+            # that leaves Z alone fails this too.
+            "name": "mulu_l_sets_n_from_bit31",
+            "mnemonic": "mulu.l",
+            "instruction": "mulu.l %d0,%d1",
+            "initial": {"regs": {"d0": 0x2, "d1": 0x50000000,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0xA0000000,
+                                  "sr": SR_BASE | CCR_N | CCR_X}},
+        },
+
+        # -------------------------------------------- DIVS, REMU and REMS
+        #
+        # THE CORPUS CARRIED NO DIVIDE CASE OF ANY KIND before these three, so
+        # the whole DIVU/DIVS/REMU/REMS group ran here unguarded. Each case
+        # below is chosen to be DISCRIMINATING on the status word, which is the
+        # half of these instructions that a plausible wrong implementation gets
+        # wrong while still writing the right register.
+        {
+            # AN OVERFLOW CLEARS N AND Z. CFPRM folios 4-31 and 4-33: "N
+            # Cleared if overflow is detected", "Z Cleared if overflow is
+            # detected", with "V Set if an overflow occurs", "C Always cleared"
+            # and X "Not affected". The most negative value over -1 has no
+            # quotient, so d1 IS UNCHANGED and only the status word moves.
+            # SR_DIRTY enters with N, Z and C SET, so a core that leaves N and
+            # Z as it found them fails here - which is exactly what this
+            # project's core did until the case existed.
+            "name": "divs_l_overflow_clears_n_and_z",
+            "mnemonic": "divs.l",
+            "instruction": "divs.l %d0,%d1",
+            "initial": {"regs": {"d0": 0xFFFFFFFF, "d1": 0x80000000,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 0x80000000,
+                                  "sr": SR_BASE | CCR_V | CCR_X}},
+        },
+        {
+            # Z COMES FROM THE QUOTIENT AND NOT FROM THE REMAINDER WRITTEN.
+            # CFPRM folio 4-71: "Z ... set if the quotient is zero, cleared if
+            # nonzero", while the operation line is "Destination/Source ->
+            # Remainder". 20 / 5 is a quotient of 4 with a remainder of ZERO,
+            # so the two rules disagree on Z and agree on the register: d2
+            # takes 0 either way. ONLY the status word separates them.
+            "name": "remu_l_z_from_quotient_not_remainder",
+            "mnemonic": "remu.l",
+            "instruction": "remu.l %d0,%d2:%d1",
+            "initial": {"regs": {"d0": 5, "d1": 20, "d2": DIRTY_D,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 20, "d2": 0,
+                                  "sr": SR_BASE | CCR_X}},
+        },
+        {
+            # N COMES FROM THE QUOTIENT TOO. CFPRM folio 4-70: "N ... set if
+            # the quotient is negative". 17 / -5 is a quotient of -3 with a
+            # remainder of +2 - the remainder takes the sign of the DIVIDEND -
+            # so the quotient rule sets N and the remainder rule clears it.
+            "name": "rems_l_n_from_quotient_not_remainder",
+            "mnemonic": "rems.l",
+            "instruction": "rems.l %d0,%d2:%d1",
+            "initial": {"regs": {"d0": 0xFFFFFFFB, "d1": 17, "d2": DIRTY_D,
+                                 "sr": SR_DIRTY}},
+            "expected": {"regs": {"d1": 17, "d2": 2,
+                                  "sr": SR_BASE | CCR_N | CCR_X}},
         },
         {
             # EXT.L REPLACES THE WHOLE REGISTER from its low word, so the seed
@@ -1134,22 +1203,21 @@ CASES = {
     #       X AND C BOTH TAKE THE LAST BIT SHIFTED OUT, which Table 3-7 states
     #       directly for all four: `X/C <- (Dy << Dx) <- 0` for the two left
     #       shifts and `MSB -> (Dy >> Dx) -> X/C`, `0 -> (Dy >> Dx) -> X/C` for
-    #       the two right ones. N and Z come from the result. V is cleared by
-    #       LSL, LSR and ASR - none of them can produce a value the operand
-    #       size cannot represent - and ASL sets it when the sign changes.
+    #       the two right ones. N and Z come from the result. V IS CLEARED BY
+    #       ALL FOUR, ASL INCLUDED.
     #
-    # THE ASL OVERFLOW CASES ALL USE A SHIFT COUNT OF ONE, DELIBERATELY. The
-    # two readings of the rule - "the MSB changed at any time during the shift"
-    # and "the MSB of the result differs from the MSB of the operand" - are the
-    # SAME STATEMENT at a count of one and can differ at a larger count. The
-    # ColdFire Family Programmer's Reference Manual is the authority that
-    # separates them (AGENTS.md section 11) and it is not on this machine, so
-    # no case here pins a count at which the two disagree.
-    # `asl_l_count_register_d1` carries no V hazard for the same reason: it
-    # shifts by two, and its operand's top three bits are all zero - the sign
-    # after k shifts is bit 31-k of the operand, so bits 31, 30 and 29 are
-    # every sign the shift passes through - so the sign is unchanged under
-    # either reading and both give V clear.
+    # ASL'S V IS SETTLED, AND THE CFPRM SETTLES IT. An earlier revision of this
+    # comment said the ColdFire Family Programmer's Reference Manual "is not on
+    # this machine" and built a two-readings hedge on that absence - whether V
+    # follows "the MSB changed at any time during the shift" or "the MSB of the
+    # result differs from the MSB of the operand", with no case allowed to pin a
+    # count where they disagree. THE RECORD WAS FALSE: the manual is on disk,
+    # and it describes NEITHER reading. Folio 4-12 gives V a flat "Always
+    # cleared" and adds "Note that CCR[V] is always cleared by ASL and ASR,
+    # unlike on the 68K family processors"; folio 4-11 says "The overflow bit is
+    # always zero". ColdFire computes no ASL overflow at all, so there is no
+    # dichotomy to hedge and no count that separates anything. The shift count
+    # of a V case is now free to be whatever the case needs.
     #
     # THE REGISTER SHIFT COUNT OF ZERO CARRIES NO `sr`, for the same reason:
     # what a zero count does to C is a rule this project cannot cite today. The
@@ -1361,7 +1429,7 @@ CASES = {
         # NEITHER CASE USES A BIT NUMBER ITS OPERAND CANNOT HOLD, AND THAT IS
         # DELIBERATE. `logic.nim` reduces an out-of-range bit number modulo
         # the operand width, and NO PASSAGE OF THE USER'S MANUAL STATES ANY
-        # MODULUS - see uncertainty 5 in that module's header, which also says
+        # MODULUS - see uncertainty 4 in that module's header, which also says
         # why Figure 3-8's `MODULO (OFFSET)` annotation does not settle it.
         # An earlier revision of this corpus held `btst #41,%d0` and
         # `btst #9,(%a0)` and asserted the modulo-32 and modulo-8 answers as
@@ -1616,18 +1684,23 @@ CASES = {
 
         # ------------------------------------------------------------ ASL
         #
-        # THE THREE COUNT-OF-ONE CASES SEPARATE V FROM C IN BOTH DIRECTIONS.
-        # `asl_l_1_sign_change_sets_v` has V set with C clear, and
-        # `asl_l_1_sign_kept_clears_v` has C set with V clear, so a core that
-        # copied one bit into the other fails one of them whichever way round
-        # it copied. A core that never writes V fails the first.
+        # ASL NEVER SETS V ON THIS PART, AND THESE CASES ARE WHAT PINS THAT.
+        # CFPRM folio 4-12 gives V a flat "Always cleared" and adds "Note that
+        # CCR[V] is always cleared by ASL and ASR, unlike on the 68K family
+        # processors"; folio 4-11 says "The overflow bit is always zero".
+        #
+        # EACH CASE BELOW CHANGES THE SIGN AND STILL EXPECTS V CLEAR, so a core
+        # carrying the 68K rule - V set when the sign changed - fails both, and
+        # every case starts from SR_DIRTY with V SET so that a core which never
+        # writes V fails them too. `asl_l_1_sign_kept_clears_v` holds the other
+        # corner: C set with V clear, so a core that copied C into V fails it.
         {
-            "name": "asl_l_1_sign_change_sets_v",
+            "name": "asl_l_1_sign_change_clears_v",
             "mnemonic": "asl.l",
             "instruction": "asl.l #1,%d0",
             "initial": {"regs": {"d0": 0x60000000, "sr": SR_DIRTY}},
             "expected": {"regs": {"d0": 0xC0000000,
-                                  "sr": SR_BASE | CCR_N | CCR_V}},
+                                  "sr": SR_BASE | CCR_N}},
         },
         {
             "name": "asl_l_1_carry_out_and_sign_change",
@@ -1635,7 +1708,7 @@ CASES = {
             "instruction": "asl.l #1,%d0",
             "initial": {"regs": {"d0": 0x87654321, "sr": SR_DIRTY}},
             "expected": {"regs": {"d0": 0x0ECA8642,
-                                  "sr": SR_BASE | CCR_V | CCR_C | CCR_X}},
+                                  "sr": SR_BASE | CCR_C | CCR_X}},
         },
         {
             "name": "asl_l_1_sign_kept_clears_v",

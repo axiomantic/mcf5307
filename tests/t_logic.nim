@@ -35,16 +35,27 @@
 ##   gives. That is why every citation here names table, page and row instead
 ##   of quoting.
 ##
-##   THE COLDFIRE FAMILY PROGRAMMER'S REFERENCE MANUAL IS GENUINELY ABSENT -
-##   searched for by name and by content across the scratchpad, and the
-##   network is closed - and it is the document that would settle FIVE OF THE
-##   SIX uncertainties the `logic.nim` header declares: numbers 1, 2, 4, 5 and
-##   6, which is the list that header itself gives. Number 3, the exact cycle
-##   count, is not one of them - it needs the clock work of AGENTS.md open
-##   question 6. AN EARLIER REVISION OF THIS PARAGRAPH SAID "the four
-##   uncertainties", which named neither the right total nor the right subset.
-##   That absence, and not the User's Manual's, is why the shift-overflow note
-##   in `logic.nim` says what it says.
+##   THE COLDFIRE FAMILY PROGRAMMER'S REFERENCE MANUAL IS PRESENT AFTER ALL,
+##   AND TWO EARLIER REVISIONS OF THIS PARAGRAPH WERE WRONG ABOUT IT. The
+##   first said both documents were absent; the second corrected the User's
+##   Manual and left this one recorded as "GENUINELY ABSENT - searched for by
+##   name and by content across the scratchpad, and the network is closed".
+##   IT IS ON DISK at `~/Development/datasheets/CFPRM.pdf` - Freescale,
+##   "ColdFire Family Programmer's Reference Manual", Rev. 3 - and the search
+##   that missed it looked in the scratchpad and not in the datasheet tree.
+##
+##   IT SETTLED THE SHIFT-OVERFLOW QUESTION AGAINST WHAT THIS FILE USED TO
+##   ASSERT. Its per-instruction pages carry the flag rules the User's Manual
+##   never had: folio 4-12 gives ASL's V a flat "Always cleared" and notes
+##   that this is "unlike on the 68K family processors". The `logic.nim`
+##   uncertainty list is five entries now rather than six, that entry having
+##   been the one deleted, and its remaining entries were NOT re-checked
+##   against the manual by the change that deleted it.
+##
+##   READ THE PDF AS RENDERED PAGES. Two tables in the OCR markdown at
+##   `~/Development/datasheets/MCF5307UM-md/` are known wrong, so a value
+##   taken from text extraction is not evidence; `pdftoppm -png` and read the
+##   image.
 ##
 ##   CPU-6'S PLAN ROW is the CPU-6 row of section 11.3 "The instruction set" of
 ##   the NMG2 emulator IMPLEMENTATION PLAN
@@ -110,7 +121,7 @@
 ## `033c 0005`, and this file asserts that the core TRAPS it. That is the only
 ## place in this file where a trap case contradicts the assembler, it is
 ## deliberate, and the manual rows that put it there are on `eaBitDynamic` in
-## `decode_types.nim`. It is uncertainty 4 in the `logic.nim` header - the one
+## `decode_types.nim`. It is uncertainty 3 in the `logic.nim` header - the one
 ## entry on that list which a future reader may have to REVERSE.
 ##
 ## TWO ASSERTIONS GO RED WHEN THEY DO, NOT ONE, AND BOTH ARE NAMED HERE. An
@@ -232,7 +243,7 @@ type Outcome = object
     ## numbers - 44, 66, 45, 65, 66, 46, 41, 61 and 47 in source order - every
     ## one confirmed in the generated C, on a fresh extract with a fresh
     ## configure; all 74 cases here and all 74 corpus cases stayed green. That
-    ## is why uncertainty 3 in the `logic.nim` header says nothing asserts the
+    ## is why uncertainty 2 in the `logic.nim` header says nothing asserts the
     ## cycle counts.
   fault: bool
   halted: bool
@@ -884,10 +895,16 @@ block:
   # X AND C BOTH TAKE THE LAST BIT SHIFTED OUT, so each case starts with a
   # dirty X and asserts the value the shift put there rather than the value it
   # inherited.
+  # ASL LEAVES V CLEAR EVEN HERE, where the sign leaves the word and the 68K
+  # rule would set it. CFPRM folio 4-12: V "Always cleared", and "Note that
+  # CCR[V] is always cleared by ASL and ASR, unlike on the 68K family
+  # processors"; folio 4-11: "The overflow bit is always zero". The case enters
+  # with V SET so that a core which never writes V fails it too.
   expectD(runIns([0xE380'u16], d = [0x80000000'u32, 0, 0, 0, 0, 0, 0, 0],
-                 sr = srBase),
-    0, 0'u32, srBase or ccrC or ccrX or ccrV or ccrZ,
-    "asl.l #1 of 0x80000000 shifts the sign out into C and X and sets V and Z")
+                 sr = srBase or ccrV),
+    0, 0'u32, srBase or ccrC or ccrX or ccrZ,
+    "asl.l #1 of 0x80000000 shifts the sign out into C and X, sets Z and " &
+    "CLEARS V")
   expectD(runIns([0xE280'u16], d = [0x80000000'u32, 0, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrX),
     0, 0xC0000000'u32, srBase or ccrN,

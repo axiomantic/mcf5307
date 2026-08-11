@@ -301,23 +301,32 @@ proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
   let src = eaRead(ctx, d.ea, 4)
   if ctx.halted: return 0'u32
   let dst = regD(ctx, dl)
-  var res: uint32
-  var overflow: bool
-  if (ext and mulDivSignedBit) != 0'u16:
-    let product = int64(cast[int32](dst)) * int64(cast[int32](src))
-    res = uint32(cast[uint64](product) and 0xFFFFFFFF'u64)
-    overflow = product < int64(low(int32)) or product > int64(high(int32))
-  else:
-    let product = uint64(dst) * uint64(src)
-    res = uint32(product and 0xFFFFFFFF'u64)
-    overflow = product > 0xFFFFFFFF'u64
+  # V IS ALWAYS CLEARED, AND THAT IS THE CFPRM'S OWN WORD RATHER THAN AN
+  # INFERENCE. Folio 4-55 for MULS and folio 4-57 for MULU each give V "Always
+  # cleared" in the condition-code table and each add the sentence "Note that
+  # CCR[V] is always cleared by MULS/MULU, unlike the 68K family processors".
+  # Neither folio's longword page (4-56, 4-58) carries a condition-code table
+  # of its own, so the word-form table governs this 32-bit form too. C is
+  # "Always cleared" on both, N comes from bit 31 of the 32 bits written - for
+  # MULU that is bit 31 of the UNSIGNED product, so it is not always zero - and
+  # Z from those same 32 bits. `setNzClearVc` is exactly that rule.
+  #
+  # AN EARLIER REVISION SET V WHEN THE 32 BITS WRITTEN WERE NOT THE WHOLE
+  # PRODUCT, so that a product whose low half is zero could be told from a
+  # multiply by zero. That is the 68K rule and it is the one the CFPRM note
+  # singles out as not this part's. The distinction it bought is real and this
+  # part simply does not report it.
+  #
+  # THE SIGNED BIT SELECTS NOTHING IN THIS FORM, and the multiply is written
+  # once because of it. A 32x32 product's low 32 bits are the same under both
+  # readings - multiplication modulo 2^32 does not depend on how the operands'
+  # sign bits are interpreted - and every flag above comes from those 32 bits.
+  # So MULS.L and MULU.L differ in NOTHING observable here once V is gone.
+  # `mulDivSignedBit` is still the decoder's business and still separates the
+  # DIVIDE forms below, where the quotient genuinely differs.
+  let res = uint32((uint64(dst) * uint64(src)) and 0xFFFFFFFF'u64)
   setRegD(ctx, dl, res)
   setNzClearVc(ctx, res, 4)
-  # V REPORTS THAT THE 32 BITS WRITTEN ARE NOT THE WHOLE PRODUCT. Without it
-  # a product whose low half is zero is indistinguishable from a multiply by
-  # zero.
-  if overflow:
-    ctx.sr = ctx.sr or ccrV
   10'u32
 
 proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
@@ -340,12 +349,22 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
   let dividend = regD(ctx, dq)
   if signed and dividend == 0x80000000'u32 and src == 0xFFFFFFFF'u32:
     # THE ONE SIGNED DIVISION OVERFLOW. The most negative value has no
-    # positive counterpart, so the quotient does not exist. V is set, C is
-    # cleared and THE OPERANDS ARE UNCHANGED. The manual leaves N and Z
-    # undefined here; this core leaves them as it found them, which is the
-    # one choice a reader can predict.
-    ctx.sr = (ctx.sr and not ccrC) or ccrV
+    # positive counterpart, so the quotient does not exist. THE OPERANDS ARE
+    # UNCHANGED and the status word is fully determined: V set, C cleared, AND
+    # N AND Z CLEARED. CFPRM folios 4-31 and 4-33 (DIVS, DIVU) and 4-70 and
+    # 4-71 (REMS, REMU) all read "N Cleared if overflow is detected;
+    # otherwise ..." and "Z Cleared if overflow is detected; otherwise ...",
+    # with "V Set if an overflow occurs" and "C Always cleared". X is "Not
+    # affected" and is the one bit that survives.
+    #
+    # AN EARLIER REVISION LEFT N AND Z AS IT FOUND THEM and called them
+    # undefined - "the one choice a reader can predict". They are not
+    # undefined; the four folios state the rule directly, and the choice was
+    # unguarded because the only overflow case entered with N and Z already
+    # clear and so could not tell the two behaviours apart.
+    ctx.sr = (ctx.sr and not (ccrC or ccrN or ccrZ)) or ccrV
     return 10'u32
+  var quotient: uint32
   var written: uint32
   if signed:
     let a = int64(cast[int32](dividend))
@@ -353,16 +372,31 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
     # Nim's `div` truncates toward zero and `mod` takes the sign of the
     # dividend, which is what the silicon does: 17 / -3 is -5 and not -6,
     # and -17 rem 5 is -2 and not +3.
-    written = if dr == dq: uint32(cast[uint64](a div b) and 0xFFFFFFFF'u64)
+    quotient = uint32(cast[uint64](a div b) and 0xFFFFFFFF'u64)
+    written = if dr == dq: quotient
               else: uint32(cast[uint64](a mod b) and 0xFFFFFFFF'u64)
   else:
-    written = if dr == dq: dividend div src else: dividend mod src
+    quotient = dividend div src
+    written = if dr == dq: quotient else: dividend mod src
   # COLDFIRE'S REMx.L PRODUCES THE REMAINDER ONLY. An unequal register pair
   # is `REMU.L`/`REMS.L` here and `DIVUL`/`DIVSL` on the 68020, and the
   # 68020 instruction also writes the quotient into Dq. Writing Dq here
   # would corrupt the dividend a following instruction still reads.
   setRegD(ctx, (if dr == dq: dq else: dr), written)
-  setNzClearVc(ctx, written, 4)
+  # N AND Z COME FROM THE QUOTIENT EVEN WHEN THE REMAINDER IS WHAT WAS
+  # WRITTEN. CFPRM folios 4-70 and 4-71 give REMS and REMU "N ... set if the
+  # QUOTIENT is negative, cleared if positive" and "Z ... set if the QUOTIENT
+  # is zero, cleared if nonzero", though the operation line of each is
+  # "Destination/Source -> Remainder". So the flags and the destination come
+  # from DIFFERENT NUMBERS, and `quotient` is computed above for the REMx
+  # forms purely to feed this line.
+  #
+  # FOR DIVU AND DIVS THIS IS THE SAME VALUE it always was - an equal register
+  # pair writes the quotient - so only the REMx forms change behaviour here.
+  # An earlier revision passed `written`, which took the flags from the
+  # remainder; the two REMx cases that covered it happened to have a quotient
+  # and a remainder agreeing on both N and Z, so nothing caught it.
+  setNzClearVc(ctx, quotient, 4)
   10'u32
 
 # ---------------------------------------------------------------------------

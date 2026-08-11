@@ -213,7 +213,7 @@ const eaBitDynamic* = EaLegality(modes: eaDataAlterableModes,
   ## WHAT WOULD OVERTURN THIS is the ColdFire Family Programmer's Reference
   ## Manual, whose per-instruction operand table names the modes directly. It
   ## is not on this machine (AGENTS.md section 11) and the network is closed.
-  ## Uncertainty 4 in the `logic.nim` header is this one.
+  ## Uncertainty 3 in the `logic.nim` header is this one.
   ##
   ## IT IS A CONSTANT OF ITS OWN AND NOT A NARROWED `eaDataAddressing`,
   ## because AND and OR keep the immediate: Table 3-13's `and.l <ea>,Rx` row
