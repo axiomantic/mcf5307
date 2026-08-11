@@ -83,6 +83,77 @@ proc execPea(ctx: MCF5307Ctx; d: Decoded): uint32 =
   writeMem(ctx, ctx.sp, 4, eaAddress)
   result = 6'u32
 
+proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
+  ## SWAP Dn: the upper and lower 16-bit halves of a data register exchange.
+  ## Table 3-7, page 3-25: `MSW of Dn <-> LSW of Dn`.
+  ##
+  ## THE CONDITION CODES COME FROM SECTION 3.2.1.5, PAGE 3-9. There is no
+  ## PER-INSTRUCTION rule to find: Table 3-7's OPERATION column carries no
+  ## condition-code clause for SWAP and Table 3-12 gives timing alone, and
+  ## those two rows are the only places the manual names SWAP at all. But the
+  ## GENERIC rule settles it. Section 3.2.1.5 opens at the foot of page 3-8
+  ## with the CCR bit-field figure and DOES NOT END THERE; page 3-9 carries
+  ## the per-bit definitions and fixes all five - N "Set if the most
+  ## significant bit of the result is set; otherwise cleared", Z "Set if the
+  ## result equals zero; otherwise cleared", V "Set if an arithmetic overflow
+  ## occurs implying that the result cannot be represented in the operand
+  ## size; otherwise cleared", C "Set if a carryout of the operand MSB occurs
+  ## for an addition, or if a borrow occurs in a subtraction; otherwise
+  ## cleared", and X "Set to the value of the C-bit for arithmetic
+  ## operations; otherwise not affected". An exchange of a register's halves
+  ## is not an addition, not a subtraction and not an arithmetic operation,
+  ## so V and C are CLEARED and X is UNTOUCHED, and N and Z come from the
+  ## result. That is `setNzClearVc` at size 4, which MOVE, MOVEQ, EXT, EXTB
+  ## and the 32-bit multiply share.
+  ##
+  ## THIS IS THE ARGUMENT `logic.nim` ALREADY RUNS, not a new one. CPU-9
+  ## derives AND, OR, EOR and NOT from these same clauses - "a logical
+  ## operation is none of those things" - and guards X on a shift by zero
+  ## from the same "otherwise not affected". One derivation used twice.
+  ##
+  ## SECTION 3.9 IS NOT AN ORACLE, AND AN EARLIER REVISION OF THIS COMMENT
+  ## MADE IT ONE. Two independent reasons it cannot be:
+  ##
+  ##   Its removed list is not reliable. Page 3-21 names "integer division"
+  ##   among the removed instructions, while Table 3-7 on page 3-23 carries
+  ##   both a DIVS row and a DIVU row and Table 3-13 on page 3-28 times
+  ##   `divs.w`, `divu.w`, `divs.l` and `divu.l`. A list that contradicts two
+  ##   tables cannot settle a question on its own.
+  ##
+  ##   "A reduced version of the 68000 instruction set" is a claim about SET
+  ##   MEMBERSHIP, not about per-instruction semantics. Table 3-7 gives ADD,
+  ##   SUB, AND, OR, EOR and CMP an OPERAND SIZE of 32 ALONE where the 68000
+  ##   has `.b`, `.w` and `.l`. Retained instructions on this part are NOT
+  ##   semantically identical to their 68000 originals, so "retained,
+  ##   therefore 68000 semantics" does not follow in general - and it is not
+  ##   what pins these flags. Section 3.2.1.5 is.
+  ##
+  ## WHAT REMAINS UNPINNED IS THE WIDTH, AND IT IS REAL. Section 3.2.1.5 says
+  ## "the result" and never says how wide that result is, and Table 3-7's
+  ## OPERAND SIZE column for SWAP says 16. A reader who reads "the result" as
+  ## the 16-bit half takes N from bit 15 and Z from the low half. This core
+  ## reads it as the whole 32-bit register, because the register is what the
+  ## instruction writes - THE SIZE ARGUMENT IS 4 AND NOT 2 FOR EXACTLY THAT
+  ## REASON. The ambiguity is why `tests/t_move.nim` carries an N-SEPARATOR
+  ## case on each side of it, `0x0000FFFF` and `0xFFFF0000`, the two shapes
+  ## whose halves disagree in their top bit. The CFPRM would close the width
+  ## question outright; it is unobtainable (AGENTS.md section 11).
+  ##
+  ## THE CPU-9 PRECEDENT IS DISCIPLINE, NOT LICENCE, and an earlier revision
+  ## here had it backwards. CPU-9 met the same CFPRM wall on `ASL`'s overflow
+  ## reading and on the status word of a shift by zero (section 24.6 row
+  ## W3-28), derived from section 3.2.1.5 everything it could, and then
+  ## DECLINED to pin the residue - "the corpus asserts the destination of
+  ## that case and not its status word, which is what keeps the choice
+  ## unpinned". Citing CPU-9 as permission to infer inverts that. These flags
+  ## are pinned because 3.2.1.5 DERIVES them; the width, which 3.2.1.5 does
+  ## not derive, is called out above rather than asserted.
+  let v = regD(ctx, d.destReg)
+  let swapped = (v shr 16'u32) or (v shl 16'u32)
+  setRegD(ctx, d.destReg, swapped)
+  setNzClearVc(ctx, swapped, 4)
+  result = 4'u32
+
 proc execLink(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## LINK An,#<d16>: push An, set An to the new frame base, then add the
   ## signed displacement to the stack pointer.
@@ -174,6 +245,35 @@ proc moveFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
       ctx.halted = true
       return 0
     result = execMovem(ctx, d)
+  of opSwap:
+    # THIS GUARD CANNOT CURRENTLY TAKE ITS FALSE BRANCH, AND THAT IS
+    # DISCLOSED HERE RATHER THAN LEFT FOR A READER TO DISCOVER. By
+    # construction: `opSwap` has exactly one producer, the `decodeWord` arm
+    # guarded by `(word and 0xFFF8) == 0x4840`, so every word reaching here
+    # is in `4840`-`4847`; `decodeEa` takes the mode from bits 5..3, which
+    # are `000` in all eight of those words; and `eaLegalityFor(opSwap)` is
+    # `{eaDn}`, which mode `000` is inside. So `eaIsLegalFor` is always true
+    # for `opSwap` and the fault below is unreachable TODAY.
+    #
+    # IT IS KEPT, NOT DELETED, because the decoder arm that makes it dead
+    # says in its own comment that widening its mask back to `0xFFC0` is the
+    # regression to fear. That widening is what would make this branch
+    # reachable: `4840`-`487f` would then decode as SWAP, modes other than
+    # `000` would arrive, and this guard would fault them instead of letting
+    # `execSwap` exchange the halves of a register the operand never named.
+    # For that to be correct, `eaLegalityFor(opSwap)` must still be `{eaDn}`
+    # - the legality table, not this call site, is where SWAP's operand rule
+    # lives. Deleting the guard would also make `opSwap` the only arm of this
+    # `case` without the check its five siblings all perform.
+    #
+    # NO TEST REACHES IT, AND NONE SHOULD BE WRITTEN TO. Reaching it needs a
+    # decoder change, so a test that covered it would have to introduce the
+    # very defect the mask ordering prevents.
+    if not eaIsLegalFor(opSwap, d.ea):
+      ctx.fault = true
+      ctx.halted = true
+      return 0
+    result = execSwap(ctx, d)
   of opLink:
     result = execLink(ctx, d)
   of opUnlk:

@@ -219,6 +219,325 @@ block:
     1, 0xAABBCCDD'u32, srBase or ccrN,
     "move.l d0,d1 replaces the whole register")
 
+# ---------------------------------------------------------------------------
+# THE THREE-WAY EFFECTIVE-ADDRESS SPLIT, AND `SWAP`.
+#
+# Everything below this line is the mechanism for two defects that were
+# RECORDED and never FILED. `decode_types.nim`'s `eaJumpTarget` docstring and
+# `tests/t_control.nim` block 9 both described the LEA/PEA mask defect in
+# detail, and nothing went red while it was live. `AGENTS.md`'s 2026-08-06
+# `EsaiClock` rule names the shape: an invariant with no mechanism is a
+# comment. These cases are the mechanism.
+#
+# The helpers below assert WHOLE POST-STATES rather than one register, for the
+# reason the file's header gives: a register that is right with a flag that is
+# wrong must fail, and so must the reverse.
+
+proc expectDAll(o: Outcome; wantD: array[8, uint32]; wantSr: uint32;
+                label: string) =
+  ## The WHOLE data-register file, the whole status register, and `fault`.
+  let got = (d: o.d, sr: o.sr, fault: o.fault)
+  let wanted = (d: wantD, sr: wantSr, fault: false)
+  check(got == wanted, label, $got, $wanted)
+
+proc expectA(o: Outcome; n: int; want: uint32; wantSr: uint32; label: string) =
+  let got = (reg: o.a[n], sr: o.sr, fault: o.fault)
+  let wanted = (reg: want, sr: wantSr, fault: false)
+  check(got == wanted, label, $got, $wanted)
+
+proc expectPushed(o: Outcome; wantSp: uint32; wantValue: uint32;
+                  wantSr: uint32; label: string) =
+  ## The stack pointer AFTER the push, the long word the push left at it, the
+  ## status register and `fault`. Reading the memory is what separates a PEA
+  ## that computed the address from one that only moved the pointer.
+  let got = (sp: o.a[7], pushed: boardReadValue(board, o.a[7], 4),
+             sr: o.sr, fault: o.fault)
+  let wanted = (sp: wantSp, pushed: wantValue, sr: wantSr, fault: false)
+  check(got == wanted, label, $got, $wanted)
+
+proc expectFault(o: Outcome; label: string) =
+  let got = (fault: o.fault, halted: o.halted)
+  let wanted = (fault: true, halted: true)
+  check(got == wanted, label, $got, $wanted)
+
+# ---------------------------------------------------------------------------
+# `SWAP Dn` - THE HALVES OF A DATA REGISTER EXCHANGE.
+#
+# WHY THIS IS HERE AT ALL. `SWAP` was in no cpu task's covered list anywhere in
+# the implementation plan, so `opSwap` sat in the `Operation` enum with no arm
+# of `decodeWord` producing it. That was not a gap awaiting a later task: the
+# PEA arm's mask `word and 0xFFC0 == 0x4840` spans `4840`-`487f` and SWALLOWED
+# all eight SWAP encodings, and `eaLegalityFor(opPea)` excludes `Dn`, so every
+# `swap` on this core faulted as an illegal PEA operand.
+#
+# THE ENCODING AND THE OPERATION ARE MANUAL-GROUNDED AND MEASURED.
+#   - MCF5307 User's Manual Table 3-7, "Instruction Set Summary", page 3-25,
+#     read as a RENDERED IMAGE: `SWAP | Dn | 16 | MSW of Dn <-> LSW of Dn`.
+#     (The row does NOT survive `pdftotext`; a text-extracted search for
+#     "SWAP" over the whole manual returns only the Table 3-12 timing row.)
+#   - Table 3-12, "One Operand Instruction Execution Times", page 3-27:
+#     `swap | Dx | Rn 1(0/0)` and a DASH in all seven other columns, which is
+#     this project's legality oracle for "a data register and nothing else".
+#   - Section 3.9, page 3-21, lists the removed instruction groups - BCD, bit
+#     field, logical rotate, decrement and branch, integer division, and
+#     integer multiply with a 64-bit result. SWAP IS NOT AMONG THEM.
+#   - The pinned `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726) emits
+#     `4840` for `swap %d0`, `4843` for `swap %d3` and `4847` for `swap %d7`.
+#   - The shipped G2 operating system uses it: `CODE_30000400.bin` holds 339
+#     words in `4840`-`4847` on a two-byte-aligned scan, the first at
+#     `0x3000066c`. 339 IS THE MEASURED FIGURE AND 335 IS NOT RECONSTRUCTIBLE.
+#     An earlier relay of this count gave 335; no derivation reproduces it,
+#     and six were tried - unaligned 423, four-byte-aligned 167, skipping a
+#     `0x400` header 334, skipping `0x10000` 330, `objdump -m m68k:5307` 337,
+#     `objdump -m m68k:68000` 334. The 335 is recorded here as unexplained so
+#     that it is not mistaken for a third measurement if it resurfaces.
+#     `m68k-elf-objdump -m m68k:5307` decodes the first hit's context as
+#     `mulsl %d0,%d2 / addil #32768,%d2 / swap %d2 / extl %d2` - a 16.16
+#     fixed-point multiply that rounds by adding a half and then takes the
+#     high word. A core that faults on `swap` cannot run that firmware.
+#
+# THE CONDITION CODES ARE MANUAL-DERIVED, FROM SECTION 3.2.1.5, PAGE 3-9.
+# No PER-INSTRUCTION rule exists to read: Table 3-7's OPERATION column for
+# SWAP reads `MSW of Dn <-> LSW of Dn` with NO condition-code clause and
+# Table 3-12 gives timing only, and those two rows are the only places the
+# manual names SWAP. The GENERIC rule is what settles it. Section 3.2.1.5
+# opens at the foot of page 3-8 with the CCR bit-field figure and DOES NOT
+# END THERE; page 3-9 defines each bit - N "Set if the most significant bit
+# of the result is set; otherwise cleared", Z "Set if the result equals
+# zero; otherwise cleared", V "Set if an arithmetic overflow occurs implying
+# that the result cannot be represented in the operand size; otherwise
+# cleared", C "Set if a carryout of the operand MSB occurs for an addition,
+# or if a borrow occurs in a subtraction; otherwise cleared", X "Set to the
+# value of the C-bit for arithmetic operations; otherwise not affected".
+# Exchanging a register's halves is no addition, no subtraction and no
+# arithmetic operation, so V and C are cleared and X is untouched, and N and
+# Z come from the result. That is `setNzClearVc(ctx, result, 4)`, the rule
+# this core already shares between MOVE, MOVEQ, EXT, EXTB and the 32-bit
+# multiply - and it is the SAME derivation `logic.nim` runs for AND, OR, EOR
+# and NOT and for its shift-by-zero X guard, not a second argument.
+#
+# SECTION 3.9 IS NOT THE ORACLE, AND AN EARLIER REVISION OF THIS BLOCK MADE
+# IT ONE. It was cited here for "a reduced version of the 68000 instruction
+# set", concluding that a retained SWAP keeps its 68000 flags. That inference
+# fails twice over. Section 3.9's removed list is itself unreliable - page
+# 3-21 names "integer division" as removed while Table 3-7 on page 3-23
+# carries DIVS and DIVU rows and Table 3-13 on page 3-28 times `divs.w`,
+# `divu.w`, `divs.l` and `divu.l`. And "reduced version" is a claim about SET
+# MEMBERSHIP, not per-instruction semantics: Table 3-7 gives ADD, SUB, AND,
+# OR, EOR and CMP an OPERAND SIZE of 32 ALONE where the 68000 has `.b`, `.w`
+# and `.l`, so retained instructions here are not semantically identical to
+# their 68000 originals. Section 3.9 is still good for what it is used for
+# above - SWAP not appearing in a removal list is evidence about MEMBERSHIP,
+# which is the one kind of claim that list makes.
+#
+# THE CFPRM WALL IS REAL BUT IT IS NOT WHAT DECIDES THIS. CPU-9 met the same
+# wall on `ASL`'s overflow reading and the zero-shift-count status word
+# (section 24.6 row W3-28), derived what section 3.2.1.5 gives, and then
+# DECLINED to pin the residue. The flags below are pinned because 3.2.1.5
+# DERIVES them - not by precedent, and not by a 68000 inheritance argument.
+#
+# WHAT 3.2.1.5 DOES NOT GIVE IS THE WIDTH, AND THE CASES BELOW SEPARATE IT.
+# The section says "the result" and never states how wide that result is,
+# while Table 3-7's OPERAND SIZE column for SWAP says 16. A reader who takes
+# the flags from the operand size sets N from bit 15 and Z from the low half;
+# this core takes the whole 32-bit register, because the register is what the
+# instruction writes. The two readings disagree on any value whose halves
+# differ in their top bit, and the two cases marked N-SEPARATOR below -
+# `0x0000FFFF` and `0xFFFF0000` - are exactly those values. That residue is
+# genuinely open; the CFPRM would close it.
+#
+# IF THE CFPRM EVER ARRIVES AND CONTRADICTS THIS, the cases to change are the
+# `sr` arguments below and `setNzClearVc`'s call in `move.nim`; the register
+# results are manual-grounded and do not move.
+
+block:
+  # The reference case. 0x12345678 -> 0x56781234. Bit 31 of the result is
+  # clear and the result is non-zero, so the CCR stays clear.
+  expectDAll(runIns([0x4840'u16],
+                    d = [0x12345678'u32, 0, 0, 0, 0, 0, 0, 0]),
+    [0x56781234'u32, 0, 0, 0, 0, 0, 0, 0], srBase,
+    "swap d0 exchanges the halves of d0")
+
+  # N-SEPARATOR, and the direction that catches N taken from bit 15.
+  # 0x0000FFFF -> 0xFFFF0000. Bit 31 of the RESULT is set, so N is set; bit 15
+  # of the result is CLEAR, so a core that read the operand-size column of
+  # Table 3-7 as the flag width leaves N clear here and fails.
+  expectDAll(runIns([0x4840'u16],
+                    d = [0x0000FFFF'u32, 0, 0, 0, 0, 0, 0, 0]),
+    [0xFFFF0000'u32, 0, 0, 0, 0, 0, 0, 0], srBase or ccrN,
+    "swap d0 takes N from bit 31 of the whole result")
+
+  # N-SEPARATOR, the other direction. 0xFFFF0000 -> 0x0000FFFF. Bit 31 of the
+  # result is CLEAR so N is clear; bit 15 of the result is SET, so a bit-15
+  # core sets N here and fails. The pair brackets the rule from both sides,
+  # which one case alone cannot do.
+  expectDAll(runIns([0x4840'u16],
+                    d = [0xFFFF0000'u32, 0, 0, 0, 0, 0, 0, 0]),
+    [0x0000FFFF'u32, 0, 0, 0, 0, 0, 0, 0], srBase,
+    "swap d0 leaves N clear when bit 31 of the result is clear")
+
+  # Z IS TAKEN FROM ALL 32 BITS. Zero is the only value whose swap is itself,
+  # so this case cannot tell a swap from a no-operation on the register - it
+  # is here for the flag alone, and the cases above carry the register rule.
+  expectDAll(runIns([0x4840'u16], d = zero8),
+    zero8, srBase or ccrZ,
+    "swap d0 of zero sets Z")
+
+  # A HALF-ZERO VALUE MUST NOT SET Z, which a core taking Z from 16 bits does.
+  # 0x00001234 -> 0x12340000: the low half of the RESULT is zero.
+  expectDAll(runIns([0x4840'u16],
+                    d = [0x00001234'u32, 0, 0, 0, 0, 0, 0, 0]),
+    [0x12340000'u32, 0, 0, 0, 0, 0, 0, 0], srBase,
+    "swap d0 takes Z from all 32 bits and not from the low half")
+
+block:
+  # X IS UNTOUCHED AND V AND C ARE CLEARED. One case cannot show both: X must
+  # start SET to show it survives, and V and C must start SET to show they do
+  # not. This case starts all three set and asserts X alone survives.
+  expectDAll(runIns([0x4840'u16],
+                    d = [0x12345678'u32, 0, 0, 0, 0, 0, 0, 0],
+                    sr = srBase or ccrX or ccrV or ccrC),
+    [0x56781234'u32, 0, 0, 0, 0, 0, 0, 0], srBase or ccrX,
+    "swap d0 keeps X and clears V and C")
+
+block:
+  # EVERY REGISTER, AND EVERY OTHER REGISTER LEFT ALONE. The register file is
+  # seeded with eight distinct values, so a core that decoded the register
+  # field wrongly - or ignored it and always swapped d0 - writes the right
+  # value into the wrong place and the whole-array assertion catches it.
+  # `4840`-`4847` is the range the PEA mask used to swallow entire.
+  const seed: array[8, uint32] = [0x00010002'u32, 0x00110012, 0x00210022,
+                                  0x00310032, 0x00410042, 0x00510052,
+                                  0x00610062, 0x00710072]
+  const swapped: array[8, uint32] = [0x00020001'u32, 0x00120011, 0x00220021,
+                                     0x00320031, 0x00420041, 0x00520051,
+                                     0x00620061, 0x00720071]
+  for n in 0 .. 7:
+    var want = seed
+    want[n] = swapped[n]
+    expectDAll(runIns([uint16(0x4840 + n)], d = seed), want, srBase,
+      "swap d" & $n & " swaps d" & $n & " and leaves the other seven alone")
+
+# ---------------------------------------------------------------------------
+# `LEA` AND `PEA` AT `(xxx).W`, AND `MOVEM` STILL REFUSING IT.
+#
+# `eaControl7` is `{ea7AbsL, ea7PCDisp, ea7PCIndex}` - no `(xxx).W` - and LEA,
+# PEA and MOVEM all read it. LEA's and PEA's exclusions are WRONG and MOVEM's
+# is RIGHT, so one constant cannot serve all three.
+#
+# THE MANUAL PUTS `(xxx).W` IN THE CONTROL CATEGORY, and each of the three
+# instructions is settled by its OWN row rather than by that category alone:
+#   - Table 3-5, "Effective Addressing Modes and Categories", page 3-21:
+#     "Absolute Data Addressing / Short", syntax `(xxx).W`, mode field 111,
+#     register field 000, carries an `x` under DATA, MEMORY and CONTROL.
+#   - Table 3-13, "Two Operand Instruction Execution Times", page 3-28: the
+#     `lea | <ea>,Ax` row is timed 1(0/0) under `xxx.wl` and DASHED under
+#     `Rn`, `(An)+`, `-(An)` and `#xxx`.
+#   - Table 3-14, "Miscellaneous Instruction Execution Times", page 3-29: the
+#     `pea | <ea>` row is timed 2(0/1) under `xxx.wl`. PEA has its own row in
+#     its own table and does not have to borrow LEA's.
+#   - Page 3-26 defines the column: 'The nomenclature "xxx.wl" refers to both
+#     forms of absolute addressing, xxx.w and xxx.l.' So a time under
+#     `xxx.wl` is a time under `(xxx).W`.
+#   - Table 3-14 again, and this is what keeps MOVEM out: both `movem.l`
+#     rows are timed under `(An)` and `(d16,An)` ONLY, and DASHED under
+#     `xxx.wl`. Table 3-13's dash is this project's legality oracle, and here
+#     it points the other way from LEA's and PEA's times.
+#
+# The pinned `m68k-elf-as -mcpu=5307` agrees with all four rows: it accepts
+# `lea 0x1234.w,%a0` (`41f8 1234`), `lea 0x8000.w,%a0` (`41f8 8000`),
+# `lea 0x1234.w,%a3` (`47f8 1234`), `pea 0x1234.w` (`4878 1234`) and
+# `pea 0x8000.w` (`4878 8000`), and it REJECTS `movem.l %d0-%d1,0x1234.w`
+# with "operands mismatch".
+
+block:
+  # LEA loads the ADDRESS and touches no flag. `41f8 1234`.
+  expectA(runIns([0x41F8'u16, 0x1234'u16]), 0, 0x00001234'u32, srBase,
+    "lea (xxx).W loads the absolute short address into An")
+
+  # THE SIGN EXTENSION, AND IT IS THE CASE A ZERO-EXTENDING CORE FAILS.
+  # `(xxx).W` is sign-extended to 32 bits, so `0x8000` addresses `0xFFFF8000`
+  # and not `0x00008000`. `41f8 8000`.
+  expectA(runIns([0x41F8'u16, 0x8000'u16]), 0, 0xFFFF8000'u32, srBase,
+    "lea (xxx).W sign-extends the absolute short address")
+
+  # A SECOND DESTINATION REGISTER. `47f8 1234` is `lea 0x1234.w,%a3`, and a
+  # core that ignored the destination field would put the address in a0.
+  expectA(runIns([0x47F8'u16, 0x1234'u16]), 3, 0x00001234'u32, srBase,
+    "lea (xxx).W honours the destination register field")
+
+block:
+  # PEA pushes the ADDRESS and touches no flag. `4878 1234`. The stack starts
+  # at `stackBase` and a long word is pushed, so the pointer lands four bytes
+  # below it and the address is the long word AT the new pointer.
+  expectPushed(runIns([0x4878'u16, 0x1234'u16]),
+    stackBase - 4'u32, 0x00001234'u32, srBase,
+    "pea (xxx).W pushes the absolute short address")
+
+  # The sign extension again, on the push path. `4878 8000`.
+  expectPushed(runIns([0x4878'u16, 0x8000'u16]),
+    stackBase - 4'u32, 0xFFFF8000'u32, srBase,
+    "pea (xxx).W pushes the sign-extended absolute short address")
+
+block:
+  # MOVEM MUST STILL TRAP AT `(xxx).W`. This is the third direction of the
+  # split and the one that fails if `eaControl7` is simply widened.
+  #
+  # THE ENCODING IS HAND-BUILT BECAUSE THE ASSEMBLER REFUSES TO BUILD IT, and
+  # that refusal is the point. `MOVEM.L reglist,<ea>` is `0x48C0 | <ea>`; the
+  # `(xxx).W` effective address is mode 111 register 000, or `0x38`, giving
+  # `48f8`. The register mask `0003` selects d0 and d1 and the address word
+  # follows it.
+  #
+  # THE ADDRESS IS `0x0400`, INSIDE THE BOARD, AND THE CHOICE IS THE WHOLE
+  # STRENGTH OF THIS CASE. An earlier draft used `0x1234`, which is past the
+  # end of this file's 0x1000-byte board - so a MOVEM whose mask had been
+  # WIDENED to accept `(xxx).W` would reach the executor, attempt the store,
+  # take a BUS fault on the unmapped address, and set `fault` anyway. The
+  # case passed either way and asserted nothing. Measured: with the address
+  # at `0x1234`, wiring `opMovem` to `eaLeaPeaTarget` left this case GREEN.
+  # At `0x0400` the widened mask completes the store and `fault` stays
+  # false, so the case goes red. A legality trap and a bus fault are not the
+  # same failure and a test that cannot tell them apart is not a test.
+  expectFault(runIns([0x48F8'u16, 0x0003'u16, 0x0400'u16]),
+    "movem.l to (xxx).W traps")
+
+  # AND THE TRAP HAPPENED BEFORE ANY STORE. `fault` alone cannot say whether
+  # the registers reached memory first; this reads the target back. A widened
+  # mask leaves 0xAABBCCDD at 0x400 and fails here as well as above, so the
+  # rule is asserted in two independent directions.
+  block:
+    discard runIns([0x48F8'u16, 0x0003'u16, 0x0400'u16],
+                   d = [0xAABBCCDD'u32, 0x11223344, 0, 0, 0, 0, 0, 0])
+    let got = (at400: boardReadValue(board, 0x400'u32, 4),
+               at404: boardReadValue(board, 0x404'u32, 4))
+    let wanted = (at400: 0'u32, at404: 0'u32)
+    check(got == wanted,
+      "movem.l to (xxx).W stores nothing before it traps", $got, $wanted)
+
+  # THE POSITIVE CONTROL, and without it the case above passes on a core whose
+  # MOVEM is broken outright. `48d0 0003` is `movem.l %d0-%d1,(%a0)`, which
+  # the assembler DOES emit and which Table 3-14 times under `(An)`. A0 points
+  # into the scratch area, well clear of the instruction words and the stack.
+  expectDAll(runIns([0x48D0'u16, 0x0003'u16],
+                    d = [0xAABBCCDD'u32, 0x11223344, 0, 0, 0, 0, 0, 0],
+                    a = [0x400'u32, 0, 0, 0, 0, 0, 0, 0]),
+    [0xAABBCCDD'u32, 0x11223344, 0, 0, 0, 0, 0, 0], srBase,
+    "movem.l to (An) still executes and touches no flag")
+
+  # And the registers actually reached memory, which the register assertion
+  # above cannot see: d0 at 0x400 and d1 at 0x404, ascending, d0 first.
+  block:
+    let o = runIns([0x48D0'u16, 0x0003'u16],
+                   d = [0xAABBCCDD'u32, 0x11223344, 0, 0, 0, 0, 0, 0],
+                   a = [0x400'u32, 0, 0, 0, 0, 0, 0, 0])
+    let got = (at400: boardReadValue(board, 0x400'u32, 4),
+               at404: boardReadValue(board, 0x404'u32, 4),
+               fault: o.fault)
+    let wanted = (at400: 0xAABBCCDD'u32, at404: 0x11223344'u32, fault: false)
+    check(got == wanted, "movem.l to (An) stores d0 then d1 in ascending order",
+      $got, $wanted)
+
 if failures.len > 0:
   echo ""
   echo "t_move: ", failures.len, " of ", failures.len + passCount,

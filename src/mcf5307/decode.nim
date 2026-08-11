@@ -241,6 +241,26 @@ proc decodeWord*(word: uint16): Decoded =
     # six bits, bits 8..6 fixed at 111.
     return Decoded(op: opLea, ea: decodeEa(word),
                    destReg: uint8((word shr 9) and 0x7'u16))
+  elif (word and 0xFFF8'u16) == 0x4840'u16:
+    # SWAP Dn: the halves of a data register exchange. THIS TEST COMES BEFORE
+    # PEA AND THE ORDER IS LOAD-BEARING, exactly as EXT comes before MOVEM
+    # above and for the same reason. `0x4840 | <ea>` is PEA, and the eight
+    # words `4840`-`4847` are the sub-range whose mode field is 000 - a data
+    # register, which is not control addressing and so is no PEA operand at
+    # all. PEA's mask `word and 0xFFC0 == 0x4840` spans `4840`-`487f` and
+    # SWALLOWED all eight, and because `eaLegalityFor(opPea)` excludes `Dn`
+    # every `swap` then faulted as an illegal PEA operand instead of
+    # executing. Table 3-7, page 3-25, carries `SWAP | Dn | 16 | MSW of Dn
+    # <-> LSW of Dn`; Table 3-12, page 3-27, times `swap Dx` at 1(0/0) under
+    # `Rn`; section 3.9, page 3-21, does not list SWAP among the removed
+    # instructions; and `m68k-elf-as -mcpu=5307` emits `4840` for
+    # `swap %d0` and `4847` for `swap %d7`. The shipped G2 operating system
+    # uses it 339 times, the first at `0x3000066c`.
+    #
+    # IF THIS ARM IS MOVED BELOW THE PEA ARM, OR ITS MASK WIDENED BACK TO
+    # `0xFFC0`, the `swap` cases in `tests/t_move.nim` go red.
+    return Decoded(op: opSwap, ea: decodeEa(word), size: 4'u8,
+                   destReg: uint8(word and 0x7'u16))
   elif (word and 0xFFC0'u16) == 0x4840'u16:
     return Decoded(op: opPea, ea: decodeEa(word))
   elif (word and 0xFFC0'u16) == 0x48C0'u16:

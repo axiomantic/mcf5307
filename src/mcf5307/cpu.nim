@@ -121,7 +121,8 @@ proc step(ctx: MCF5307Ctx): uint32 =
   case decoded.op
   of opNop:
     result = fetchCycles + nopCycles
-  of opMove, opMovea, opMoveq, opMovem, opLea, opPea, opLink, opUnlk:
+  of opMove, opMovea, opMoveq, opMovem, opLea, opPea, opLink, opUnlk,
+     opSwap:
     # `moveFamily` executes the instruction
     # and halts the context with `fault` on an illegal encoding or an
     # illegal effective address.
@@ -156,45 +157,46 @@ proc step(ctx: MCF5307Ctx): uint32 =
     # and not on this part - or an exception frame whose format field is not
     # one of the four the part writes.
     result = fetchCycles + controlFamily(ctx, opWord, decoded)
-  of opExg, opSwap, opTas, opNbcd:
+  of opExg, opTas, opNbcd:
     # The `Operation` enum names every opcode the later instruction-group
     # tasks decode. Their execution semantics arrive with those tasks. Until
     # then exec halts rather than pretend to have executed them. `halted` is
     # set and `fault` is not, because the encoding is valid and only the
     # semantics are absent.
     #
-    # NO ARM OF `decodeWord` PRODUCES ANY OF THESE FOUR TODAY, and the arm is
+    # NO ARM OF `decodeWord` PRODUCES ANY OF THESE THREE, and the arm is
     # kept rather than deleted because the enum members are reachable through
     # `eaLegalityFor` and a `case` over `Operation` must be exhaustive.
     #
-    # THE REASON IS NOT THE SAME FOR ALL FOUR, AND ONE OF THEM IS A DEFECT.
+    # `opExg`, `opTas`, `opNbcd` - NOT ON THIS PART. Table 3-7, pages 3-23
+    # to 3-25, carries no EXG, TAS or NBCD row, Table 3-12, page 3-27, none
+    # either, and `m68k-elf-as -mcpu=5307` REJECTS `exg %d0,%d1`, `tas %d0`
+    # and `nbcd %d0`. Section 3.9, page 3-21, names BCD among the removed
+    # groups, which is NBCD; it does not name EXG or TAS, whose absence is
+    # the tables' and the assembler's. Nothing decodes them because there is
+    # nothing to decode. This is a property of the part.
     #
-    #   `opExg`, `opTas`, `opNbcd` - NOT ON THIS PART. Table 3-7, pages 3-23
-    #   to 3-25, carries no EXG, TAS or NBCD row, Table 3-12, page 3-27, none
-    #   either, and `m68k-elf-as -mcpu=5307` REJECTS `exg %d0,%d1`, `tas %d0`
-    #   and `nbcd %d0`. Section 3.9, page 3-21, names BCD among the removed
-    #   groups, which is NBCD; it does not name EXG or TAS, whose absence is
-    #   the tables' and the assembler's. Nothing decodes them because there is
-    #   nothing to decode. This is a property of the part.
+    # `opSwap` WAS THE FOURTH MEMBER OF THIS ARM AND IT HAS MOVED, BECAUSE
+    # ITS PRESENCE HERE WAS A DEFECT WEARING THE COSTUME OF A PROPERTY.
+    # SWAP is on this part - Table 3-7, page 3-25, carries `SWAP | Dn | 16 |
+    # MSW of Dn <-> LSW of Dn`, Table 3-12, page 3-27, times `swap Dx` at
+    # 1(0/0), section 3.9's removed list does not name it, and the shipped
+    # G2 operating system executes it 339 times. It reached this arm only
+    # because `decode.nim`'s PEA mask `word and 0xFFC0 == 0x4840` spans
+    # `4840`-`487f` and swallowed all eight SWAP encodings before any
+    # `opSwap` arm could be reached. `decode.nim` now tests `0xFFF8`/`0x4840`
+    # AHEAD of the PEA arm, `move.nim` executes it, and it is dispatched
+    # with the data-movement group above, which is the group Table 3-7 puts
+    # it in.
     #
-    #   `opSwap` - ON THIS PART, AND UNREACHABLE BECAUSE THIS CODE EATS IT.
-    #   SWAP IS NOT REMOVED: Table 3-7, page 3-25, carries the row
-    #   `SWAP | Dn | 16 | MSW of Dn <-> LSW of Dn`, Table 3-12, page 3-27,
-    #   carries a `swap Dx` row at 1(0/0), and `m68k-elf-as -mcpu=5307`
-    #   assembles `swap %d0` to `4840` and `swap %d7` to `4847`.
-    #   `decode.nim`'s PEA arm matches `word and 0xFFC0 == 0x4840`, which spans
-    #   `4840`-`487f` and so SWALLOWS ALL EIGHT SWAP ENCODINGS. Measured
-    #   against the decoder: `4840`, `4841` and `4847` all come back
-    #   `op=opPea, ea.mode=eaDn`, and `eaLegalityFor(opPea)` is control
-    #   addressing, which excludes `Dn` - so every `swap` on this core faults
-    #   as an illegal PEA operand instead of executing.
-    #
-    #   THAT IS A LIVE DEFECT, NOT A GAP AWAITING A LATER TASK. It is CPU-7's
-    #   code, pre-existing at commit a124077, and it is filed and repaired as
-    #   its own task - NOT here, and NOT by this arm. Until it is fixed,
-    #   "`opSwap` is not produced" must be read as "the decoder is wrong",
-    #   because the alternative reading - that the part has no SWAP - is
-    #   contradicted by both tables and by the assembler.
+    # THE LESSON IS WORTH MORE THAN THE REPAIR. Gate 4.4's 65,536-word sweep
+    # CONFIRMED the sentence that used to stand here - "no arm produces
+    # `opSwap`" - and the sentence was true, for the wrong reason. A
+    # measurement that verifies the LETTER of a claim can miss its MEANING,
+    # and an unreachable-opcode note is exactly the shape that makes a live
+    # defect look like a property of the silicon. What now keeps this
+    # honest is not a comment: `tests/t_move.nim` fails if the decoder
+    # stops producing `opSwap`.
     ctx.halted = true
     result = 0
   of opIllegal:

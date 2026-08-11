@@ -282,9 +282,60 @@ const eaJumpTarget* = EaLegality(
   ## `pea 0x1234.w` (`4878 1234`) ARE accepted, and
   ## `movem.l %d0-%d1,0x1234.w` is REJECTED. So MOVEM's exclusion is right and
   ## LEA's and PEA's are not, one constant cannot serve all four, and
-  ## WIDENING `eaControl7` WOULD BREAK MOVEM. Repairing LEA and PEA is CPU-7's
-  ## and is not done here; `tests/t_control.nim` records the measurement so
-  ## the next reader does not have to take it again.
+  ## WIDENING `eaControl7` WOULD BREAK MOVEM. LEA's and PEA's repair is
+  ## CPU-7's and is `eaLeaPeaTarget` below; `tests/t_control.nim` records the
+  ## measurement so the next reader does not have to take it again.
+
+const eaLeaPeaTarget* = EaLegality(
+  modes: eaControlModes, ea7: eaControl7 + {ea7AbsW})
+  ## THE OPERAND OF `LEA` AND `PEA`: control addressing INCLUDING the absolute
+  ## SHORT form. CPU-7 added it, and the entry above states why it could not
+  ## simply widen `eaControl7`.
+  ##
+  ## IT IS A THIRD CONSTANT AND NOT A REUSE OF `eaJumpTarget`, WHICH IT
+  ## CURRENTLY EQUALS. The two are equal by measurement rather than by
+  ## definition: `eaJumpTarget` is the class of a BRANCH TARGET and this is
+  ## the class of an ADDRESS an instruction computes. Folding them together
+  ## would mean a later correction to one silently moving the other, and the
+  ## entry above already records that this family has drifted once.
+  ##
+  ## THE MANUAL TIMES BOTH INSTRUCTIONS UNDER THE ABSOLUTE COLUMN, AND EACH
+  ## HAS ITS OWN ROW. Read as RENDERED IMAGES - the `SWAP` row of Table 3-7
+  ## does not survive `pdftotext` and neither do these:
+  ##
+  ##   - MCF5307 User's Manual Table 3-13, "Two Operand Instruction Execution
+  ##     Times", page 3-28. The `lea | <ea>,Ax` row is timed `1(0/0)` under
+  ##     `xxx.wl`, `1(0/0)` under `(An)` and under the merged
+  ##     `(d16,An)/(d16,PC)` column, `2(0/0)` under
+  ##     `(d8,An,Xi*SF)/(d8,PC,Xi*SF)`, and DASHED under `Rn`, `(An)+`,
+  ##     `-(An)` and `#xxx`.
+  ##
+  ##   - Table 3-14, "Miscellaneous Instruction Execution Times", page 3-29.
+  ##     The `pea | <ea>` row is timed `2(0/1)` under `xxx.wl`, `2(0/1)` under
+  ##     `(An)` and `(d16,An)`, `3(0/1)` under `(d8,An,Xi*SF)`, and DASHED
+  ##     under `Rn`, `(An)+`, `-(An)` and `#xxx`. PEA IS NOT BORROWING LEA'S
+  ##     ROW: it has its own, in its own table, and the two agree.
+  ##
+  ##   - Page 3-26 defines the column heading: 'The nomenclature "xxx.wl"
+  ##     refers to both forms of absolute addressing, xxx.w and xxx.l.' So a
+  ##     time under `xxx.wl` is a time under `(xxx).W`.
+  ##
+  ##   - Table 3-5, "Effective Addressing Modes and Categories", page 3-21,
+  ##     carries an `x` for "Absolute Data Addressing / Short" `(xxx).W` in
+  ##     the CONTROL column, beside `(xxx).L`.
+  ##
+  ## `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726, the pin in
+  ## `docs/toolchain.md`) corroborates: `lea 0x1234.w,%a0` assembles to
+  ## `41f8 1234`, `lea 0x8000.w,%a0` to `41f8 8000`, `lea 0x1234.w,%a3` to
+  ## `47f8 1234`, `pea 0x1234.w` to `4878 1234` and `pea 0x8000.w` to
+  ## `4878 8000`.
+  ##
+  ## `MOVEM` DOES NOT READ THIS AND MUST NOT. Table 3-14's two `movem.l` rows
+  ## are timed under `(An)` and `(d16,An)` ONLY and are DASHED under
+  ## `xxx.wl`, and the assembler rejects `movem.l %d0-%d1,0x1234.w` with
+  ## "operands mismatch". `tests/t_move.nim` asserts that MOVEM still traps
+  ## there, which is the case that fails if this constant is ever wired to
+  ## the MOVEM arm of `eaLegalityFor`.
 
 proc eaLegalityFor*(op: Operation): EaLegality =
   ## The legality mask the opcode carries. An opcode with no effective
@@ -422,12 +473,28 @@ proc eaLegalityFor*(op: Operation): EaLegality =
     # rejects `dbra %d0,.` and `dbf %d0,.`. CPU-13 owns the negative case and
     # this mask is the mechanism it asserts through.
     EaLegality(modes: {eaDn}, ea7: {})
-  of opLea, opMovem, opPea:
-    # These take control addressing only: (An), (d16,An), (d8,An,Xn),
-    # (xxx).L, (d16,PC), (d8,PC,Xn). A data register direct (mode 0), an
-    # immediate (mode 7, sub 4), a postincrement or a predecrement are
-    # illegal and must trap.
+  of opLea, opPea:
+    # CONTROL ADDRESSING INCLUDING `(xxx).W`. This arm USED TO BE SHARED WITH
+    # `opMovem` on `eaControl7`, and that was a live defect: `eaControl7`
+    # excludes `(xxx).W`, so `lea 0x1234.w,%a0` and `pea 0x1234.w` - two
+    # forms the pinned assembler emits - trapped. `eaLeaPeaTarget` carries
+    # the manual rows and the measurements.
+    eaLeaPeaTarget
+  of opMovem:
+    # MOVEM KEEPS `eaControl7`, AND ITS EXCLUSION OF `(xxx).W` IS CORRECT.
+    # Table 3-14, page 3-29, dashes both `movem.l` rows under `xxx.wl`, and
+    # `m68k-elf-as -mcpu=5307` rejects `movem.l %d0-%d1,0x1234.w`. This is
+    # why LEA and PEA needed a constant of their own rather than a wider
+    # `eaControl7`. A data register direct (mode 0), an immediate (mode 7,
+    # sub 4), a postincrement or a predecrement are illegal and must trap.
+    # `MOVEM -(An)` is the CPU-13 negative case.
     EaLegality(modes: eaControlModes, ea7: eaControl7)
+  of opSwap:
+    # A DATA REGISTER AND NOTHING ELSE. Table 3-7, page 3-25, gives the
+    # operand syntax as `Dn`, and Table 3-12, page 3-27, times `swap Dx`
+    # at 1(0/0) under `Rn` with a DASH in all seven other columns - the
+    # same shape as `ext`, `extb`, `neg`, `negx` and `not` in that table.
+    EaLegality(modes: {eaDn}, ea7: {})
   else:
     EaLegality(modes: {}, ea7: {})
 
