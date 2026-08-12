@@ -44,15 +44,17 @@
 ##
 ## THE SKIP RULE, STATED ONCE. An operation is outside the domain WHEN AND
 ## ONLY WHEN `eaLegalityFor` returns an EMPTY mask. That is the same test
-## `eaIsLegalFor` already makes, and `decode_types.nim:534-538` says why a
-## second list of the same operations drifts.
+## `eaIsLegalFor` already makes, and that proc's own doc comment in
+## `decode_types.nim` - "THE EMPTY MASK IS THE TEST" - says why a second
+## list of the same operations drifts.
 ##
 ## NOTHING HERE IS SKIPPED FOR BEING UNREACHABLE FROM THE DECODER, AND THAT
 ## RESTRICTION IS LOAD-BEARING RATHER THAN DECORATIVE. A skip justified by
 ## reachability would have skipped `SWAP` - the defect this file exists to
 ## catch, and the one that `decode.nim`'s PEA mask really was hiding while
-## `cpu.nim:177` carried the sentence "no arm produces it". Reachability is
-## not a skip criterion here at any strength.
+## `cpu.nim`'s `opExg, opTas, opNbcd` arm carried the sentence "no arm
+## produces `opSwap`". Reachability is not a skip criterion here at any
+## strength.
 ##
 ##   (4) The extension-word order of absolute long addressing, with its own
 ##       control. `(xxx).L` carries the high half of the address in the first
@@ -393,8 +395,9 @@ const
   dRegSeedMustBeNonZero = 0x00000007'u32
   aRegSeedStrideMustBeNonZero = 0x4'u32
   srAfterResetMustMatchCpuNim = 0x2700'u32
-    ## What `mcf5307_reset` leaves in the status register - `cpu.nim:104`, from
-    ## the G2 reset vector's `move.w #$2700,%sr`. `runFamily` seeds every other
+    ## What `mcf5307_reset` leaves in the status register - `cpu.nim`'s
+    ## `mcf5307_reset` writes `ctx.sr = 0x2700'u32` - from the G2 reset
+    ## vector's `move.w #$2700,%sr`. `runFamily` seeds every other
     ## register `pristine` reads, so this is its one copy of PRODUCTION state.
     ## NOT imported from `cpu.nim`: one shared symbol would hide a wrong value.
 func aRegSeed(i: int): uint32 = ramBase + uint32(i) * aRegSeedStrideMustBeNonZero
@@ -705,12 +708,12 @@ let coverage: seq[Coverage] = @[
   # measured by dropping the flag and widening the arm together, and the plan
   # section carries the run.
   #
-  # WHAT IS LOST WITHOUT THE FLAG IS ASSERTION (4)'s SUBJECT. `logic.nim:431`
-  # picks `eaBitStatic` for the static form, `eaBitStatic` also rejects `An`,
-  # and so the executor keeps trapping and (4) stays GREEN over a widened
-  # mask - passing while exercising a mask that is not the entry's own. The
-  # flag points assertion (4) at the operation's own mask, and that is the
-  # whole of what it does.
+  # WHAT IS LOST WITHOUT THE FLAG IS ASSERTION (4)'s SUBJECT. `logic.nim`'s
+  # `execBitOp` picks `eaBitStatic` for the static form, `eaBitStatic` also
+  # rejects `An`, and so the executor keeps trapping and (4) stays GREEN over
+  # a widened mask - passing while exercising a mask that is not the entry's
+  # own. The flag points assertion (4) at the operation's own mask, and that
+  # is the whole of what it does.
   cov(opBtst, famLogic, mDn, mAn, whyAnNotData, regOperand = true),
   cov(opBchg, famLogic, mDn, mAn, whyAnNotData, regOperand = true),
   cov(opBclr, famLogic, mDn, mAn, whyAnNotData, regOperand = true),
@@ -824,12 +827,13 @@ proc table313ImmOf(c: Coverage): Option[Table313Imm] =
   ## THAT IS THE OPERATIONAL CONTENT OF THE `#xxx` COLUMN. A time under `#xxx`
   ## is the manual timing the case where the effective address IS an immediate,
   ## which the four shift rows have - `<ea>,Dx`, where the `<ea>` is the shift
-  ## COUNT and `logic.nim:523` reads `uint32(d.imm)` for it. A DASH is the
-  ## manual withholding that case, which the other eight rows have: their
-  ## `<EA>` syntax is `#imm,Dx` or `Dy,Dx`, the `<ea>` is a register, and the
-  ## long immediate those rows do carry is a separate EXTENSION WORD fetched
-  ## from the instruction stream - `decode.nim:313` and `decode.nim:372` - so
-  ## `d.imm` reaches nothing and the two runs are identical.
+  ## COUNT and `logic.nim`'s `execShift` reads `uint32(d.imm)` for it. A DASH
+  ## is the manual withholding that case, which the other eight rows have:
+  ## their `<EA>` syntax is `#imm,Dx` or `Dy,Dx`, the `<ea>` is a register,
+  ## and the long immediate those rows do carry is a separate EXTENSION WORD
+  ## fetched from the instruction stream - `decode.nim`'s `opAddi` and `opOri`
+  ## arms, each commented "immediate follows this word" - so `d.imm` reaches
+  ## nothing and the two runs are identical.
   ##
   ## THIS IS A SECOND SOURCE AND NOT A ROSTER ASSERTED AGAINST ITSELF. The
   ## executor is production code written from the manual, it is independent of

@@ -110,6 +110,24 @@ type
     fault*: bool
 
 # ---------------------------------------------------------------------------
+# The width of one word of the instruction stream.
+#
+# It lives here because BOTH of its readers are here-or-above and neither is
+# above the other: `cpu.nim`'s `step` advances the pc past the OPCODE word and
+# `machine.nim`'s `fetchExt` advances it past an EXTENSION word. Those two
+# modules import this one already, so a shared constant costs no new edge;
+# `machine.nim` cannot import `cpu.nim` and does not need to.
+#
+# One width and not two: on this ISA every word of the instruction stream is
+# 16 bits, so the opcode word and each extension word are the same width by
+# the encoding and not by coincidence. This is not `fetchCycles`, which shares
+# the value 2 by arithmetic accident; the block above the constants in
+# `cpu.nim` separates the two and records what each one guards.
+
+const insWordBytes* = 2'u32
+  ## one word of the instruction stream, in bytes
+
+# ---------------------------------------------------------------------------
 # The effective-address legality table.
 
 const eaMemoryAlterable* = EaLegality(modes: eaMemAlterableModes,

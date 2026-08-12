@@ -565,8 +565,10 @@ struct CaseRun {
 // The returned cycle count stops carrying information under this budget - a
 // completed instruction reports the budget and a halted core reports zero - so
 // it is read as "did an instruction complete" and never as a cost. The corpus
-// asserts no cycle count (`conformance/generate.py`), and the per-instruction
-// costs are nominal until the clock question is settled.
+// asserts no cycle count (`conformance/generate.py`), and neither does anything
+// else in this tree: the block above the constants in `src/mcf5307/cpu.nim`
+// carries that fact and the evidence for it, and every executor module points
+// at that block rather than repeating it.
 //
 // A core that refused to start an instruction it could not afford would return
 // zero here, and `runCase` fails a case that completed no instruction. This

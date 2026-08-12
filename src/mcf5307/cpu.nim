@@ -41,15 +41,97 @@ import mcf5307/logic
 import mcf5307/control
 
 # ---------------------------------------------------------------------------
-# The instruction-cycle costs.
+# THE CYCLE COUNTS, AND WHY NOTHING CHECKS THEM. Stated once here; the four
+# executor modules point at this block instead of repeating it.
 #
-# These are nominal. The per-instruction cycle budget on serial MCF5307
-# silicon is not settled, so no exact cost is asserted anywhere. The only
-# property asserted is that `mcf5307_exec` returns a non-zero count.
+# `mcf5307_exec` SATURATES AT ITS BUDGET, and that is the whole mechanism. The
+# conformance runner passes 1 (`kBudget`, `conformance/runner.cpp`) and so do
+# `t_alu`, `t_move`, `t_logic` and `t_control`, so the return is 1 for an
+# instruction that ran and 0 for one that trapped and carries no count at all.
+# The `cycles` field of those four drivers is that return, and MOST OF THEIR
+# TUPLES LEAVE IT OUT. Measured 2026-08-12 over the `let`-bound named-field
+# tuple literals of the four, 24 of 86 carry a `cycles` member: `t_logic` 14 of
+# 18, `t_alu` 8 of 28, `t_control` 2 of 22, and `t_move` 0 of 18, which fills
+# the field and reads it in no assertion at all. `expectPc` in `t_alu` is one
+# of the omitting sites. Where a tuple does carry it, flattened to 0-or-1 it
+# reads like a counter and is not one. THREE assertions read a return not
+# flattened to 0-or-1, and every one of them asserts its DIRECTION and never
+# its value. `t_ea_masks` assertion (5) is `check(cycles > 0'u32, ...)` in
+# `tests/t_ea_masks.nim`, over the `mcf5307_exec(ctx, 64'u32)` beside it and
+# its budget of 64: EVERY non-zero return passes it, so it cannot tell 64
+# from 1. It saturates as well - its board answers NOP to every fetch, and
+# measured 2026-08-12 against this tree, with that assertion temporarily
+# strengthened to `cycles == 64'u32`, the 4-cycle NOP fills the budget exactly
+# and returns 64 while `nopCycles` at 1044 makes the 1046-cycle NOP take the
+# saturation clause and return 64 AGAIN.
+# Assertions (3) and (4) of the same file read a return that never entered
+# `mcf5307_exec` at all - `runFamily` calls the family procs directly - and
+# assert only that a legal operand costs something and a trapped one costs
+# nothing. No cycle count is asserted anywhere.
+#
+# MEASURED 2026-08-12 AGAINST THIS TREE - the one where `step` advances the pc
+# by `insWordBytes` and `fetchCycles` prices the fetch alone. EVERY non-zero
+# cycle expression in `src/mcf5307` given a distinct wrong value in one build -
+# 45 of them over 40 sites, 41..49 in `move`, 51..65 in `alu`, 71..79 in
+# `logic`, 81..90 in `control` and 91 and 92 here. The census counts each ARM
+# of an `if` expression and each COEFFICIENT of a sum separately, which is what
+# makes `move` 9 over 8 sites and `logic` 9 over 7. Reach: 44 of the 45 appear
+# as their own literal in the generated C of a fresh configure, the Nim
+# transpile being a configure-time step; the forty-fifth is `nopCycles`, which
+# is constant-folded and reaches the C only as the sum `fetchCycles +
+# nopCycles` - `((NU32)183)` present, `((NU32)4)` absent. EVERY SUITE HELD ITS
+# BASELINE: t_alu 165, t_ea_masks 395, t_move 34, t_logic 74, t_control 168,
+# t_sign_extend 10, conformance 23/32/48/82/185, ctest exit 8 with `abi_smoke`
+# - which fails to LINK against 13 unimplemented ABI symbols - the one failure.
+#
+# A DATE IS NOT A TREE STATE, and this result is a property of the tree above
+# rather than of the calendar. The SAME 45-value mutation applied to the tree
+# at HEAD c374e8c, where `step` still advanced the pc by `fetchCycles`, reds 63
+# unit cases - t_alu 27, t_move 7, t_logic 6, t_control 23 - and 120 corpus
+# cases - 14, 13, 17 and 76 - measured 2026-08-12 by reconstructing that tree
+# and rerunning. Any measurement recorded here names the tree it ran against
+# and not only the day it ran.
+#
+# `fetchCycles` IS IN THAT POPULATION AND IS NOT SPECIAL. It used to advance
+# the program counter as well as price the fetch, and a wrong value then red
+# unit and corpus cases through the pc. The pc now advances by `insWordBytes`,
+# a width in bytes sharing the value 2 by arithmetic accident, and measured
+# 2026-08-12 `fetchCycles` alone at 1091 reds NOTHING - 0 unit cases, 0 corpus
+# cases, every suite at its baseline.
+#
+# `insWordBytes` IS WHAT THE SUITE ACTUALLY GUARDS, and it is declared in
+# `decode_types.nim`, not here, because it is not a cycle count. Its red count
+# MOVES WITH THE WRONG VALUE, so a count quoted without its value does not
+# reproduce. Measured 2026-08-12: 63 unit cases at 99, 63 at 3, 64 at 8 and 65
+# at 4 - `t_logic` supplies the movement at 6, 6, 7 and 8 - against 120 corpus
+# cases at all four.
+#
+# THE TWO PC SITES ARE NOW ONE CONSTANT, AND COUPLING THEM COST ONE CASE. Both
+# `step` below and `fetchExt` in `machine.nim` advance the pc by that constant,
+# so a wrong value moves the opcode word and every extension word TOGETHER and
+# the two errors can cancel. Measured 2026-08-12 against the same tree with the
+# two sites separate: the opcode site alone at 3 reds 64 unit cases where the
+# shared constant reds 63, and the case that recovers is `t_logic`'s
+# `andi.l #5,%d0 = 0 and sets Z`, whose displaced immediate still ANDs to zero.
+# The extension site was never unguarded - separate and wrong alone at 6 it
+# reds 8 unit cases and 36 corpus cases - so this change bought one name for
+# one concept and not new coverage.
+#
+# HOW TO READ ANY NUMBER HERE OR IN AN EXECUTOR. None was derived from the
+# manual, and the split into a fetch cost plus an executor return is this
+# core's own: Tables 3-9 to 3-16, folios 3-26 to 3-30, time WHOLE instructions
+# and decompose nothing. Where a return happens to EQUAL a cell of those tables
+# the site names the cell; where the manual carries no row for the instruction
+# the site says so. A RETURN WITH NO COMMENT MAKES NO CLAIM ABOUT THE TABLES.
+#
+# Cycle accuracy, if it is ever wanted, needs a new return type rather than
+# better constants: a saturating `uint32` cannot report a count the caller
+# bounded.
 
 const
   fetchCycles = 2'u32   ## one 16-bit instruction fetch
-  nopCycles = 2'u32     ## NOP on the execution pipe
+  nopCycles = 2'u32     ## NOP on the execution pipe. The pair sums to 4 where
+                        ## Table 3-14, folio 3-29, times `nop` at 3(0/0) whole.
 
 # ---------------------------------------------------------------------------
 # Core lifecycle.
@@ -117,7 +199,7 @@ proc step(ctx: MCF5307Ctx): uint32 =
   # narrowed value, and the executors take it at its own width.
   let opWord = uint16(word and 0xFFFF'u32)
   let decoded = decodeWord(opWord)
-  ctx.pc = ctx.pc + fetchCycles
+  ctx.pc = ctx.pc + insWordBytes
   case decoded.op
   of opNop:
     result = fetchCycles + nopCycles

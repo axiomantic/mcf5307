@@ -113,6 +113,7 @@ type Outcome = object
   d: array[8, uint32]
   a: array[8, uint32]      ## a[7] is the single A7 (the stack pointer)
   sr: uint32
+  pc: uint32               ## the only witness of an extension word too many
 
 proc runIns(words: openArray[uint16];
             d: array[8, uint32] = zero8;
@@ -156,6 +157,7 @@ proc runIns(words: openArray[uint16];
     result.d[i] = mcf5307_get_reg(ctx, cint(i))
     result.a[i] = mcf5307_get_reg(ctx, cint(8 + i))
   result.sr = mcf5307_get_reg(ctx, 16)
+  result.pc = mcf5307_get_reg(ctx, 17)
   mcf5307_destroy(ctx)
 
 proc mem32(address: uint32): uint32 =
@@ -849,6 +851,61 @@ block:
   let got = (d1: o.d[1], fault: o.fault, halted: o.halted, cycles: o.cycles)
   let want = (d1: 4'u32, fault: true, halted: true, cycles: 0'u32)
   check(got == want, "mulu.w from an address register traps", $got, $want)
+
+block:
+  # (i) THE THREE ADDRESS-REGISTER SOURCES, WHERE THE PROGRAM COUNTER IS THE
+  # ONLY WITNESS. `(%a0)`, `(%a0)+` and `-(%a0)` read no word from the
+  # instruction stream, so an executor that fetched an extension word here -
+  # the word form has none, and `src/mcf5307/decode.nim` names the hazard -
+  # writes the SAME destination register, the SAME status word and the SAME
+  # address register, and leaves the pc two bytes high. The five cases above
+  # whose source word comes from the instruction stream - the two IMMEDIATE,
+  # the PC-RELATIVE and the two ABSOLUTE SHORT - catch such a fetch on the
+  # operand VALUE and red under the insertion described below;
+  # `divs.w takes an INDIRECT source` has no value to move and stays green.
+  #
+  # THE ADDRESS REGISTER IS NOT A SECOND WITNESS. `eaAddr` increments and
+  # decrements it from the register alone, so the over-fetch does not move it.
+  # Measured 2026-08-11 with `discard fetchExt(ctx)` at the head of
+  # `execMulWord` and `execDivWord`: probe cases of `(%a0)+` and `-(%a0)` that
+  # asserted the operand, the status word and a0 but NOT the pc stayed GREEN
+  # beside these three, which red.
+  #
+  # ONE MODE PER EXECUTOR IS WHAT THIS PINS, and that is the limit. The word
+  # multiply and the word divide are separate procedures, and two more runs of
+  # the same day separate them: with the fetch in `execMulWord` alone the two
+  # multiply cases red and the divide case stays green, and with it in
+  # `execDivWord` alone the reverse. A fetch conditional on BOTH a procedure
+  # and one addressing mode - a divide that over-fetched for `(%a0)` only - is
+  # not covered here. `mulu_w_reg_source_takes_no_extension_word` in the corpus
+  # pins the same rule for a DATA-register source and is not repeated.
+  proc expectPc(o: Outcome; d1: uint32; a0: uint32; sr: uint32; label: string) =
+    let got = (d1: o.d[1], a0: o.a[0], pc: o.pc, sr: o.sr, fault: o.fault)
+    let want = (d1: d1, a0: a0, pc: execBase + 2'u32, sr: sr, fault: false)
+    check(got == want, label, $got, $want)
+
+  # `mulu.w (%a0),%d1` is `c2d0`. 7 * 6 = 42, and a0 must not move.
+  expectPc(runIns([0xC2D0'u16], d = [0'u32, 6, 0, 0, 0, 0, 0, 0],
+                  a = [0x200'u32, 0, 0, 0, 0, 0, 0, 0],
+                  mem = @[(0x200'u32, 0x00070000'u32)]),
+    42'u32, 0x200'u32, srBase,
+    "mulu.w (a0),d1 consumes no extension word")
+
+  # `divu.w (%a0)+,%d1` is `82d8`. 17 / 3 is 5 remainder 2, and the source is
+  # a WORD, so a0 advances by 2 and not by 4.
+  expectPc(runIns([0x82D8'u16], d = [0'u32, 17, 0, 0, 0, 0, 0, 0],
+                  a = [0x200'u32, 0, 0, 0, 0, 0, 0, 0],
+                  mem = @[(0x200'u32, 0x00030000'u32)]),
+    0x00020005'u32, 0x202'u32, srBase,
+    "divu.w (a0)+,d1 consumes no extension word")
+
+  # `muls.w -(%a0),%d1` is `c3e0`. a0 enters at 0x202 and the decrement of 2
+  # puts the operand at 0x200: -3 * 3 = -9.
+  expectPc(runIns([0xC3E0'u16], d = [0'u32, 3, 0, 0, 0, 0, 0, 0],
+                  a = [0x202'u32, 0, 0, 0, 0, 0, 0, 0],
+                  mem = @[(0x200'u32, 0xFFFD0000'u32)]),
+    0xFFFFFFF7'u32, 0x200'u32, srBase or ccrN,
+    "muls.w -(a0),d1 consumes no extension word")
 
 # ---------------------------------------------------------------------------
 # The encodings this part does not have. Every one below was offered to

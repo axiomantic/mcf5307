@@ -101,55 +101,67 @@
 ##       Section 3.3, page 3-11: the processor copies SR, then sets the S-bit
 ##       and clears the T-bit. `machine.nim`'s `takeException` carries it.
 ##
-## CYCLES ARE NOMINAL, for the reason `move.nim`, `alu.nim`, `logic.nim` and
-## `cpu.nim` all give: the per-instruction budget needs the clock work of open
-## question 6 in AGENTS.md and no exact cost is asserted anywhere. Uncertainty
-## 3 below gives the mechanism: `Outcome.cycles` is the return of
-## `mcf5307_exec(ctx, 1)`, which SATURATES at its budget, so it reports 1 for an
-## instruction that ran and 0 for one that trapped and CANNOT SEE A COUNT AT
-## ALL. Every number in this module is therefore a PLACEHOLDER, and nothing in
-## the tree would notice if it were wrong.
+## CYCLES. The block above the constants in `cpu.nim` says why nothing checks
+## any of them, and uncertainty 3 below is this group's entry. THE NUMBERS ARE
+## NOT A TRANSCRIPTION OF THE TABLES. Read on the rendered pages, against what
+## the code returns:
 ##
-## THEY ARE NOT A TRANSCRIPTION OF THE TABLES, and this header used to say they
-## were. Read on the rendered pages, against what the code returns:
+##   FOUR ARE EXACT, each of them a row carrying a SINGLE cell that the one
+##   return equals, which is why no effective address can pull them apart the
+##   way it pulls the three below apart. `execScc` returns 1 and Table 3-12,
+##   folio 3-27, gives `scc Dx` 1(0/0); `execRts` returns 8 and Table 3-15,
+##   folio 3-30, gives `rts` 8(1/0); `execRte` returns 14 and the same table
+##   gives `rte` 14(2/0); `execTrap` returns 18 and Table 3-14, folio 3-29,
+##   gives `trap #imm` 18(1/2). An exact number is still unchecked, but it was
+##   not invented.
 ##
-##   THE BRANCH NUMBERS ARE IN NO TABLE AT ALL. `execBranch` returns 3 for BSR
-##   and 2 for BRA and Bcc. Table 3-16, page 3-30, gives `bra` 1(0/0) taken in
-##   either direction and `Bcc` 5(0/0) or 1(0/0) depending on whether the static
-##   prediction held; Table 3-15, page 3-30, gives `bsr` 1(0/1). NEITHER 2 NOR 3
-##   APPEARS IN EITHER TABLE. They are invented, and the inline comment at the
-##   foot of `execBranch` is the honest one.
+##   THREE ARE FLATTENED ACROSS THE EFFECTIVE ADDRESS. `execJump` returns 5 for
+##   every operand; Table 3-15 gives `jmp`/`jsr` 5 for `(An)` and `(d16,An)`
+##   but 6 for the indexed forms and 1 for `xxx.wl` - 1(0/0) for `jmp` and
+##   1(0/1) for `jsr`, whose extra write is the return address. Notes 1 and 2
+##   widen those two `xxx.wl` cells to 1-to-3, which the flat 5 is outside as
+##   well. `execTst` returns 1 for a register and 3 otherwise, and the flat 3 is
+##   FIVE of the SEVEN non-register cells of the `tst.l` row of Table 3-12 -
+##   `(An)`, `(An)+`, `-(An)`, `(d16,An)` and `xxx.wl` are each 3(1/0) - but NOT
+##   the whole row: `(d8,An,Xi*SF)` is 4(1/0) and `#xxx` is 1(0/0), and `tst.b`
+##   and `tst.w` read 4(1/0) on those same five. `execCompare` returns 1 for all
+##   three comparisons; Table 3-13, "Two Operand Instruction Execution Times",
+##   folio 3-28, gives `cmpi.l #imm,Dx` ONE cell and it is 1(0/0), SO THE FLAT
+##   1 IS EXACT FOR CMPI, while its `cmp.l <ea>,Rx` row is 1(0/0) under `Rn`
+##   and `#xxx` ALONE and reads 4(1/0) under `(An)`, `(An)+`, `-(An)`,
+##   `(d16,An)` and `xxx.wl` and 5(1/0) under `(d8,An,Xi*SF)`.
 ##
-##   THE EA-DEPENDENT ONES ARE FLATTENED, and there are THREE of them.
-##   `execJump` returns 5 for every effective address; Table 3-15 gives
-##   `jmp`/`jsr` 5 for `(An)` and `(d16,An)` but 6 for the indexed forms and 1
-##   for `xxx.wl` - 1(0/0) for `jmp` and 1(0/1) for `jsr`, whose extra write is
-##   the return address. `execTst` returns 1 for a register and 3 otherwise,
-##   and the flat 3 matches FIVE of the SEVEN non-register cells of the `tst.l`
-##   row of Table 3-12 on page 3-27 - `(An)`, `(An)+`, `-(An)`, `(d16,An)` and
-##   `xxx.wl` are each 3(1/0) - but NOT the whole row: `(d8,An,Xi*SF)` is
-##   4(1/0) and `#xxx` is 1(0/0). `tst.b` and `tst.w` on `(An)` are 4(1/0)
-##   there too. `execCompare` returns 1 for all three comparisons; Table 3-13,
-##   "Two Operand Instruction Execution Times", page 3-28, gives `cmpi.l
-##   #imm,Dx` ONE cell and it is 1(0/0), so the flat 1 is exact for CMPI, but
-##   its `cmp.l <ea>,Rx` row is 1(0/0) under `Rn` and `#xxx` ALONE and reads
-##   4(1/0) under `(An)`, `(An)+`, `-(An)`, `(d16,An)` and `xxx.wl` and 5(1/0)
-##   under `(d8,An,Xi*SF)`. CMPA HAS NO ROW IN THAT TABLE at all, on either of
-##   its pages 3-28 and 3-29, so CMPA's number is invented the way the branch
-##   numbers are.
+##   ONE HAS NO SOURCE AT ALL, AND IT IS NOT A BRANCH. CMPA HAS NO ROW IN TABLE
+##   3-13, on folio 3-28 or folio 3-29, so its number is invented outright
+##   rather than flattened out of a row; `alu.nim` records the same absence for
+##   ADDA and SUBA. NO ROW ANYWHERE is a worse fact than the three below, which
+##   are outside a cell but inside a documented range.
 ##
-##   FOUR HAPPEN TO MATCH EXACTLY - four whose table row carries a SINGLE cell
-##   and whose one return is that cell, which is why no effective address can
-##   pull them apart the way it pulls `execJump`, `execTst` and `execCompare`
-##   apart. It is worth saying so rather than overcorrecting: `execRts`
-##   returns 8 and Table 3-15 gives `rts` 8(1/0);
-##   `execRte` returns 14 and Table 3-15 gives `rte` 14(2/0); `execTrap`
-##   returns 18 and Table 3-14, page 3-29, gives `trap #imm` 18(1/2). `execScc`
-##   returns 1 and Table 3-12 gives `scc Dx` 1(0/0). A matching number is still
-##   a placeholder - nothing measures it - but it was not invented.
+##   ALL THREE BRANCH RETURNS SIT INSIDE A DOCUMENTED RANGE, IN NO CELL.
+##   `execBranch` returns 3 for BSR and 2 for BRA and Bcc. No cell carries
+##   either: Table 3-16, folio 3-30, gives `bra` 1(0/0) taken in either
+##   direction and dashes both not-taken columns; Table 3-15 gives `bsr`
+##   1(0/1) under `(d16,An)`/`(d16,PC)` and dashes the rest; and Bcc's row
+##   reads 5(0/0) forward-taken, 1(0/0) forward-not-taken, 1(0/0) backward-
+##   taken and 5(0/0) backward-not-taken. THE NOTES BENEATH THOSE TABLES ARE
+##   PART OF THEM, AND THEY DO NOT ALL END ON FOLIO 3-30. Note 1, superscripted
+##   onto both `bra` cells and onto two `jmp` cells, and note 2, superscripted
+##   onto the `bsr` cell and onto `jsr xxx.wl`, each say the branch-
+##   acceleration decoupling makes the execution time "vary from 1 to 3
+##   cycles"; BSR's 3 and BRA's 2 are inside that range. NOTE 3, Bcc's only
+##   superscript, ENDS FOLIO 3-30 MID-SENTENCE - "This algorithm is as
+##   follows:" - AND RUNS ONTO FOLIO 3-31, which prints the prediction
+##   algorithm and then Table 3-17, "Another Table of Bcc Instruction Execution
+##   Times": Bcc 1(0/0) predicted correctly as taken, 1(0/0) predicted
+##   correctly as not-taken, 5(0/0) mispredicted. Immediately beneath it the
+##   manual says the predicted-correctly-as-taken column "can vary between 1 to
+##   3 cycles depending on the amount of decoupling" between the two pipelines.
+##   Bcc's 2 is inside that range, by the same reading that puts BRA's 2 inside
+##   note 1's.
 ##
-## A plausible number is no worse than an invented one for a budget nothing
-## checks. Uncertainty 3.
+##   A TABLE'S ROWS AND ITS NOTES CAN END ON DIFFERENT FOLIOS, and a second
+##   table on the same subject can follow the notes. A citation to a table read
+##   on one page is not complete until the next page has been read.
 ##
 ## WHAT THIS MODULE DOES NOT KNOW. Four things, and the rule for every one is
 ## the one `logic.nim` established: THE IMPLEMENTATION PICKS A BEHAVIOUR AND
@@ -200,12 +212,14 @@
 ##
 ##   3. THE EXACT CYCLE COUNT of every instruction in this group. Nothing
 ##      asserts it, and `tests/t_control.nim`'s `cycles` field is not a
-##      counter-case though its name reads like one: it is the return of
-##      `mcf5307_exec(ctx, 1)`, which SATURATES at its budget, so the value is
-##      1 for an instruction that ran and 0 for one that trapped and it cannot
-##      see a count at all. `logic.nim`'s uncertainty 2 measured the same
-##      thing for its own group by replacing all nine of its cycle returns
-##      with wrong numbers and watching every case stay green.
+##      counter-case though its name reads like one; `cpu.nim` states the
+##      mechanism once, above its cycle constants. MEASURED 2026-08-12 AGAINST
+##      THIS TREE, as part of the project-wide run recorded there: all ten
+##      cycle expressions of this module - ten over eight return sites, by the
+##      census convention stated there - given distinct wrong values (81..90),
+##      each confirmed as its own literal in the generated C of a fresh
+##      configure; `t_control` held its 168 cases and the control corpus held
+##      its 82.
 ##
 ##   4. WHAT AN `RTE` WITH A BAD FORMAT FIELD SHOULD DO. Section 3.5.7, "RTE
 ##      and Format Error Exceptions", page 3-16, is unambiguous that it
@@ -342,11 +356,11 @@ proc execBranch(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
       return 0'u32
   if d.op != opBcc or conditionHolds(ctx.sr, d.destReg):
     ctx.pc = target
-  # Table 3-16, page 3-30, gives `Bcc` 1 or 5 cycles depending on whether the
-  # static prediction was right; it gives `bra` 1(0/0) taken in either
-  # direction, with no prediction in it, and it has no `bsr` row at all -
-  # Table 3-15 on the same page gives `bsr` 1(0/1). Neither 2 nor 3 is any of
-  # those. Nominal; see uncertainty 3.
+  # No CELL of Table 3-15 or Table 3-16 carries 2 or 3, but their NOTES do, and
+  # the notes run past folio 3-30. Note 1 puts BRA's 2 inside a documented
+  # 1-to-3 range and note 2 puts BSR's 3 inside one; note 3 continues onto
+  # folio 3-31, where Table 3-17 and the sentence beneath it put Bcc's 2 inside
+  # one as well. This module's header carries the three readings.
   if d.op == opBsr: 3'u32 else: 2'u32
 
 # ---------------------------------------------------------------------------
@@ -547,11 +561,11 @@ proc execTrap(ctx: MCF5307Ctx; d: Decoded): uint32 =
 
 proc controlFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   ## Execute one control-flow or comparison instruction. Called from `step` in
-  ## `mcf5307/cpu` with the opcode word and the decoded operation. Returns the
-  ## instruction's nominal cycles excluding the fetch; halts the context with
-  ## `fault` set on an illegal size, an illegal effective address, a 32-bit
-  ## branch displacement or an exception frame whose format field is not one
-  ## of the four the part writes.
+  ## `mcf5307/cpu` with the opcode word and the decoded operation. Returns a
+  ## PLACEHOLDER cycle count excluding the fetch - see the cycle block in
+  ## `cpu.nim` - and halts the context with `fault` set on an illegal size, an
+  ## illegal effective address, a 32-bit branch displacement or an exception
+  ## frame whose format field is not one of the four the part writes.
   case d.op
   of opBra, opBsr, opBcc: execBranch(ctx, word, d)
   of opScc: execScc(ctx, d)

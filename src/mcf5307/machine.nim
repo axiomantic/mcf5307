@@ -167,7 +167,7 @@ proc fetchExt*(ctx: MCF5307Ctx): uint16 =
     ctx.fault = true
     ctx.halted = true
     return 0'u16
-  ctx.pc = ctx.pc + 2'u32
+  ctx.pc = ctx.pc + insWordBytes
   uint16(v and 0xFFFF'u32)
 
 # Sign extension of a displacement or an immediate value.
