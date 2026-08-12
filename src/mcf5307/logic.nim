@@ -116,9 +116,14 @@
 ##   THAT CASE AND NOT ITS STATUS WORD, which is what keeps the choice
 ##   unpinned.
 ##
-## CYCLES ARE NOMINAL, for the reason `move.nim`, `alu.nim` and `cpu.nim` all
-## give: the per-instruction budget needs the clock work of open question 6 in
-## AGENTS.md and no exact cost is asserted anywhere.
+## CYCLES. The block above the constants in `cpu.nim` says why nothing checks
+## any of them, and uncertainty 2 below is this group's entry. Every
+## instruction here has a timing row - all of them in Table 3-13 (folios 3-28
+## and 3-29) except NOT, which is in Table 3-12 (3-27) - and none of the
+## returns here was derived from one. Eight of those rows carry `1(0/0)` in
+## every cell they carry at all - `not.l Dx`, the three `#imm,Dx` immediate
+## rows, and the four shifts, which are timed under `Rn` and `#xxx` and dashed
+## everywhere else - against the 4 and 6 returned.
 ##
 ## WHAT THIS MODULE DOES NOT KNOW. Five things, and the rule for every one of
 ## them is the same: THE IMPLEMENTATION PICKS A BEHAVIOUR AND NOTHING ASSERTS
@@ -143,16 +148,14 @@
 ##
 ##   2. THE EXACT CYCLE COUNT of every instruction in this group. NOTHING
 ##      ASSERTS IT, AND `tests/t_logic.nim`'s `cycles` FIELD IS NOT A COUNTER-
-##      CASE THOUGH ITS NAME READS LIKE ONE. That field is the return of
-##      `mcf5307_exec(ctx, 1)`, and `mcf5307_exec` SATURATES AT ITS BUDGET: a
-##      cost of 2 for the fetch plus anything this module returns already
-##      exceeds a budget of one, so the value is 1 for an instruction that ran
-##      and 0 for one that trapped, and it cannot see a count at all. MEASURED:
-##      ALL NINE cycle returns in this module replaced by wrong numbers - 44,
-##      66, 45, 65, 66, 46, 41, 61 and 47 in source order, `trap`'s zero left
-##      alone - every one confirmed in the generated C, rebuilt from a fresh
-##      configure of a fresh extract; all 74 `t_logic` cases and all 74 corpus
-##      cases stayed GREEN.
+##      CASE THOUGH ITS NAME READS LIKE ONE; `cpu.nim` states the mechanism
+##      once, above its cycle constants. MEASURED 2026-08-12 AGAINST THIS TREE,
+##      as part of the project-wide run recorded there: all nine cycle
+##      expressions of this module - nine over seven return sites, by the
+##      census convention stated there - given distinct wrong values (71..79),
+##      `trap`'s zero left alone, each confirmed as its own literal in the
+##      generated C of a fresh configure; `t_logic` held its 74 cases and the
+##      logic corpus held its 48.
 ##
 ##   3. WHETHER A DYNAMIC BTST MAY READ AN IMMEDIATE OPERAND. User's Manual
 ##      Table 3-13, page 3-28, dashes the `#xxx` column of the `btst Dy,<ea>`
@@ -567,9 +570,10 @@ proc execShift(ctx: MCF5307Ctx; d: Decoded): uint32 =
 
 proc logicFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   ## Execute one logic, bit-operation or shift instruction. Called from `step`
-  ## in `mcf5307/cpu` with the opcode word and the decoded operation. Returns
-  ## the instruction's nominal cycles excluding the fetch; halts the context
-  ## with `fault` set on an illegal size or an illegal effective address.
+  ## in `mcf5307/cpu` with the opcode word and the decoded operation. Returns a
+  ## PLACEHOLDER cycle count excluding the fetch - see the cycle block in
+  ## `cpu.nim` - and halts the context with `fault` set on an illegal size or
+  ## an illegal effective address.
   case d.op
   of opAnd, opOr: execAndOr(ctx, d)
   of opEor: execEor(ctx, d)

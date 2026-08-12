@@ -2,9 +2,12 @@
 ## core. Task CPU-8 creates this file. Design section 6.1.
 ##
 ## This module executes ADD, ADDA, ADDI, ADDQ, ADDX, SUB, SUBA, SUBI, SUBQ,
-## SUBX, NEG, NEGX, CLR, EXT, EXTB, MULU.L, MULS.L, DIVU.L, DIVS.L and the two
+## SUBX, NEG, NEGX, CLR, EXT, EXTB, MULU, MULS, DIVU and DIVS in BOTH their
+## word and their long forms - eight instructions, not four - and the two
 ## REMx.L forms, AND NOTHING ELSE. The register file, the board accesses and
-## the effective-address evaluation are `mcf5307/machine`'s.
+## the effective-address evaluation are `mcf5307/machine`'s. The word forms are
+## `execMulWord` and `execDivWord`, and they are what makes the MUL and DIV
+## rows of Table 3-13 EIGHT rather than four.
 ##
 ## THIS MODULE IS A SIBLING OF `move.nim` AND OF `decode.nim`. It imports
 ## neither, and neither imports it. Adding this group cost one new module, one
@@ -31,9 +34,31 @@
 ## silicon and CPU-14 owns the vector table. Until then it halts the context
 ## with `fault`, which is the same channel every other illegal operand uses.
 ##
-## CYCLES ARE NOMINAL, for the reason `move.nim` and `cpu.nim` both give: the
-## per-instruction budget needs the clock work of open question 6 in AGENTS.md
-## and no exact cost is asserted anywhere.
+## CYCLES. The block above the constants in `cpu.nim` says why nothing checks
+## any of them. Every instruction in this group has a timing row - ADD and SUB
+## with their I, Q and X forms and the eight MUL and DIV rows in Table 3-13
+## (folios 3-28 and 3-29), NEG, NEGX, CLR, EXT and EXTB in Table 3-12 (3-27) -
+## with four exceptions. THE OPCODE COLUMN IS NOT ALPHABETICAL, so a gap
+## between neighbours proves nothing: `msac.w` and `msac.l` print BEFORE
+## `moveq` on folio 3-28, and `divs.w`/`divu.w` before `divs.l`/`divu.l`. The
+## count is four on FULL ENUMERATION of both pages instead - 42 rows on folio
+## 3-28, `add.l` through `mulu.l`, and 8 on folio 3-29, `or.l` through
+## `subx.l`, 50 in all - and not one of the 50 names `adda.l`, `suba.l`,
+## `rems.l` or `remu.l`. Those four numbers have no source at all rather than a
+## flattened one. `control.nim` records the same absence for CMPA, established
+## the same way.
+##
+## THE REMx FORMS DO NOT INHERIT THE DIVIDE ROW. This module models them as
+## behaviour of their own inside `execDiv` - an unequal register pair writes
+## the remainder and leaves Dq alone - and TABLE 3-13 does not price them:
+## across the 50 rows enumerated above there is no `rems.l` row and no `remu.l`
+## row, and the `divs.l`/`divu.l` row names those two opcodes and no others.
+## THAT IS THE WHOLE OF WHAT WAS CHECKED - folios 3-28 and 3-29, not the rest
+## of the manual. A reader who priced REMS.L or REMU.L off the divide row would
+## be quoting a cell the table never offered for them.
+##
+## The word MUL and DIV returns equal a cell of their own row and say so at the
+## site; nothing else here was derived from a table.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
 ## semantics, the condition-code rules and the encodings are facts about
@@ -322,11 +347,12 @@ proc execMulWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # and neither continuation page (4-56, 4-58) carries a second. The word
   # table therefore governs both sizes.
   setNzClearVc(ctx, res, 4)
-  # MCF5307 User's Manual Table 3-13 p.3-28, `muls.w`/`mulu.w <ea>,Dx`, the
-  # `Rn` column: `3(0/0)`. THIS CORE RETURNS ONE NOMINAL FIGURE PER FORM AND
-  # DOES NOT MODEL THE PER-OPERAND COLUMNS - the row also carries `6(1/0)` for
-  # the four memory modes, `7(1/0)` for `(d8,An,Xi*SF)`, `6(1/0)` for `xxx.wl`
-  # and `3(0/0)` for `#xxx`, and none of those is returned here.
+  # MCF5307 User's Manual Table 3-13, folio 3-28, `muls.w`/`mulu.w <ea>,Dx`:
+  # `3(0/0)` under `Rn` AND under `#xxx`. THE EQUALITY IS NOT A MODEL. The rest
+  # of the row is `6(1/0)` for the four memory modes, `7(1/0)` for
+  # `(d8,An,Xi*SF)` and `6(1/0)` for `xxx.wl`, none of which this core returns,
+  # and nothing checks the number: it was 61 in the census the cycle block in
+  # `cpu.nim` records, and every suite held its baseline count.
   3'u32
 
 proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
@@ -371,12 +397,17 @@ proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
   let res = uint32((uint64(dst) * uint64(src)) and 0xFFFFFFFF'u64)
   setRegD(ctx, dl, res)
   setNzClearVc(ctx, res, 4)
+  # `muls.l`/`mulu.l <ea>,Dx` reads `5(0/0)` under `Rn` and `8(1/0)` under the
+  # four memory modes, Table 3-13 folio 3-28. 10 IS NEITHER.
   10'u32
 
 const divWordCycles = 20'u32
-  ## MCF5307 User's Manual Table 3-13 p.3-28, `divs.w`/`divu.w <ea>,Dx`, the
-  ## `Rn` column: `20(0/0)`. As with the multiply above, this core returns one
-  ## nominal figure per form and does not model the per-operand columns.
+  ## MCF5307 User's Manual Table 3-13, folio 3-28, `divs.w`/`divu.w <ea>,Dx`:
+  ## `20(0/0)` under `Rn` AND under `#xxx`. THE EQUALITY IS NOT A MODEL - the
+  ## rest of the row is `23(1/0)` for the four memory modes, `24(1/0)` for
+  ## `(d8,An,Xi*SF)` and `23(1/0)` for `xxx.wl` - and nothing checks it: this
+  ## constant was 63 in the census the cycle block in `cpu.nim` records, and
+  ## every suite held its baseline count.
 
 proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## DIVU.W and DIVS.W: a 32-bit dividend in Dx over a 16-bit source, with
@@ -545,6 +576,10 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # remainder; the two REMx cases that covered it happened to have a quotient
   # and a remainder agreeing on both N and Z, so nothing caught it.
   setNzClearVc(ctx, quotient, 4)
+  # `divs.l`/`divu.l <ea>,Dx` reads `35(0/0)` under `Rn` and `35(1/0)` under
+  # the four memory modes, Table 3-13 folio 3-28, and dashes the rest. 10 IS
+  # NEITHER, and it is the same 10 the long multiply returns for a row that
+  # reads 5 and 8. The overflow path above returns it too.
   10'u32
 
 # ---------------------------------------------------------------------------
@@ -552,10 +587,10 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
 
 proc aluFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   ## Execute one integer-arithmetic instruction. Called from `step` in
-  ## `mcf5307/cpu` with the opcode word and the decoded operation. Returns the
-  ## instruction's nominal cycles excluding the fetch; halts the context with
-  ## `fault` set on an illegal size, an illegal effective address or a divide
-  ## by zero.
+  ## `mcf5307/cpu` with the opcode word and the decoded operation. Returns a
+  ## PLACEHOLDER cycle count excluding the fetch - see the cycle block in
+  ## `cpu.nim` - and halts the context with `fault` set on an illegal size, an
+  ## illegal effective address or a divide by zero.
   case d.op
   of opAdd: execAddSub(ctx, d, false)
   of opSub: execAddSub(ctx, d, true)

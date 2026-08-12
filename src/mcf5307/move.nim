@@ -25,10 +25,16 @@
 ## operand evaluation walks them. The MOVEM mask precedes the EA extension
 ## words, so the mask is fetched before the EA's own words.
 ##
-## CYCLES ARE NOMINAL. The per-instruction cycle budget on serial MCF5307
-## silicon needs the clock work of open question 6 in AGENTS.md; until it is
-## settled no exact cost is asserted anywhere (cpu.nim carries the same
-## note). A later task replaces the constants when the clock is settled.
+## CYCLES. The block above the constants in `cpu.nim` says why nothing checks
+## any of them. Every instruction in this group HAS a timing row - MOVE and
+## MOVEA in Tables 3-9 and 3-10 (folios 3-26 and 3-27), MOVEQ and LEA in Table
+## 3-13 (3-28), SWAP in Table 3-12 (3-27), and PEA, LINK, UNLK and MOVEM in
+## Table 3-14 (3-29) - and NONE OF THE RETURNS HERE WAS DERIVED FROM ONE. Four
+## of those rows carry a SINGLE cell that the return contradicts outright, so
+## no effective-address flattening explains them: `moveq #imm,Dx` is 1(0/0)
+## against the 4 returned, `swap Dx` is 1(0/0) against 4, `link.w Ay,#imm` is
+## 2(0/1) against 8, and `unlk Ax` is 3(1/0) against 6. `movem.l` is `2+n`
+## against the `8+2n` here.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
 ## semantics, register numbering and addressing-mode behaviour are facts
@@ -219,10 +225,10 @@ proc execMovem(ctx: MCF5307Ctx; d: Decoded): uint32 =
 
 proc moveFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   ## Execute one data-movement instruction. Called from `step` in
-  ## `mcf5307/cpu` with the opcode word and the decoded operation. Returns the
-  ## instruction's nominal cycles excluding the fetch; halts the context
-  ## with `fault` set on an illegal encoding or an illegal effective
-  ## address.
+  ## `mcf5307/cpu` with the opcode word and the decoded operation. Returns a
+  ## PLACEHOLDER cycle count excluding the fetch - see the cycle block in
+  ## `cpu.nim` - and halts the context with `fault` set on an illegal encoding
+  ## or an illegal effective address.
   case d.op
   of opMove, opMovea:
     if d.size == 0 or (d.op == opMovea and d.size == 1):
