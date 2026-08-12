@@ -72,7 +72,9 @@
 ## widened mask would move the asserted mode with it. Every `illegal` field
 ## below carries its own citation, so a mask that widens to admit THAT mode
 ## turns the entry RED instead of moving it. A widening that admits some OTHER
-## mode is invisible here, and assertion (1) below carries that limit.
+## mode is invisible TO THE ENTRY, and assertion (1) below carries that limit;
+## block (19) is what covers that direction for the whole domain, by holding
+## each mask against a literal rather than by naming one mode.
 ##
 ## THE WORD "EVERY" IN THAT PARAGRAPH IS ASSERTION (11) AND NOT A PROMISE.
 ## `why` is required by `cov`, so a row cannot omit a citation but can pass one
@@ -89,7 +91,8 @@
 ##       mode, so a mask that widens somewhere else passes (1) unchanged.
 ##       This is the exact mirror of the narrowing blindness recorded further
 ##       down, and it has the same single cause: one cited mode per entry.
-##       Both directions are measured; the plan section holds both.
+##       Both directions are measured; the plan section holds both. Block (19)
+##       is what closes both, and it closes them by not naming a mode at all.
 ##
 ##   (2) THE PREDICATE ACCEPTS A LEGAL MODE - the positive control. Without
 ##       it, a mask that rejected everything would report (1) as a pass and
@@ -209,8 +212,8 @@
 ## and none was made. UNCHECKED, and closing it is one deletion and one full
 ## run rather than an argument.
 ##
-## A NARROWED MASK IS INVISIBLE TO THIS FILE FOR EVERY ENTRY, AND NOT ONLY FOR
-## THE ELEVEN. Each entry names exactly ONE legal mode, so a mask NARROWED to
+## A NARROWED MASK IS INVISIBLE TO EVERY `coverage` ENTRY, AND NOT ONLY TO THE
+## ELEVEN. Each entry names exactly ONE legal mode, so a mask NARROWED to
 ## that single mode passes all four assertions unchanged: (1) still rejects the
 ## cited illegal mode, (2) still accepts the one legal mode the entry names,
 ## and (3) and (4) drive those same two operands and nothing else. Most entries
@@ -220,23 +223,29 @@
 ## worse for them than for the rest - the discriminating flag is about assertion
 ## (4)'s ATTRIBUTION and says nothing at all about narrowing.
 ##
-## THE MITIGATION IS PARTIAL AND LIVES OUTSIDE THIS FILE. `t_move`, `t_alu`,
-## `t_logic`, `t_control` and the conformance corpus assert POSITIVE behaviour
-## on legal modes, so a narrowing that removes a mode one of THOSE exercises
-## turns them red. A narrowing that removes a mode NOTHING in the repository
-## exercises goes unnoticed everywhere, this file included.
+## WHAT COVERS THE NARROWING DIRECTION IS BLOCK (19), AND IT IS IN THIS FILE.
+## It holds every one of the 51 operation-and-size masks against its literal
+## value, so a narrowing anywhere in the domain is RED there whether or not
+## anything exercises the mode it removed. `t_move`, `t_alu`, `t_logic`,
+## `t_control` and the conformance corpus assert POSITIVE behaviour on legal
+## modes and red beside it where they happen to drive one. That mitigation AND
+## this file's own blocks (12), (13), (14) and (16) and `coverage` rows were the
+## whole of the coverage until block (19) existed, and between them they reached
+## 217 of the 338 cells - the complement of the 121 that block (19) measured as
+## reddening nothing else anywhere. AN EARLIER REVISION OF THIS SENTENCE GAVE
+## THE 217 TO THE EXTERNAL SUITES ALONE, which is not what the sweep measured:
+## part of it is reached only by the four blocks in this file.
 ##
-## ONE NARROWING HAS BEEN MEASURED, AND WHAT CAUGHT IT WAS THE CONFORMANCE
-## CORPUS AND NOT THE FAMILY TEST THE PARAGRAPH ABOVE NAMES FIRST. `opMove` and
-## `opMovea` narrowed to `{eaDn}`/`{}` left THIS FILE green and `t_move` green,
-## and turned `mcf5307_conformance_move` red. `t_move` drives MOVE
-## register-to-register only, so it asserts positive MOVE behaviour on the one
-## mode that narrowing keeps. The transcript is in the plan section.
-##
-## ONE NARROWING OF ONE MASK IS NOT THE GENERAL CASE, AND NOTHING HERE CLAIMS
-## IT IS. The other masks were NOT mutated. For them the paragraph above
-## remains an argument about where coverage happens to fall, and an argument
-## and a measurement are not interchangeable.
+## WHERE THAT MITIGATION FALLS IS NOT AN ARGUMENT ANY MORE. Every cell of every
+## mask in the domain has been deleted on its own and the whole suite run, so
+## the split between the cells something else exercises and the cells nothing
+## else exercises is a measurement rather than a guess. Block (19) carries it.
+## The one narrowing that predates that sweep is still worth its sentence,
+## because of WHICH suite caught it: `opMove` and `opMovea` narrowed to
+## `{eaDn}`/`{}` left THIS FILE green and `t_move` green and turned
+## `mcf5307_conformance_move` red - `t_move` drives MOVE register-to-register
+## only, so it asserts positive MOVE behaviour on the one mode that narrowing
+## keeps. The transcript is in the plan section.
 ##
 ## THE OTHER TWO ASSERTIONS THE FILE HAS ALWAYS CARRIED ARE KEPT.
 ##
@@ -1167,10 +1176,12 @@ block:
 # `3 of 34 cases failed` - `movem.l to (xxx).L traps`, `movem.l to (xxx).L
 # stores nothing before it traps` AND `movem.l to (d8,An,Xi) traps`, the last
 # of which the pair above omits. This file prints
-# `4 of <caseTotalMustMatchTranscripts> cases failed`, one per cell named
-# below. Nothing else in the suite moves. RE-MEASURED 2026-08-11 with block
-# (18) in place, because that block is itself a case and moved the
-# denominator.
+# `5 of <caseTotalMustMatchTranscripts> cases failed` - one per cell named
+# below, and one more for block (19)'s `opMovem` row, which holds the whole
+# mask against a literal and reds on any change to it. Nothing else in the
+# suite moves. RE-MEASURED 2026-08-12 with blocks (18) and (19) in place,
+# because (18) is itself a case that moved the denominator and (19) moved this
+# mutation's blast radius.
 #
 # THE DENOMINATOR IS A NAMED CONSTANT AND NOT A NUMBER. Neither copy of this
 # transcript spells the figure: both name `caseTotalMustMatchTranscripts`, the
@@ -1343,51 +1354,65 @@ block:
 #   eaControl7 + {ea7Imm}       2 red: 0 executor, both `checkMask`
 #
 # IN THE TWO `eaControl7` DIRECTIONS EVERY `t_control` RED IS A MASK ROW, AND
-# THE TWO DIRECTIONS DIFFER IN WHAT IS LEFT ELSEWHERE. Under
-# `- {ea7AbsW}` the executor-level evidence lives in other files - `t_move`'s
-# five `lea`/`pea (xxx).W` cases and the `jmp_absolute_short` conformance case
-# all red, eleven cases in all. Under `+ {ea7Imm}` NOTHING executes: the five
-# reds are this file's two block-(14) cases, block (17)'s `eaControl7`
-# equality and `t_control`'s two `#imm is illegal` rows, every one of them a
-# mask or value assertion. The CFPRM provenance the block carried is on the
-# `eaControl7` declaration in `src/mcf5307/ea.nim`, beside the value it cites.
+# THE TWO DIRECTIONS DIFFER IN WHAT IS LEFT ELSEWHERE. Re-measured 2026-08-12
+# with block (19) in place and block (17) deleted. Under `- {ea7AbsW}` the
+# executor-level evidence lives in other files - `t_move`'s five `lea`/`pea
+# (xxx).W` cases and the `jmp_absolute_short` conformance case all red,
+# fourteen cases in all. Under `+ {ea7Imm}` NOTHING executes: the eight reds
+# are this file's two block-(14) cases, block (19)'s four rows for `opLea`,
+# `opPea`, `opJmp` and `opJsr`, and `t_control`'s two `#imm is illegal` rows,
+# every one of them a mask or value assertion. The CFPRM
+# provenance the block carried is on the `eaControl7` declaration in
+# `src/mcf5307/ea.nim`, beside the value it cites.
 #
 # WHY BLOCK (14) SURVIVES THE SAME ARGUMENT. LEA and PEA have no cell table
 # anywhere else, which is NOT the same as their being untested: the baseline
-# `ctest -V` transcript carries THIRTY-TWO case labels naming LEA or PEA,
-# measured 2026-08-11 - 27 in this file (this block's eighteen, the `coverage`
-# rows' four assertions for each of `opLea` and `opPea`, and block (6)'s
-# `decodes LEA (A0),A0`) and 5 in `t_move`, which EXECUTES `lea (xxx).W` and
-# `pea (xxx).W` and reds all five under `eaControl7 - {ea7AbsW}`. What block
-# (14) holds alone is the two cells no other case names.
+# `ctest -V` transcript carries THIRTY-FOUR case labels naming LEA or PEA,
+# measured 2026-08-12 - 29 in this file (this block's eighteen, the `coverage`
+# rows' four assertions for each of `opLea` and `opPea`, block (6)'s
+# `decodes LEA (A0),A0`, and block (19)'s two rows) and 5 in `t_move`, which
+# EXECUTES `lea (xxx).W` and `pea (xxx).W` and reds all five under
+# `eaControl7 - {ea7AbsW}`.
 #
 # THE MUTATION THAT SHOWS IT IS `eaLeaPeaTarget` WIDENED ON ITS OWN to
-# `ea7: eaControl7 + {ea7Imm}`: 2 red in the ENTIRE suite, both this block's
-# `the mask REJECTS #<data>` cases, and every other case green. That is the
-# criterion the deletion above rests on, met in block (14)'s favour.
+# `ea7: eaControl7 + {ea7Imm}`: measured 2026-08-12, 4 red in the ENTIRE suite -
+# this block's two `the mask REJECTS #<data>` cases and block (19)'s `opLea` and
+# `opPea` rows - and every other case green.
 #
-# WIDENING `eaControl7` ITSELF IS THE WRONG WITNESS FOR THAT CLAIM, because
-# the widening moves four operations at once: it reds FIVE - this block's two,
-# block (17)'s `eaControl7` equality and `t_control`'s `jmp #imm is illegal`
-# and `jsr #imm is illegal` - so under it block (14) does not red alone.
-# Block (15) never red alone in any direction.
+# BLOCK (19) DOES NOT MAKE THIS BLOCK THE SECOND DETECTOR BLOCK (15) WAS, AND
+# THE DIFFERENCE IS THE LAYER. Block (15) computed the SAME booleans through the
+# SAME predicate as `t_control`, so no mutation could separate them. Block (19)
+# compares `eaLegalityFor`'s ANSWER against a literal; this block asks
+# `eaIsLegalFor` about a cell, which runs `isEaLegal` on top of that answer.
+# Measured 2026-08-12 with `isEaLegal` made to answer true unconditionally: this
+# block reds 4 and block (19) reds 0. Neither is reachable only through the
+# other.
+#
+# WIDENING `eaControl7` ITSELF IS THE WRONG WITNESS FOR THAT CLAIM, because the
+# widening moves four operations at once: measured 2026-08-12 it reds EIGHT -
+# this block's two, block (19)'s four rows for `opLea`, `opPea`, `opJmp` and
+# `opJsr`, and `t_control`'s `jmp #imm is illegal` and `jsr #imm is illegal` -
+# so under it block (14) does not red alone. An earlier revision of this line
+# said FIVE: it counted block (17)'s `eaControl7` equality and no block-(19)
+# row, and was not re-measured when block (19) landed. Block (15) never red
+# alone in any direction.
 
 # ---------------------------------------------------------------------------
 # (16) THE ADDQ AND SUBQ MASK, ENUMERATED CELL BY CELL. THIS BLOCK CLOSES A
 # MEASURED BLIND SPOT AND THE DIRECTION IS NARROWING, which is the direction
 # this file has repeatedly been weakest in.
 #
-# MEASURED 2026-08-11, EACH MUTATION RUN THROUGH THE WHOLE SUITE:
+# MEASURED 2026-08-12, EACH MUTATION RUN THROUGH THE WHOLE SUITE:
 #
-#   eaAlterable7 - {ea7AbsW}   3 red, AND ALL THREE ARE CASES ADDED WITH THIS
-#                              BLOCK: the two `the mask accepts (xxx).W` rows
-#                              below and block (17)'s `eaAlterable7 is the two
-#                              absolute forms and nothing else`. BEFORE they
+#   eaAlterable7 - {ea7AbsW}   4 red, and every one is a case added with this
+#                              block or with block (19): the two `the mask
+#                              accepts (xxx).W` rows below, and block (19)'s
+#                              `opAddq` and `opSubq` rows. BEFORE EITHER PAIR
 #                              existed this narrowing left the ENTIRE SUITE
 #                              GREEN - ADDQ and SUBQ would have trapped on
 #                              `addq.l #1,0x1234.w`, a form the pinned
 #                              assembler emits, and nothing would have said so.
-#   eaAlterable7 + {ea7PCDisp} 7 red, of which `t_alu` 2 were already there.
+#   eaAlterable7 + {ea7PCDisp} 8 red, of which `t_alu` 2 were already there.
 #                              The WIDENING direction was already guarded.
 #
 # THAT ASYMMETRY IS THE POINT. The `coverage` rows for these two declare
@@ -1402,14 +1427,14 @@ block:
 # "THE MODE SET" HAS TWO READINGS HERE AND THEY GIVE DIFFERENT NUMBERS, because
 # ADDQ and SUBQ NO LONGER HAVE A MODE SET OF THEIR OWN: their arm names
 # `eaAllModes`, which ELEVEN operations share. Measured
-# 2026-08-11, each mutation configured FRESH and run through `ctest`:
+# 2026-08-12, each mutation configured FRESH and run through `ctest`:
 #
 #   the ADDQ/SUBQ ARM ALONE - `eaAllModes - {eaAn}` written at that one site:
-#     4 red. `t_alu` 2 (`addq.l #1,a1 wraps and leaves the condition codes
-#     alone`, `the ADDQ mask admits An`) and this block 2.
+#     6 red. `t_alu` 2 (`addq.l #1,a1 wraps and leaves the condition codes
+#     alone`, `the ADDQ mask admits An`), this block 2 and block (19) 2.
 #   the SHARED DECLARATION - `eaAn` deleted from `eaAllModes` in `ea.nim`:
-#     11 red. `t_alu` 3, `t_control` 3, this block 2 and the conformance
-#     corpus 3. Those eleven are the blast radius of the OTHER NINE READERS
+#     22 red. `t_alu` 3, `t_control` 3, this block 2, block (19) 11 and the
+#     conformance corpus 3. Those are the blast radius of ALL ELEVEN READERS
 #     and not better coverage of ADDQ and SUBQ; `ea.nim` names all eleven.
 #
 # EITHER READING LEAVES THE CONCLUSION STANDING. `t_alu` reds under both, so
@@ -1460,74 +1485,326 @@ block:
         " `m68k-elf-as -mcpu=5307` answers \"operands mismatch\")")
 
 # ---------------------------------------------------------------------------
-# (17) THE MODE-7 SETS, HELD AGAINST THEIR LITERAL MEMBERSHIP. Every assertion
-# above reaches a set through `eaLegalityFor`, so a RENAME is invisible to all
-# of them and so is a rename that quietly moved a member. These cases name the
-# members, so a rename cannot smuggle a value change past the suite.
+# (17) THE MODE-7 SETS HELD AGAINST THEIR LITERAL MEMBERSHIP STOOD HERE UNTIL
+# 2026-08-12 AND WAS DELETED ON THE TEST BLOCK (15) WAS DELETED ON. Three cases
+# pinned `eaValid7`, `eaControl7` and `eaAlterable7` against the members spelled
+# out in them. Each of the three sets is read by an arm of `eaLegalityFor` whose
+# mask block (19) below holds against a literal, so NO VALUE CHANGE TO ANY OF
+# THEM CAN RED BLOCK (17) ALONE. Measured 2026-08-12, each mutation configured
+# FRESH and run through `ctest`, with block (17) still present:
 #
-# THE STATED LIMIT. This block pins the VALUE of each set and says NOTHING
-# about whether the NAME describes it. A set renamed truthfully and a set
-# renamed to a second lie are indistinguishable here; the manual citations on
-# the declarations are what carry that, and no run can check them.
+#   eaValid7 + {ea7Invalid}    block (17) 1, block (19) 16, `t_control` 1
+#   eaControl7 + {ea7Imm}      block (17) 1, block (19) 4, block (14) 2,
+#                              `t_control` 2
+#   eaAlterable7 - {ea7AbsW}   block (17) 1, block (19) 2, block (16) 2
 #
-# WHY THE FULL VALID SET IS NAMED RATHER THAN THE THREE RESERVED ENCODINGS.
-# `EA7` has eight members and only five are encodings this part defines, so
-# "every valid sub-variant" is a five-member set and the reserved trio is its
-# complement. Asserting the complement instead would pass for a set that had
-# also lost a valid member.
+# THE BLOCK'S OWN ADMISSION RULE IS WHAT CONDEMNS IT, and that rule had already
+# been used to delete three cases from INSIDE the block: "a case whose condition
+# is ENTAILED by the equality cases cannot be the sole detector of anything,
+# because two conditions that cannot disagree cannot red apart". With block (19)
+# in place each of the three equalities is itself entailed one level up -
+# `eaLegalityFor(opMove, 4)` held against a literal whose mode-7 half spells
+# `eaValid7`'s five members entails that `eaValid7` has those five members - so
+# the rule that removed three cases from the block removes the block.
 #
-# THE ADMISSION RULE FOR THIS BLOCK: ONE LITERAL-EQUALITY CASE PER SET, AND
-# NOTHING DERIVED FROM THEM. A case whose condition is ENTAILED by the equality
-# cases cannot be the sole detector of anything, because two conditions that
-# cannot disagree cannot red apart. Three such cases have been written here and
-# all three are gone; the rule is stated so a fourth is not.
+# THE READABILITY ARGUMENT IS REAL AND IS NOT ENOUGH, AND THAT IS THE ASYMMETRY
+# WITH BLOCK (15) NAMED RATHER THAN LEFT IMPLIED. Block (15) reported the SAME
+# proposition as `t_control` through the same predicate; these three cases
+# reported a DIFFERENT one - a failing log without them names sixteen operations
+# and never names `eaValid7`, which is a worse read. But block (15) had the same
+# localisation argument available, twenty-four cases in this file against twelve
+# rows in another, and was deleted anyway. An exception granted here on
+# readability would license re-adding block (15) on the same ground.
 #
-# WHAT THE RULE EXCLUDED, AND WHY EACH EXCLUSION IS SOUND:
+# WHAT THE DELETION DOES NOT LOSE. The manual citations the three cases carried
+# - CFPRM Rev. 3 Table 2-3 folio 2-10 for all three - are on the declarations in
+# `src/mcf5307/ea.nim`, beside the values that evidence establishes. The idiom
+# the block stated and the admission rule are restated on block (19) below,
+# which is the block that now applies them.
+
+# ---------------------------------------------------------------------------
+# (19) EVERY MASK IN THE DOMAIN, HELD AGAINST ITS LITERAL VALUE. One case per
+# operation-and-size mask, each holding the whole `EaLegality` against members
+# spelled out below.
 #
-#   `not ({ea7Unused5, ea7Invalid, ea7Unused7} <= eaValid7)` - entailed by the
-#   `eaValid7` equality, since a set equal to the five valid members is
-#   disjoint from the three reserved ones. It was also the wrong SHAPE: `not
-#   (trio <= s)` is false only when ALL THREE are present, so alone it would
-#   have tolerated one or two being admitted. The property wanted is
-#   DISJOINTNESS, not "not a superset".
+# THE ADMISSION RULE, WHICH BLOCK (17) STATED AND THIS BLOCK INHERITED WITH THE
+# IDIOM: ONE LITERAL-EQUALITY CASE PER MASK, AND NOTHING DERIVED FROM THEM. A
+# case whose condition is ENTAILED by the equality cases cannot be the sole
+# detector of anything, because two conditions that cannot disagree cannot red
+# apart. It has now removed three cases from inside block (17) and then block
+# (17) itself; it is stated here so a fourth is not written.
 #
-#   `eaControl7 == eaValid7 - {ea7Imm}` - entailed by the two equality cases
-#   above it. If `eaValid7 == {the five}` and `eaControl7 == {the four}` both
-#   hold, then `eaValid7 - {ea7Imm}` IS `{the four}`, so the third condition
-#   cannot fail while its two premises pass.
+# THE DIRECTION THAT FORCED IT IS NARROWING, which the `coverage` table
+# structurally cannot see: every row there names ONE ILLEGAL mode, and a
+# narrowing removes a LEGAL one. Block (16) closed that for ADDQ and SUBQ by
+# hand; a sweep found it open nearly everywhere else.
 #
-# MEASURED 2026-08-11, EACH MUTATION CONFIGURED FRESH AND RUN THROUGH `ctest`,
-# WITH THE ENTAILED `eaControl7 == eaValid7 - {ea7Imm}` CASE STILL PRESENT. In
-# all three directions it moved WITH a premise and never alone:
+# THE SWEEP, 2026-08-12. The population is every LEGAL cell of every operation
+# whose `eaLegalityFor` mask is non-empty - one cell per mode and one per
+# mode-7 sub-variant, and separately per SIZE where the mask depends on it. It
+# is enumerated FROM `eaLegalityFor` and not by hand: 338 cells over the 47
+# operations in the domain, which is 51 operation-and-size masks, because
+# `opMulu`, `opMuls`, `opDivu` and `opDivs` carry two masks each - re-derived
+# 2026-08-12 by walking `Operation` and counting a second mask wherever the
+# word and long answers differ.
 #
-#   eaValid7 + {ea7Invalid}   the `eaValid7` equality reds, and the entailed
-#                             case reds beside it.
-#   eaControl7 - {ea7AbsW}    the `eaControl7` equality reds, and the entailed
-#                             case reds beside it.
-#   eaControl7 + {ea7Imm}     the `eaControl7` equality reds, and the entailed
-#                             case reds beside it.
+# EACH CELL IS DELETED FROM THAT ONE OPERATION'S MASK ALONE - the scope block
+# (16) measured in, not a shared declaration - and the WHOLE suite run through
+# `ctest`, the `t_*` suites and the conformance corpus both. Measured
+# 2026-08-12 with the table below in place, over all 338 cells: EVERY cell reds,
+# each reds EXACTLY ONE case in this block, and 121 of them red NOTHING ELSE
+# ANYWHERE. Those 121 are the blind spot. 80 are MODE cells and 41 are mode-7
+# sub-variants, so the blind spot is not a mode-7 curiosity: 72 of the 80 are an
+# ordinary addressing mode, the whole register-indirect group of `opAdd`,
+# `opSub`, `opAnd` and `opOr` among them, and the other 8 are the `eaMode7` MODE
+# of an operation that also has silent sub-variants.
 #
-# NO CASE TOTAL IS QUOTED FOR THOSE THREE RUNS, because they were measured on a
-# file state that no longer exists and a total would not reproduce. What
-# reproduces is the CO-MOVEMENT, which is the whole of the claim.
+# THE 121 FALL IN FIFTEEN OPERATIONS - `opMove`, `opMovea`, `opAdd`, `opSub`,
+# `opAdda`, `opSuba`, `opCmpa`, `opClr`, `opAnd`, `opOr`, `opBtst`, `opBchg`,
+# `opBclr`, `opBset` and `opEor`. `isEaLegal` returns at `ea.mode notin
+# leg.modes` before it reads `ea7`, which is why an `eaMode7` MODE cell and its
+# sub-variant cells are separate members of the population and not one.
 #
-# THE MUTATION THAT WOULD SEPARATE THEM DOES NOT EXIST. Any mutation reaching
-# the entailed condition falsifies one of its premises first, so deleting it
-# removed a case that could never fire on its own. Re-measured after the
-# deletion: all three mutations still red an equality case, and nothing else in
-# the suite moved that had not moved before.
+# THE SILENCE IS AN EQUALITY WITH THE BASELINE APART FROM THE ONE CASE IN THIS
+# BLOCK, AND NOT AN EMPTY GREP. Each run is compared against the baseline
+# `ctest` result - the `abi_smoke` link failure and nothing else - with THIS
+# BLOCK'S single red for the deleted cell subtracted first. That subtraction is
+# the criterion and it has to be stated: with this block present every one of
+# the 338 runs reds `t_ea_masks`, so the floor is `2 tests failed out of 15` and
+# the baseline shape `93% tests passed, 1 tests failed out of 15` is one NO cell
+# deletion can produce - read literally it would classify all 338 as not-silent.
+# A suite that failed to compile or died before printing lands outside the
+# equality, not inside it.
+#
+# EVERY DELETION IS PROVED TO EXECUTE INSIDE THE COMPILED ARTIFACT, because a
+# reach guard that passes on a no-op is this project's recurring defect. The
+# harness emits a line the first time it removes the cell from a mask, and all
+# 338 runs emitted one, so no cell is recorded silent for want of a mutation
+# that arrived.
+#
+# EQUALITY IS STRICTLY STRONGER THAN A CELL TABLE, AND THAT IS WHY THE SHAPE IS
+# THIS ONE. A cell table pins the cells someone enumerated; an equality pins the
+# mask, so it catches WIDENING as well as narrowing and catches both for cells
+# nobody listed.
+#
+# WHY ALL 51 MASKS AND NOT ONLY THE 15 THAT CARRY A SILENT CELL, MEASURED. Both
+# forms pin every silent cell, so the choice rests on what the other 36 rows
+# add, and two widenings on operations OUTSIDE the fifteen answer it. Each was
+# run twice on 2026-08-12, once with this block absent and once with it present:
+#
+#   `eaLeaPeaTarget` modes + {eaAn}      0 red without / 2 red with
+#   the `opScc`/`opCmpi` arm + {eaAnPost} 0 red without / 2 red with
+#
+# LEA and PEA accepting an ADDRESS REGISTER, and Scc and CMPI accepting
+# POSTINCREMENT, are silent in the whole repository today. Both are widenings,
+# so no cell table of any size reaches them; both are outside the fifteen, so
+# the narrow form would not have carried a row for them either. On coverage the
+# same gap shows as a count: fifteen rows pin 171 of the 338 cells and leave 167
+# depending on cases elsewhere, and 51 rows pin all 338.
+#
+# AND IT OBSOLETES NOTHING, WHICH IS THE OBJECTION BLOCK (15) WAS DELETED FOR.
+# Blocks (12), (13), (14) and (16) reach the table THROUGH `eaIsLegalFor`; these
+# cases compare the table itself, so the two layers red apart and neither is the
+# other's second detector. Measured 2026-08-12 with `isEaLegal` in `ea.nim` made
+# to answer true unconditionally: 242 cases red across the suite, 52 of them in
+# those four blocks, and EVERY case in this one stays green.
+#
+# WHAT A CORRECT NARROWING COSTS, because the mask is now written down twice and
+# a real repair has to be made in both places. Measured 2026-08-12:
+#
+#   one operation's arm narrowed by one cell           1 case here - and that
+#                                                      holds for all 338 cells
+#   `eaDataAlterableModes - {eaAnIndex}` in `ea.nim`   12 cases here, one per
+#                                                      mask that reads the set
+#
+# THE SHARED-DECLARATION FIGURE IS THE COST AND IT IS NOT A DEFECT. Twelve masks
+# name that set through four intermediaries, so twelve rows have to move; a form
+# that charged less than twelve would be pinning fewer than twelve masks.
+#
+# WHAT THIS BLOCK IS NOT. It pins the VALUE of each mask and carries no
+# provenance of its own. What makes a cell LEGAL is recorded on the declarations
+# the mask is built from - `eaAllModes` and `eaValid7`, `eaDataAlterableModes`
+# and `eaDataAlterable7`, `eaDataAddressing`, `eaBitDynamic`, `eaJumpTarget`,
+# `eaLeaPeaTarget`, `eaMulDivLongModes` - each carrying its manual folios and
+# its `m68k-elf-as` transcript beside the value that evidence establishes. It
+# also cannot fail because the DECODER handed the wrong operation or size to a
+# word, which reaches the right mask under the wrong key, and it cannot fail if
+# a literal below was mis-transcribed AT AUTHORING TIME from an already-wrong
+# mask - the sharpest limit of any guard whose expected value is copied from its
+# own subject.
+#
+# THE EXECUTION-LEVEL LIMIT, AND IT IS THE WIDER HALF OF THE GAP. A mask case
+# proves the mask still ADMITS the cell. IT DOES NOT PROVE THE EMULATOR EXECUTES
+# THAT INSTRUCTION CORRECTLY, and for the cells this block was written for
+# nothing anywhere does - which is why deleting them red nothing. Read from
+# `conformance/corpus` on 2026-08-12: the ADD cases are `add.l %d0,%d1`,
+# `0x2000.w`, `0x00030004`, `(0x1e,%pc)` and `(4,%pc,%d2)`, EXACTLY the
+# complement of the `(An)`-family cells that were silent; SUB carries
+# `sub.l %d0,%d1` alone; and the only OR cases beyond `or.l %d0,%d1` are the
+# `Dn -> <ea>` direction, which `logic.nim` masks with `eaMemoryAlterable`
+# directly and which never reaches `eaLegalityFor(opOr)`. So for those cells the
+# mask half is guarded here and NOTHING ANYWHERE EXECUTES THE INSTRUCTION.
+#
+# THE DECAY THIS SHAPE DISSOLVES, AND THE RESIDUE IT DOES NOT. A cell table is
+# membership defined by a measurement: delete the four `add_l_*` corpus cases
+# later and the cells they caught go silent again while the table does not grow.
+# An equality does not depend on what else covers a cell, so all 338 stay pinned
+# whatever happens elsewhere. What remains is the OPERATION axis: a 48th
+# operation joining the domain, or an existing one becoming size-dependent,
+# needs a row here. The row count below is held against the domain so that is
+# RED rather than silent - which is the mechanism the `coverage` enumeration
+# uses one level up, not a second detector for anything this block already pins.
 
 block:
-  check(eaValid7 == {ea7AbsW, ea7AbsL, ea7PCDisp, ea7PCIndex, ea7Imm},
-    "eaValid7 is every VALID mode-7 sub-variant and no reserved one" &
-    " (CFPRM Rev. 3 Table 2-3 folio 2-10 prints exactly these five rows" &
-    " under mode field 111)")
-  check(eaControl7 == {ea7AbsW, ea7AbsL, ea7PCDisp, ea7PCIndex},
-    "eaControl7 is the FULL control mode-7 class, `(xxx).W` included" &
-    " (CFPRM Rev. 3 Table 2-3 folio 2-10, Control column;" &
-    " `#<data>` is the one valid mode-7 row it excludes)")
-  check(eaAlterable7 == {ea7AbsW, ea7AbsL},
-    "eaAlterable7 is the two absolute forms and nothing else")
+  # THE MEMBERS ARE SPELLED HERE AND NOT NAMED FROM `ea.nim`. A row reading
+  # `eaAllModes` would move with the declaration it exists to pin, and so would
+  # assert nothing about it.
+  const
+    everyMode = {eaDn, eaAn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp, eaAnIndex,
+                 eaMode7}
+    everyModeButAn = {eaDn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp, eaAnIndex,
+                      eaMode7}
+    controlModes = {eaAnInd, eaAnDisp, eaAnIndex, eaMode7}
+    mulDivLongModes = {eaDn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp}
+    movemModes = {eaAnInd, eaAnDisp}
+    dnOnly = {eaDn}
+    every7 = {ea7AbsW, ea7AbsL, ea7PCDisp, ea7PCIndex, ea7Imm}
+    every7ButImm = {ea7AbsW, ea7AbsL, ea7PCDisp, ea7PCIndex}
+    abs7 = {ea7AbsW, ea7AbsL}
+    no7: set[EA7] = {}
+    wordSize = 2'u8
+    longSize = 4'u8
+
+  # THE SIZE COLUMN IS THE KEY THE TABLE IS INDEXED BY AND THE SUFFIX IS THE
+  # LABEL. A size-independent mask carries an empty suffix and is asserted at
+  # the long size, which is what the size-less overload forwards to; the four
+  # multiply-and-divide operations carry a row per size and say which.
+  let masks: seq[(Operation, uint8, string, EaLegality)] = @[
+    (opMove,  longSize, "", EaLegality(modes: everyMode, ea7: every7)),
+    (opMovea, longSize, "", EaLegality(modes: everyMode, ea7: every7)),
+    (opMovem, longSize, "", EaLegality(modes: movemModes, ea7: no7)),
+    (opLea,   longSize, "", EaLegality(modes: controlModes, ea7: every7ButImm)),
+    (opPea,   longSize, "", EaLegality(modes: controlModes, ea7: every7ButImm)),
+    (opAddq,  longSize, "", EaLegality(modes: everyMode, ea7: abs7)),
+    (opSubq,  longSize, "", EaLegality(modes: everyMode, ea7: abs7)),
+    (opAdd,   longSize, "", EaLegality(modes: everyMode, ea7: every7)),
+    (opSub,   longSize, "", EaLegality(modes: everyMode, ea7: every7)),
+    (opAdda,  longSize, "", EaLegality(modes: everyMode, ea7: every7)),
+    (opSuba,  longSize, "", EaLegality(modes: everyMode, ea7: every7)),
+    (opAddi,  longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opSubi,  longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opClr,   longSize, "", EaLegality(modes: everyModeButAn, ea7: abs7)),
+    (opExt,   longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opNeg,   longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opMulu,  wordSize, ".W",
+      EaLegality(modes: everyModeButAn, ea7: every7)),
+    (opMulu,  longSize, ".L",
+      EaLegality(modes: mulDivLongModes, ea7: no7)),
+    (opMuls,  wordSize, ".W",
+      EaLegality(modes: everyModeButAn, ea7: every7)),
+    (opMuls,  longSize, ".L",
+      EaLegality(modes: mulDivLongModes, ea7: no7)),
+    (opDivu,  wordSize, ".W",
+      EaLegality(modes: everyModeButAn, ea7: every7)),
+    (opDivu,  longSize, ".L",
+      EaLegality(modes: mulDivLongModes, ea7: no7)),
+    (opDivs,  wordSize, ".W",
+      EaLegality(modes: everyModeButAn, ea7: every7)),
+    (opDivs,  longSize, ".L",
+      EaLegality(modes: mulDivLongModes, ea7: no7)),
+    (opAnd,   longSize, "", EaLegality(modes: everyModeButAn, ea7: every7)),
+    (opOr,    longSize, "", EaLegality(modes: everyModeButAn, ea7: every7)),
+    (opNot,   longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opSwap,  longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opTst,   longSize, "", EaLegality(modes: everyMode, ea7: every7)),
+    (opBtst,  longSize, "",
+      EaLegality(modes: everyModeButAn, ea7: every7ButImm)),
+    (opBchg,  longSize, "", EaLegality(modes: everyModeButAn, ea7: abs7)),
+    (opBclr,  longSize, "", EaLegality(modes: everyModeButAn, ea7: abs7)),
+    (opBset,  longSize, "", EaLegality(modes: everyModeButAn, ea7: abs7)),
+    (opScc,   longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opAddx,  longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opSubx,  longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opNegx,  longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opExtb,  longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opEor,   longSize, "", EaLegality(modes: everyModeButAn, ea7: abs7)),
+    (opAndi,  longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opOri,   longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opEori,  longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opAsl,   longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opAsr,   longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opLsl,   longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opLsr,   longSize, "", EaLegality(modes: dnOnly, ea7: no7)),
+    (opJmp,   longSize, "", EaLegality(modes: controlModes, ea7: every7ButImm)),
+    (opJsr,   longSize, "", EaLegality(modes: controlModes, ea7: every7ButImm)),
+    (opCmp,   longSize, "", EaLegality(modes: everyMode, ea7: every7)),
+    (opCmpa,  longSize, "", EaLegality(modes: everyMode, ea7: every7)),
+    (opCmpi,  longSize, "", EaLegality(modes: dnOnly, ea7: no7))]
+
+  for (op, size, suffix, expected) in masks:
+    let actual = eaLegalityFor(op, size)
+    checkDetail(actual == expected,
+      $op & suffix & ": the legality mask is exactly the members this block " &
+      "spells - a narrowing removes one and a widening adds one, and both " &
+      "are RED here (measured 2026-08-12)",
+      "expected " & $expected & " and got " & $actual)
+
+  # THE KEY SET, HELD AGAINST THE DOMAIN, AND NOT THE ROW COUNT. Without this
+  # an operation that gained a mask, or an existing one that gained a second
+  # mask by becoming size-dependent, would be SILENTLY unpinned here - the same
+  # shape of miss the `coverage` enumeration exists to turn LOUD one level up.
+  #
+  # A COUNT IS NOT A KEY SET, AND A TRANSCRIPTION SLIP IS WHAT SEPARATES THEM.
+  # Measured 2026-08-12 with the count form in place: replacing the `opCmpi` row
+  # with a DUPLICATE `opMove` row held the count at 51 and the case total at its
+  # constant, the whole suite stayed green, and a two-mode widening of `opCmpi`
+  # then red NOTHING ANYWHERE - 0 cases, the baseline exactly. The comparison
+  # below is between SETS, so the duplicate and the omission are each named.
+  #
+  # AND THE SIZE AXIS IS WALKED OVER EVERY SIZE THE KEY ADMITS, NOT OVER TWO.
+  # The count form asked `eaLegalityFor` at the word and long sizes alone, so a
+  # mask that differed at BYTE size alone was pinned by no row and missed by the
+  # count: measured 2026-08-12, `opAnd` split from `opOr` at byte size only red
+  # 0 cases across the suite and left the row count where it was. Nothing
+  # branches on byte today, which is what makes that latent rather than live -
+  # the bit operations are the obvious future case - and the key is a `uint8`,
+  # so every value of one is what the loop below walks. Deriving the domain from
+  # `eaLegalityFor` is sound because what is derived is WHICH ROWS ARE REQUIRED
+  # and never the value of any row.
+  var declaredKeys: seq[(Operation, uint8)] = @[]
+  var duplicateKeys: seq[string] = @[]
+  for row in masks:
+    let key = (row[0], row[1])
+    if key in declaredKeys: duplicateKeys.add($row[0] & " at size " & $row[1])
+    else: declaredKeys.add(key)
+
+  var declaredMasks: seq[(Operation, EaLegality)] = @[]
+  for (op, size) in declaredKeys:
+    let pinned = (op, eaLegalityFor(op, size))
+    if pinned notin declaredMasks: declaredMasks.add(pinned)
+
+  var domainMasks: seq[(Operation, EaLegality)] = @[]
+  for op in Operation:
+    for sizeIndex in int(low(uint8)) .. int(high(uint8)):
+      let answered = eaLegalityFor(op, uint8(sizeIndex))
+      if card(answered.modes) == 0: continue
+      if (op, answered) notin domainMasks: domainMasks.add((op, answered))
+
+  var unpinned: seq[string] = @[]
+  for entry in domainMasks:
+    if entry notin declaredMasks: unpinned.add($entry[0] & " " & $entry[1])
+  var stale: seq[string] = @[]
+  for entry in declaredMasks:
+    if entry notin domainMasks: stale.add($entry[0] & " " & $entry[1])
+
+  checkDetail(duplicateKeys.len == 0 and unpinned.len == 0 and
+              stale.len == 0 and masks.len == domainMasks.len,
+    "this block carries one row per operation-and-size mask in the domain, " &
+    "held as a KEY SET rather than as a row count",
+    $masks.len & " rows written and " & $domainMasks.len &
+    " masks in the domain; duplicate keys: " & $duplicateKeys &
+    "; masks no row pins: " & $unpinned &
+    "; rows the domain does not carry: " & $stale)
 
 # ---------------------------------------------------------------------------
 # (6) The decoder recognizes each implemented opcode from a representative
@@ -1613,7 +1890,8 @@ block:
 
 # (18) THIS FILE'S OWN CASE TOTAL, HELD AGAINST THE ONE FIGURE THE TRANSCRIPTS
 # QUOTE. Block (13) above and the `opMovem` arm of `decode_types.nim` each
-# transcribe a mutation run as "N of <total> cases failed", where that total is
+# transcribe a mutation run as "N of <total> cases failed", and `cpu.nim`'s
+# per-suite BASELINE line records the same total a third time; that total is
 # what the summary line at the foot of this file prints. The denominator moved
 # 367 -> 420 -> 419 over three consecutive repairs; on each one a single copy of
 # the transcript was updated and the other was left standing, and on the last
@@ -1624,12 +1902,20 @@ block:
 # constant has moved since and will move again; a list that grows by one entry
 # per repair is the defect this block exists to end, not a record of it.
 #
-# THE FIGURE NOW EXISTS ONCE, AS `caseTotalMustMatchTranscripts`, AND BOTH
-# TRANSCRIPTS NAME THE CONSTANT RATHER THAN SPELLING A NUMBER. This case is
-# what keeps the constant true: it holds the live count of every case this run
-# emitted against it, so a block added to or removed from this file is RED here
-# until the constant moves - and moving the constant moves both transcripts
-# with it, because neither of them carries a second copy to forget.
+# THE FIGURE NOW EXISTS ONCE, AS `caseTotalMustMatchTranscripts`, AND ALL THREE
+# SITES NAME THE CONSTANT RATHER THAN SPELLING A NUMBER. This case is what keeps
+# the constant true: it holds the live count of every case this run emitted
+# against it, so a block added to or removed from this file is RED here until
+# the constant moves - and moving the constant moves all three sites with it,
+# because none of them carries a second copy to forget.
+#
+# THE `cpu.nim` SITE WAS A BARE LITERAL AND IS THE SAME DEFECT ONE DIRECTORY
+# OVER. Its BASELINE line spelled a number for this suite that NO RUN COULD
+# REACH: that copy lives in PRODUCTION SOURCE, which this case does not count
+# and cannot reach, so it can go stale in silence. NO DISAGREEMENT IS CLAIMED -
+# at HEAD that line and the constant here read the SAME figure, and an earlier
+# revision of this paragraph reported a drift that no committed state carried.
+# The SHAPE is the defect; naming the constant is what removes it.
 #
 # IT IS A RUN-TIME CASE AND NOT THE `static: doAssert` ASSERTION (9) USES, AND
 # THAT IS FORCED RATHER THAN PREFERRED. `passCount` and `failures` are
@@ -1646,7 +1932,7 @@ block:
 # this block and increments one of the two counters whichever way it goes, so
 # the figure the summary line goes on to print is one greater than the one read
 # here. The constant is the SUMMARY LINE's figure, because that is the figure
-# the two transcripts quote.
+# the three sites quote.
 #
 # WHAT IT DOES NOT CATCH, STATED SO THE CONSTANT IS NOT READ AS MORE THAN A
 # TOTAL. It pins the COUNT and says nothing about WHICH cases ran: one block
@@ -1656,23 +1942,33 @@ block:
 # mutation's blast radius and another file's total, neither of them this run's
 # to count.
 
-const caseTotalMustMatchTranscripts = 397
-  ## THE TOTAL THE SUMMARY LINE PRINTS, WRITTEN DOWN EXACTLY ONCE IN THIS
-  ## REPOSITORY. Both mutation transcripts that need the denominator name this
-  ## constant instead of copying its value, so there is one figure to move and
-  ## the case below is what refuses to let it be moved wrongly. Measured
-  ## through `ctest` on 2026-08-11.
+const caseTotalMustMatchTranscripts = 446
+  ## THE TOTAL THE SUMMARY LINE PRINTS. ITS VALUE IS WRITTEN DOWN ONCE IN THIS
+  ## REPOSITORY - here - and the three sites that need the denominator name the
+  ## constant instead of copying it: block (13) above, the `opMovem` arm of
+  ## `src/mcf5307/decode_types.nim`, and the BASELINE line in
+  ## `src/mcf5307/cpu.nim`. So there is one figure to move and the case below is
+  ## what refuses to let it be moved wrongly. Measured through `ctest` on
+  ## 2026-08-12, when block (19) was reworked into the equality form.
+  ##
+  ## THE LIMIT IS THE SYMBOL AND NOT THE VALUE, AND IT IS UNCLOSEABLE FROM HERE.
+  ## All three sites name this constant as TEXT INSIDE A COMMENT, and nothing
+  ## links the text to the symbol: renaming or deleting the constant leaves the
+  ## three stale with nothing red. An import cannot close it - `src/` does not
+  ## import `tests/`, and this constant is not exported - and exporting it would
+  ## not help, because a comment cannot reference a symbol at all. The `opMovem`
+  ## arm of `decode_types.nim` records the same gap from its own side.
 
 block:
   let totalBeforeThisCase = failures.len + passCount
   checkDetail(totalBeforeThisCase + 1 == caseTotalMustMatchTranscripts,
     "this run emits the case total `caseTotalMustMatchTranscripts` records, " &
-    "which is the denominator both mutation transcripts quote - block (13) " &
-    "here and the `opMovem` arm of `decode_types.nim`",
+    "which is the figure all three sites quote - block (13) here, the " &
+    "`opMovem` arm of `decode_types.nim`, and the BASELINE line in `cpu.nim`",
     "the constant records " & $caseTotalMustMatchTranscripts &
     " and this run emitted " & $(totalBeforeThisCase + 1) &
     "; a block was added to or removed from this file, so move the constant " &
-    "and re-read both transcripts")
+    "and re-read all three sites")
 
 # ---------------------------------------------------------------------------
 # THE SUMMARY LINE CARRIES THE ATTRIBUTION FIGURE, BECAUSE A BARE COUNT WOULD

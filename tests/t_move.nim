@@ -593,12 +593,16 @@ block:
   # displacement puts d0 at 0x404 and d1 at 0x408.
   #
   # IT IS HERE BECAUSE THE NARROWING HAD NO EXECUTION-LEVEL POSITIVE CONTROL
-  # FOR THIS MODE. Measured 2026-08-11: dropping `eaAnDisp` from the `opMovem`
-  # arm - over-narrowing it to `{eaAnInd}` - left `t_move` at 33 of 33 PASSED
-  # and reddened exactly ONE case, in block (13) of `tests/t_ea_masks.nim`. A
-  # single assertion in one file was the whole guard against a MOVEM that
-  # traps a form the compiler emits constantly for prologues, so this case
-  # gives the executor its own witness.
+  # FOR THIS MODE. Measured 2026-08-11, BEFORE THIS CASE EXISTED: dropping
+  # `eaAnDisp` from the `opMovem` arm - over-narrowing it to `{eaAnInd}` - left
+  # `t_move` at 33 of 33 PASSED and reddened exactly ONE case, in block (13) of
+  # `tests/t_ea_masks.nim`. A single assertion in one file was the whole guard
+  # against a MOVEM that traps a form the compiler emits constantly for
+  # prologues, so this case gives the executor its own witness.
+  #
+  # RE-MEASURED 2026-08-12 with this case and with block (19) of that file both
+  # in place: the same drop now reds THREE - this case, block (13)'s `movem:
+  # the mask accepts (d16,An)`, and block (19)'s `opMovem` row.
   block:
     let o = runIns([0x48E8'u16, 0x0003'u16, 0x0004'u16],
                    d = [0xAABBCCDD'u32, 0x11223344, 0, 0, 0, 0, 0, 0],
