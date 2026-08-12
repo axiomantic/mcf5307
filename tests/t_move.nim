@@ -421,13 +421,16 @@ block:
 # ---------------------------------------------------------------------------
 # `LEA` AND `PEA` AT `(xxx).W`, AND `MOVEM` STILL REFUSING IT.
 #
-# `eaControl7NoAbsW` is `{ea7AbsL, ea7PCDisp, ea7PCIndex}` - no `(xxx).W`.
-# LEA, PEA and MOVEM ALL READ IT UNTIL 2026-08-11: LEA's and PEA's exclusion
-# of `(xxx).W` was WRONG and MOVEM's was RIGHT, so one constant could not
-# serve all three. LEA and PEA moved to `eaLeaPeaTarget`, and MOVEM then moved
-# OFF the constant entirely - its `(xxx).W` exclusion was the only cell that
-# set got right for it, and folios 4-50 and 4-51 dash four more. MOVEM now
-# carries `{eaAnInd, eaAnDisp}` with an empty `ea7`.
+# A SET THEN CALLED `eaControl7NoAbsW` HELD
+# `{ea7AbsL, ea7PCDisp, ea7PCIndex}` - no `(xxx).W`. It is RETIRED as of
+# 2026-08-11, and `ea.nim`'s `eaControl7` now holds the full control mode-7
+# class with `(xxx).W` in it; this block reads the behaviour and not the set.
+# LEA, PEA and MOVEM ALL READ THE `NoAbsW` SET UNTIL 2026-08-11: LEA's and
+# PEA's exclusion of `(xxx).W` was WRONG and MOVEM's was RIGHT, so one
+# constant could not serve all three. LEA and PEA moved to `eaLeaPeaTarget`,
+# and MOVEM then moved OFF the constant entirely - its `(xxx).W` exclusion was
+# the only cell that set got right for it, and folios 4-50 and 4-51 dash four
+# more. MOVEM now carries `{eaAnInd, eaAnDisp}` with an empty `ea7`.
 #
 # THE MANUAL PUTS `(xxx).W` IN THE CONTROL CATEGORY, and each of the three
 # instructions is settled by its OWN row rather than by that category alone:
@@ -485,7 +488,7 @@ block:
 
 block:
   # MOVEM MUST STILL TRAP AT `(xxx).W`. This is the third direction of the
-  # split and the one that fails if `eaControl7NoAbsW` is simply widened.
+  # split and the one that fails if `eaControl7` is handed to the MOVEM arm.
   #
   # THE ENCODING IS HAND-BUILT BECAUSE THE ASSEMBLER REFUSES TO BUILD IT, and
   # that refusal is the point. `MOVEM.L reglist,<ea>` is `0x48C0 | <ea>`; the
@@ -521,8 +524,9 @@ block:
 
   # AND MOVEM MUST TRAP AT `(xxx).L`, WHICH IS THE CELL THAT WAS LIVE. The
   # `(xxx).W` pair above passed against a mask that admitted FOUR OTHER CELLS,
-  # because `eaControl7NoAbsW` excludes the absolute SHORT form alone and the
-  # `opMovem` arm read the whole control class either side of it. Folios 4-50
+  # because the retired `NoAbsW` set excluded the absolute SHORT form alone
+  # and the `opMovem` arm read the whole control class either side of it.
+  # Folios 4-50
   # and 4-51 dash `(xxx).L` in BOTH directions, `m68k-elf-as -mcpu=5307`
   # rejects `movem.l %d0-%d1,0x400.l` with "operands mismatch", and
   # `m68k-elf-objdump -m m68k:5307` decodes `48f9` as `.short` while

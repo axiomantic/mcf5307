@@ -761,19 +761,20 @@ block:
 # absolute short row CONTROL, and page 3-26 says the timing tables' `xxx.wl`
 # column "refers to both forms of absolute addressing".
 #
-# IT IS A CONSTANT OF ITS OWN AND NOT `eaControl7NoAbsW`. That set EXCLUDES
-# `(xxx).W`, and the two cannot be merged: measured, `m68k-elf-as -mcpu=5307`
-# ACCEPTS `lea 0x1234.w,%a0`, `pea 0x1234.w`, `jmp 0x1234.w` and
-# `jsr 0x1234.w` and REJECTS `movem.l %d0-%d1,0x1234.w`, so MOVEM's rejection
-# is right and LEA's and PEA's are not.
+# `(xxx).W` SEPARATES THIS CLASS FROM MOVEM'S AND ALWAYS DID. Measured,
+# `m68k-elf-as -mcpu=5307` ACCEPTS `lea 0x1234.w,%a0`, `pea 0x1234.w`,
+# `jmp 0x1234.w` and `jsr 0x1234.w` and REJECTS `movem.l %d0-%d1,0x1234.w`, so
+# MOVEM's rejection is right and LEA's and PEA's were not.
 #
-# WHO READS THAT SET HAS CHANGED SINCE THIS PARAGRAPH WAS WRITTEN. It said
-# "which LEA, PEA and MOVEM read". LEA and PEA moved to `eaLeaPeaTarget`
-# (CPU-7), and on 2026-08-11 MOVEM moved off it as well: `(xxx).W` was the one
-# cell that set got right for MOVEM, and folios 4-50 and 4-51 dash
-# `(d8,An,Xi)`, `(xxx).L`, `(d16,PC)` and `(d8,PC,Xi)` too. MOVEM now carries
-# `{eaAnInd, eaAnDisp}`, and `eaControl7NoAbsW`'s only readers are
-# `eaJumpTarget` and `eaLeaPeaTarget`.
+# WHAT HOLDS THE CLASS. `ea.nim` declares it as `eaControl7`, and
+# `eaJumpTarget` and `eaLeaPeaTarget` in `decode_types.nim` are its two
+# readers. MOVEM reads neither: it carries `{eaAnInd, eaAnDisp}`, because
+# `(xxx).W` is the one cell the control class gets right for MOVEM and folios
+# 4-50 and 4-51 dash `(d8,An,Xi)`, `(xxx).L`, `(d16,PC)` and `(d8,PC,Xi)` too.
+#
+# THE TWELVE CELLS BELOW ARE THE MASK-LEVEL TABLE FOR `opJmp` AND `opJsr`.
+# They reach `eaIsLegalFor` directly, so a widening or a narrowing of
+# `eaControl7` or of `eaJumpTarget` reds here whichever side it falls on.
 
 block:
   for (field, name, legal) in [

@@ -65,74 +65,165 @@ const
   # values of `EAMode`, `eaAn` INCLUDED, so it is not the manual's DATA class
   # and never was.
   #
-  # IT WAS CALLED `eaDataModes` UNTIL 2026-08-11, AND THE VALUE IS UNCHANGED
-  # BY THE RENAME. The old name read as the manual's DATA category, which
-  # EXCLUDES `An` - that class is `eaDataAlterableModes` above, and
-  # `decode_types.nim` reaches it through `eaDataAddressing`. A reader who
-  # took the old name at face value would have concluded that the nine
-  # operations reading this set reject an address register, and all nine
-  # ACCEPT one.
+  # RENAMED FROM `eaDataModes` 2026-08-11, VALUE UNCHANGED. The old name read
+  # as the manual's DATA category, which EXCLUDES `An`; a reader taking it at
+  # face value would have concluded that the nine operations reading this set
+  # reject an address register, and all nine ACCEPT one. The DATA class is
+  # `eaDataAlterableModes` below, reached through `eaDataAddressing`.
   #
   # THE `eaAn` MEMBERSHIP IS LOAD-BEARING AND IS NOT AN OVERSIGHT TO TIDY.
   # `m68k-elf-as -mcpu=5307` emits `4a88` for `tst.l %a0`, `b288` for
   # `cmp.l %a0,%d1` and `b3c8` for `cmpa.l %a0,%a1`, and MOVE and the ADD/SUB
   # pair take an address register source.
   #
-  # MEASURED 2026-08-11 BY DELETING `eaAn` FROM THIS SET, AND THE COUNT IS
-  # STATED THE WAY THE RUN PRINTS IT rather than as one round number. SEVEN
-  # DISTINCT CASES GO RED, over TEN failure lines:
+  # MEASURED 2026-08-11 BY DELETING `eaAn` FROM THIS SET. ELEVEN DISTINCT CASES
+  # GO RED:
   #
-  #   t_alu       1  `add.l a0,d1 reads the address register`
+  #   t_alu       3  `add.l a0,d1 reads the address register`,
+  #                  `addq.l #1,a1 wraps and leaves the condition codes alone`,
+  #                  `the ADDQ mask admits An`
   #   t_control   3  `tst.w %a0 (4a48) runs: the word form reaches An`,
   #                  `tst %a0 is legal`, `cmp %a0 is legal`
+  #   t_ea_masks  2  `opAddq: the mask accepts An`,
+  #                  `opSubq: the mask accepts An`
   #   conformance 3  `move_l_a0_to_a1`, `tst_l_address_register`,
   #                  `cmp_l_address_register_source`
   #
   # The three conformance cases each print TWICE - once in their per-group
   # target and once in `mcf5307_conformance_all`, which re-runs the whole
-  # corpus - so a reader counting failure LINES gets ten and a reader counting
-  # CASES gets seven. Neither figure is wrong and they are not the same
-  # figure, which is why both are written here.
+  # corpus - so a reader counting failure LINES and a reader counting CASES get
+  # different figures. The count above is CASES.
   #
-  # NOTE WHAT DOES *NOT* GO RED: `t_ea_masks` stays at 367 passed. Its
-  # `coverage` row for each of these nine operations cites a RESERVED mode-7
-  # encoding as the illegal mode, not `An`, so the file that exists to guard
-  # the legality table cannot see this particular narrowing at all. The
-  # evidence for `eaAn` is the executor and corpus cases above.
+  # FOUR OF THE ELEVEN ARE A WIDER READERSHIP AND NOT BETTER COVERAGE, and the
+  # two are easy to confuse. ADDQ and SUBQ read this set only because
+  # `eaAlterableModes` was retired into it, so the cases guarding THEIR
+  # address-register operand joined a blast radius they were never part of.
+  # Measured 2026-08-11 by narrowing the ADDQ/SUBQ ARM ALONE to
+  # `eaAllModes - {eaAn}`, configured FRESH and run through `ctest`: FOUR red -
+  # `t_alu` 2 and `t_ea_masks` 2 - and nothing else in the suite moves.
+  #
+  # WHAT IS STILL NOT SEEN, STATED SO THE ELEVEN ARE NOT READ AS ELEVEN
+  # OPERATIONS' WORTH. For MOVE, MOVEA, ADD, SUB, ADDA, SUBA, TST, CMP and
+  # CMPA the `t_ea_masks` `coverage` row cites a RESERVED mode-7 encoding as
+  # the illegal mode and never `An`, so the mask-level file remains blind to an
+  # `eaAn` deletion for all nine. Only ADDQ and SUBQ are covered there, and
+  # only because block (16) enumerates their twelve cells by hand. The evidence
+  # for `eaAn` in the other nine is the executor and corpus cases above.
+  #
+  # WIDENING THIS SET IS NOT A MEASURABLE DIRECTION. It already holds all eight
+  # members of `EAMode`, so there is no mode to add and no widening mutation to
+  # run. Every widening this family admits is a mode-7 one and belongs to the
+  # `EA7` sets below.
   eaAllModes* = {eaDn, eaAn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp,
                  eaAnIndex, eaMode7}
-  eaData7* = {ea7AbsW, ea7AbsL, ea7PCDisp, ea7PCIndex, ea7Imm}
+
+  # EVERY VALID MODE-7 SUB-VARIANT, AND THE NAME SAYS SO. `EA7` has eight
+  # members; three of them - `ea7Unused5`, `ea7Invalid` and `ea7Unused7` - are
+  # encodings this part does not define, and this set is the other five.
+  #
+  # RENAMED FROM `eaData7` 2026-08-11, VALUE UNCHANGED; `tests/t_ea_masks.nim`
+  # block (17) holds the five members by name, so the rename could not move
+  # one. The old name claimed the manual's DATA class, and `decode_types.nim`
+  # pairs this set with `eaAllModes` for nine operations that ACCEPT `An` -
+  # which DATA excludes - so the pair is the widest class and not DATA.
+  #
+  # THE GENUINE DATA-CLASS MASK IS `eaDataAddressing` in `decode_types.nim`,
+  # which pairs `eaDataAlterableModes` - every mode but `An` - with this set.
+  # DATA and DATA ALTERABLE differ on this part in their mode-7 sub-variants
+  # alone, so a DATA mask is honestly built from the alterable mode list plus
+  # the full valid mode-7 set.
+  eaValid7* = {ea7AbsW, ea7AbsL, ea7PCDisp, ea7PCIndex, ea7Imm}
 
   eaControlModes* = {eaAnInd, eaAnDisp, eaAnIndex, eaMode7}
 
-  # THE CONTROL CLASS'S MODE-7 SUB-VARIANTS WITHOUT THE ABSOLUTE SHORT FORM,
-  # AND THE NAME NOW SAYS WHICH ONE IS MISSING. Table 3-5 p.3-21 marks
-  # `(xxx).W`, `(xxx).L`, `(d16,PC)` and `(d8,PC,Xi)` as CONTROL; this set
-  # omits the first of the four.
+  # THE CONTROL CLASS'S MODE-7 SUB-VARIANTS. All four of them, `(xxx).W`
+  # INCLUDED.
   #
-  # IT WAS CALLED `eaControl7` UNTIL 2026-08-11, AND THE VALUE IS UNCHANGED BY
-  # THE RENAME. The old name claimed to BE the control mode-7 class while
-  # being narrower than it, which is the same defect as the old `eaDataModes`
-  # above and inverted: that one was WIDER than its name and this one is
-  # NARROWER.
+  # CFPRM Rev. 3, Table 2-3, "Effective Addressing Modes and Categories", folio
+  # 2-10 - PDF PAGE 50, rendered with `pdftoppm -r 200` and read as an IMAGE.
+  # Chapter 2's folio-to-page offset is +40 and is NOT the +76 that the
+  # chapter 4 instruction folios take. The `Control` column carries an `X` on
+  # `(An)`, `(d16,An)`, `(d8,An,Xi*SF)`, `(d16,PC)`, `(d8,PC,Xi*SF)`, `(xxx).W`
+  # and `(xxx).L`, and a dash on `Dn`, `An`, `(An)+`, `-(An)` and `#<xxx>`. The
+  # four mode-7 rows among the seven are this set.
   #
-  # THE OLD NAME COST REAL WORK TWICE. LEA and PEA were wired to it and
-  # trapped `lea 0x1234.w,%a0` and `pea 0x1234.w`, two forms the pinned
-  # assembler emits; `eaLeaPeaTarget` in `decode_types.nim` is that repair.
-  # MOVEM was then left on it on the reasoning that its `(xxx).W` exclusion
-  # was correct - which it is - while the REST of the set was four cells too
-  # wide for MOVEM, which folios 4-50 and 4-51 dash. That was a live defect
-  # until the `opMovem` arm was narrowed to `{eaAnInd, eaAnDisp}`.
+  # `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726) ANSWERS THE SAME
+  # TWELVE CELLS FOR ALL FOUR READERS, measured 2026-08-11: `jmp`, `jsr`, `lea`
+  # and `pea` each accept the seven control rows and reject the other five with
+  # "operands mismatch". The absolute-short encodings are `4ef8 1234`,
+  # `4eb8 1234`, `41f8 1234` and `4878 1234`.
   #
-  # BOTH REMAINING READERS ADD `ea7AbsW` BACK. `eaJumpTarget` and
-  # `eaLeaPeaTarget` each spell `eaControl7NoAbsW + {ea7AbsW}`, so this
-  # constant survives only as the left operand of that sum. It is NOT dead -
-  # a prediction that MOVEM's narrowing would leave it unread was checked on
-  # 2026-08-11 and is wrong by two consumers.
-  eaControl7NoAbsW* = {ea7AbsL, ea7PCDisp, ea7PCIndex}
+  # THIS CONSTANT DID NOT EXIST UNTIL 2026-08-11 AND ITS ABSENCE COST TWO
+  # REPAIRS. The control class MINUS `(xxx).W` was the declared primitive and
+  # the class itself was written down nowhere; `eaJumpTarget` and
+  # `eaLeaPeaTarget` each RECONSTRUCTED it as `<that set> + {ea7AbsW}`. LEA and
+  # PEA were wired to the narrow set and trapped `lea 0x1234.w,%a0` and
+  # `pea 0x1234.w`, forms the pinned assembler emits. A future operand class
+  # that really excludes `(xxx).W` belongs at its site as
+  # `eaControl7 - {ea7AbsW}`, not back here as a second declaration.
+  #
+  # THE NARROW SET IS GONE RATHER THAN DERIVED, AND THE MEASURED FACT IS ZERO
+  # CODE READERS: once both readers took this set directly, no expression
+  # anywhere in `src/` read the old name. THE STATED LIMIT IS THAT THIS IS A
+  # CLAIM ABOUT CODE AND NOT ABOUT PROSE - the old name still appears in
+  # comment text, and no run can see that. Measured 2026-08-11 by grepping the
+  # name over each directory in turn: EIGHT mentions under `src/`, every one of
+  # them in `decode_types.nim`; TWO under `tests/`, one each in
+  # `t_ea_masks.nim` and `t_move.nim`; and ZERO under `conformance/`. MOVEM
+  # reads neither set and carries `{eaAnInd, eaAnDisp}`.
+  #
+  # WHAT THAT EXPRESSION COSTS IF IT IS EVER WRITTEN ON THIS DECLARATION
+  # INSTEAD OF AT A SITE. Measured 2026-08-11 by narrowing THIS set to
+  # `{ea7AbsL, ea7PCDisp, ea7PCIndex}`, configured FRESH and run through
+  # `ctest`: ELEVEN distinct cases red -
+  #
+  #   t_ea_masks   3  `opLea`/`opPea: the mask accepts (xxx).W` and block
+  #                   (17)'s `eaControl7` equality case
+  #   t_move       5  the three `lea (xxx).W` cases and the two `pea (xxx).W`
+  #   t_control    2  `jmp (xxx).w is legal`, `jsr (xxx).w is legal`
+  #   conformance  1  `group=control case=jmp_absolute_short
+  #                   instruction="jmp 0x1234.w"`
+  #
+  # THE CONFORMANCE CASE IS THE ONE A COUNT TAKEN FROM THE `t_*` SUITES ALONE
+  # LEAVES OUT, and leaving it out is how the records in this family have been
+  # wrong before. Ten is the number a reader gets by stopping at `ctest`'s Nim
+  # suites; eleven is the number.
+  #
+  # JMP AND JSR ARE COVERED BY `tests/t_control.nim` AND NOT BY `t_ea_masks`.
+  # Its twelve-row `eaIsLegalFor(opJmp/opJsr, ...)` table is where the two
+  # `(xxx).w is legal` cases above come from.
+  eaControl7* = {ea7AbsW, ea7AbsL, ea7PCDisp, ea7PCIndex}
 
-  eaAlterableModes* = {eaDn, eaAn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp,
-                       eaAnIndex, eaMode7}
+  # THE MODE-7 SUB-VARIANTS OF A WRITTEN OPERAND. There is no companion mode
+  # set: an ALTERABLE operand may take EVERY mode, so the readers pair this with
+  # `eaAllModes` and the whole of the restriction is here.
+  #
+  # `eaAlterableModes` HELD THAT MODE LIST UNTIL 2026-08-11 AND WAS
+  # BYTE-IDENTICAL TO `eaAllModes`. It is gone; the ADDQ and SUBQ arm names
+  # `eaAllModes`, which claims no class and is therefore true.
+  #
+  # WHY THE MODE LIST CANNOT RESTRICT ANYTHING HERE. Seven of the eight modes
+  # are alterable outright, and the eighth is mode 7, whose sub-variants split
+  # between alterable and not. A mode-level set therefore has to admit mode 7 to
+  # let the absolute forms through, at which point it admits all eight and
+  # restricts nothing. The split is a property of the register field alone.
+  #
+  # MEASURED 2026-08-11 WITH `m68k-elf-as -mcpu=5307` (GNU Binutils
+  # 2.47.20260726), twelve cells each for ADDQ and SUBQ. ADDQ accepts `%d0`
+  # (`5280`), `%a0` (`5288`), `(%a0)` (`5290`), `(%a0)+` (`5298`), `-(%a0)`
+  # (`52a0`), `(4,%a0)` (`52a8 0004`), `(4,%a0,%d2)` (`52b0 2804`), `0x1234.w`
+  # (`52b8 1234`) and `0x12345678` (`52b9 1234 5678`), and rejects `(4,%pc)`,
+  # `(4,%pc,%d2)` and `#5`. SUBQ answers the same twelve - `%a0` is `5388`,
+  # `0x1234.w` is `53b8 1234`. Every mode appears among the accepted cells.
+  #
+  # THE CFPRM'S `Alterable` COLUMN DASHES BOTH MEMBERS OF THIS SET, AND THE
+  # ASSEMBLER IS TAKEN AS THE AUTHORITY. Table 2-3, folio 2-10, PDF page 50,
+  # read as a rendered image: `(xxx).W` and `(xxx).L` carry an `X` under `Data`,
+  # `Memory` and `Control` and a DASH under `Alterable`. An ADDQ to an absolute
+  # destination writes memory and the pinned assembler emits it, so the column
+  # is read here as a coarse-table artefact. THAT DISAGREEMENT IS RECORDED AND
+  # NOT SETTLED; `tests/t_ea_masks.nim` block (16) pins the behaviour so a
+  # narrowing that follows the column goes red rather than passing quietly.
   eaAlterable7* = {ea7AbsW, ea7AbsL}
 
   # Data alterable: alterable without An. CLR takes this class - measured

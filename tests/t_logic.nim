@@ -125,7 +125,13 @@
 ## wrote it - said "this case is what would go red", which undercounts by one.
 ## The two are this trap case and the
 ## `checkMask(eaIsLegalFor(opBtst, decodeEa(0x3C)), false, ...)` row further
-## down. The corpus does not pin this question either way.
+## down, which that same commit flipped from `true`. MEASURED: `eaBitDynamic`'s
+## `ea7` restored to the full valid mode-7 set - then named `eaData7`, now
+## `eaValid7` - in a `git archive` extract of this commit,
+## confirmed in the generated C as `{253, 31}` against this commit's
+## `{253, 15}`, rebuilt from a fresh configure - `t_logic: 2 of 74 cases
+## failed`, exactly those two, and `mcf5307_conformance_logic` stayed
+## `41 cases, 0 failed`. The corpus does not pin this question either way.
 ##
 ## THE PC-RELATIVE CASES NOW PIN THE PC-RELATIVE BASE, AND THEY USED NOT TO.
 ## An earlier revision of this paragraph said they did not pin it "and that is
@@ -542,11 +548,28 @@ block:
   # `bchg %d1,%d0` is `0340`. `m68k-elf-as -mcpu=5307` rejects every one of
   # `bset %d1,(4,%pc)`, `bset %d1,#5`, `bclr %d1,(4,%pc)` and `bchg %d1,#5`.
   #
-  # More than one guard refuses these four, and no case here can name one of
-  # them. The per-operation mask in `execBitOp` runs first and `eaResolve`
-  # runs second, and the two immediate cases meet a third underneath both:
-  # `eaAddr` has no address for an immediate and faults on its own. The four
-  # cases assert that the encoding does not execute, and that is all they
+  # MORE THAN ONE GUARD REFUSES THESE FOUR AND NO CASE HERE CAN NAME ONE OF
+  # THEM. The per-operation mask in `execBitOp` runs first and `eaResolve`
+  # runs second, and the two IMMEDIATE cases meet a third underneath both:
+  # `eaAddr` has no address for an immediate and faults on its own.
+  #
+  # MEASURED, FOUR WAYS, and the last two are why the two halves of this group
+  # are not the same case twice:
+  #   - widening `eaResolve` to admit `ea7PCDisp` and `ea7PCIndex`: all four
+  #     stay green;
+  #   - widening the BSET/BCLR/BCHG mask to `eaAllModes` + `eaValid7` (then
+  #     spelled `eaAlterableModes` + `eaData7`):
+  #     all four stay green;
+  #   - widening BOTH: the two PC-RELATIVE cases go red, the two IMMEDIATE
+  #     ones stay green;
+  #   - widening both AND adding `ea7Imm` to `eaResolve`: the two immediate
+  #     cases STILL stay green, because `eaAddr` refuses the immediate
+  #     underneath everything above it.
+  #
+  # AN EARLIER REVISION OF THIS COMMENT CLAIMED THESE WERE "the cases that
+  # fail if `eaResolve` is widened instead of the executor being fixed". That
+  # claim was never run and it is false. The four cases assert that the
+  # encoding DOES NOT EXECUTE, which is worth asserting and is all they
   # assert.
   #
   # Each guard is measured somewhere that can see it, and the places are named
@@ -869,14 +892,15 @@ block:
   # EOR writes its effective address, so the class is data alterable: no
   # PC-relative operand and no address register.
   #
-  # The two cases are not equally sharp and the difference is `eaResolve`. It
-  # refuses a PC-relative destination on its own, so the PC-relative case is
-  # refused twice over and cannot name the guard that stopped it - measured,
-  # it stayed green when the EOR mask was widened to `eaAlterableModes` +
-  # `eaData7`. `eaResolve` resolves an address register, so the An case meets
-  # the mask alone, and it went red under that same widening. Both are kept
-  # and they say different things: the first asserts the encoding does not
-  # execute, the second asserts which guard stops it.
+  # THE TWO CASES ARE NOT EQUALLY SHARP AND THE DIFFERENCE IS `eaResolve`.
+  # `eaResolve` refuses a PC-relative destination on its own, so the
+  # PC-relative case is refused twice over and cannot name the guard that
+  # stopped it - measured, it stayed green when the EOR mask was widened to
+  # `eaAllModes` + `eaValid7` (then spelled `eaAlterableModes` + `eaData7`).
+  # `eaResolve` RESOLVES an address register,
+  # so the An case meets the mask alone, and it went red under that same
+  # widening. Both are kept and they say different things: the first asserts
+  # the encoding does not execute, the second asserts WHICH guard stops it.
   expectTrapD(runIns([0xB3BA'u16, 0x0004'u16], d = two), 0, 0x12345678'u32,
     "eor.l %d1,(4,%pc) traps: an EOR destination is not PC-relative")
   expectTrapA(runIns([0xB388'u16], d = two,

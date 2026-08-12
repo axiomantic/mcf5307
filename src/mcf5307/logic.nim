@@ -152,11 +152,19 @@
 ##      `CMP <ea>y,Dx` is "Destination - Source" - which an immediate cannot
 ##      be.
 ##
-##      A reader who reverses this must change both assertions in
-##      `tests/t_logic.nim`: the `btst %d1,#5` trap case, and the
-##      `checkMask(eaIsLegalFor(opBtst, decodeEa(0x3C)), false, ...)` row. It
-##      is the one entry on this list that a future reader may have to reverse
-##      rather than merely fill in.
+##      THIS ONE IS ASSERTED, in `tests/t_logic.nim`, because a mask must be
+##      one thing or the other and a trap that no case covers is a trap nothing
+##      measures. IT IS ASSERTED TWICE AND A READER WHO REVERSES IT MUST CHANGE
+##      BOTH: the `btst %d1,#5` trap case, and the
+##      `checkMask(eaIsLegalFor(opBtst, decodeEa(0x3C)), false, ...)` row that
+##      this commit flipped from `true`. MEASURED: `eaBitDynamic`'s `ea7`
+##      restored to the full valid mode-7 set (then `eaData7`, now
+##      `eaValid7`), confirmed in the generated C as `{253, 31}`
+##      against this commit's `{253, 15}`, rebuilt from a fresh configure of a
+##      `git archive` of this commit - `t_logic: 2 of 74 cases failed`, exactly
+##      those two, and the corpus stayed 41 of 41. It is the one entry on this
+##      list that a future reader may have to REVERSE rather than merely fill
+##      in.
 ##
 ##   4. THE BIT NUMBER'S MODULUS. `execBitOp` reduces the number modulo the
 ##      operand width - 32 for a data register, 8 for memory. Table 3-7 gives
