@@ -24,6 +24,11 @@ project(mcf5307
 # that registers no test: the first is a broken build tree and the second is
 # this skeleton. CPU-26's negative case deletes this line and asserts the two
 # shapes are distinguishable.
+#
+# IT IS NOT GUARDED BY `PROJECT_IS_TOP_LEVEL` AND THE SUITE BELOW IT IS. A
+# guarded one writes no `CTestTestfile.cmake` for this directory in a consumer's
+# tree, and the ABI-gate assertion `tests/tests_cpu.cmake` registers there would
+# then not register at all.
 enable_testing()
 
 # The relaxation that keeps a CONSUMER's compiler flags from failing THIS
@@ -92,5 +97,12 @@ add_custom_target(mcf5307_tests
 # links the core needs the target to exist when its own list is read.
 include(cmake/Nim.cmake)
 
+# `tests/` IS ENTERED IN EVERY TREE AND `conformance/` ONLY AT TOP LEVEL.
+# `tests/tests_cpu.cmake` registers the ABI-gate assertion and then returns
+# unless this project is top-level, so a consumer inherits that one test, no
+# other, and no test executable. Nothing in `conformance/` has a reason to
+# outlive the top-level tree, so its guard is the whole directory.
 add_subdirectory(tests)
-add_subdirectory(conformance)
+if(PROJECT_IS_TOP_LEVEL)
+    add_subdirectory(conformance)
+endif()

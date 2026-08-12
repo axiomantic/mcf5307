@@ -6,7 +6,184 @@
 #
 # Each later cpu task adds its own `add_test(NAME <name> ...)` line here, with
 # whatever target the name needs, and attaches that target to the `mcf5307_tests`
-# aggregate that the root list creates.
+# aggregate that the root list creates, AFTER the `PROJECT_IS_TOP_LEVEL` guard
+# below unless it has the same reason to outlive it the block above the guard has.
+
+# --------------------------------------------------------------------- CPU-3
+# `t0_abi_gate_on` - step 4a is switched ON in the tree this suite is running
+# against.
+#
+# THE BANNER READ CPU-26 AND THAT WAS WRONG. Section 7.4.2's owner row, CPU-26's
+# own block and the root list all three say CPU-26 registers no test of its own,
+# and the section defines no third role for a registration that belongs to
+# nobody. CPU-3 is the later task the second role names: it owns `cmake/Nim.cmake`
+# as a declared second write, and the gate this test reads is its work.
+#
+# WHAT IT PROTECTS. What the OFF branch of step 4a does is `message(WARNING)`,
+# and a warning fails neither `cmake`, nor `cmake --build`, nor `ctest`. The
+# switch is a `CACHE BOOL`, so a directory configured OFF once stays OFF with
+# nobody naming it again. The whole OFF state was therefore reportable only as
+# one line of scrollback on a run that ends in exit 0 - the shape of a check
+# that quietly does not run, which is the shape step 4a was written to end.
+#
+# THIS TEST IS THE ONLY THING IN THE REPOSITORY THAT FAILS WHEN THE GATE IS
+# OFF. Measured 2026-08-12: `git grep -n MCF5307_ABI_GATE` answers with
+# `cmake/Nim.cmake` and this file and nothing else. No CI step, no lint and no
+# other test reads the switch. The command is `git grep` because a literal
+# `grep -rn` also walks `.claude/worktrees/`, where an untracked checkout of
+# this same repository carries its own `cmake/Nim.cmake`; measured the same
+# day, that answered with a THIRD file.
+#
+# THE CACHE ENTRY IS NOT THE GATE. It is the SWITCH. A run can read `ON` out of
+# `CMakeCache.txt` and still not have run step 4a: delete the branch and keep
+# the `set(... CACHE BOOL)`, or let a parent list file shadow the entry with a
+# NORMAL variable, which the docstring in `cmake/Nim.cmake` records. Both were
+# MEASURED 2026-08-12 against the cache-only form this block replaces, and a
+# cache-only assertion PASSED on each.
+#
+# SO THE ASSERTION IS ON AN ARTIFACT STEP 4a PRODUCED, AND THE CACHE CHECKS ARE
+# KEPT BESIDE IT. `cmake/Nim.cmake` writes `mcf5307_abi_gate_ran.token` at the
+# END of step 4a's own branch, carrying the counts the three parts measured and
+# the number of sites that ran. This file MOVES that token - removes any
+# previous stamp, then renames - into the binary directory ctest starts the
+# driver in. The token is CONSUMED, so a stamp can be here only if step 4a
+# wrote a token in the same run that moved it.
+#
+# WHAT THE MOVE DOES NOT CLOSE is a configure that ABORTS before this directory
+# is read: nothing here runs to remove the previous stamp. MEASURED 2026-08-12:
+# an honest tree passed, a fault injected inside step 4a made the reconfigure
+# exit 1 without generating, and the test PASSED against the surviving stamp.
+# So a stamp proves the branch ran through IN THE MOST RECENT CONFIGURE THAT
+# REACHED `tests/`, which is what the pass line says. It is bounded: `cmake
+# --build` on that tree re-runs cmake and exits 2, so CI never reaches ctest.
+#
+# THE MOVE IS WHY THERE IS NO MTIME COMPARISON. An existence-only stamp needs
+# one, and `CMakeCache.txt` is the file it would have to name. MEASURED
+# 2026-08-12 on a two-line probe project, both directions defeat it. Within one
+# configure the cache is written AFTER every list file has run, so a stamp
+# written by step 4a is ALWAYS older than the cache of its own run and the
+# honest ON case would red. And a second configure that changed no entry left
+# `CMakeCache.txt` at the mtime of the first while the probe's own list-file
+# write moved forward, so the cache is not rewritten on every configure either
+# - which makes a STALE stamp read NEWER than the cache. Consumption answers
+# the question the mtime was reaching for without depending on either ordering.
+#
+# THE TWO OFFSETS ARE ANCHORED DIFFERENTLY ON PURPOSE. The token lands in THIS
+# PROJECT's binary directory, `PROJECT_BINARY_DIR`; `CMakeCache.txt` is written
+# once per BUILD TREE, `CMAKE_BINARY_DIR`. The two are the same directory ONLY
+# when mcf5307 is top-level. MEASURED 2026-08-12 with the cache offset taken
+# from `PROJECT_BINARY_DIR`: configured through `add_subdirectory()` it named
+# `<build>/mcf5307_build`, which holds no cache, and the test was red on every
+# run WITH THE GATE ON - closed rather than open, but broken in the
+# configuration step 6 exists to serve.
+#
+# THE CACHE CHECKS ARE KEPT AND NOT REPLACED. They read the persisted entry,
+# which is the thing that survives into the next configure, and they name a
+# different fault: a tree whose switch is off, or whose switch is no longer
+# declared, is a different report from a tree whose branch did not run.
+#
+# THE TWO FILES IT READS ARE RESOLVED AT RUN TIME AND NOT BAKED AT CONFIGURE
+# TIME. What `add_test` records for each is a RELATIVE offset, resolved against
+# the directory ctest starts the driver in, in whatever tree ctest was invoked
+# in. An absolute path
+# computed at configure time names THAT tree forever, and a build tree is a
+# directory anyone can copy. MEASURED 2026-08-12 against the absolute form this
+# replaces: configure a tree with `-DMCF5307_ABI_GATE=OFF`, copy it,
+# reconfigure the ORIGINAL to ON, run ctest in the COPY - PASSED, exit 0,
+# printing the ORIGINAL tree's path in its own pass line.
+#
+# THE ASSERTION IS ON CMAKE'S OWN BOOLEAN READING OF THE LITERAL, not on the
+# spelling `ON`. `-DMCF5307_ABI_GATE=TRUE` and `-DMCF5307_ABI_GATE=1` are gates
+# that ARE on, and a test that demanded the three letters would red on a tree
+# whose gate runs. The literal is reported verbatim in both the pass line and
+# the failure message, so the evidence is the value itself either way.
+#
+# THE COUNT CHECK IS NOT DECORATION. Zero entries means `cmake/Nim.cmake` no
+# longer declares the switch at all, which is a way to lose step 4a that an
+# ON/OFF assertion alone reads as a missing variable and CMake reads as false.
+# The two are separated so the failure names which one happened.
+#
+# IT REGISTERS NO CHECK TARGET, AND `docs/check-targets.txt` IS LEFT EMPTY AND
+# UNMODIFIED. VERIFIED 2026-08-12 in the tool: the check-target condition
+# compares that file against a set harvested from the PLAN DOCUMENT and opens
+# NO SOURCE FILE, so an `add_test()` written here puts a name into neither set.
+# The file's own prose - it declares the targets of tasks declared COMPLETE -
+# is no filter in that comparison, so the empty file is correct because no name
+# reaches either set and NOT because a filter holds incomplete tasks back. The
+# prose is not inert: a SECOND half of the same tool reads the same file, by a
+# different rule, as a completion signal. Neither reading reaches this block.
+#
+# The `t0_` prefix is what puts this name in front of CI instead -
+# `.github/workflows/ci.yml` runs `-R '^t0_'` in two jobs, and this name joins
+# that pattern with no edit to the workflow.
+
+# The consume step. It runs on EVERY configure, because this file is what
+# registers the test: a configure that does not reach this line registers no
+# `t0_abi_gate_on` at all, which `--no-tests=error` and the suite's own count
+# report as a missing test rather than as a pass. The removal comes first so
+# that a configure which finds no token leaves no stamp behind.
+#
+# THE TOKEN IS HELD AGAINST THE VARIABLE `cmake/Nim.cmake` LEFT BESIDE IT.
+# WHAT THAT REJECTS is a token on disk that step 4a's branch did not write in
+# this run. Measured 2026-08-12 without the comparison: a token planted in the
+# build tree, with step 4a's whole branch then deleted from `cmake/Nim.cmake`,
+# was moved here and the test PASSED. A rejected token is removed rather than
+# left, so the next configure starts from the same place a clean one does.
+#
+# WHAT IT DOES NOT REJECT IS `-D`. The variable is NOT set by this run or not
+# at all: `cmake -DMCF5307_ABI_GATE_RECORD=<text>` creates a cache entry, the
+# same persistence `MCF5307_ABI_GATE` has and this test exists to catch.
+# MEASURED 2026-08-12 against a branch-deleted source with a token planted by
+# hand, one configure naming `-D` PASSED and the entry landed as
+# `MCF5307_ABI_GATE_RECORD:UNINITIALIZED=`. It is bounded twice, and neither
+# bound makes the old claim safe to restate. The record is multi-line and CMake
+# truncates a cached value at the first newline, so a later configure that does
+# not name `-D` reds - measured the same run. And naming it is hand-writing the
+# record with an extra step, which belongs with forging the stamp.
+#
+# DELETING THIS STEP IS NOT A QUIET WAY TO DISARM THE TEST. The offset computed
+# below names `MCF5307_GATE_STAMP`, so a tree without this step reaches
+# `file(RELATIVE_PATH)` with an empty argument. MEASURED 2026-08-12: `CMake
+# Error ... file RELATIVE_PATH must be passed a full path to the file`, and the
+# configure ends non-zero with no test registered at all.
+set(MCF5307_GATE_TOKEN "${PROJECT_BINARY_DIR}/mcf5307_abi_gate_ran.token")
+set(MCF5307_GATE_STAMP "${CMAKE_CURRENT_BINARY_DIR}/t0_abi_gate_ran.stamp")
+file(REMOVE "${MCF5307_GATE_STAMP}")
+if(EXISTS "${MCF5307_GATE_TOKEN}")
+    file(READ "${MCF5307_GATE_TOKEN}" MCF5307_GATE_TOKEN_TEXT)
+    if(MCF5307_ABI_GATE_RECORD AND
+       "${MCF5307_GATE_TOKEN_TEXT}" STREQUAL "${MCF5307_ABI_GATE_RECORD}")
+        file(RENAME "${MCF5307_GATE_TOKEN}" "${MCF5307_GATE_STAMP}")
+    else()
+        file(REMOVE "${MCF5307_GATE_TOKEN}")
+    endif()
+endif()
+
+file(RELATIVE_PATH MCF5307_GATE_CACHE_OFFSET
+    "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_BINARY_DIR}/CMakeCache.txt")
+file(RELATIVE_PATH MCF5307_GATE_STAMP_OFFSET
+    "${CMAKE_CURRENT_BINARY_DIR}" "${MCF5307_GATE_STAMP}")
+
+# THE DRIVER IS A SOURCE FILE AND THE OFFSETS STILL RESOLVE AGAINST THE BUILD
+# TREE. `cmake -P` sets `CMAKE_CURRENT_BINARY_DIR` to the WORKING DIRECTORY and
+# never to the script's own directory. MEASURED 2026-08-12 on CMake 4.3.4, with
+# a decoy `CMakeCache.txt` reading OFF planted where a script-anchored
+# resolution would have landed: the driver read the build tree's cache.
+add_test(NAME t0_abi_gate_on
+    COMMAND "${CMAKE_COMMAND}"
+        "-DGATE_CACHE_OFFSET=${MCF5307_GATE_CACHE_OFFSET}"
+        "-DGATE_STAMP_OFFSET=${MCF5307_GATE_STAMP_OFFSET}"
+        -P "${CMAKE_CURRENT_LIST_DIR}/t0_abi_gate_on.cmake")
+
+# THE BLOCK ABOVE REGISTERS IN EVERY TREE AND EVERYTHING BELOW ONLY AT TOP
+# LEVEL. A test that runs in a tree no task owns is a test whose failure has no
+# owner. THE GATE ASSERTION IS THE EXCEPTION ON PURPOSE: `add_subdirectory()` is
+# where a hidden published symbol breaks a plugin, and it is the configuration
+# the parent-variable shadow of `MCF5307_ABI_GATE` was found in. MEASURED
+# 2026-08-12: 16 names top-level, 1 from a scratch parent.
+if(NOT PROJECT_IS_TOP_LEVEL)
+    return()
+endif()
 
 # --------------------------------------------------------------------- CPU-0
 # `t0_abi_header` - the application binary interface contract.
@@ -1151,353 +1328,3 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
 endif()
 add_dependencies(mcf5307_tests abi_smoke)
 add_test(NAME abi_smoke COMMAND abi_smoke)
-
-# -------------------------------------------------------------------- CPU-26
-# `t0_abi_gate_on` - step 4a is switched ON in the tree this suite is running
-# against.
-#
-# WHY THIS ONE IS THE FILE OWNER'S. Section 7.4.2 makes CPU-26 the owner of
-# this file and admits a later cpu task only as a second writer of ITS OWN
-# registration. No plan task names `t0_abi_gate_on`, which is the same fact the
-# check-target paragraph below turns on, so it is no later task's own - and a
-# registration that belongs to no later task belongs to the owner.
-#
-# WHAT IT PROTECTS. What the OFF branch of step 4a does is `message(WARNING)`,
-# and a warning fails neither `cmake`, nor `cmake --build`, nor `ctest`. The
-# switch is a `CACHE BOOL`, so a directory configured OFF once stays OFF with
-# nobody naming it again. The whole OFF state was therefore reportable only as
-# one line of scrollback on a run that ends in exit 0 - the shape of a check
-# that quietly does not run, which is the shape step 4a was written to end.
-#
-# THIS TEST IS THE ONLY THING IN THE REPOSITORY THAT FAILS WHEN THE GATE IS
-# OFF. Measured 2026-08-12: `git grep -n MCF5307_ABI_GATE` answers with
-# `cmake/Nim.cmake` and this file and nothing else. No CI step, no lint and no
-# other test reads the switch. The command is `git grep` because a literal
-# `grep -rn` also walks `.claude/worktrees/`, where an untracked checkout of
-# this same repository carries its own `cmake/Nim.cmake`; measured the same
-# day, that answered with a THIRD file.
-#
-# THE CACHE ENTRY IS NOT THE GATE. It is the SWITCH. A run can read `ON` out of
-# `CMakeCache.txt` and still not have run step 4a: delete the branch and keep
-# the `set(... CACHE BOOL)`, or let a parent list file shadow the entry with a
-# NORMAL variable, which the docstring in `cmake/Nim.cmake` records. Both were
-# MEASURED 2026-08-12 against the cache-only form this block replaces, and a
-# cache-only assertion PASSED on each.
-#
-# SO THE ASSERTION IS ON AN ARTIFACT STEP 4a PRODUCED, AND THE CACHE CHECKS ARE
-# KEPT BESIDE IT. `cmake/Nim.cmake` writes `mcf5307_abi_gate_ran.token` at the
-# END of step 4a's own branch, carrying the counts the three parts measured and
-# the number of sites that ran. This file MOVES that token - removes any
-# previous stamp, then renames - into the binary directory ctest starts the
-# driver in. The token is CONSUMED, so a stamp can be here only if step 4a
-# wrote a token in the same run that moved it.
-#
-# WHAT THE MOVE DOES NOT CLOSE is a configure that ABORTS before this directory
-# is read: nothing here runs to remove the previous stamp. MEASURED 2026-08-12:
-# an honest tree passed, a fault injected inside step 4a made the reconfigure
-# exit 1 without generating, and the test PASSED against the surviving stamp.
-# So a stamp proves the branch ran through IN THE MOST RECENT CONFIGURE THAT
-# REACHED `tests/`, which is what the pass line says. It is bounded: `cmake
-# --build` on that tree re-runs cmake and exits 2, so CI never reaches ctest.
-#
-# THE MOVE IS WHY THERE IS NO MTIME COMPARISON. An existence-only stamp needs
-# one, and `CMakeCache.txt` is the file it would have to name. MEASURED
-# 2026-08-12 on a two-line probe project, both directions defeat it. Within one
-# configure the cache is written AFTER every list file has run, so a stamp
-# written by step 4a is ALWAYS older than the cache of its own run and the
-# honest ON case would red. And a second configure that changed no entry left
-# `CMakeCache.txt` at the mtime of the first while the probe's own list-file
-# write moved forward, so the cache is not rewritten on every configure either
-# - which makes a STALE stamp read NEWER than the cache. Consumption answers
-# the question the mtime was reaching for without depending on either ordering.
-#
-# THE TWO OFFSETS ARE ANCHORED DIFFERENTLY ON PURPOSE. The token lands in THIS
-# PROJECT's binary directory, `PROJECT_BINARY_DIR`; `CMakeCache.txt` is written
-# once per BUILD TREE, `CMAKE_BINARY_DIR`. The two are the same directory ONLY
-# when mcf5307 is top-level. MEASURED 2026-08-12 with the cache offset taken
-# from `PROJECT_BINARY_DIR`: configured through `add_subdirectory()` it named
-# `<build>/mcf5307_build`, which holds no cache, and the test was red on every
-# run WITH THE GATE ON - closed rather than open, but broken in the
-# configuration step 6 exists to serve.
-#
-# THE CACHE CHECKS ARE KEPT AND NOT REPLACED. They read the persisted entry,
-# which is the thing that survives into the next configure, and they name a
-# different fault: a tree whose switch is off, or whose switch is no longer
-# declared, is a different report from a tree whose branch did not run.
-#
-# THE PATH IS RESOLVED AT RUN TIME AND NOT BAKED AT CONFIGURE TIME. What
-# `add_test` records is a RELATIVE offset, resolved against the directory ctest
-# starts the driver in, in whatever tree ctest was invoked in. An absolute path
-# computed at configure time names THAT tree forever, and a build tree is a
-# directory anyone can copy. MEASURED 2026-08-12 against the absolute form this
-# replaces: configure a tree with `-DMCF5307_ABI_GATE=OFF`, copy it,
-# reconfigure the ORIGINAL to ON, run ctest in the COPY - PASSED, exit 0,
-# printing the ORIGINAL tree's path in its own pass line.
-#
-# THE ASSERTION IS ON CMAKE'S OWN BOOLEAN READING OF THE LITERAL, not on the
-# spelling `ON`. `-DMCF5307_ABI_GATE=TRUE` and `-DMCF5307_ABI_GATE=1` are gates
-# that ARE on, and a test that demanded the three letters would red on a tree
-# whose gate runs. The literal is reported verbatim in both the pass line and
-# the failure message, so the evidence is the value itself either way.
-#
-# THE COUNT CHECK IS NOT DECORATION. Zero entries means `cmake/Nim.cmake` no
-# longer declares the switch at all, which is a way to lose step 4a that an
-# ON/OFF assertion alone reads as a missing variable and CMake reads as false.
-# The two are separated so the failure names which one happened.
-#
-# IT REGISTERS NO CHECK TARGET, AND `docs/check-targets.txt` IS LEFT EMPTY AND
-# UNMODIFIED. VERIFIED 2026-08-12 in the tool: the check-target condition
-# compares that file against a set harvested from the PLAN DOCUMENT and opens
-# NO SOURCE FILE, so an `add_test()` written here puts a name into neither set.
-# The file's own prose - it declares the targets of tasks declared COMPLETE -
-# is no filter in that comparison, so the empty file is correct because no name
-# reaches either set and NOT because a filter holds incomplete tasks back. The
-# prose is not inert: a SECOND half of the same tool reads the same file, by a
-# different rule, as a completion signal. Neither reading reaches this block.
-#
-# The `t0_` prefix is what puts this name in front of CI instead -
-# `.github/workflows/ci.yml` runs `-R '^t0_'` in two jobs, and this name joins
-# that pattern with no edit to the workflow.
-
-# The consume step. It runs on EVERY configure, because this file is what
-# registers the test: a configure that does not reach this line registers no
-# `t0_abi_gate_on` at all, which `--no-tests=error` and the suite's own count
-# report as a missing test rather than as a pass. The removal comes first so
-# that a configure which finds no token leaves no stamp behind.
-#
-# THE TOKEN IS HELD AGAINST THE VARIABLE `cmake/Nim.cmake` LEFT BESIDE IT.
-# WHAT THAT REJECTS is a token on disk that step 4a's branch did not write in
-# this run. Measured 2026-08-12 without the comparison: a token planted in the
-# build tree, with step 4a's whole branch then deleted from `cmake/Nim.cmake`,
-# was moved here and the test PASSED. A rejected token is removed rather than
-# left, so the next configure starts from the same place a clean one does.
-#
-# WHAT IT DOES NOT REJECT IS `-D`. The variable is NOT set by this run or not
-# at all: `cmake -DMCF5307_ABI_GATE_RECORD=<text>` creates a cache entry, the
-# same persistence `MCF5307_ABI_GATE` has and this test exists to catch.
-# MEASURED 2026-08-12 against a branch-deleted source with a token planted by
-# hand, one configure naming `-D` PASSED and the entry landed as
-# `MCF5307_ABI_GATE_RECORD:UNINITIALIZED=`. It is bounded twice, and neither
-# bound makes the old claim safe to restate. The record is multi-line and CMake
-# truncates a cached value at the first newline, so a later configure that does
-# not name `-D` reds - measured the same run. And naming it is hand-writing the
-# record with an extra step, which belongs with forging the stamp.
-#
-# DELETING THIS STEP IS NOT A QUIET WAY TO DISARM THE TEST. The offset computed
-# below names `MCF5307_GATE_STAMP`, so a tree without this step reaches
-# `file(RELATIVE_PATH)` with an empty argument. MEASURED 2026-08-12: `CMake
-# Error ... file RELATIVE_PATH must be passed a full path to the file`, and the
-# configure ends non-zero with no test registered at all.
-set(MCF5307_GATE_TOKEN "${PROJECT_BINARY_DIR}/mcf5307_abi_gate_ran.token")
-set(MCF5307_GATE_STAMP "${CMAKE_CURRENT_BINARY_DIR}/t0_abi_gate_ran.stamp")
-file(REMOVE "${MCF5307_GATE_STAMP}")
-if(EXISTS "${MCF5307_GATE_TOKEN}")
-    file(READ "${MCF5307_GATE_TOKEN}" MCF5307_GATE_TOKEN_TEXT)
-    if(MCF5307_ABI_GATE_RECORD AND
-       "${MCF5307_GATE_TOKEN_TEXT}" STREQUAL "${MCF5307_ABI_GATE_RECORD}")
-        file(RENAME "${MCF5307_GATE_TOKEN}" "${MCF5307_GATE_STAMP}")
-    else()
-        file(REMOVE "${MCF5307_GATE_TOKEN}")
-    endif()
-endif()
-
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t0_abi_gate_on_driver.cmake" [==[
-# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
-#
-# The driver of the registered test `t0_abi_gate_on`. `GATE_CACHE_OFFSET` and
-# `GATE_STAMP_OFFSET` are RELATIVE paths - to the build tree's `CMakeCache.txt`
-# and to the record step 4a left behind - resolved HERE, at run time, so the
-# files read are always the ones of the tree the suite is running in. The block
-# in tests/tests_cpu.cmake that registers this test says what an absolute path
-# did instead.
-
-foreach(offset_name GATE_CACHE_OFFSET GATE_STAMP_OFFSET)
-    if(NOT ${offset_name})
-        message(FATAL_ERROR
-            "t0_abi_gate_on: ${offset_name} is empty or unset. ctest passes "
-            "it. Run `ctest -R '^t0_abi_gate_on$'` from a build tree rather "
-            "than running this file directly.")
-    endif()
-endforeach()
-
-# In script mode CMAKE_CURRENT_BINARY_DIR is the directory cmake was started
-# in, and ctest starts a test in the binary directory that registered it - in
-# the tree ctest itself was invoked in, which is the anchor that makes this
-# survive a copied build tree. BASE_DIR is named rather than defaulted.
-get_filename_component(GATE_CACHE "${GATE_CACHE_OFFSET}" ABSOLUTE
-    BASE_DIR "${CMAKE_CURRENT_BINARY_DIR}")
-
-if(NOT EXISTS "${GATE_CACHE}")
-    message(FATAL_ERROR
-        "t0_abi_gate_on: no cache file at ${GATE_CACHE}. The test reads the "
-        "persisted cache entry, and there is nothing here to read.")
-endif()
-
-file(STRINGS "${GATE_CACHE}" gate_lines REGEX "^MCF5307_ABI_GATE:")
-list(LENGTH gate_lines gate_count)
-if(NOT gate_count EQUAL 1)
-    message(FATAL_ERROR
-        "t0_abi_gate_on: ${GATE_CACHE} carries ${gate_count} "
-        "MCF5307_ABI_GATE entr(y/ies) and exactly 1 is expected: "
-        "`${gate_lines}`. Zero means cmake/Nim.cmake no longer declares the "
-        "switch, and step 4a is then unreachable rather than off.")
-endif()
-
-string(REGEX REPLACE "^MCF5307_ABI_GATE:[A-Z]+=" "" gate_value "${gate_lines}")
-if(NOT gate_value)
-    message(FATAL_ERROR
-        "t0_abi_gate_on: MCF5307_ABI_GATE is `${gate_value}` in ${GATE_CACHE}. "
-        "THE SWITCH IS OFF IN THIS BUILD TREE. The configure-time warning "
-        "`mcf5307: step 4a IS TURNED OFF` in cmake/Nim.cmake enumerates what a "
-        "run without step 4a did not measure; that warning is the one "
-        "statement of it. The entry is a CACHE entry and it persists: "
-        "reconfigure this tree with -DMCF5307_ABI_GATE=ON, or configure a "
-        "fresh tree.")
-endif()
-
-# The switch reads on. That is the switch and not the work, so the rest of this
-# driver reads the record step 4a leaves when it actually runs.
-get_filename_component(GATE_STAMP "${GATE_STAMP_OFFSET}" ABSOLUTE
-    BASE_DIR "${CMAKE_CURRENT_BINARY_DIR}")
-
-if(NOT EXISTS "${GATE_STAMP}")
-    message(FATAL_ERROR
-        "t0_abi_gate_on: MCF5307_ABI_GATE reads `${gate_value}` in "
-        "${GATE_CACHE} AND STEP 4a'S BRANCH STILL DID NOT RUN IN THE MOST "
-        "RECENT CONFIGURE OF THIS TREE THAT REACHED tests/. There is no "
-        "${GATE_STAMP}. "
-        "cmake/Nim.cmake writes that record at the END of step 4a's own "
-        "branch and tests/tests_cpu.cmake MOVES it here on every configure, "
-        "so a tree whose branch ran has one and a tree whose branch did not "
-        "has none. Two ways to reach this state: the branch was deleted from "
-        "cmake/Nim.cmake while the `set()` that declares the switch was kept, "
-        "or a parent list file set MCF5307_ABI_GATE as a NORMAL variable "
-        "before add_subdirectory() and it shadows the cache entry from the "
-        "second configure onward. The configure-time warning `mcf5307: step "
-        "4a IS TURNED OFF` enumerates what an unmeasured build does not know "
-        "about itself.")
-endif()
-
-file(STRINGS "${GATE_STAMP}" stamp_lines)
-list(LENGTH stamp_lines stamp_line_count)
-if(NOT stamp_line_count EQUAL 7)
-    message(FATAL_ERROR
-        "t0_abi_gate_on: ${GATE_STAMP} carries ${stamp_line_count} line(s) and "
-        "exactly 7 are expected: `${stamp_lines}`. cmake/Nim.cmake writes the "
-        "record in one `file(WRITE)` at the end of step 4a, so a short record "
-        "is a record the writer and this reader no longer agree on.")
-endif()
-
-list(GET stamp_lines 0 stamp_head)
-if(NOT stamp_head STREQUAL "MCF5307_ABI_GATE_RAN")
-    message(FATAL_ERROR
-        "t0_abi_gate_on: ${GATE_STAMP} opens with `${stamp_head}` and "
-        "`MCF5307_ABI_GATE_RAN` is expected. The file in that place is not the "
-        "record step 4a writes.")
-endif()
-
-set(stamp_index 1)
-foreach(key IN ITEMS CONTRACT PUBLISHED VISIBLE UNIMPLEMENTED STUB_EXTERNAL_OWN
-        SITES)
-    list(GET stamp_lines ${stamp_index} stamp_line)
-    if(NOT stamp_line MATCHES "^${key}=(.*)$")
-        message(FATAL_ERROR
-            "t0_abi_gate_on: line ${stamp_index} of ${GATE_STAMP} is "
-            "`${stamp_line}` and a `${key}=` line is expected there.")
-    endif()
-    set(stamp_${key} "${CMAKE_MATCH_1}")
-    math(EXPR stamp_index "${stamp_index} + 1")
-endforeach()
-
-if(stamp_CONTRACT STREQUAL "")
-    message(FATAL_ERROR
-        "t0_abi_gate_on: ${GATE_STAMP} names no contract file. Step 4a reads "
-        "one file for the published set and records which.")
-endif()
-
-foreach(key PUBLISHED VISIBLE UNIMPLEMENTED STUB_EXTERNAL_OWN SITES)
-    if(NOT "${stamp_${key}}" MATCHES "^[0-9]+$")
-        message(FATAL_ERROR
-            "t0_abi_gate_on: ${GATE_STAMP} records ${key}=`${stamp_${key}}`, "
-            "which is not a count. Step 4a records what it measured.")
-    endif()
-endforeach()
-
-# The site counter. Step 4a's three parts and nine controls each add one where
-# they finish, and control A runs on both reads, so a branch with every site in
-# it records thirteen. A part or a control deleted from cmake/Nim.cmake takes
-# its increment with it and lands here as a shortfall. The counts below cannot
-# do this: they come from three readings and name no site, so they read the
-# same for three parts as for two.
-if(NOT stamp_SITES EQUAL 13)
-    message(FATAL_ERROR
-        "t0_abi_gate_on: ${GATE_STAMP} records SITES=${stamp_SITES} and 13 are "
-        "expected. Step 4a's three parts and nine controls each increment "
-        "MCF5307_ABI_GATE_SITES where they finish, and control A increments on "
-        "the calibration read and again on the contract read. A count below 13 "
-        "is a part or a control that is no longer in cmake/Nim.cmake; a count "
-        "above it is a site counted twice. Either way the branch that ran is "
-        "not the branch this test is written against.")
-endif()
-
-# The three counts came from three separate measurements - the published set
-# read out of the contract header, `nm` on the measurement shared object, and
-# `nm` on the link-partner stub object - so holding them against each other is
-# a check and not a restatement. A branch that ran but measured nothing writes
-# zeroes, and zeroes satisfy neither line below.
-if(stamp_PUBLISHED LESS 1)
-    message(FATAL_ERROR
-        "t0_abi_gate_on: ${GATE_STAMP} records PUBLISHED=${stamp_PUBLISHED}. "
-        "Step 4a ran against a contract header it read no published symbol "
-        "out of, and the three parts then measured an empty set.")
-endif()
-
-math(EXPR stamp_partition "${stamp_VISIBLE} + ${stamp_UNIMPLEMENTED}")
-if(NOT stamp_partition EQUAL stamp_PUBLISHED)
-    message(FATAL_ERROR
-        "t0_abi_gate_on: ${GATE_STAMP} records PUBLISHED=${stamp_PUBLISHED} "
-        "but VISIBLE=${stamp_VISIBLE} plus "
-        "UNIMPLEMENTED=${stamp_UNIMPLEMENTED} is ${stamp_partition}. Part one "
-        "of step 4a puts every published symbol in exactly one of those two: "
-        "exported by the measurement shared object, or defined by no "
-        "compilation unit. A published symbol in neither is one part one did "
-        "not account for.")
-endif()
-
-if(NOT stamp_STUB_EXTERNAL_OWN EQUAL stamp_PUBLISHED)
-    message(FATAL_ERROR
-        "t0_abi_gate_on: ${GATE_STAMP} records "
-        "STUB_EXTERNAL_OWN=${stamp_STUB_EXTERNAL_OWN} against "
-        "PUBLISHED=${stamp_PUBLISHED}. Part three of step 4a holds the "
-        "external definitions of the link-partner stub equal to the published "
-        "set, so the two counts are the same count when it has run.")
-endif()
-
-message("t0_abi_gate_on: MCF5307_ABI_GATE is `${gate_value}` in ${GATE_CACHE}, "
-    "and step 4a's BRANCH RAN THROUGH - no fault fired and all "
-    "${stamp_SITES} sites ran - in the most recent configure of this tree "
-    "THAT REACHED tests/. ${GATE_STAMP} records CONTRACT=${stamp_CONTRACT} "
-    "PUBLISHED=${stamp_PUBLISHED} VISIBLE=${stamp_VISIBLE} "
-    "UNIMPLEMENTED=${stamp_UNIMPLEMENTED} "
-    "STUB_EXTERNAL_OWN=${stamp_STUB_EXTERNAL_OWN}. THAT IS WHAT THIS TEST "
-    "ASSERTS AND ALL OF IT: that the branch RAN, not that the gate is "
-    "CORRECT. A configure that aborts inside step 4a never reaches tests/ and "
-    "leaves the previous stamp standing, which is why this line says `that "
-    "reached tests/`.")
-]==])
-
-file(RELATIVE_PATH MCF5307_GATE_CACHE_OFFSET
-    "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_BINARY_DIR}/CMakeCache.txt")
-file(RELATIVE_PATH MCF5307_GATE_STAMP_OFFSET
-    "${CMAKE_CURRENT_BINARY_DIR}" "${MCF5307_GATE_STAMP}")
-
-# Both offsets AND the driver are relative, and ctest resolves each against the
-# working directory it starts the test in. An absolute `-P` would run the
-# ORIGINAL tree's driver out of a copied tree for the same reason an absolute
-# cache path read the original tree's cache.
-add_test(NAME t0_abi_gate_on
-    COMMAND "${CMAKE_COMMAND}"
-        "-DGATE_CACHE_OFFSET=${MCF5307_GATE_CACHE_OFFSET}"
-        "-DGATE_STAMP_OFFSET=${MCF5307_GATE_STAMP_OFFSET}"
-        -P t0_abi_gate_on_driver.cmake)
-
