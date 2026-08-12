@@ -88,9 +88,22 @@ import mcf5307/control
 # transpile being a configure-time step; the forty-fifth is `nopCycles`, which
 # is constant-folded and reaches the C only as the sum `fetchCycles +
 # nopCycles` - `((NU32)183)` present, `((NU32)4)` absent. EVERY SUITE HELD ITS
-# BASELINE: t_alu 165, t_ea_masks 395, t_move 34, t_logic 74, t_control 168,
-# t_sign_extend 10, conformance 23/32/48/82/185, ctest exit 8 with `abi_smoke`
-# - which fails to LINK against 13 unimplemented ABI symbols - the one failure.
+# BASELINE: t_alu 165, t_ea_masks <caseTotalMustMatchTranscripts>, t_move 34,
+# t_logic 74, t_control 168, t_sign_extend 10, conformance 23/32/48/82/185,
+# ctest exit 8 with `abi_smoke` - which fails to LINK against 13 unimplemented
+# ABI symbols - the one failure.
+#
+# THE `t_ea_masks` COLUMN NAMES A CONSTANT AND THE OTHERS SPELL A NUMBER, AND
+# THAT ASYMMETRY IS DELIBERATE. `t_ea_masks` is the one suite whose total is
+# GUARDED - `caseTotalMustMatchTranscripts`, declared once in
+# `tests/t_ea_masks.nim` and held against the live count by block (18) of that
+# file - and it is also the one that moves when a block is added there. A bare
+# literal in this line went stale on exactly that event and no run could see it,
+# because the copy sits in PRODUCTION SOURCE, which that guard does not count
+# and cannot reach. Naming the constant is the only spelling here that cannot go
+# silently wrong. The `opMovem` arm of `decode_types.nim` names it the same way
+# and records the limit both share: this is TEXT IN A COMMENT, nothing links it
+# to the symbol, and `src/` cannot import `tests/` to close that.
 #
 # A DATE IS NOT A TREE STATE, and this result is a property of the tree above
 # rather than of the calendar. The SAME 45-value mutation applied to the tree

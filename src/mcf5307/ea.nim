@@ -86,16 +86,18 @@ const
   # `cmp.l %a0,%d1` and `b3c8` for `cmpa.l %a0,%a1`, and MOVE and the ADD/SUB
   # pair take an address register source.
   #
-  # MEASURED 2026-08-11 BY DELETING `eaAn` FROM THIS SET. ELEVEN DISTINCT CASES
-  # GO RED:
+  # MEASURED 2026-08-12 BY DELETING `eaAn` FROM THIS SET. TWENTY-TWO DISTINCT
+  # CASES GO RED:
   #
+  #   t_ea_masks 13  block (19) 11 - one per mask that names this set, which is
+  #                  MOVE, MOVEA, ADDQ, SUBQ, ADD, SUB, ADDA, SUBA, TST, CMP and
+  #                  CMPA - and block (16) 2, `opAddq`/`opSubq: the mask accepts
+  #                  An`
   #   t_alu       3  `add.l a0,d1 reads the address register`,
   #                  `addq.l #1,a1 wraps and leaves the condition codes alone`,
   #                  `the ADDQ mask admits An`
   #   t_control   3  `tst.w %a0 (4a48) runs: the word form reaches An`,
   #                  `tst %a0 is legal`, `cmp %a0 is legal`
-  #   t_ea_masks  2  `opAddq: the mask accepts An`,
-  #                  `opSubq: the mask accepts An`
   #   conformance 3  `move_l_a0_to_a1`, `tst_l_address_register`,
   #                  `cmp_l_address_register_source`
   #
@@ -104,21 +106,21 @@ const
   # corpus - so a reader counting failure LINES and a reader counting CASES get
   # different figures. The count above is CASES.
   #
-  # FOUR OF THE ELEVEN ARE A WIDER READERSHIP AND NOT BETTER COVERAGE, and the
-  # two are easy to confuse. ADDQ and SUBQ read this set only because
-  # `eaAlterableModes` was retired into it, so the cases guarding THEIR
-  # address-register operand joined a blast radius they were never part of.
-  # Measured 2026-08-11 by narrowing the ADDQ/SUBQ ARM ALONE to
-  # `eaAllModes - {eaAn}`, configured FRESH and run through `ctest`: FOUR red -
-  # `t_alu` 2 and `t_ea_masks` 2 - and nothing else in the suite moves.
+  # ELEVEN OF THE TWENTY-TWO ARE A WIDER READERSHIP AND NOT BETTER COVERAGE, and
+  # the two are easy to confuse. Every operation naming this set contributes its
+  # block (19) row, and ADDQ and SUBQ read it only because `eaAlterableModes`
+  # was retired into it, so the cases guarding THEIR address-register operand
+  # joined a blast radius they were never part of. Measured 2026-08-12 by
+  # narrowing the ADDQ/SUBQ ARM ALONE to `eaAllModes - {eaAn}`, configured FRESH
+  # and run through `ctest`: SIX red - `t_alu` 2, and `t_ea_masks` 4, which is
+  # block (16) 2 and block (19) 2 - and nothing else in the suite moves.
   #
-  # WHAT IS STILL NOT SEEN, STATED SO THE ELEVEN ARE NOT READ AS ELEVEN
-  # OPERATIONS' WORTH. For MOVE, MOVEA, ADD, SUB, ADDA, SUBA, TST, CMP and
-  # CMPA the `t_ea_masks` `coverage` row cites a RESERVED mode-7 encoding as
-  # the illegal mode and never `An`, so the mask-level file remains blind to an
-  # `eaAn` deletion for all nine. Only ADDQ and SUBQ are covered there, and
-  # only because block (16) enumerates their twelve cells by hand. The evidence
-  # for `eaAn` in the other nine is the executor and corpus cases above.
+  # THE MASK LEVEL SEES THIS DELETION FOR ALL ELEVEN, AND IT DID NOT USED TO.
+  # For MOVE, MOVEA, ADD, SUB, ADDA, SUBA, TST, CMP and CMPA the `t_ea_masks`
+  # `coverage` row cites a RESERVED mode-7 encoding as the illegal mode and
+  # never `An`, so those nine rows are blind to it; block (19) holds each mask
+  # against its literal value and is what covers them. ADDQ and SUBQ are covered
+  # twice over, there and in block (16)'s hand-written cells.
   #
   # WIDENING THIS SET IS NOT A MEASURABLE DIRECTION. It already holds all eight
   # members of `EAMode`, so there is no mode to add and no widening mutation to
@@ -132,8 +134,11 @@ const
   # encodings this part does not define, and this set is the other five.
   #
   # RENAMED FROM `eaData7` 2026-08-11, VALUE UNCHANGED; `tests/t_ea_masks.nim`
-  # block (17) holds the five members by name, so the rename could not move
-  # one. The old name claimed the manual's DATA class, and `decode_types.nim`
+  # block (19) holds every mask that names this set against a literal spelling
+  # these five members, so the rename could not move one. Block (17), which held
+  # the set itself by name, was deleted 2026-08-12 because it could not red
+  # without block (19) reddening too, and the tombstone there carries the runs.
+  # The old name claimed the manual's DATA class, and `decode_types.nim`
   # pairs this set with `eaAllModes` for nine operations that ACCEPT `An` -
   # which DATA excludes - so the pair is the widest class and not DATA.
   #
@@ -183,12 +188,12 @@ const
   # reads neither set and carries `{eaAnInd, eaAnDisp}`.
   #
   # WHAT THAT EXPRESSION COSTS IF IT IS EVER WRITTEN ON THIS DECLARATION
-  # INSTEAD OF AT A SITE. Measured 2026-08-11 by narrowing THIS set to
+  # INSTEAD OF AT A SITE. Measured 2026-08-12 by narrowing THIS set to
   # `{ea7AbsL, ea7PCDisp, ea7PCIndex}`, configured FRESH and run through
-  # `ctest`: ELEVEN distinct cases red -
+  # `ctest`: FOURTEEN distinct cases red -
   #
-  #   t_ea_masks   3  `opLea`/`opPea: the mask accepts (xxx).W` and block
-  #                   (17)'s `eaControl7` equality case
+  #   t_ea_masks   6  `opLea`/`opPea: the mask accepts (xxx).W` and block (19)'s
+  #                   four rows for `opLea`, `opPea`, `opJmp` and `opJsr`
   #   t_move       5  the three `lea (xxx).W` cases and the two `pea (xxx).W`
   #   t_control    2  `jmp (xxx).w is legal`, `jsr (xxx).w is legal`
   #   conformance  1  `group=control case=jmp_absolute_short
@@ -196,8 +201,8 @@ const
   #
   # THE CONFORMANCE CASE IS THE ONE A COUNT TAKEN FROM THE `t_*` SUITES ALONE
   # LEAVES OUT, and leaving it out is how the records in this family have been
-  # wrong before. Ten is the number a reader gets by stopping at `ctest`'s Nim
-  # suites; eleven is the number.
+  # wrong before. Thirteen is the number a reader gets by stopping at `ctest`'s
+  # Nim suites; fourteen is the number.
   #
   # JMP AND JSR ARE COVERED BY `tests/t_control.nim` AND NOT BY `t_ea_masks`.
   # Its twelve-row `eaIsLegalFor(opJmp/opJsr, ...)` table is where the two
@@ -262,20 +267,31 @@ const
   # `#<data>`, `(d16,PC)` and `(d8,PC,Xi)`. `m68k-elf-as -mcpu=5307` answers
   # the same twelve cells for all four operations.
   #
-  # `eaMulDivLong7` IS DEAD FOR THESE OPERATIONS. IT RECORDS THE FOLIOS; IT
-  # CONSTRAINS NOTHING, AND IT MUST NOT BE READ AS A CHECKED MASK. `isEaLegal`
-  # below returns at `ea.mode notin leg.modes` before it reaches `ea7`, and
-  # the mode set on the line above has no `eaMode7`, so the ONLY read of the
-  # field anywhere in the core - `EA7(ea.reg) in leg.ea7` - is unreachable
-  # through this mask. The emptiness is therefore not what rejects a mode-7
-  # operand here; the absent `eaMode7` is.
+  # `eaMulDivLong7` IS DEAD FOR THESE OPERATIONS AT RUN TIME. IT RECORDS THE
+  # FOLIOS AND IT CONSTRAINS NOTHING THE CORE EVALUATES. `isEaLegal` below
+  # returns at `ea.mode notin leg.modes` before it reaches `ea7`, and the mode
+  # set on the line above has no `eaMode7`, so the ONLY read of the field
+  # anywhere in the core - `EA7(ea.reg) in leg.ea7` - is unreachable through
+  # this mask. The emptiness is therefore not what rejects a mode-7 operand
+  # here; the absent `eaMode7` is.
   #
-  # MEASURED 2026-08-11, AND BOTH HALVES ARE INDIVIDUALLY UNGUARDED. Widening
-  # this set to all EIGHT mode-7 sub-variants leaves the whole suite green.
-  # Adding `eaMode7` to the mode set while leaving this set empty ALSO leaves
-  # the whole suite green. Only widening BOTH is caught, and then 28 cases
-  # red. A reader who takes either line alone for a tested constraint has the
-  # same wrong picture that the defect this split was written to close had.
+  # BOTH HALVES ARE NEVERTHELESS GUARDED NOW, AND THEY DID NOT USED TO BE.
+  # `t_ea_masks` block (19) holds the whole `EaLegality` of each mask against a
+  # literal, which reads the `ea7` field whether the core ever does or not.
+  # Measured 2026-08-12, each mutation configured FRESH and run through `ctest`:
+  #
+  #   this set widened to all EIGHT sub-variants      4 red, all block (19)
+  #   `eaMode7` added to the mode set, this set empty 4 red, all block (19)
+  #   BOTH widened together                          32 red, of which 4 are
+  #                                                   block (19) and 28 are the
+  #                                                   cases that were the whole
+  #                                                   of the coverage before it
+  #
+  # THE TWO SINGLE-HALF MUTATIONS LEFT THE ENTIRE SUITE GREEN before block (19)
+  # existed, so a reader who took either line alone for a tested constraint had
+  # the same wrong picture that the defect this split was written to close had.
+  # That is now a statement about a value pinned in one place and a run-time
+  # path reached in another, which is the honest shape of it.
   eaMulDivLongModes* = {eaDn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp}
   eaMulDivLong7*: set[EA7] = {}
 

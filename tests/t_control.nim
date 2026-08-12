@@ -586,6 +586,14 @@ block:
   # only the two `checkMask` rows in block 9 went red. `writableOperand` is
   # inside the board and clear of the encoding, so the mask is now the only
   # thing that can refuse the write, and under that mutation both rows fail.
+  #
+  # THAT MEASUREMENT DESCRIBES A SUPERSEDED OPERAND CONFIGURATION AND IS NOT
+  # RE-MEASURED, because the addresses it names are no longer what these rows
+  # drive and reproducing it means RECONSTRUCTING the configuration rather than
+  # reading a number; only the mutation's blast radius is re-read, 2026-08-12,
+  # and the `opScc`/`opCmpi` arm of `eaLegalityFor` set to the data-alterable
+  # mask now reds THIRTEEN cases - `t_ea_masks` 6 and `t_control` 7 - among them
+  # block (19) of `tests/t_ea_masks.nim`, which reds on this mutation too.
   expectTrap(runIns([0x54D0'u16],
                     d = trapD,
                     a = [writableOperand, 0, 0, 0, 0, 0, 0, 0],

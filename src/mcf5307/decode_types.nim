@@ -622,10 +622,12 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # `t_move` prints `3 of 34 cases failed` - `movem.l to (xxx).L traps`,
     # `movem.l to (xxx).L stores nothing before it traps` AND
     # `movem.l to (d8,An,Xi) traps`, which the pair above omits. `t_ea_masks`
-    # prints `4 of <caseTotalMustMatchTranscripts> cases failed`, one for each
-    # cell block (13) names. Nothing else in the suite moves. RE-MEASURED
-    # 2026-08-11 with that file's block (18) in place, because that block is
-    # itself a case and moved the denominator.
+    # prints `5 of <caseTotalMustMatchTranscripts> cases failed` - one for each
+    # cell block (13) names, and one more for block (19)'s `opMovem` row, which
+    # holds the whole mask against a literal and so reds on any change to it.
+    # Nothing else in the suite moves. RE-MEASURED 2026-08-12 with that file's
+    # blocks (18) and (19) in place, because (18) is itself a case that moved
+    # the denominator and (19) moved this mutation's blast radius.
     #
     # THE DENOMINATOR IS A NAMED CONSTANT AND NOT A NUMBER. It is
     # `caseTotalMustMatchTranscripts`, declared once in `tests/t_ea_masks.nim`,
