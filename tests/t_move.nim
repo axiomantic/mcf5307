@@ -442,9 +442,13 @@ block:
 # ---------------------------------------------------------------------------
 # `LEA` AND `PEA` AT `(xxx).W`, AND `MOVEM` STILL REFUSING IT.
 #
-# `eaControl7` is `{ea7AbsL, ea7PCDisp, ea7PCIndex}` - no `(xxx).W` - and LEA,
-# PEA and MOVEM all read it. LEA's and PEA's exclusions are WRONG and MOVEM's
-# is RIGHT, so one constant cannot serve all three.
+# `eaControl7NoAbsW` is `{ea7AbsL, ea7PCDisp, ea7PCIndex}` - no `(xxx).W`.
+# LEA, PEA and MOVEM ALL READ IT UNTIL 2026-08-11: LEA's and PEA's exclusion
+# of `(xxx).W` was WRONG and MOVEM's was RIGHT, so one constant could not
+# serve all three. LEA and PEA moved to `eaLeaPeaTarget`, and MOVEM then moved
+# OFF the constant entirely - its `(xxx).W` exclusion was the only cell that
+# set got right for it, and folios 4-50 and 4-51 dash four more. MOVEM now
+# carries `{eaAnInd, eaAnDisp}` with an empty `ea7`.
 #
 # THE MANUAL PUTS `(xxx).W` IN THE CONTROL CATEGORY, and each of the three
 # instructions is settled by its OWN row rather than by that category alone:
@@ -502,7 +506,7 @@ block:
 
 block:
   # MOVEM MUST STILL TRAP AT `(xxx).W`. This is the third direction of the
-  # split and the one that fails if `eaControl7` is simply widened.
+  # split and the one that fails if `eaControl7NoAbsW` is simply widened.
   #
   # THE ENCODING IS HAND-BUILT BECAUSE THE ASSEMBLER REFUSES TO BUILD IT, and
   # that refusal is the point. `MOVEM.L reglist,<ea>` is `0x48C0 | <ea>`; the
@@ -536,6 +540,60 @@ block:
     check(got == wanted,
       "movem.l to (xxx).W stores nothing before it traps", $got, $wanted)
 
+  # AND MOVEM MUST TRAP AT `(xxx).L`, WHICH IS THE CELL THAT WAS LIVE. The
+  # `(xxx).W` pair above passed against a mask that admitted FOUR OTHER CELLS,
+  # because `eaControl7NoAbsW` excludes the absolute SHORT form alone and the
+  # `opMovem` arm read the whole control class either side of it. Folios 4-50
+  # and 4-51 dash `(xxx).L` in BOTH directions, `m68k-elf-as -mcpu=5307`
+  # rejects `movem.l %d0-%d1,0x400.l` with "operands mismatch", and
+  # `m68k-elf-objdump -m m68k:5307` decodes `48f9` as `.short` while
+  # `-m m68k:68020` decodes the same bytes as a real `moveml`.
+  #
+  # MEASURED ON THE WIDE MASK, 2026-08-11: this instruction reached the
+  # executor and COMPLETED ITS STORE. `fault` was false and 0xAABBCCDD stood
+  # at 0x400. That is the whole reason the narrowing is not cosmetic.
+  #
+  # THE ENCODING IS HAND-BUILT for the reason the `(xxx).W` pair gives - the
+  # assembler refuses to build it. `MOVEM.L reglist,<ea>` is `0x48C0 | <ea>`
+  # and `(xxx).L` is mode 111 register 001, or `0x39`, giving `48f9`; the
+  # register mask `0003` selects d0 and d1 and the 32-bit address follows as
+  # two words.
+  #
+  # THE ADDRESS IS `0x0400`, INSIDE THE 0x1000-BYTE BOARD, AND THAT IS WHAT
+  # MAKES THE CASE ABLE TO FAIL. At an address past the end of the board a
+  # widened mask would reach the executor, attempt the store, take a BUS fault
+  # on the unmapped address and set `fault` anyway - passing while asserting
+  # nothing. The `(xxx).W` pair records the same trap being measured at
+  # `0x1234`, where it left the case GREEN.
+  expectFault(runIns([0x48F9'u16, 0x0003'u16, 0x0000'u16, 0x0400'u16]),
+    "movem.l to (xxx).L traps")
+
+  # AND NOTHING REACHED MEMORY. `fault` alone cannot separate a legality trap
+  # taken before the store from a bus fault taken during one; this reads the
+  # target back. On the wide mask both words were written and this case names
+  # the bytes that were there.
+  block:
+    discard runIns([0x48F9'u16, 0x0003'u16, 0x0000'u16, 0x0400'u16],
+                   d = [0xAABBCCDD'u32, 0x11223344, 0, 0, 0, 0, 0, 0])
+    let got = (at400: boardReadValue(board, 0x400'u32, 4),
+               at404: boardReadValue(board, 0x404'u32, 4))
+    let wanted = (at400: 0'u32, at404: 0'u32)
+    check(got == wanted,
+      "movem.l to (xxx).L stores nothing before it traps", $got, $wanted)
+
+  # THE THIRD WRONGLY-ADMITTED CELL AT THE EXECUTION LEVEL: `(d8,An,Xi)`.
+  # `48f0` is `0x48C0 | 0x30`, mode 110 register 000, and the extension word
+  # `2804` is the one `m68k-elf-objdump -m m68k:68020` renders as
+  # `%a0@(4,%d2:l)`. A0 is left at zero and the index register at zero, so a
+  # widened mask computes 0x004 + 0 and stores INSIDE the board rather than
+  # faulting on an unmapped address - the same requirement the `(xxx).L` case
+  # states. `(d16,PC)` and `(d8,PC,Xi)` are not asserted here: as a
+  # register-to-MEMORY destination the folio dashes them in a direction the
+  # executor has no store path for, and block (13) of `t_ea_masks` carries
+  # them at the mask level where the assertion is exact.
+  expectFault(runIns([0x48F0'u16, 0x0003'u16, 0x2804'u16]),
+    "movem.l to (d8,An,Xi) traps")
+
   # THE POSITIVE CONTROL, and without it the case above passes on a core whose
   # MOVEM is broken outright. `48d0 0003` is `movem.l %d0-%d1,(%a0)`, which
   # the assembler DOES emit and which Table 3-14 times under `(An)`. A0 points
@@ -545,6 +603,31 @@ block:
                     a = [0x400'u32, 0, 0, 0, 0, 0, 0, 0]),
     [0xAABBCCDD'u32, 0x11223344, 0, 0, 0, 0, 0, 0], srBase,
     "movem.l to (An) still executes and touches no flag")
+
+  # THE SECOND LEGAL MODE, `(d16,An)`, AT THE EXECUTION LEVEL. `48e8 0003
+  # 0004` is `movem.l %d0-%d1,(4,%a0)`, which the assembler emits and which
+  # folios 4-50 and 4-51 print with mode 101. A0 holds 0x400, so the
+  # displacement puts d0 at 0x404 and d1 at 0x408.
+  #
+  # IT IS HERE BECAUSE THE NARROWING HAD NO EXECUTION-LEVEL POSITIVE CONTROL
+  # FOR THIS MODE. Measured 2026-08-11: dropping `eaAnDisp` from the `opMovem`
+  # arm - over-narrowing it to `{eaAnInd}` - left `t_move` at 33 of 33 PASSED
+  # and reddened exactly ONE case, in block (13) of `tests/t_ea_masks.nim`. A
+  # single assertion in one file was the whole guard against a MOVEM that
+  # traps a form the compiler emits constantly for prologues, so this case
+  # gives the executor its own witness.
+  block:
+    let o = runIns([0x48E8'u16, 0x0003'u16, 0x0004'u16],
+                   d = [0xAABBCCDD'u32, 0x11223344, 0, 0, 0, 0, 0, 0],
+                   a = [0x400'u32, 0, 0, 0, 0, 0, 0, 0])
+    let got = (at404: boardReadValue(board, 0x404'u32, 4),
+               at408: boardReadValue(board, 0x408'u32, 4),
+               fault: o.fault, sr: o.sr)
+    let wanted = (at404: 0xAABBCCDD'u32, at408: 0x11223344'u32,
+                  fault: false, sr: srBase)
+    check(got == wanted,
+      "movem.l to (d16,An) executes and stores at the displaced address",
+      $got, $wanted)
 
   # And the registers actually reached memory, which the register assertion
   # above cannot see: d0 at 0x400 and d1 at 0x404, ascending, d0 first.

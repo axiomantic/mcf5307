@@ -169,7 +169,7 @@
 ## by remembering this paragraph. Two masks meet it, for two DIFFERENT reasons.
 ##
 ##   - MOVE, MOVEA, ADD, SUB, ADDA, SUBA, TST, CMP and CMPA carry
-##     `eaDataModes`/`eaData7`, which admits every addressing mode Table 3-5
+##     `eaAllModes`/`eaData7`, which admits every addressing mode Table 3-5
 ##     p.3-21 prints. The only encodings outside it are the RESERVED mode-7
 ##     ones, and `machine.nim`'s `eaAddr` and `eaRead` fault on those
 ##     independently of any mask.
@@ -648,7 +648,7 @@ proc cov313(op: Operation; family: Family; page: Table313Page;
   result.imm313 = some(imm)
 
 let coverage: seq[Coverage] = @[
-  # --- eaDataModes / eaData7: every printed mode is legal, so the only
+  # --- eaAllModes / eaData7: every printed mode is legal, so the only
   # illegal operand is a reserved mode-7 encoding, which `machine.nim` also
   # refuses on its own. These nine are NINE OF THE ELEVEN non-discriminating
   # entries; ADDQ and SUBQ below are the other two, by a different mechanism.
@@ -1120,6 +1120,171 @@ block:
   for op in mulDivOps:
     check(eaLegalityFor(op) == eaLegalityFor(op, 4'u8),
       $op & ": the size-less `eaLegalityFor` answers the LONGWORD mask")
+
+# ---------------------------------------------------------------------------
+# (13) MOVEM TAKES `(An)` AND `(d16,An)` AND NOTHING ELSE, AND THE `coverage`
+# ROW ABOVE CANNOT SEE THAT. That row cites `-(An)`, which is dashed on the
+# folios and outside the mask both before and after this narrowing, so it is
+# GREEN over a mask four cells too wide. Every entry names exactly ONE illegal
+# mode - the header's assertion (1) states that limit - so the cells this
+# block names could not have been added to it, and a second row for `opMovem`
+# would be dropped by the first-match lookup and red the reached-row count
+# instead of asserting anything.
+#
+# THE FOUR CELLS THIS BLOCK EXISTS FOR are `(d8,An,Xi)`, `(xxx).L`,
+# `(d16,PC)` and `(d8,PC,Xi)`. `eaLegalityFor`'s `opMovem` arm read
+# `EaLegality(modes: eaControlModes, ea7: eaControl7NoAbsW)`, which admits all
+# four, while the arm's own comment cited Table 3-14 as timing MOVEM under
+# `(An)` and `(d16,An)` alone. The comment was right and the code was wrong.
+#
+# IT WAS NOT LATENT. Measured 2026-08-11 on the wide mask, before the
+# narrowing: `movem.l %d0-%d1,0x400.l` - hand-built as `48f9 0003 0000 0400` -
+# reached the executor and COMPLETED ITS STORE, leaving 0xAABBCCDD at 0x400
+# and 0x11223344 at 0x404 with `fault` false. `tests/t_move.nim` carries that
+# case at the execution level; this block carries the mask level.
+#
+# THE WIDE MASK REDS THREE `t_move` CASES AND NOT TWO. The sentence above
+# accounts for the `(xxx).L` pair only - the `fault` assertion and the
+# read-back of the two stored words - and an earlier revision of this record
+# left it there. Measured 2026-08-11 by restoring
+# `EaLegality(modes: eaControlModes, ea7: eaControl7NoAbsW)` on the `opMovem`
+# arm, rebuilding and running through `ctest`: `t_move` prints
+# `3 of 34 cases failed` - `movem.l to (xxx).L traps`, `movem.l to (xxx).L
+# stores nothing before it traps` AND `movem.l to (d8,An,Xi) traps`, the last
+# of which the pair above omits. This file prints `4 of 367 cases failed`,
+# one per cell named below. Nothing else in the suite moves.
+#
+# THE SOURCE IS THE CFPRM AND BOTH DIRECTIONS AGREE, read as RENDERED IMAGES
+# (`pdftoppm -r 200`) and not from any OCR text:
+#
+#   folio 4-50, "Effective Address field ... for register-to-memory transfers,
+#                use the following table for <ea>x"
+#   folio 4-51, "Effective Address field (continued) - For memory-to-register
+#                transfers, use the following table for <ea>y"
+#
+# EACH FOLIO PRINTS A MODE AND REGISTER VALUE FOR EXACTLY TWO ROWS - `(Ax)`
+# 010 and `(d16,Ax)` 101 - AND A DASH FOR THE OTHER TEN: `Dx`, `Ax`, `(Ax)+`,
+# `-(Ax)`, `(d8,Ax,Xi)`, `(xxx).W`, `(xxx).L`, `#<data>`, `(d16,PC)` and
+# `(d8,PC,Xi)`. The two tables are the same shape cell for cell, so the mask
+# does not depend on the direction and one mask can serve both.
+#
+# TWO INDEPENDENT TOOLCHAIN ORACLES AGREE, both run 2026-08-11:
+#
+#   - `m68k-elf-as -mcpu=5307` assembles `movem.l %d0-%d1,(%a0)` (`48d0 0003`)
+#     and `movem.l %d0-%d1,(4,%a0)` (`48e8 0003 0004`) and the two
+#     memory-to-register forms (`4cd0`, `4ce8`), and REJECTS all ten other
+#     rows in both directions with "operands mismatch".
+#   - `m68k-elf-objdump -m m68k:5307` decodes `48d0`, `48e8`, `4cd0` and
+#     `4ce8` as `moveml` and decodes `48f0`, `48f8`, `48f9`, `48fa`, `48fb`
+#     and their `4cxx` partners as `.short`.
+#
+# THE 68020 CROSS-CHECK SEPARATES EIGHT OF THOSE TEN AND NOT ALL TEN, AND AN
+# EARLIER REVISION OF THIS BLOCK CLAIMED ALL TEN. Measured 2026-08-11, each
+# encoding disassembled in a file of its own so no mis-decode could cascade:
+# `-m m68k:68020` renders `48f0`, `48f8`, `48f9`, `4cf0`, `4cf8`, `4cf9`,
+# `4cfa` and `4cfb` as a real `moveml`, and for those eight the ColdFire
+# `.short` is therefore a statement about the PART rather than about the
+# disassembler. `48fa` and `48fb` come back `.short` on the 68020 TOO. Both
+# STORE to a PC-relative destination, which is illegal on every 68k, so those
+# two encodings are not a MOVEM on any target and the differential oracle is
+# silent about them. The asymmetry is the direction and nothing else: the
+# memory-to-register partners `4cfa` and `4cfb` READ from PC-relative, which
+# the 68020 permits, and they do discriminate.
+#
+# THE NARROWING IS NOT WEAKENED BY THAT CORRECTION. Eight encodings still
+# discriminate, and the two folios and the pinned assembler each answer all
+# ten on their own, so no cell in this block rests on the 68020 alone.
+#
+# `(xxx).W` IS ASSERTED HERE AND WAS ALREADY RIGHT. It is in the block so that
+# a repair of the four cells cannot be written as a widening that admits it.
+
+block:
+  const
+    movemLegal = [
+      ("(An)", EA(mode: eaAnInd, reg: 1)),
+      ("(d16,An)", EA(mode: eaAnDisp, reg: 1))]
+    # THE FOUR CELLS THE WIDE MASK ADMITTED, then the six that were already
+    # outside it. Both groups are asserted so that the narrowing cannot be
+    # implemented by moving the error somewhere else.
+    movemIllegalWrongly = [
+      ("(d8,An,Xi)", EA(mode: eaAnIndex, reg: 1)),
+      ("(xxx).L", EA(mode: eaMode7, reg: uint8(ord(ea7AbsL)))),
+      ("(d16,PC)", EA(mode: eaMode7, reg: uint8(ord(ea7PCDisp)))),
+      ("(d8,PC,Xi)", EA(mode: eaMode7, reg: uint8(ord(ea7PCIndex))))]
+    movemIllegalAlready = [
+      ("Dn", EA(mode: eaDn, reg: 1)),
+      ("An", EA(mode: eaAn, reg: 1)),
+      ("(An)+", EA(mode: eaAnPost, reg: 1)),
+      ("-(An)", EA(mode: eaAnPre, reg: 1)),
+      ("(xxx).W", EA(mode: eaMode7, reg: uint8(ord(ea7AbsW)))),
+      ("#<data>", EA(mode: eaMode7, reg: uint8(ord(ea7Imm))))]
+
+  # THE POSITIVE CONTROL FIRST. Without it a mask emptied outright would pass
+  # every negative below by refusing everything, which is the failure shape
+  # this file's header calls a vacuous refusal.
+  for (label, ea) in movemLegal:
+    check(eaIsLegalFor(opMovem, ea),
+      "movem: the mask accepts " & label &
+      " (folios 4-50 and 4-51 both print a mode and register value)")
+
+  for (label, ea) in movemIllegalWrongly:
+    check(not eaIsLegalFor(opMovem, ea),
+      "movem: the mask REJECTS " & label &
+      " (folios 4-50 and 4-51: a dash in both directions)")
+
+  for (label, ea) in movemIllegalAlready:
+    check(not eaIsLegalFor(opMovem, ea),
+      "movem: the mask REJECTS " & label &
+      " (folios 4-50 and 4-51: a dash in both directions)")
+
+# ---------------------------------------------------------------------------
+# (14) THE `eaLeaPeaTarget` GUARD. The mask is BELIEVED CORRECT and that is not
+# why this block exists: an unguarded mask is a latent defect whatever its
+# current value, and this project has now measured three of them.
+#
+# MEASURED 2026-08-11, BEFORE THIS BLOCK EXISTED: widening `eaLeaPeaTarget` to
+# `modes: eaControlModes + {eaAnPost}` and `ea7: eaControl7NoAbsW + {ea7AbsW,
+# ea7Imm}` - admitting `(An)+` and `#<data>` - left the ENTIRE suite green.
+# The `coverage` rows for `opLea` and `opPea` cite `Dn`, which stays outside
+# the widened mask, so assertion (1) could not see it.
+#
+# THE SOURCE. `m68k-elf-as -mcpu=5307` REJECTS `lea (%a0)+,%a1`, `lea #4,%a1`,
+# `pea (%a0)+` and `pea #4`, all four with "operands mismatch", and accepts
+# every mode named in the positive control below. MCF5307 User's Manual Table
+# 3-13 p.3-28 dashes the `lea | <ea>,Ax` row under `(An)+` and `#xxx`, and
+# Table 3-14 p.3-29 dashes the `pea | <ea>` row under the same two columns.
+#
+# THE POSITIVE CONTROL INCLUDES `(xxx).W`, which is the cell `eaLeaPeaTarget`
+# was created to admit and the one MOVEM must not have. A repair of block (13)
+# written by widening a shared constant reds there and here at once.
+
+block:
+  const
+    leaPeaOps = [opLea, opPea]
+    leaPeaLegal = [
+      ("(An)", EA(mode: eaAnInd, reg: 1)),
+      ("(d16,An)", EA(mode: eaAnDisp, reg: 1)),
+      ("(d8,An,Xi)", EA(mode: eaAnIndex, reg: 1)),
+      ("(xxx).W", EA(mode: eaMode7, reg: uint8(ord(ea7AbsW)))),
+      ("(xxx).L", EA(mode: eaMode7, reg: uint8(ord(ea7AbsL)))),
+      ("(d16,PC)", EA(mode: eaMode7, reg: uint8(ord(ea7PCDisp)))),
+      ("(d8,PC,Xi)", EA(mode: eaMode7, reg: uint8(ord(ea7PCIndex))))]
+    # THE TWO CELLS THE WIDENING ADDED. These are the guard.
+    leaPeaIllegal = [
+      ("(An)+", EA(mode: eaAnPost, reg: 1)),
+      ("#<data>", EA(mode: eaMode7, reg: uint8(ord(ea7Imm))))]
+
+  for op in leaPeaOps:
+    let name = $op
+    for (label, ea) in leaPeaLegal:
+      check(eaIsLegalFor(op, ea),
+        name & ": the mask accepts " & label &
+        " (Table 3-13 p.3-28 and Table 3-14 p.3-29 time the column)")
+    for (label, ea) in leaPeaIllegal:
+      check(not eaIsLegalFor(op, ea),
+        name & ": the mask REJECTS " & label &
+        " (Table 3-13 p.3-28 and Table 3-14 p.3-29 dash the column; " &
+        "`m68k-elf-as -mcpu=5307` answers \"operands mismatch\")")
 
 # ---------------------------------------------------------------------------
 # (6) The decoder recognizes each implemented opcode from a representative
