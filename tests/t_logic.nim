@@ -130,7 +130,8 @@
 ## The two are this trap case and the
 ## `checkMask(eaIsLegalFor(opBtst, decodeEa(0x3C)), false, ...)` row further
 ## down, which that same commit flipped from `true`. MEASURED: `eaBitDynamic`'s
-## `ea7` restored to `eaData7` in a `git archive` extract of this commit,
+## `ea7` restored to the full valid mode-7 set - then named `eaData7`, now
+## `eaValid7` - in a `git archive` extract of this commit,
 ## confirmed in the generated C as `{253, 31}` against this commit's
 ## `{253, 15}`, rebuilt from a fresh configure - `t_logic: 2 of 74 cases
 ## failed`, exactly those two, and `mcf5307_conformance_logic` stayed
@@ -573,7 +574,8 @@ block:
   # are not the same case twice:
   #   - widening `eaResolve` to admit `ea7PCDisp` and `ea7PCIndex`: all four
   #     stay green;
-  #   - widening the BSET/BCLR/BCHG mask to `eaAlterableModes` + `eaData7`:
+  #   - widening the BSET/BCLR/BCHG mask to `eaAllModes` + `eaValid7` (then
+  #     spelled `eaAlterableModes` + `eaData7`):
   #     all four stay green;
   #   - widening BOTH: the two PC-RELATIVE cases go red, the two IMMEDIATE
   #     ones stay green;
@@ -935,7 +937,8 @@ block:
   # `eaResolve` refuses a PC-relative destination on its own, so the
   # PC-relative case is refused twice over and cannot name the guard that
   # stopped it - measured, it stayed green when the EOR mask was widened to
-  # `eaAlterableModes` + `eaData7`. `eaResolve` RESOLVES an address register,
+  # `eaAllModes` + `eaValid7` (then spelled `eaAlterableModes` + `eaData7`).
+  # `eaResolve` RESOLVES an address register,
   # so the An case meets the mask alone, and it went red under that same
   # widening. Both are kept and they say different things: the first asserts
   # the encoding does not execute, the second asserts WHICH guard stops it.

@@ -169,12 +169,12 @@
 ## by remembering this paragraph. Two masks meet it, for two DIFFERENT reasons.
 ##
 ##   - MOVE, MOVEA, ADD, SUB, ADDA, SUBA, TST, CMP and CMPA carry
-##     `eaAllModes`/`eaData7`, which admits every addressing mode Table 3-5
+##     `eaAllModes`/`eaValid7`, which admits every addressing mode Table 3-5
 ##     p.3-21 prints. The only encodings outside it are the RESERVED mode-7
 ##     ones, and `machine.nim`'s `eaAddr` and `eaRead` fault on those
 ##     independently of any mask.
 ##
-##   - ADDQ and SUBQ carry `eaAlterableModes`/`eaAlterable7`, whose mode-7
+##   - ADDQ and SUBQ carry `eaAllModes`/`eaAlterable7`, whose mode-7
 ##     half is `{ea7AbsW, ea7AbsL}`. `machine.nim`'s `eaResolve` accepts
 ##     EXACTLY those two mode-7 encodings as a destination and faults on every
 ##     other one, so the complement of this mask and the set `eaResolve`
@@ -648,7 +648,7 @@ proc cov313(op: Operation; family: Family; page: Table313Page;
   result.imm313 = some(imm)
 
 let coverage: seq[Coverage] = @[
-  # --- eaAllModes / eaData7: every printed mode is legal, so the only
+  # --- eaAllModes / eaValid7: every printed mode is legal, so the only
   # illegal operand is a reserved mode-7 encoding, which `machine.nim` also
   # refuses on its own. These nine are NINE OF THE ELEVEN non-discriminating
   # entries; ADDQ and SUBQ below are the other two, by a different mechanism.
@@ -664,7 +664,7 @@ let coverage: seq[Coverage] = @[
   cov(opCmpa, famControl, mDn, mReserved, whyReserved,
       discriminating = false),
 
-  # --- eaAlterableModes / eaAlterable7: an ADDQ or SUBQ destination is
+  # --- eaAllModes / eaAlterable7: an ADDQ or SUBQ destination is
   # WRITTEN, so it cannot be PC-relative. An address register IS legal here,
   # which is why the class is alterable and not data alterable.
   #
@@ -1133,7 +1133,8 @@ block:
 #
 # THE FOUR CELLS THIS BLOCK EXISTS FOR are `(d8,An,Xi)`, `(xxx).L`,
 # `(d16,PC)` and `(d8,PC,Xi)`. `eaLegalityFor`'s `opMovem` arm read
-# `EaLegality(modes: eaControlModes, ea7: eaControl7NoAbsW)`, which admits all
+# `EaLegality(modes: eaControlModes, ea7: eaControl7NoAbsW)` - a set retired on
+# 2026-08-11 and equal to today's `eaControl7 - {ea7AbsW}` - which admits all
 # four, while the arm's own comment cited Table 3-14 as timing MOVEM under
 # `(An)` and `(d16,An)` alone. The comment was right and the code was wrong.
 #
@@ -1147,12 +1148,26 @@ block:
 # accounts for the `(xxx).L` pair only - the `fault` assertion and the
 # read-back of the two stored words - and an earlier revision of this record
 # left it there. Measured 2026-08-11 by restoring
-# `EaLegality(modes: eaControlModes, ea7: eaControl7NoAbsW)` on the `opMovem`
-# arm, rebuilding and running through `ctest`: `t_move` prints
+# `EaLegality(modes: eaControlModes, ea7: eaControl7 - {ea7AbsW})` on the
+# `opMovem` arm, configuring FRESH, rebuilding and running through `ctest`:
+# `t_move` prints
 # `3 of 34 cases failed` - `movem.l to (xxx).L traps`, `movem.l to (xxx).L
 # stores nothing before it traps` AND `movem.l to (d8,An,Xi) traps`, the last
-# of which the pair above omits. This file prints `4 of 367 cases failed`,
-# one per cell named below. Nothing else in the suite moves.
+# of which the pair above omits. This file prints
+# `4 of <caseTotalMustMatchTranscripts> cases failed`, one per cell named
+# below. Nothing else in the suite moves. RE-MEASURED 2026-08-11 with block
+# (18) in place, because that block is itself a case and moved the
+# denominator.
+#
+# THE DENOMINATOR IS A NAMED CONSTANT AND NOT A NUMBER. Neither copy of this
+# transcript spells the figure: both name `caseTotalMustMatchTranscripts`, the
+# constant exists once, and block (18) reds the run when it stops describing
+# it.
+#
+# THE REST OF THE TRANSCRIPT IS PROSE IN TWO PLACES - the `4`, the `3 of 34`
+# and every citation - because it is duplicated in the `opMovem` arm of
+# `src/mcf5307/decode_types.nim`. A change to either copy has to be made in
+# both, and nothing reds if only one is made.
 #
 # THE SOURCE IS THE CFPRM AND BOTH DIRECTIONS AGREE, read as RENDERED IMAGES
 # (`pdftoppm -r 200`) and not from any OCR text:
@@ -1243,8 +1258,8 @@ block:
 # current value, and this project has now measured three of them.
 #
 # MEASURED 2026-08-11, BEFORE THIS BLOCK EXISTED: widening `eaLeaPeaTarget` to
-# `modes: eaControlModes + {eaAnPost}` and `ea7: eaControl7NoAbsW + {ea7AbsW,
-# ea7Imm}` - admitting `(An)+` and `#<data>` - left the ENTIRE suite green.
+# `modes: eaControlModes + {eaAnPost}` and `ea7: eaControl7 + {ea7Imm}` -
+# admitting `(An)+` and `#<data>` - left the ENTIRE suite green.
 # The `coverage` rows for `opLea` and `opPea` cite `Dn`, which stays outside
 # the widened mask, so assertion (1) could not see it.
 #
@@ -1287,6 +1302,221 @@ block:
         "`m68k-elf-as -mcpu=5307` answers \"operands mismatch\")")
 
 # ---------------------------------------------------------------------------
+# (15) THE `eaJumpTarget` CELL TABLE LIVES IN `tests/t_control.nim`, NOT HERE.
+# A block of twenty-four cases mirroring block (14) for `opJmp` and `opJsr`
+# stood here until 2026-08-11 and was DELETED as unable to detect anything.
+# `t_control.nim`'s twelve-row `eaIsLegalFor(opJmp/opJsr, ...)` table
+# enumerates the SAME twelve cells with the SAME verdicts through the SAME
+# predicate, so the two computed the same twenty-four booleans and no mutation
+# can separate them. Measured 2026-08-11, each mutation configured FRESH and
+# run through `ctest`, deleted block against `t_control`:
+#
+#   eaJumpTarget + {eaAnPost}   `t_control` 4, deleted block 2
+#   eaJumpTarget + {eaAn}       `t_control` 3, deleted block 2
+#   eaControl7 - {ea7AbsW}      `t_control` 2, deleted block 2
+#   eaControl7 + {ea7Imm}       `t_control` 2, deleted block 2
+#
+# IN NO DIRECTION DID THE DELETED BLOCK RED ALONE. RE-MEASURED AFTER THE
+# DELETION: `t_control` reds 4, 3, 2 and 2 as above, unchanged.
+#
+# IN TWO OF THE FOUR - NOT THREE - `t_control` ALSO REDS AT THE EXECUTOR
+# LEVEL, WHICH THE DELETED BLOCK NEVER REACHED. Measured 2026-08-11 by
+# classifying every red `t_control` label as an `expectTrap` case or a
+# `checkMask` row:
+#
+#   eaJumpTarget + {eaAnPost}   4 red: 2 executor, 2 `checkMask`
+#   eaJumpTarget + {eaAn}       3 red: 1 executor, 2 `checkMask`
+#   eaControl7 - {ea7AbsW}      2 red: 0 executor, both `checkMask`
+#   eaControl7 + {ea7Imm}       2 red: 0 executor, both `checkMask`
+#
+# IN THE TWO `eaControl7` DIRECTIONS EVERY `t_control` RED IS A MASK ROW, AND
+# THE TWO DIRECTIONS DIFFER IN WHAT IS LEFT ELSEWHERE. Under
+# `- {ea7AbsW}` the executor-level evidence lives in other files - `t_move`'s
+# five `lea`/`pea (xxx).W` cases and the `jmp_absolute_short` conformance case
+# all red, eleven cases in all. Under `+ {ea7Imm}` NOTHING executes: the five
+# reds are this file's two block-(14) cases, block (17)'s `eaControl7`
+# equality and `t_control`'s two `#imm is illegal` rows, every one of them a
+# mask or value assertion. The CFPRM provenance the block carried is on the
+# `eaControl7` declaration in `src/mcf5307/ea.nim`, beside the value it cites.
+#
+# WHY BLOCK (14) SURVIVES THE SAME ARGUMENT. LEA and PEA have no cell table
+# anywhere else, which is NOT the same as their being untested: the baseline
+# `ctest -V` transcript carries THIRTY-TWO case labels naming LEA or PEA,
+# measured 2026-08-11 - 27 in this file (this block's eighteen, the `coverage`
+# rows' four assertions for each of `opLea` and `opPea`, and block (6)'s
+# `decodes LEA (A0),A0`) and 5 in `t_move`, which EXECUTES `lea (xxx).W` and
+# `pea (xxx).W` and reds all five under `eaControl7 - {ea7AbsW}`. What block
+# (14) holds alone is the two cells no other case names.
+#
+# THE MUTATION THAT SHOWS IT IS `eaLeaPeaTarget` WIDENED ON ITS OWN to
+# `ea7: eaControl7 + {ea7Imm}`: 2 red in the ENTIRE suite, both this block's
+# `the mask REJECTS #<data>` cases, and every other case green. That is the
+# criterion the deletion above rests on, met in block (14)'s favour.
+#
+# WIDENING `eaControl7` ITSELF IS THE WRONG WITNESS FOR THAT CLAIM, because
+# the widening moves four operations at once: it reds FIVE - this block's two,
+# block (17)'s `eaControl7` equality and `t_control`'s `jmp #imm is illegal`
+# and `jsr #imm is illegal` - so under it block (14) does not red alone.
+# Block (15) never red alone in any direction.
+
+# ---------------------------------------------------------------------------
+# (16) THE ADDQ AND SUBQ MASK, ENUMERATED CELL BY CELL. THIS BLOCK CLOSES A
+# MEASURED BLIND SPOT AND THE DIRECTION IS NARROWING, which is the direction
+# this file has repeatedly been weakest in.
+#
+# MEASURED 2026-08-11, EACH MUTATION RUN THROUGH THE WHOLE SUITE:
+#
+#   eaAlterable7 - {ea7AbsW}   3 red, AND ALL THREE ARE CASES ADDED WITH THIS
+#                              BLOCK: the two `the mask accepts (xxx).W` rows
+#                              below and block (17)'s `eaAlterable7 is the two
+#                              absolute forms and nothing else`. BEFORE they
+#                              existed this narrowing left the ENTIRE SUITE
+#                              GREEN - ADDQ and SUBQ would have trapped on
+#                              `addq.l #1,0x1234.w`, a form the pinned
+#                              assembler emits, and nothing would have said so.
+#   eaAlterable7 + {ea7PCDisp} 7 red, of which `t_alu` 2 were already there.
+#                              The WIDENING direction was already guarded.
+#
+# THAT ASYMMETRY IS THE POINT. The `coverage` rows for these two declare
+# `discriminating: false` because their cited illegal mode `(d16,PC)` is
+# refused by `eaResolve` as well - an argument about assertion (4) - and
+# assertion (1) does catch a widening onto that one cell. Neither reaches a
+# narrowing, because every `coverage` row names an ILLEGAL mode and a narrowing
+# removes a LEGAL one.
+#
+# THE MODE SET IS NOT WHAT THIS BLOCK CLOSES, and saying so would overstate it.
+#
+# "THE MODE SET" HAS TWO READINGS HERE AND THEY GIVE DIFFERENT NUMBERS, because
+# ADDQ and SUBQ NO LONGER HAVE A MODE SET OF THEIR OWN: their arm names
+# `eaAllModes`, which ELEVEN operations share. Measured
+# 2026-08-11, each mutation configured FRESH and run through `ctest`:
+#
+#   the ADDQ/SUBQ ARM ALONE - `eaAllModes - {eaAn}` written at that one site:
+#     4 red. `t_alu` 2 (`addq.l #1,a1 wraps and leaves the condition codes
+#     alone`, `the ADDQ mask admits An`) and this block 2.
+#   the SHARED DECLARATION - `eaAn` deleted from `eaAllModes` in `ea.nim`:
+#     11 red. `t_alu` 3, `t_control` 3, this block 2 and the conformance
+#     corpus 3. Those eleven are the blast radius of the OTHER NINE READERS
+#     and not better coverage of ADDQ and SUBQ; `ea.nim` names all eleven.
+#
+# EITHER READING LEAVES THE CONCLUSION STANDING. `t_alu` reds under both, so
+# the mode half had executor-level coverage already and it is the mode-7 half
+# that had none in the narrowing direction.
+#
+# THE MODE SET IS EVERY MODE AND THE RESTRICTION LIVES ENTIRELY IN THE MODE-7
+# HALF. That is the whole content of the naming defect this block accompanies:
+# a set named for the manual's ALTERABLE class that excludes no mode is not
+# restricting anything, and only `eaAlterable7` is.
+#
+# THE ASSEMBLER TRANSCRIPT BEHIND THESE TWELVE CELLS, AND THE CFPRM
+# `Alterable` COLUMN THAT DISAGREES WITH IT ON TWO OF THEM, ARE RECORDED ONCE -
+# on the `eaAlterable7` declaration in `src/mcf5307/ea.nim`. That is the site
+# whose VALUE the evidence establishes; this block only pins it. The
+# disagreement is NOT settled there and is not settled here: a future reader
+# who narrows the mask to follow the column reds the two `(xxx).W` and
+# `(xxx).L` rows below, and that is the intended conversation.
+
+block:
+  const
+    addqOps = [opAddq, opSubq]
+    addqLegal = [
+      ("Dn", EA(mode: eaDn, reg: 1)),
+      ("An", EA(mode: eaAn, reg: 1)),
+      ("(An)", EA(mode: eaAnInd, reg: 1)),
+      ("(An)+", EA(mode: eaAnPost, reg: 1)),
+      ("-(An)", EA(mode: eaAnPre, reg: 1)),
+      ("(d16,An)", EA(mode: eaAnDisp, reg: 1)),
+      ("(d8,An,Xi)", EA(mode: eaAnIndex, reg: 1)),
+      ("(xxx).W", EA(mode: eaMode7, reg: uint8(ord(ea7AbsW)))),
+      ("(xxx).L", EA(mode: eaMode7, reg: uint8(ord(ea7AbsL))))]
+    addqIllegal = [
+      ("(d16,PC)", EA(mode: eaMode7, reg: uint8(ord(ea7PCDisp)))),
+      ("(d8,PC,Xi)", EA(mode: eaMode7, reg: uint8(ord(ea7PCIndex)))),
+      ("#<data>", EA(mode: eaMode7, reg: uint8(ord(ea7Imm))))]
+
+  for op in addqOps:
+    let name = $op
+    for (label, ea) in addqLegal:
+      check(eaIsLegalFor(op, ea),
+        name & ": the mask accepts " & label &
+        " (`m68k-elf-as -mcpu=5307` emits it, measured 2026-08-11)")
+    for (label, ea) in addqIllegal:
+      check(not eaIsLegalFor(op, ea),
+        name & ": the mask REJECTS " & label &
+        " (a written destination is not PC-relative and not an immediate;" &
+        " `m68k-elf-as -mcpu=5307` answers \"operands mismatch\")")
+
+# ---------------------------------------------------------------------------
+# (17) THE MODE-7 SETS, HELD AGAINST THEIR LITERAL MEMBERSHIP. Every assertion
+# above reaches a set through `eaLegalityFor`, so a RENAME is invisible to all
+# of them and so is a rename that quietly moved a member. These cases name the
+# members, so a rename cannot smuggle a value change past the suite.
+#
+# THE STATED LIMIT. This block pins the VALUE of each set and says NOTHING
+# about whether the NAME describes it. A set renamed truthfully and a set
+# renamed to a second lie are indistinguishable here; the manual citations on
+# the declarations are what carry that, and no run can check them.
+#
+# WHY THE FULL VALID SET IS NAMED RATHER THAN THE THREE RESERVED ENCODINGS.
+# `EA7` has eight members and only five are encodings this part defines, so
+# "every valid sub-variant" is a five-member set and the reserved trio is its
+# complement. Asserting the complement instead would pass for a set that had
+# also lost a valid member.
+#
+# THE ADMISSION RULE FOR THIS BLOCK: ONE LITERAL-EQUALITY CASE PER SET, AND
+# NOTHING DERIVED FROM THEM. A case whose condition is ENTAILED by the equality
+# cases cannot be the sole detector of anything, because two conditions that
+# cannot disagree cannot red apart. Three such cases have been written here and
+# all three are gone; the rule is stated so a fourth is not.
+#
+# WHAT THE RULE EXCLUDED, AND WHY EACH EXCLUSION IS SOUND:
+#
+#   `not ({ea7Unused5, ea7Invalid, ea7Unused7} <= eaValid7)` - entailed by the
+#   `eaValid7` equality, since a set equal to the five valid members is
+#   disjoint from the three reserved ones. It was also the wrong SHAPE: `not
+#   (trio <= s)` is false only when ALL THREE are present, so alone it would
+#   have tolerated one or two being admitted. The property wanted is
+#   DISJOINTNESS, not "not a superset".
+#
+#   `eaControl7 == eaValid7 - {ea7Imm}` - entailed by the two equality cases
+#   above it. If `eaValid7 == {the five}` and `eaControl7 == {the four}` both
+#   hold, then `eaValid7 - {ea7Imm}` IS `{the four}`, so the third condition
+#   cannot fail while its two premises pass.
+#
+# MEASURED 2026-08-11, EACH MUTATION CONFIGURED FRESH AND RUN THROUGH `ctest`,
+# WITH THE ENTAILED `eaControl7 == eaValid7 - {ea7Imm}` CASE STILL PRESENT. In
+# all three directions it moved WITH a premise and never alone:
+#
+#   eaValid7 + {ea7Invalid}   the `eaValid7` equality reds, and the entailed
+#                             case reds beside it.
+#   eaControl7 - {ea7AbsW}    the `eaControl7` equality reds, and the entailed
+#                             case reds beside it.
+#   eaControl7 + {ea7Imm}     the `eaControl7` equality reds, and the entailed
+#                             case reds beside it.
+#
+# NO CASE TOTAL IS QUOTED FOR THOSE THREE RUNS, because they were measured on a
+# file state that no longer exists and a total would not reproduce. What
+# reproduces is the CO-MOVEMENT, which is the whole of the claim.
+#
+# THE MUTATION THAT WOULD SEPARATE THEM DOES NOT EXIST. Any mutation reaching
+# the entailed condition falsifies one of its premises first, so deleting it
+# removed a case that could never fire on its own. Re-measured after the
+# deletion: all three mutations still red an equality case, and nothing else in
+# the suite moved that had not moved before.
+
+block:
+  check(eaValid7 == {ea7AbsW, ea7AbsL, ea7PCDisp, ea7PCIndex, ea7Imm},
+    "eaValid7 is every VALID mode-7 sub-variant and no reserved one" &
+    " (CFPRM Rev. 3 Table 2-3 folio 2-10 prints exactly these five rows" &
+    " under mode field 111)")
+  check(eaControl7 == {ea7AbsW, ea7AbsL, ea7PCDisp, ea7PCIndex},
+    "eaControl7 is the FULL control mode-7 class, `(xxx).W` included" &
+    " (CFPRM Rev. 3 Table 2-3 folio 2-10, Control column;" &
+    " `#<data>` is the one valid mode-7 row it excludes)")
+  check(eaAlterable7 == {ea7AbsW, ea7AbsL},
+    "eaAlterable7 is the two absolute forms and nothing else")
+
+# ---------------------------------------------------------------------------
 # (6) The decoder recognizes each implemented opcode from a representative
 # word, so the legality assertions above are attached to a decoder that runs.
 
@@ -1302,6 +1532,70 @@ block:
   for (word, opx, name) in words:
     check(decodeWord(word).op == opx,
       "decodes " & name & " (0x" & word.toHex(4) & ")")
+
+# ---------------------------------------------------------------------------
+# (18) THIS FILE'S OWN CASE TOTAL, HELD AGAINST THE ONE FIGURE THE TRANSCRIPTS
+# QUOTE. Block (13) above and the `opMovem` arm of `decode_types.nim` each
+# transcribe a mutation run as "N of <total> cases failed", where that total is
+# what the summary line at the foot of this file prints. The denominator moved
+# 367 -> 420 -> 419 over three consecutive repairs; on each one a single copy of
+# the transcript was updated and the other was left standing, and on the last
+# the very repair that corrected the figure invalidated it again by deleting a
+# case. Nothing went red, because the denominator was PROSE IN TWO FILES.
+#
+# THAT TALLY IS CLOSED AT THE POINT THIS BLOCK LANDED AND IS NOT EXTENDED. The
+# constant has moved since and will move again; a list that grows by one entry
+# per repair is the defect this block exists to end, not a record of it.
+#
+# THE FIGURE NOW EXISTS ONCE, AS `caseTotalMustMatchTranscripts`, AND BOTH
+# TRANSCRIPTS NAME THE CONSTANT RATHER THAN SPELLING A NUMBER. This case is
+# what keeps the constant true: it holds the live count of every case this run
+# emitted against it, so a block added to or removed from this file is RED here
+# until the constant moves - and moving the constant moves both transcripts
+# with it, because neither of them carries a second copy to forget.
+#
+# IT IS A RUN-TIME CASE AND NOT THE `static: doAssert` ASSERTION (9) USES, AND
+# THAT IS FORCED RATHER THAN PREFERRED. `passCount` and `failures` are
+# accumulated by the enumeration over `Operation` and over the `coverage` seq,
+# and both are run-time values. Measured 2026-08-11: appending
+# `static: doAssert failures.len + passCount == <any total>` to this file fails
+# to COMPILE, with `Error: cannot evaluate at compile time: failures` - the
+# right-hand side is not what it objects to - and the
+# registered test reports that as a driver error rather than as a case. The
+# price of the run-time form is that it fires only when the suite runs; the
+# compile-time form is not an option that exists here.
+#
+# THE `+ 1` IS THIS CASE ITSELF. `checkDetail` below is called exactly once in
+# this block and increments one of the two counters whichever way it goes, so
+# the figure the summary line goes on to print is one greater than the one read
+# here. The constant is the SUMMARY LINE's figure, because that is the figure
+# the two transcripts quote.
+#
+# WHAT IT DOES NOT CATCH, STATED SO THE CONSTANT IS NOT READ AS MORE THAN A
+# TOTAL. It pins the COUNT and says nothing about WHICH cases ran: one block
+# deleted and another of the same size added in a single change passes. And it
+# says nothing about the other figures those transcripts carry - the `4` red
+# cases under the wide MOVEM mask, and `t_move`'s own `3 of 34` - which are a
+# mutation's blast radius and another file's total, neither of them this run's
+# to count.
+
+const caseTotalMustMatchTranscripts = 395
+  ## THE TOTAL THE SUMMARY LINE PRINTS, WRITTEN DOWN EXACTLY ONCE IN THIS
+  ## REPOSITORY. Both mutation transcripts that need the denominator name this
+  ## constant instead of copying its value, so there is one figure to move and
+  ## the case below is what refuses to let it be moved wrongly. Measured
+  ## through `ctest` on 2026-08-11.
+
+block:
+  let totalBeforeThisCase = failures.len + passCount
+  checkDetail(totalBeforeThisCase + 1 == caseTotalMustMatchTranscripts,
+    "this run emits the case total `caseTotalMustMatchTranscripts` records, " &
+    "which is the denominator both mutation transcripts quote - block (13) " &
+    "here and the `opMovem` arm of `decode_types.nim`",
+    "the constant records " & $caseTotalMustMatchTranscripts &
+    " and this run emitted " & $(totalBeforeThisCase + 1) &
+    "; a block was added to or removed from this file, so move the constant " &
+    "and re-read both transcripts")
 
 # ---------------------------------------------------------------------------
 # THE SUMMARY LINE CARRIES THE ATTRIBUTION FIGURE, BECAUSE A BARE COUNT WOULD

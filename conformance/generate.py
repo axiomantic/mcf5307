@@ -2575,14 +2575,20 @@ CASES = {
         #
         # `(xxx).W` IS IN THE CLASS. Table 3-5 marks the absolute SHORT row
         # CONTROL, and page 3-26 states that the tables' `xxx.wl` column "refers
-        # to both forms of absolute addressing, xxx.w and xxx.l". This is why
-        # JMP and JSR carry a mask of their own rather than reuse
-        # `eaControl7NoAbsW` - see `eaJumpTarget` in
-        # `src/mcf5307/decode_types.nim`. That set was shared with LEA, PEA and
-        # MOVEM when this comment was written; LEA and PEA moved to
-        # `eaLeaPeaTarget`, and MOVEM moved to `{eaAnInd, eaAnDisp}` on
-        # 2026-08-11 because folios 4-50 and 4-51 dash every row but `(An)`
-        # and `(d16,An)`.
+        # to both forms of absolute addressing, xxx.w and xxx.l".
+        #
+        # JMP AND JSR CARRY A MASK OF THEIR OWN, AND THE REASON IS NOT
+        # `(xxx).W`. `eaJumpTarget` in `src/mcf5307/decode_types.nim` is the
+        # class of a BRANCH TARGET and `eaLeaPeaTarget` is the class of an
+        # ADDRESS an instruction computes. The two are equal BY MEASUREMENT
+        # rather than by definition, and folding them together would let a
+        # later correction to one silently move the other. That entry records
+        # the argument in full.
+        #
+        # BOTH READ `ea.nim`'s `eaControl7`, which holds the full control
+        # mode-7 class with `(xxx).W` in it. MOVEM reads neither and carries
+        # `{eaAnInd, eaAnDisp}`, because folios 4-50 and 4-51 dash every row
+        # but `(An)` and `(d16,An)`.
         {
             "name": "jmp_indirect",
             "mnemonic": "jmp",

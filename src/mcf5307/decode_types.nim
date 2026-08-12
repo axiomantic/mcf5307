@@ -130,7 +130,7 @@ const eaMemoryAlterable* = EaLegality(modes: eaMemAlterableModes,
   ## instruction WORD, not of the operation. `alu.nim` names it directly.
 
 const eaDataAddressing* = EaLegality(modes: eaDataAlterableModes,
-                                     ea7: eaData7)
+                                     ea7: eaValid7)
   ## THE MANUAL'S `DATA` CLASS, WHICH DOES NOT INCLUDE `An`. The MCF5307
   ## User's Manual Table 3-5 marks every mode but address-register direct as
   ## DATA, and `m68k-elf-as -mcpu=5307` agrees: it rejects `and.l %a0,%d1` and
@@ -149,7 +149,7 @@ const eaDataAddressing* = EaLegality(modes: eaDataAlterableModes,
   ## above.
 
 const eaBitDynamic* = EaLegality(modes: eaDataAlterableModes,
-                                 ea7: eaData7 - {ea7Imm})
+                                 ea7: eaValid7 - {ea7Imm})
   ## THE OPERAND OF A DYNAMIC BIT TEST: the manual's DATA class WITHOUT the
   ## immediate. It is `eaDataAddressing` minus one sub-variant, and the whole
   ## of the difference between them is this paragraph.
@@ -265,7 +265,7 @@ const eaBitStatic* = EaLegality(
   ## table is keyed on the operation alone.
 
 const eaJumpTarget* = EaLegality(
-  modes: eaControlModes, ea7: eaControl7NoAbsW + {ea7AbsW})
+  modes: eaControlModes, ea7: eaControl7)
   ## THE OPERAND OF `JMP` AND `JSR`: control addressing INCLUDING the absolute
   ## SHORT form. CPU-10 added it.
   ##
@@ -293,9 +293,12 @@ const eaJumpTarget* = EaLegality(
   ## `4ec0` and `4ec8` as an instruction on NEITHER `-m m68k:5307` nor
   ## `-m m68k:68020`.
   ##
-  ## IT IS A CONSTANT OF ITS OWN AND NOT `eaControl7NoAbsW`, AND THE TWO
-  ## CANNOT BE MERGED. `eaControl7NoAbsW` in `ea.nim` is
-  ## `{ea7AbsL, ea7PCDisp, ea7PCIndex}` - no `(xxx).W`. Measured on the pinned
+  ## IT WAS A CONSTANT OF ITS OWN AND NOT `eaControl7NoAbsW`, AND THE TWO
+  ## COULD NOT BE MERGED. `eaControl7NoAbsW` HELD
+  ## `{ea7AbsL, ea7PCDisp, ea7PCIndex}` in `ea.nim` - no `(xxx).W` - UNTIL IT
+  ## WAS RETIRED on 2026-08-11. `ea.nim` DECLARES NO SUCH CONSTANT TODAY, and
+  ## the mask on the line above reads `eaControl7`, which holds the full
+  ## control mode-7 class with `(xxx).W` in it. Measured on the pinned
   ## assembler: `lea 0x1234.w,%a0` (`41f8 1234`) and `pea 0x1234.w`
   ## (`4878 1234`) ARE accepted, so LEA's and PEA's exclusion of the absolute
   ## short form was wrong; `eaLeaPeaTarget` below is CPU-7's repair, and
@@ -312,16 +315,16 @@ const eaJumpTarget* = EaLegality(
   ## wide: `(xxx).W` was the only cell anyone checked, and it was the only one
   ## the set happened to exclude.
   ##
-  ## SO THE TWO REMAINING READERS ARE THIS CONSTANT AND `eaLeaPeaTarget`, and
-  ## both spell `eaControl7NoAbsW + {ea7AbsW}`. Widening `eaControl7NoAbsW`
-  ## today would move JMP, JSR, LEA and PEA together and would NOT touch
-  ## MOVEM.
+  ## SO THE TWO READERS OF `eaControl7` ARE THIS CONSTANT AND `eaLeaPeaTarget`.
+  ## Widening `eaControl7` today would move JMP, JSR, LEA and PEA together and
+  ## would NOT touch MOVEM.
 
 const eaLeaPeaTarget* = EaLegality(
-  modes: eaControlModes, ea7: eaControl7NoAbsW + {ea7AbsW})
+  modes: eaControlModes, ea7: eaControl7)
   ## THE OPERAND OF `LEA` AND `PEA`: control addressing INCLUDING the absolute
-  ## SHORT form. CPU-7 added it, and the entry above states why it could not
-  ## simply widen `eaControl7NoAbsW`.
+  ## SHORT form. CPU-7 added it. The entry above records, AS HISTORY, why it
+  ## could not simply widen the set then called `eaControl7NoAbsW`, and why
+  ## that obstacle no longer exists.
   ##
   ## IT IS A THIRD CONSTANT AND NOT A REUSE OF `eaJumpTarget`, WHICH IT
   ## CURRENTLY EQUALS. The two are equal by measurement rather than by
@@ -386,18 +389,18 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # These take data addressing, which admits every mode including the
     # mode-7 sub-variants. The reserved and invalid mode-7 encodings stay
     # out of the mask, so they trap.
-    EaLegality(modes: eaAllModes, ea7: eaData7)
+    EaLegality(modes: eaAllModes, ea7: eaValid7)
   of opAdd, opSub, opAdda, opSuba:
     # The `<ea>` operand of the register direction, and the source of ADDA
     # and SUBA: data addressing, PC-relative and immediate included.
-    EaLegality(modes: eaAllModes, ea7: eaData7)
+    EaLegality(modes: eaAllModes, ea7: eaValid7)
   of opAddq, opSubq:
     # ALTERABLE, WHICH IS NARROWER THAN THE DATA ADDRESSING THIS ENTRY USED
     # TO NAME. An ADDQ destination is written, so it cannot be PC-relative
     # and it cannot be an immediate; `m68k-elf-as -mcpu=5307` rejects
     # `addq.l #1,(4,%pc)`. An address register IS allowed, which is why this
     # is `alterable` and not `data alterable`.
-    EaLegality(modes: eaAlterableModes, ea7: eaAlterable7)
+    EaLegality(modes: eaAllModes, ea7: eaAlterable7)
   of opClr:
     # Data alterable: no An, no PC-relative, no immediate.
     EaLegality(modes: eaDataAlterableModes, ea7: eaDataAlterable7)
@@ -408,10 +411,11 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # one; no single class is right for both and the arm cannot be collapsed.
     #
     #   WORD  the manual's DATA class - but THE COMPOSITION BELOW NAMES NO SET
-    #         CALLED "DATA", and reading it as one is the
-    #         `eaControl7NoAbsW` mistake waiting to happen again. It pairs
+    #         CALLED "DATA", and reading it as one repeats this family's
+    #         RECURRING DEFECT: taking a mask for the manual class its name
+    #         suggests instead of for the value it holds. It pairs
     #         `eaDataAlterableModes`, which
-    #         is every mode but `An`, with `eaData7`, and it is that SECOND
+    #         is every mode but `An`, with `eaValid7`, and it is that SECOND
     #         half that puts the PC-relative pair and the immediate back IN,
     #         because the word form only READS its source. The mode lists of
     #         DATA and DATA ALTERABLE are identical on this part and the two
@@ -442,7 +446,7 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # two-word ones. A size this arm does not expect takes the LONG mask,
     # which refuses more than it allows.
     if size == 2'u8:
-      EaLegality(modes: eaDataAlterableModes, ea7: eaData7)
+      EaLegality(modes: eaDataAlterableModes, ea7: eaValid7)
     else:
       EaLegality(modes: eaMulDivLongModes, ea7: eaMulDivLong7)
   of opAnd, opOr:
@@ -538,7 +542,7 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # carries it, because this table is keyed on the operation alone and the
     # size is not part of the key - the same reason `eaMemoryAlterable` is not
     # in it.
-    EaLegality(modes: eaAllModes, ea7: eaData7)
+    EaLegality(modes: eaAllModes, ea7: eaValid7)
   of opScc, opCmpi:
     # A DATA REGISTER AND NOTHING ELSE, AND THE MANUAL'S TIMING TABLES SAY SO
     # ROW BY ROW.
@@ -594,13 +598,33 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # two sentences above describe the `(xxx).L` pair alone - the `fault`
     # assertion and the read-back of the two stored words - and an earlier
     # revision of this record stopped there. Measured 2026-08-11 by restoring
-    # `EaLegality(modes: eaControlModes, ea7: eaControl7NoAbsW)` on this arm,
-    # rebuilding and running through `ctest`: `t_move` prints
-    # `3 of 34 cases failed` - `movem.l to (xxx).L traps`,
+    # `EaLegality(modes: eaControlModes, ea7: eaControl7 - {ea7AbsW})` on this
+    # arm - the retired `eaControl7NoAbsW` written in terms of the set that
+    # replaced it - configuring FRESH, rebuilding and running through `ctest`:
+    # `t_move` prints `3 of 34 cases failed` - `movem.l to (xxx).L traps`,
     # `movem.l to (xxx).L stores nothing before it traps` AND
     # `movem.l to (d8,An,Xi) traps`, which the pair above omits. `t_ea_masks`
-    # prints `4 of 367 cases failed`, one for each cell block (13) names.
-    # Nothing else in the suite moves.
+    # prints `4 of <caseTotalMustMatchTranscripts> cases failed`, one for each
+    # cell block (13) names. Nothing else in the suite moves. RE-MEASURED
+    # 2026-08-11 with that file's block (18) in place, because that block is
+    # itself a case and moved the denominator.
+    #
+    # THE DENOMINATOR IS A NAMED CONSTANT AND NOT A NUMBER. It is
+    # `caseTotalMustMatchTranscripts`, declared once in `tests/t_ea_masks.nim`,
+    # and block (18) of that file holds it against the case count of the run
+    # that prints it, so adding or removing a case there is RED until the
+    # constant moves.
+    #
+    # THAT MECHANIZES THE VALUE AND NOT THE SYMBOL, AND THE GAP IS UNGUARDED.
+    # `caseTotalMustMatchTranscripts` is a NON-EXPORTED constant in a test
+    # file; the line above names it as TEXT, and nothing links the two.
+    # Renaming or deleting it leaves this comment stale with nothing red, and
+    # an import cannot close that - `src/` does not import `tests/`.
+    #
+    # THE REST OF THE TRANSCRIPT IS PROSE IN TWO PLACES - the `4`, the
+    # `3 of 34` and every citation - because it is duplicated in
+    # `tests/t_ea_masks.nim` block (13). A change to either copy has to be
+    # made in both.
     #
     # THE CFPRM SETTLES BOTH DIRECTIONS AND THEY ARE THE SAME SHAPE. Folio
     # 4-50 carries the register-to-memory table for `<ea>x` and folio 4-51 the

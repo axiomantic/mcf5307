@@ -179,7 +179,8 @@
 ##      BOTH: the `btst %d1,#5` trap case, and the
 ##      `checkMask(eaIsLegalFor(opBtst, decodeEa(0x3C)), false, ...)` row that
 ##      this commit flipped from `true`. MEASURED: `eaBitDynamic`'s `ea7`
-##      restored to `eaData7`, confirmed in the generated C as `{253, 31}`
+##      restored to the full valid mode-7 set (then `eaData7`, now
+##      `eaValid7`), confirmed in the generated C as `{253, 31}`
 ##      against this commit's `{253, 15}`, rebuilt from a fresh configure of a
 ##      `git archive` of this commit - `t_logic: 2 of 74 cases failed`, exactly
 ##      those two, and the corpus stayed 41 of 41. It is the one entry on this
