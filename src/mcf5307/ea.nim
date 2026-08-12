@@ -61,12 +61,75 @@ proc isMode7*(ea: EA): bool =
 #   Alterable addressing Data addressing without PC-relative or immediate.
 
 const
-  eaDataModes* = {eaDn, eaAn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp,
-                  eaAnIndex, eaMode7}
+  # EVERY ADDRESSING MODE, AND THE NAME SAYS SO. This set holds all eight
+  # values of `EAMode`, `eaAn` INCLUDED, so it is not the manual's DATA class
+  # and never was.
+  #
+  # IT WAS CALLED `eaDataModes` UNTIL 2026-08-11, AND THE VALUE IS UNCHANGED
+  # BY THE RENAME. The old name read as the manual's DATA category, which
+  # EXCLUDES `An` - that class is `eaDataAlterableModes` above, and
+  # `decode_types.nim` reaches it through `eaDataAddressing`. A reader who
+  # took the old name at face value would have concluded that the nine
+  # operations reading this set reject an address register, and all nine
+  # ACCEPT one.
+  #
+  # THE `eaAn` MEMBERSHIP IS LOAD-BEARING AND IS NOT AN OVERSIGHT TO TIDY.
+  # `m68k-elf-as -mcpu=5307` emits `4a88` for `tst.l %a0`, `b288` for
+  # `cmp.l %a0,%d1` and `b3c8` for `cmpa.l %a0,%a1`, and MOVE and the ADD/SUB
+  # pair take an address register source.
+  #
+  # MEASURED 2026-08-11 BY DELETING `eaAn` FROM THIS SET, AND THE COUNT IS
+  # STATED THE WAY THE RUN PRINTS IT rather than as one round number. SEVEN
+  # DISTINCT CASES GO RED, over TEN failure lines:
+  #
+  #   t_alu       1  `add.l a0,d1 reads the address register`
+  #   t_control   3  `tst.w %a0 (4a48) runs: the word form reaches An`,
+  #                  `tst %a0 is legal`, `cmp %a0 is legal`
+  #   conformance 3  `move_l_a0_to_a1`, `tst_l_address_register`,
+  #                  `cmp_l_address_register_source`
+  #
+  # The three conformance cases each print TWICE - once in their per-group
+  # target and once in `mcf5307_conformance_all`, which re-runs the whole
+  # corpus - so a reader counting failure LINES gets ten and a reader counting
+  # CASES gets seven. Neither figure is wrong and they are not the same
+  # figure, which is why both are written here.
+  #
+  # NOTE WHAT DOES *NOT* GO RED: `t_ea_masks` stays at 367 passed. Its
+  # `coverage` row for each of these nine operations cites a RESERVED mode-7
+  # encoding as the illegal mode, not `An`, so the file that exists to guard
+  # the legality table cannot see this particular narrowing at all. The
+  # evidence for `eaAn` is the executor and corpus cases above.
+  eaAllModes* = {eaDn, eaAn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp,
+                 eaAnIndex, eaMode7}
   eaData7* = {ea7AbsW, ea7AbsL, ea7PCDisp, ea7PCIndex, ea7Imm}
 
   eaControlModes* = {eaAnInd, eaAnDisp, eaAnIndex, eaMode7}
-  eaControl7* = {ea7AbsL, ea7PCDisp, ea7PCIndex}
+
+  # THE CONTROL CLASS'S MODE-7 SUB-VARIANTS WITHOUT THE ABSOLUTE SHORT FORM,
+  # AND THE NAME NOW SAYS WHICH ONE IS MISSING. Table 3-5 p.3-21 marks
+  # `(xxx).W`, `(xxx).L`, `(d16,PC)` and `(d8,PC,Xi)` as CONTROL; this set
+  # omits the first of the four.
+  #
+  # IT WAS CALLED `eaControl7` UNTIL 2026-08-11, AND THE VALUE IS UNCHANGED BY
+  # THE RENAME. The old name claimed to BE the control mode-7 class while
+  # being narrower than it, which is the same defect as the old `eaDataModes`
+  # above and inverted: that one was WIDER than its name and this one is
+  # NARROWER.
+  #
+  # THE OLD NAME COST REAL WORK TWICE. LEA and PEA were wired to it and
+  # trapped `lea 0x1234.w,%a0` and `pea 0x1234.w`, two forms the pinned
+  # assembler emits; `eaLeaPeaTarget` in `decode_types.nim` is that repair.
+  # MOVEM was then left on it on the reasoning that its `(xxx).W` exclusion
+  # was correct - which it is - while the REST of the set was four cells too
+  # wide for MOVEM, which folios 4-50 and 4-51 dash. That was a live defect
+  # until the `opMovem` arm was narrowed to `{eaAnInd, eaAnDisp}`.
+  #
+  # BOTH REMAINING READERS ADD `ea7AbsW` BACK. `eaJumpTarget` and
+  # `eaLeaPeaTarget` each spell `eaControl7NoAbsW + {ea7AbsW}`, so this
+  # constant survives only as the left operand of that sum. It is NOT dead -
+  # a prediction that MOVEM's narrowing would leave it unread was checked on
+  # 2026-08-11 and is wrong by two consumers.
+  eaControl7NoAbsW* = {ea7AbsL, ea7PCDisp, ea7PCIndex}
 
   eaAlterableModes* = {eaDn, eaAn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp,
                        eaAnIndex, eaMode7}

@@ -761,12 +761,19 @@ block:
 # absolute short row CONTROL, and page 3-26 says the timing tables' `xxx.wl`
 # column "refers to both forms of absolute addressing".
 #
-# IT IS A CONSTANT OF ITS OWN AND NOT `eaControl7`. That set - which LEA, PEA
-# and MOVEM read - EXCLUDES `(xxx).W`, and the two cannot be merged: measured,
-# `m68k-elf-as -mcpu=5307` ACCEPTS `lea 0x1234.w,%a0`, `pea 0x1234.w`,
-# `jmp 0x1234.w` and `jsr 0x1234.w` and REJECTS `movem.l %d0-%d1,0x1234.w`, so
-# MOVEM's rejection is right and LEA's and PEA's are not. Repairing those two
-# is CPU-7's and is not done here.
+# IT IS A CONSTANT OF ITS OWN AND NOT `eaControl7NoAbsW`. That set EXCLUDES
+# `(xxx).W`, and the two cannot be merged: measured, `m68k-elf-as -mcpu=5307`
+# ACCEPTS `lea 0x1234.w,%a0`, `pea 0x1234.w`, `jmp 0x1234.w` and
+# `jsr 0x1234.w` and REJECTS `movem.l %d0-%d1,0x1234.w`, so MOVEM's rejection
+# is right and LEA's and PEA's are not.
+#
+# WHO READS THAT SET HAS CHANGED SINCE THIS PARAGRAPH WAS WRITTEN. It said
+# "which LEA, PEA and MOVEM read". LEA and PEA moved to `eaLeaPeaTarget`
+# (CPU-7), and on 2026-08-11 MOVEM moved off it as well: `(xxx).W` was the one
+# cell that set got right for MOVEM, and folios 4-50 and 4-51 dash
+# `(d8,An,Xi)`, `(xxx).L`, `(d16,PC)` and `(d8,PC,Xi)` too. MOVEM now carries
+# `{eaAnInd, eaAnDisp}`, and `eaControl7NoAbsW`'s only readers are
+# `eaJumpTarget` and `eaLeaPeaTarget`.
 
 block:
   for (field, name, legal) in [

@@ -127,7 +127,7 @@ const eaDataAddressing* = EaLegality(modes: eaDataAlterableModes,
   ## accepts every other source this mask names, `(4,%pc)` and `#imm`
   ## included.
   ##
-  ## It is not `eaDataModes`. That constant in `ea.nim` is the wider "every
+  ## It is not `eaAllModes`. That constant in `ea.nim` is the wider "every
   ## addressing mode" set, which is what a MOVE source needs and what this
   ## class is not.
   ##
@@ -247,7 +247,7 @@ const eaBitStatic* = EaLegality(
   ## table is keyed on the operation alone.
 
 const eaJumpTarget* = EaLegality(
-  modes: eaControlModes, ea7: eaControl7 + {ea7AbsW})
+  modes: eaControlModes, ea7: eaControl7NoAbsW + {ea7AbsW})
   ## THE OPERAND OF `JMP` AND `JSR`: control addressing INCLUDING the absolute
   ## SHORT form. CPU-10 added it.
   ##
@@ -275,22 +275,35 @@ const eaJumpTarget* = EaLegality(
   ## `4ec0` and `4ec8` as an instruction on NEITHER `-m m68k:5307` nor
   ## `-m m68k:68020`.
   ##
-  ## IT IS A CONSTANT OF ITS OWN AND NOT `eaControl7`, AND THE TWO CANNOT BE
-  ## MERGED. `eaControl7` in `ea.nim` is `{ea7AbsL, ea7PCDisp, ea7PCIndex}` -
-  ## no `(xxx).W` - and LEA, PEA and MOVEM read it through the entry below.
-  ## Measured on the pinned assembler: `lea 0x1234.w,%a0` (`41f8 1234`) and
-  ## `pea 0x1234.w` (`4878 1234`) ARE accepted, and
-  ## `movem.l %d0-%d1,0x1234.w` is REJECTED. So MOVEM's exclusion is right and
-  ## LEA's and PEA's are not, one constant cannot serve all four, and
-  ## WIDENING `eaControl7` WOULD BREAK MOVEM. LEA's and PEA's repair is
-  ## CPU-7's and is `eaLeaPeaTarget` below; `tests/t_control.nim` records the
-  ## measurement so the next reader does not have to take it again.
+  ## IT IS A CONSTANT OF ITS OWN AND NOT `eaControl7NoAbsW`, AND THE TWO
+  ## CANNOT BE MERGED. `eaControl7NoAbsW` in `ea.nim` is
+  ## `{ea7AbsL, ea7PCDisp, ea7PCIndex}` - no `(xxx).W`. Measured on the pinned
+  ## assembler: `lea 0x1234.w,%a0` (`41f8 1234`) and `pea 0x1234.w`
+  ## (`4878 1234`) ARE accepted, so LEA's and PEA's exclusion of the absolute
+  ## short form was wrong; `eaLeaPeaTarget` below is CPU-7's repair, and
+  ## `tests/t_control.nim` records the measurement.
+  ##
+  ## MOVEM NO LONGER READS `eaControl7NoAbsW`, AND AN EARLIER REVISION OF THIS
+  ## PARAGRAPH SAID IT DID. It read "LEA, PEA and MOVEM read it through the
+  ## entry below" and concluded that "WIDENING `eaControl7NoAbsW` WOULD BREAK
+  ## MOVEM". Both sentences were true when written and stopped being true on
+  ## 2026-08-11: MOVEM's arm carries `{eaAnInd, eaAnDisp}` with an EMPTY `ea7`,
+  ## because folios 4-50 and 4-51 dash every row but `(An)` and `(d16,An)` in
+  ## both directions. The old wording is recorded rather than deleted because
+  ## it is what kept MOVEM on a control-class mask that was four cells too
+  ## wide: `(xxx).W` was the only cell anyone checked, and it was the only one
+  ## the set happened to exclude.
+  ##
+  ## SO THE TWO REMAINING READERS ARE THIS CONSTANT AND `eaLeaPeaTarget`, and
+  ## both spell `eaControl7NoAbsW + {ea7AbsW}`. Widening `eaControl7NoAbsW`
+  ## today would move JMP, JSR, LEA and PEA together and would NOT touch
+  ## MOVEM.
 
 const eaLeaPeaTarget* = EaLegality(
-  modes: eaControlModes, ea7: eaControl7 + {ea7AbsW})
+  modes: eaControlModes, ea7: eaControl7NoAbsW + {ea7AbsW})
   ## THE OPERAND OF `LEA` AND `PEA`: control addressing INCLUDING the absolute
   ## SHORT form. CPU-7 added it, and the entry above states why it could not
-  ## simply widen `eaControl7`.
+  ## simply widen `eaControl7NoAbsW`.
   ##
   ## IT IS A THIRD CONSTANT AND NOT A REUSE OF `eaJumpTarget`, WHICH IT
   ## CURRENTLY EQUALS. The two are equal by measurement rather than by
@@ -355,11 +368,11 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # These take data addressing, which admits every mode including the
     # mode-7 sub-variants. The reserved and invalid mode-7 encodings stay
     # out of the mask, so they trap.
-    EaLegality(modes: eaDataModes, ea7: eaData7)
+    EaLegality(modes: eaAllModes, ea7: eaData7)
   of opAdd, opSub, opAdda, opSuba:
     # The `<ea>` operand of the register direction, and the source of ADDA
     # and SUBA: data addressing, PC-relative and immediate included.
-    EaLegality(modes: eaDataModes, ea7: eaData7)
+    EaLegality(modes: eaAllModes, ea7: eaData7)
   of opAddq, opSubq:
     # Alterable. An ADDQ destination is written, so it cannot be PC-relative
     # and it cannot be an immediate; `m68k-elf-as -mcpu=5307` rejects
@@ -376,8 +389,9 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # one; no single class is right for both and the arm cannot be collapsed.
     #
     #   WORD  the manual's DATA class - but THE COMPOSITION BELOW NAMES NO SET
-    #         CALLED "DATA", and reading it as one is the `eaControl7` mistake
-    #         waiting to happen again. It pairs `eaDataAlterableModes`, which
+    #         CALLED "DATA", and reading it as one is the
+    #         `eaControl7NoAbsW` mistake waiting to happen again. It pairs
+    #         `eaDataAlterableModes`, which
     #         is every mode but `An`, with `eaData7`, and it is that SECOND
     #         half that puts the PC-relative pair and the immediate back IN,
     #         because the word form only READS its source. The mode lists of
@@ -492,7 +506,7 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # rows, which is the same mark that puts `and.l Dy,<ea>`'s `Rn` and
     # `btst #imm,<ea>`'s `xxx.wl` out.
     #
-    # THAT IS THE `eaDataModes` SET AND NOT `eaDataAddressing`, because these
+    # THAT IS THE `eaAllModes` SET AND NOT `eaDataAddressing`, because these
     # three admit an ADDRESS REGISTER: `m68k-elf-as -mcpu=5307` emits `4a88`
     # for `tst.l %a0`, `b288` for `cmp.l %a0,%d1` and `b3c8` for
     # `cmpa.l %a0,%a1`. `eaDataAddressing` is the manual's DATA class, which
@@ -504,7 +518,7 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # carries it, because this table is keyed on the operation alone and the
     # size is not part of the key - the same reason `eaMemoryAlterable` is not
     # in it.
-    EaLegality(modes: eaDataModes, ea7: eaData7)
+    EaLegality(modes: eaAllModes, ea7: eaData7)
   of opScc, opCmpi:
     # A DATA REGISTER AND NOTHING ELSE, AND THE MANUAL'S TIMING TABLES SAY SO
     # ROW BY ROW.
@@ -531,20 +545,83 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     EaLegality(modes: {eaDn}, ea7: {})
   of opLea, opPea:
     # CONTROL ADDRESSING INCLUDING `(xxx).W`. This arm USED TO BE SHARED WITH
-    # `opMovem` on `eaControl7`, and that was a live defect: `eaControl7`
+    # `opMovem` on `eaControl7NoAbsW`, and that was a live defect: the set
     # excludes `(xxx).W`, so `lea 0x1234.w,%a0` and `pea 0x1234.w` - two
     # forms the pinned assembler emits - trapped. `eaLeaPeaTarget` carries
-    # the manual rows and the measurements.
+    # the manual rows and the measurements. The SPLIT that repair created is
+    # what later let MOVEM be narrowed on its own, in the arm below.
     eaLeaPeaTarget
   of opMovem:
-    # MOVEM KEEPS `eaControl7`, AND ITS EXCLUSION OF `(xxx).W` IS CORRECT.
-    # Table 3-14, page 3-29, dashes both `movem.l` rows under `xxx.wl`, and
-    # `m68k-elf-as -mcpu=5307` rejects `movem.l %d0-%d1,0x1234.w`. This is
-    # why LEA and PEA needed a constant of their own rather than a wider
-    # `eaControl7`. A data register direct (mode 0), an immediate (mode 7,
-    # sub 4), a postincrement or a predecrement are illegal and must trap.
-    # `MOVEM -(An)` is the CPU-13 negative case.
-    EaLegality(modes: eaControlModes, ea7: eaControl7)
+    # `(An)` AND `(d16,An)`, AND NOTHING ELSE. MOVEM IS NOT A CONTROL-CLASS
+    # OPERAND ON THIS PART.
+    #
+    # THIS ARM READ `EaLegality(modes: eaControlModes, ea7: eaControl7NoAbsW)`
+    # UNTIL 2026-08-11, WHICH WAS FOUR CELLS TOO WIDE: `(d8,An,Xi)` from the
+    # mode set and `(xxx).L`, `(d16,PC)` and `(d8,PC,Xi)` from the mode-7 set.
+    # The comment on `eaLeaPeaTarget` above ALREADY SAID SO - "Table 3-14's
+    # two `movem.l` rows are timed under `(An)` and `(d16,An)` ONLY" - and the
+    # arm was wired to a wider class anyway. The prose was right and the code
+    # was wrong, so the disagreement between them is what this arm records.
+    #
+    # IT WAS A LIVE DEFECT AND NOT A LATENT ONE. Measured 2026-08-11 against
+    # the wide mask: `movem.l %d0-%d1,0x400.l`, hand-assembled as
+    # `48f9 0003 0000 0400`, reached the executor and COMPLETED ITS STORE -
+    # 0xAABBCCDD at 0x400, 0x11223344 at 0x404, `fault` false. A permissive
+    # core executing an addressing mode the silicon rejects is the exact
+    # failure design section 6.1 exists to prevent.
+    #
+    # PUTTING THE WIDE MASK BACK REDS THREE `t_move` CASES AND NOT TWO. The
+    # two sentences above describe the `(xxx).L` pair alone - the `fault`
+    # assertion and the read-back of the two stored words - and an earlier
+    # revision of this record stopped there. Measured 2026-08-11 by restoring
+    # `EaLegality(modes: eaControlModes, ea7: eaControl7NoAbsW)` on this arm,
+    # rebuilding and running through `ctest`: `t_move` prints
+    # `3 of 34 cases failed` - `movem.l to (xxx).L traps`,
+    # `movem.l to (xxx).L stores nothing before it traps` AND
+    # `movem.l to (d8,An,Xi) traps`, which the pair above omits. `t_ea_masks`
+    # prints `4 of 367 cases failed`, one for each cell block (13) names.
+    # Nothing else in the suite moves.
+    #
+    # THE CFPRM SETTLES BOTH DIRECTIONS AND THEY ARE THE SAME SHAPE. Folio
+    # 4-50 carries the register-to-memory table for `<ea>x` and folio 4-51 the
+    # memory-to-register table for `<ea>y`; EACH prints a mode and register
+    # value for `(Ax)` (010) and `(d16,Ax)` (101) and A DASH for the other
+    # ten rows - `Dx`, `Ax`, `(Ax)+`, `-(Ax)`, `(d8,Ax,Xi)`, `(xxx).W`,
+    # `(xxx).L`, `#<data>`, `(d16,PC)` and `(d8,PC,Xi)`. Read as RENDERED
+    # IMAGES; the OCR markdown of this manual has three tables known wrong.
+    #
+    # `m68k-elf-as -mcpu=5307` answers the same twenty-four cells, and
+    # `m68k-elf-objdump -m m68k:5307` decodes `48f0`, `48f8`, `48f9`, `48fa`,
+    # `48fb` and their `4cxx` partners as `.short`.
+    #
+    # THE 68020 CROSS-CHECK DISCRIMINATES EIGHT OF THOSE TEN AND NOT ALL TEN.
+    # An earlier revision of this comment said all ten, and that was wrong.
+    # Measured 2026-08-11, each encoding disassembled on its own: under
+    # `-m m68k:68020` the eight `48f0`, `48f8`, `48f9`, `4cf0`, `4cf8`,
+    # `4cf9`, `4cfa` and `4cfb` decode as a real `moveml`, so for those the
+    # ColdFire `.short` is a statement about the PART. `48fa` and `48fb`
+    # decode as `.short` on the 68020 AS WELL: both STORE to a PC-relative
+    # destination, which no 68k permits, so those two encodings are not a
+    # MOVEM anywhere and the differential oracle has nothing to say about
+    # them. Their memory-to-register partners `4cfa` and `4cfb` READ from
+    # PC-relative, which the 68020 does allow - which is exactly why the load
+    # direction discriminates where the store direction cannot.
+    #
+    # THAT IS A CORRECTION AND NOT A RETRACTION. Eight encodings still
+    # discriminate, and folios 4-50 and 4-51 and the pinned assembler each
+    # cover all ten independently of any disassembler.
+    #
+    # THE `ea7` SET IS EMPTY AND THAT IS NOT WHAT REJECTS A MODE-7 OPERAND,
+    # for the reason `eaMulDivLong7` states in `ea.nim`: `isEaLegal` returns
+    # at `ea.mode notin leg.modes` before it reads `ea7`, and `eaMode7` is not
+    # in the mode set above. The absent `eaMode7` is the rejection; the empty
+    # set is unreachable through this mask and constrains nothing.
+    #
+    # `MOVEM -(An)` remains the CPU-13 negative case. `tests/t_move.nim`
+    # carries the execution-level trap for `(xxx).W`, `(xxx).L` and
+    # `(d8,An,Xi)`, and block (13) of `tests/t_ea_masks.nim` carries all
+    # twelve cells at the mask level.
+    EaLegality(modes: {eaAnInd, eaAnDisp}, ea7: {})
   of opSwap:
     # A DATA REGISTER AND NOTHING ELSE. Table 3-7, page 3-25, gives the
     # operand syntax as `Dn`, and Table 3-12, page 3-27, times `swap Dx`

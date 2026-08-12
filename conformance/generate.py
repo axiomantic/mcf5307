@@ -2548,9 +2548,13 @@ CASES = {
         # `(xxx).W` IS IN THE CLASS. Table 3-5 marks the absolute SHORT row
         # CONTROL, and page 3-26 states that the tables' `xxx.wl` column "refers
         # to both forms of absolute addressing, xxx.w and xxx.l". This is why
-        # JMP and JSR carry a mask of their own rather than reuse the
-        # `eaControl7` that LEA, PEA and MOVEM share - see `eaJumpTarget` in
-        # `src/mcf5307/decode_types.nim`.
+        # JMP and JSR carry a mask of their own rather than reuse
+        # `eaControl7NoAbsW` - see `eaJumpTarget` in
+        # `src/mcf5307/decode_types.nim`. That set was shared with LEA, PEA and
+        # MOVEM when this comment was written; LEA and PEA moved to
+        # `eaLeaPeaTarget`, and MOVEM moved to `{eaAnInd, eaAnDisp}` on
+        # 2026-08-11 because folios 4-50 and 4-51 dash every row but `(An)`
+        # and `(d16,An)`.
         {
             "name": "jmp_indirect",
             "mnemonic": "jmp",
