@@ -620,26 +620,108 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # did not find, because a check that quietly does not run is the fault this
 # whole block exists to end.
 #
-# `-DMCF5307_ABI_GATE=OFF` configures such a host, and prints a warning on
-# every configure run.
+# `-DMCF5307_ABI_GATE=OFF` configures such a host. IT DOES NOT TURN OFF ONE
+# CHECK. It skips all three parts of step 4a and all nine of step 4a's own
+# controls, and the warning it prints enumerates them by name rather than
+# naming the visibility gate alone.
+#
+# THE WARNING IS NOT THE ENFORCEMENT. `message(WARNING)` fails neither `cmake`,
+# nor `cmake --build`, nor `ctest`, and the switch is a `CACHE BOOL`, so a
+# build directory configured OFF once reads OFF back on every later configure
+# with nobody naming the switch again. The registered test `t0_abi_gate_on` is
+# what fails.
+#
+# AND WHAT THAT TEST READS IS THE RECORD THIS BRANCH WRITES, NOT ONLY THE
+# SWITCH. The switch is a declaration and the branch is the work, and the two
+# come apart: a tree can read `ON` out of its cache with this branch deleted,
+# and a parent list file that sets `MCF5307_ABI_GATE` as a NORMAL variable
+# shadows the cache entry from its second configure onward with no edit to this
+# repository at all. Both were measured. So the branch below leaves a token at
+# its END carrying what it measured and how many of its sites ran,
+# `tests/tests_cpu.cmake` consumes it on every configure, and the ABSENT RECORD
+# is the test's second way to red - the one that covers a tree whose switch
+# reads ON while the branch did not run.
 #
 # The gate costs roughly half of this project's configure time, of which the
 # controls that exist only to fire the gate's own fatal branches are about an
 # eighth. Turning it off buys that back in exchange for a build whose published
 # symbols nobody measured. To take a current figure, run `cmake` with
 # `--profiling-output=... --profiling-format=google-trace`.
+#
+# THE ENUMERATION OF WHAT OFF SKIPS IS WRITTEN ONCE, in the warning below. The
+# docstring here and the failure message of the registered test
+# `t0_abi_gate_on` point at it rather than restating it, because three copies
+# of one enumeration are three texts nothing holds in step, and the weaker copy
+# is the one a reader meets.
 set(MCF5307_ABI_GATE ON CACHE BOOL
-    "Measure the visibility of every published symbol at configure time")
+    "Run step 4a. cmake/Nim.cmake enumerates what OFF skips")
+
+# The record step 4a leaves when it runs. `tests/tests_cpu.cmake` MOVES this
+# file into the binary directory of the test that reads it, so the token is
+# consumed once per configure and a stale one cannot outlive the run that wrote
+# it. The removal here is unconditional and comes BEFORE the branch: a
+# configure that aborts after step 4a but before the test directory is read
+# leaves a token nothing consumed, and without this line the next configure
+# could hand that leftover to the consumer as though its own run had produced
+# it.
+set(MCF5307_ABI_GATE_TOKEN
+    "${CMAKE_CURRENT_BINARY_DIR}/mcf5307_abi_gate_ran.token")
+file(REMOVE "${MCF5307_ABI_GATE_TOKEN}")
 
 if(NOT MCF5307_ABI_GATE)
     message(WARNING
-        "mcf5307: step 4a IS TURNED OFF. MCF5307_ABI_GATE is OFF, so nothing "
-        "in this configure run measured the visibility of the published "
-        "symbols of ${MCF5307_ABI_CONTRACT_FILE}. A published "
-        "symbol that reaches the shared object hidden makes a plugin that "
-        "exports nothing, and this build would not report it. Turn the gate "
-        "back on with -DMCF5307_ABI_GATE=ON.")
+        "mcf5307: step 4a IS TURNED OFF. MCF5307_ABI_GATE is OFF, and this "
+        "switch does not turn off one check. IT SKIPS ALL THREE PARTS:\n"
+        "  PART ONE, THE VISIBILITY GATE. Nothing in this configure run "
+        "measured whether the symbols ${MCF5307_ABI_CONTRACT_FILE} publishes "
+        "leave the shared object with default visibility. A published symbol "
+        "that reaches the shared object hidden makes a plugin that exports "
+        "nothing, and this build would not report it.\n"
+        "  PART TWO, THE SMOKE-TEST LIST GATE. Nothing compared "
+        "tests/abi_smoke_symbols.inc against the published set. A published "
+        "symbol missing from that list is no longer a link error in "
+        "tests/abi_smoke.cpp, the one test whose stated job is the ABI "
+        "surface.\n"
+        "  PART THREE, THE LINK-PARTNER STUB GATE. Nothing compared the "
+        "external definitions of tests/abi_stub.c against the published set. "
+        "Cases 3 and 4 of t0_abi_header can only report a renamed declaration "
+        "for a name the stub defines, so a gap in the stub silently narrows "
+        "what those two cases can catch.\n"
+        "  IT ALSO SKIPS ALL NINE CONTROLS, A THROUGH I. Those are what prove "
+        "on every configure run that the three parts can still fail, so with "
+        "the gate off nothing reports a gate that has stopped working "
+        "either.\n"
+        "THIS MESSAGE IS NOT THE ENFORCEMENT. It fails neither cmake, nor the "
+        "build, nor ctest, and MCF5307_ABI_GATE is a CACHE entry: this build "
+        "directory reads OFF back on every later configure without the switch "
+        "being named again. The registered test `t0_abi_gate_on` is what "
+        "fails. In THIS state it fails on the switch, which it reads back out "
+        "of CMakeCache.txt; it has a SECOND way to fail, on the absent record, "
+        "which covers a tree whose branch was skipped with the switch still "
+        "reading ON. Turn the gate back on with -DMCF5307_ABI_GATE=ON.")
 else()
+
+# ---------------------------------------------------------------------------
+# The site counter.
+#
+# Each of step 4a's three parts and nine controls adds one to it where that
+# site FINISHES, and the record at the end of the branch carries the total. A
+# part or a control deleted from this file takes its increment with it, so the
+# record is short and `t0_abi_gate_on` reds. Without it the record's fields all
+# came from three readings and named no site, so nothing in it could tell three
+# parts from two. MEASURED 2026-08-12 against that form: part two deleted
+# alone, and control H deleted alone, each configured green and PASSED.
+#
+# WHAT IT PROVES IS THAT THE SITE EXECUTED, and not that the site measured
+# anything. What proves the second is the `FATAL_ERROR` every increment sits
+# below - each site is placed after its own assertion, so a site that reached
+# its increment is a site whose assertion held.
+#
+# CONTROL A RUNS ON BOTH READS, so the total is THIRTEEN executions of twelve
+# sites. The increments are written at the sites and never in one place at the
+# end: measured the same day, a counter hoisted to one `set()` before the
+# record passes every construction above, which is the defect wearing a number.
+set(MCF5307_ABI_GATE_SITES 0)
 
 # ---------------------------------------------------------------------------
 # The two tools.
@@ -865,6 +947,11 @@ function(mcf5307_abi_check_sentinels mcf5307_check_label mcf5307_check_seen
             "nothing would report neither anywhere. This pair separates those "
             "two failures from a correct read.")
     endif()
+    # Site: control A. It is inside the function, so it counts EXECUTIONS - one
+    # for the calibration read and one for the contract read - and a lost call
+    # site is as short as a lost control.
+    math(EXPR mcf5307_check_sites "${MCF5307_ABI_GATE_SITES} + 1")
+    set(MCF5307_ABI_GATE_SITES ${mcf5307_check_sites} PARENT_SCOPE)
 endfunction()
 
 # ---------------------------------------------------------------------------
@@ -1018,6 +1105,7 @@ endif()
 message(STATUS
     "mcf5307: step 4a control B the published-set reader answered the "
     "calibration header exactly (8 of 8 shapes, 5 negatives)")
+math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control B
 
 # ---------------------------------------------------------------------------
 # The published set. It comes from the contract header, through the same
@@ -1045,6 +1133,7 @@ if(MCF5307_ABI_PUBLISHED STREQUAL "")
         "published set makes every verdict below it vacuous, and silence is "
         "not a pass.")
 endif()
+math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control C
 
 # ---------------------------------------------------------------------------
 # The measurement shared object.
@@ -1200,6 +1289,7 @@ message(STATUS
     "mcf5307: step 4a control D the symbol reader separated visible, hidden "
     "and absent on ${MCF5307_ABI_OBJECT} (symbol prefix: "
     "`${MCF5307_ABI_PREFIX}`)")
+math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control D
 
 # ---------------------------------------------------------------------------
 # The Nim runtime scaffolding.
@@ -1329,6 +1419,7 @@ if(NOT MCF5307_ABI_REACHABLE STREQUAL "")
         "call it, the contract header does not declare it, and no mechanism "
         "here enforces that. This line is a report and not a check.")
 endif()
+math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part one
 
 # ---------------------------------------------------------------------------
 # Step 4a, part two. The smoke-test list gate.
@@ -1542,6 +1633,7 @@ message(STATUS
     "${MCF5307_ABI_SMOKE_COUNT} symbol(s) the library defines and exports, so "
     "`tests/abi_smoke.cpp` takes the address of every one of them and no ABI "
     "addition or loss can pass unnamed")
+math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part two
 
 # ---------------------------------------------------------------------------
 # Step 4a, part three. The link-partner stub gate.
@@ -1786,6 +1878,7 @@ endif()
 message(STATUS
     "mcf5307: step 4a control I the compile-fault split told an instrument "
     "collision from a fault of the stub's own")
+math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control I
 
 # The object of an earlier configure run is removed before the compile, for
 # the reason every driver in `tests/tests_cpu.cmake` records: without it a
@@ -1966,6 +2059,7 @@ message(STATUS
     "mcf5307: step 4a control E the symbol reader separated external, "
     "internal and absent on ${MCF5307_ABI_STUB_OBJECT} (symbol prefix: "
     "`${MCF5307_ABI_STUB_PREFIX}`, the shared object's)")
+math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control E
 
 # The verdict. Three categories over the published set, and each published
 # name lands in exactly one.
@@ -2064,6 +2158,7 @@ message(STATUS
     "mcf5307: step 4a control F the stub verdict placed one probe in each of "
     "its three categories (linkable, internal, absent) on "
     "${MCF5307_ABI_STUB_OBJECT}")
+math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control F
 
 # ---------------------------------------------------------------------------
 # Control G. The other direction, entered on every configure run.
@@ -2113,6 +2208,7 @@ endif()
 message(STATUS
     "mcf5307: step 4a control G the unpublished-export check answered with "
     "its probe on ${MCF5307_ABI_STUB_OBJECT}")
+math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control G
 
 # ---------------------------------------------------------------------------
 # Control H. The internal branch's two routes, compiled on every configure run.
@@ -2421,6 +2517,7 @@ message(STATUS
     "category: `${MCF5307_ABI_STUB_ROUTE_NAME}` reaches INTERNAL by two "
     "routes (`static`-with-anchor, `__asm__`-label-with-`used`), and does not "
     "reach it by two others (hidden is LINKABLE, late-`static` is REJECTED)")
+math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control H
 
 # ---------------------------------------------------------------------------
 # The verdict itself, over the published set.
@@ -2544,6 +2641,47 @@ message(STATUS
     "${MCF5307_ABI_NM} answers ${MCF5307_ABI_STUB_EXTERNAL_COUNT} on "
     "${MCF5307_ABI_STUB_OBJECT}: those, and this step's own "
     "${MCF5307_ABI_STUB_EXTERNAL_INSTRUMENT}")
+math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part three
+
+# ---------------------------------------------------------------------------
+# The record.
+#
+# IT IS THE LAST LINE OF THE BRANCH. Every fault above this point is a
+# `FATAL_ERROR` that ends the configure run, so a token on disk proves NO FAULT
+# FIRED - and that is the whole of what the placement proves. It says nothing
+# about which sites EXIST, and a file with two parts or eight controls reaches
+# this line just as quietly. `SITES` is the field that carries that.
+#
+# IT CARRIES WHAT THIS STEP MEASURED AND NOT A BARE TOUCH. The four counts come
+# from three separate readings - the published set read out of the contract
+# header, `nm` on the measurement shared object, `nm` on the link-partner stub
+# object - and the test holds them against each other: VISIBLE plus
+# UNIMPLEMENTED is the whole published set, and the stub defines externally
+# exactly that set. A branch that ran but measured an empty set writes zeroes,
+# and zeroes fail both.
+#
+# WHAT READS IT is the registered test `t0_abi_gate_on`, via the consume step
+# in `tests/tests_cpu.cmake`. The `file(REMOVE)` before the branch and that
+# move are the two halves of one mechanism; neither is useful alone.
+#
+# THE TEXT IS ALSO LEFT IN A VARIABLE, AND THAT IS NOT A CONVENIENCE. The
+# consume step holds the token it finds against this variable before moving it,
+# which rejects a token this run's branch did not write - measured, a leftover
+# planted by hand was moved and PASSED before the comparison existed. What it
+# does NOT reject is `-D`, and the consume step records that measurement rather
+# than this one. The comparison is on the WHOLE record and the record is
+# written down once, here, so the two sites cannot drift into agreeing on a
+# shorter one.
+set(MCF5307_ABI_GATE_RECORD
+"MCF5307_ABI_GATE_RAN
+CONTRACT=${MCF5307_ABI_CONTRACT_FILE}
+PUBLISHED=${MCF5307_ABI_PUBLISHED_COUNT}
+VISIBLE=${MCF5307_ABI_VISIBLE_COUNT}
+UNIMPLEMENTED=${MCF5307_ABI_UNIMPLEMENTED_COUNT}
+STUB_EXTERNAL_OWN=${MCF5307_ABI_STUB_EXTERNAL_OWN_COUNT}
+SITES=${MCF5307_ABI_GATE_SITES}
+")
+file(WRITE "${MCF5307_ABI_GATE_TOKEN}" "${MCF5307_ABI_GATE_RECORD}")
 
 endif()
 
