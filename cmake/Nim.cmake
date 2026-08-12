@@ -1309,6 +1309,29 @@ endforeach()
 set(MCF5307_ABI_INSTRUMENT
     mcf5307_abi_probe_visible mcf5307_abi_probe_hidden)
 
+# The section boundaries a linker script defines, not this project.
+#
+# PRE-EMPTIVE. Today it exempts nothing, measured: no name in it is in the
+# export set. GNU ld's `-shared` script `PROVIDE`s these, and `PROVIDE` is
+# CONDITIONAL - ld defines the name only when an input object holds an
+# undefined reference to it. Nothing in the measurement link references one.
+# The day one does - a heap walker reading `_end`, a sanitizer or coverage
+# runtime, a future Nim allocator - the undeclared check would stop the
+# configure step and blame the contract for a name it can never carry.
+#
+# WHAT IT COSTS. An exemption removes a fault, and this one is silent on every
+# host where the names do not appear - which is every host today. It exempts
+# by name and not by origin, so a name this project exported itself as `end`,
+# `edata` or `etext` would pass here unreported. Every other exported name of
+# this project is `mcf5307_`-prefixed, and that is the whole of the margin.
+#
+# The comparison is against the PREFIX-STRIPPED set, so a Mach-O `_edata`
+# would arrive as `edata`. Mach-O supplies none of these, so that path is
+# reasoned, not measured.
+set(MCF5307_ABI_LINKER_PROVIDED
+    __bss_end__ __bss_start __bss_start__ __data_start __end__ __etext
+    _bss_end__ _edata _end _etext edata end etext)
+
 # ---------------------------------------------------------------------------
 # The verdict. Three categories, and each name lands in exactly one.
 #
@@ -1367,7 +1390,8 @@ set(MCF5307_ABI_UNDECLARED "")
 foreach(name IN LISTS MCF5307_ABI_EXPORTED)
     if(name IN_LIST MCF5307_ABI_PUBLISHED
             OR name IN_LIST MCF5307_ABI_SCAFFOLDING
-            OR name IN_LIST MCF5307_ABI_INSTRUMENT)
+            OR name IN_LIST MCF5307_ABI_INSTRUMENT
+            OR name IN_LIST MCF5307_ABI_LINKER_PROVIDED)
         continue()
     endif()
     list(APPEND MCF5307_ABI_UNDECLARED "${name}")
