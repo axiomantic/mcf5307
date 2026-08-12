@@ -28,8 +28,26 @@ permissions:
   contents: read
 
 env:
-  # The T0 name prefix this repository registers.
-  T0_PATTERN: '^t0_'
+  # THE T0 NAME PREFIXES THIS REPOSITORY REGISTERS. THERE ARE TWO OF THEM.
+  #
+  # `t0_` is NOT the tier marker. A tier is a property of a check AT RUN TIME
+  # -- T0 is the set of checks that run with no firmware byte -- and it is not
+  # a property of the name. The Nim-side suites this repository registers carry
+  # a bare `t_` prefix with no tier digit, and every one of them is produced by
+  # a task the plan heads `-- T0`: `t_ea_masks`, `t_sign_extend`, `t_alu`,
+  # `t_move`, `t_logic`, `t_control`, `t_exception`, `t_checks_on`.
+  #
+  # A `^t0_` pattern selected THREE of the eleven registered T0 names and
+  # reported success, because `ctest -R` that matches something cannot tell you
+  # about what it did not match. `--no-tests=error` did not help: the pattern
+  # matched three tests, so the run was not empty and the flag stayed silent.
+  # That is the shape this file's own note warns about -- a check whose regular
+  # expression matches nothing is not a weak check, it is a check that cannot
+  # fail -- except here it matched too little rather than nothing at all.
+  #
+  # NO `t1_` OR `t2_oracle` ALTERNATIVE MAY EVER BE ADDED HERE. Both are
+  # firmware-gated, and the matrix at the top of this file is T0 only.
+  T0_PATTERN: '^t0_|^t_'
 
 jobs:
   build-and-t0:
@@ -141,16 +159,92 @@ jobs:
       # `--no-tests=error` governs a test RUN. In `-N` listing mode it is inert:
       # the listing exits 0 whether or not any test matched. So this step reads
       # what the listing PRINTS.
-      - name: Assert that the build registers at least one test
+      #
+      # IT COMPARES SETS OF NAMES AND IT WRITES DOWN NO COUNT. Its predecessor
+      # asserted only that the listing did not say `Total Tests: 0`, which is
+      # blind in both of the directions that matter. A suite that stops reaching
+      # the build tree still leaves a non-zero total, so the check cannot see a
+      # suite vanish. And whether a listed suite is one any job RUNS is not a
+      # property of the listing at all, so the check could not see that eight of
+      # the eleven T0 names were selected by no pattern.
+      #
+      # A HAND-WRITTEN COUNT IS NOT THE REPAIR EITHER. A count of names in this
+      # repository went stale inside a day and had to be re-measured. So both
+      # comparisons below DERIVE BOTH OF THEIR SIDES, and the only roster that
+      # is typed out is the exclusion roster, whose whole purpose is to be typed.
+      - name: Assert that every registered test reaches the build tree and a job
         shell: bash
         run: |
           set -uo pipefail
-          listing=$(ctest --test-dir build --no-tests=error -N)
-          printf '%s\n' "${listing}"
-          if printf '%s\n' "${listing}" | grep -q 'Total Tests: 0'; then
-            echo "FAILURE: the build tree of ${GITHUB_REPOSITORY} registers no test at all."
-            exit 1
+
+          names() { sed -nE 's/^  Test +#[0-9]+: (.*)$/\1/p' | sort -u; }
+
+          # Derived from the tracked CMake source. `git grep` is what keeps the
+          # build tree and any untracked file out of the sweep.
+          registered=$(git grep -hoE 'add_test\(NAME[[:space:]]+[A-Za-z0-9_]+' \
+              -- '*.cmake' '*CMakeLists.txt' \
+              | sed -E 's/.*add_test\(NAME[[:space:]]+//' | sort -u)
+          # Derived from the configured build tree.
+          listed=$(ctest --test-dir build -N | names)
+          selected=$(ctest --test-dir build -N -R "${T0_PATTERN}" | names)
+
+          printf 'registered in tracked source:\n%s\n\n' "${registered}"
+          printf 'listed by the build tree:\n%s\n\n' "${listed}"
+          printf 'selected by T0_PATTERN %s:\n%s\n\n' "${T0_PATTERN}" "${selected}"
+
+          status=0
+
+          # 1. Every name the source registers reaches the build tree, and the
+          #    build tree lists nothing the source does not register. This is
+          #    the check that sees a suite vanish.
+          if [ "${registered}" != "${listed}" ]; then
+            echo "FAILURE: the registration source and the build tree disagree."
+            echo "registered in source but MISSING from the build tree:"
+            comm -23 <(printf '%s\n' "${registered}") <(printf '%s\n' "${listed}")
+            echo "listed by the build tree but registered nowhere in source:"
+            comm -13 <(printf '%s\n' "${registered}") <(printf '%s\n' "${listed}")
+            status=1
           fi
+
+          # 2. Every listed name is either selected by the T0 pattern or sits on
+          #    the roster below. THE ROSTER IS THE ONE THING HERE THAT IS WRITTEN
+          #    DOWN RATHER THAN DERIVED, and that is the point of it: a test that
+          #    neither matches the pattern nor appears here fails this step, so
+          #    "this does not run in CI" has to be a sentence somebody typed. The
+          #    three-of-eleven silence this step replaces is precisely what an
+          #    unwritten exclusion looks like from the outside.
+          #
+          #    `abi_smoke` does not LINK at this commit -- it takes the address
+          #    of thirteen C ABI symbols that are not implemented yet, so the
+          #    build step above fails before this one is reached. Its roster
+          #    entry is not what keeps it out of the run; it is here so that the
+          #    day it links, the entry has to be deleted deliberately.
+          #
+          #    `mcf5307_conformance_*` are the corpus runner's five groups. They
+          #    need no firmware and no cross assembler at RUN time -- the
+          #    assembler regenerates the corpus, and these read the committed
+          #    one -- so nothing about them is inherently T1. They are held out
+          #    pending a decision about their place in this matrix, and this
+          #    roster is where that open question is recorded.
+          excluded=$(printf '%s\n' \
+              abi_smoke \
+              mcf5307_conformance_all \
+              mcf5307_conformance_alu \
+              mcf5307_conformance_control \
+              mcf5307_conformance_logic \
+              mcf5307_conformance_move | sort -u)
+          unselected=$(comm -23 \
+              <(printf '%s\n' "${listed}") <(printf '%s\n' "${selected}"))
+          if [ "${unselected}" != "${excluded}" ]; then
+            echo "FAILURE: the set of tests that no job runs is not the roster."
+            echo "runs in no job and is NOT on the roster:"
+            comm -13 <(printf '%s\n' "${excluded}") <(printf '%s\n' "${unselected}")
+            echo "on the roster but DOES run -- delete the roster entry:"
+            comm -23 <(printf '%s\n' "${excluded}") <(printf '%s\n' "${unselected}")
+            status=1
+          fi
+
+          exit "${status}"
 
       - name: Run the T0 suite
         shell: bash
