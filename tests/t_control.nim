@@ -90,18 +90,34 @@ import mcf5307/ea
 import mcf5307/machine
 
 var failures: seq[string]
+import ./case_sites
+
 var passCount = 0
 
-proc check(ok: bool; label: string; got: string; want: string) =
+proc checkImpl(site: int; ok: bool; label: string; got: string; want: string) =
   if ok:
     echo "PASSED  ", label
     inc passCount
+    executedSites.add(site)
   else:
     echo "FAILED  ", label
     echo "          got  ", got
     echo "          want ", want
     failures.add(label)
+    executedSites.add(site)
 
+
+template check(ok: bool; label: string; got: string; want: string) =
+  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
+  ## `declaredSites` by the `static` below, and once at RUN TIME into
+  ## `executedSites`, by the implementation and only when it reaches a
+  ## verdict. `tests/case_sites.nim` states what the pair is for and
+  ## `tests/case_sites.cmake` states the five rules the driver applies.
+  ## The template exists for `instantiationInfo`: a proc cannot see where
+  ## it was called from.
+  const site = instantiationInfo(-1).line
+  static: declaredSites.add(site)
+  checkImpl(site, ok, label, got, want)
 # ---------------------------------------------------------------------------
 # The board. One flat byte array, big-endian, exactly as `t_logic`'s and the
 # conformance runner's. A read outside it reports `busUnmapped`.
@@ -238,9 +254,21 @@ proc expectDecode(word: uint16; want: Operation; label: string) =
   let got = decodeWord(word).op
   check(got == want, label, $got, $want)
 
-proc checkMask(got: bool; want: bool; label: string) =
-  check(got == want, label, $got, $want)
+proc checkMaskImpl(site: int; got: bool; want: bool; label: string) =
+  checkImpl(site, got == want, label, $got, $want)
 
+
+template checkMask(got: bool; want: bool; label: string) =
+  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
+  ## `declaredSites` by the `static` below, and once at RUN TIME into
+  ## `executedSites`, by the implementation and only when it reaches a
+  ## verdict. `tests/case_sites.nim` states what the pair is for and
+  ## `tests/case_sites.cmake` states the five rules the driver applies.
+  ## The template exists for `instantiationInfo`: a proc cannot see where
+  ## it was called from.
+  const site = instantiationInfo(-1).line
+  static: declaredSites.add(site)
+  checkMaskImpl(site, got, want, label)
 # The dirty condition codes an instruction of this group must carry through
 # untouched. NOP, BRA, BSR, Bcc, JMP, JSR and Scc write no flag at all -
 # MCF5307 User's Manual Table 3-7, "Instruction Set Summary", pages 3-23 and
@@ -896,6 +924,18 @@ block:
 # ---------------------------------------------------------------------------
 
 echo ""
+# THE THREE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
+# program reports what its text declares and what its run adjudicated,
+# and the registered test's driver is what compares them - and what
+# compares the declared count against the call sites in this file.
+# A verdict printed here would be a self-assessment, and a run that
+# stopped early would simply not print one.
+const declaredCaseSites = declaredSites
+const declaredOffGreenPathSites = offGreenPathSites
+echo caseSiteLine("declared", "t_control", declaredCaseSites)
+echo caseSiteLine("executed", "t_control", executedSites)
+echo caseSiteLine("off-green-path", "t_control", declaredOffGreenPathSites)
+
 if failures.len == 0:
   echo "t_control: ", passCount, " cases passed"
   quit(0)
