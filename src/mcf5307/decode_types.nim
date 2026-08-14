@@ -63,6 +63,12 @@ type
     opBsr
     opJmp, opJsr, opRts, opRte, opTrap
     opCmp, opCmpa, opCmpi
+    # CPU-11 appends here, under the same rule CPU-8, CPU-9 and CPU-10
+    # followed: immediately before `opIllegal` and nowhere else. `MOVEC` is a
+    # group of ONE - it shares no encoding shape, no size field and no
+    # effective address with any member above, and `src/mcf5307/movec.nim` is
+    # its executor.
+    opMovec
     opIllegal
 
   Decoded* = ref object

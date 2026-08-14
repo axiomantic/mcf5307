@@ -47,6 +47,7 @@ import mcf5307/move
 import mcf5307/alu
 import mcf5307/logic
 import mcf5307/control
+import mcf5307/movec
 import mcf5307/irq
 
 # ---------------------------------------------------------------------------
@@ -232,6 +233,17 @@ proc step(ctx: MCF5307Ctx): uint32 =
     # and not on this part - or an exception frame whose format field is not
     # one of the four the part writes.
     result = fetchCycles + controlFamily(ctx, opWord, decoded)
+  of opMovec:
+    # `MOVEC` (CPU-11). `movecFamily` fetches the extension word, takes the
+    # privilege violation in user state, and halts the context WITHOUT `fault`
+    # on a control-register number this part does not carry.
+    #
+    # THIS ARM IS THE IMPORT EDGE AS WELL AS THE DISPATCH. `src/mcf5307.nim`
+    # imports this module and this module imports `movec`, so the executor
+    # reaches the archive through chain A and the entry module needs no edge
+    # of its own - which is what `mcf5307/control.nim` already demonstrates
+    # from the same position.
+    result = fetchCycles + movecFamily(ctx, opWord, decoded)
   of opExg, opTas, opNbcd:
     # The `Operation` enum names every opcode the later instruction-group
     # tasks decode. Their execution semantics arrive with those tasks. Until

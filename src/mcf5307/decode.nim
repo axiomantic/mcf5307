@@ -526,6 +526,23 @@ proc decodeWord*(word: uint16): Decoded =
     return Decoded(op: opRts)
   elif word == 0x4E73'u16:
     return Decoded(op: opRte)
+  elif word == 0x4E7B'u16:
+    # MOVEC.L Ry,Rc. CFPRM Rev. 3, folio 8-13, prints the sixteen bits of the
+    # opcode word as `0100 1110 0111 1011` and the register numbers in a
+    # SECOND word, which `movec.nim` reads and this module does not fetch.
+    #
+    # THE TEST IS AN EQUALITY AND NOT A MASK, WHICH IS WHY IT CAN SIT HERE
+    # BESIDE `RTS` AND `RTE` RATHER THAN AHEAD OF THE JMP AND JSR ARMS ABOVE.
+    # Line 4 is dense: `0x4E7A` is MOVEC-FROM-control-register, which is a
+    # 68000 instruction that this part does not have, and a mask over
+    # `0x4E78`-`0x4E7F` would claim it. `tests/t_control.nim` asserts that
+    # `0x4E7A` stays illegal.
+    #
+    # `size: 4` IS THE INSTRUCTION'S OWN AND NOT AN OPERAND'S. CFPRM folio
+    # 8-13 gives the attributes as `Size = longword`, and the description adds
+    # that the transfer "is always 32 bits even though the control register
+    # may be implemented with fewer bits".
+    return Decoded(op: opMovec, size: 4'u8)
   elif (word and 0xFFF0'u16) == 0x4E40'u16:
     # TRAP #<vector>, the vector in the low four bits. `m68k-elf-as -mcpu=5307`
     # emits `4e40` for `trap #0` and `4e4f` for `trap #15`, and it SILENTLY
