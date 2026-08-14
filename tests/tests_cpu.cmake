@@ -1574,7 +1574,7 @@ mcf5307_check_case_sites("t_bus_fault" "@MCF5307_BUS_FAULT_SOURCE@" "${bus_fault
 # states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
 # what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
 # CASE COUNT.
-mcf5307_check_case_total("t_bus_fault" "${bus_fault_run_out}" 21)
+mcf5307_check_case_total("t_bus_fault" "${bus_fault_run_out}" 24)
 
 ]==])
 

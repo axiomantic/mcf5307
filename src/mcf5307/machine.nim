@@ -34,6 +34,7 @@
 ## behaviour are taken from the ColdFire Family Programmer's Reference Manual
 ## and the MCF5307 User's Manual, and from this project's own measurements.
 
+import mcf5307/bus
 import mcf5307/decode_types
 import mcf5307/ea
 import mcf5307/exception
@@ -157,27 +158,94 @@ proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
 # this module and the executor modules, and each of those runs only from
 # `step`, whose first statement faults on a nil `readFn`.
 
-proc readMem*(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
+# THE `FS` ARGUMENT IS DEFAULTED, AND THE DEFAULT IS THE MANUAL'S ANSWER RATHER
+# THAN THIS MODULE'S CONVENIENCE. User's Manual section 3.4, folio 3-14, of the
+# fault status field: "This field is defined for access and address errors only
+# and written as zeros for all other types of exceptions." The two callers
+# outside this module - `control.nim`'s `TRAP` and `irq.nim`'s interrupt - are
+# both "other types", so `0000` is what the manual writes for each of them, and
+# a required parameter would make each of them state a value the manual already
+# fixes. `frameFirstLongword` keeps its own `fs` parameter undefaulted, so the
+# layout is still closed by the compiler one layer down.
+proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
+                    fs: uint32 = fsNotAnAccessError)
+
+proc boardRead(ctx: MCF5307Ctx; address: uint32; size: uint8;
+               st: var Mcf5307BusStatus): uint32 =
+  ## One board read, reporting what the board reported and deciding nothing.
+  ## The two callers below are the decision and they differ.
+  st = Mcf5307BusStatus.busOk
   if ctx.readFn.isNil:
     ctx.fault = true
     ctx.halted = true
     return 0'u32
-  var st = Mcf5307BusStatus.busOk
-  result = ctx.readFn(ctx.user, address, cint(size), addr st)
-  if st != Mcf5307BusStatus.busOk:
-    ctx.fault = true
-    ctx.halted = true
+  ctx.readFn(ctx.user, address, cint(size), addr st)
 
-proc writeMem*(ctx: MCF5307Ctx; address: uint32; size: uint8; value: uint32) =
+proc boardWrite(ctx: MCF5307Ctx; address: uint32; size: uint8; value: uint32;
+                st: var Mcf5307BusStatus) =
+  st = Mcf5307BusStatus.busOk
   if ctx.writeFn.isNil:
     ctx.fault = true
     ctx.halted = true
     return
-  var st = Mcf5307BusStatus.busOk
   ctx.writeFn(ctx.user, address, cint(size), value and sizeMask(size), addr st)
+
+# THE TWO LAYERS DIFFER IN WHAT A NON-OK STATUS MEANS AND IN NOTHING ELSE. On
+# an executor's path it is an ACCESS FAULT and takes a vector; inside an
+# exception ENTRY the same status is a DOUBLE FAULT and halts. Design section
+# 5.2.1 rule 5 requires the second and requires that it not recurse.
+#
+# THE BOUND ON THE RECURSION IS THE CALL GRAPH AND NOT A FLAG ON THE CONTEXT.
+# `takeException` reaches the board only through `stackingRead` and
+# `stackingWrite`, neither of which can re-enter it, so there is no state to
+# set, to clear, or to leave set on a path that returned early.
+
+proc stackingRead(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
+  var st = Mcf5307BusStatus.busOk
+  result = boardRead(ctx, address, size, st)
   if st != Mcf5307BusStatus.busOk:
     ctx.fault = true
     ctx.halted = true
+
+proc stackingWrite(ctx: MCF5307Ctx; address: uint32; size: uint8;
+                   value: uint32) =
+  var st = Mcf5307BusStatus.busOk
+  boardWrite(ctx, address, size, value, st)
+  if st != Mcf5307BusStatus.busOk:
+    ctx.fault = true
+    ctx.halted = true
+
+# THE READ PATH HALTS AND DOES NOT TAKE A VECTOR, AND AN UNWIND BLOCKS IT
+# RATHER THAN A PREFERENCE. Design section 5.2.1 rule 4 requires that a fault be
+# taken "before it commits any register or memory side effect of the faulting
+# instruction", and `ctx.halted` is the ONLY signal that unwinds a
+# part-completed instruction: every executor checks it after each step. An
+# access fault must NOT halt - the handler has to run - so a read that took a
+# vector here would return to an executor that carried on with a zero operand
+# and committed it. MEASURED: `move.l 0x1000,%d1` against a board that reports
+# `busUnmapped` left `d1` zeroed over its previous value.
+#
+# TAKING IT AT THE INSTRUCTION BOUNDARY IS THE FIX AND IT IS NOT WRITABLE FROM
+# THIS MODULE: it needs either a pending-fault field on `MCF5307Ctx`, which
+# `decode_types.nim` holds, or a check after the executor returns, which
+# `cpu.nim`'s `step` holds. `tests/t_bus_fault.nim` pins the present behaviour
+# so that wiring the read path is a deliberate change and not a silent one.
+#
+# THE WRITE PATH NEEDS NO UNWIND, WHICH IS WHY IT IS WIRED AND THE READ IS NOT.
+# Rule 4's one named exception is the operand write, and User's Manual section
+# 3.5.1, folio 3-14, is why: "All programming model updates associated with the
+# write instruction are completed." An executor that carries on after a write
+# fault is doing what the manual requires. That the only access error this part
+# raises is a store to write-protected space puts the real case on this side too.
+
+proc readMem*(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
+  stackingRead(ctx, address, size)
+
+proc writeMem*(ctx: MCF5307Ctx; address: uint32; size: uint8; value: uint32) =
+  var st = Mcf5307BusStatus.busOk
+  boardWrite(ctx, address, size, value, st)
+  if st != Mcf5307BusStatus.busOk:
+    takeException(ctx, vecAccessError, ctx.pc, faultStatusFor(st, operandWrite))
 
 proc fetchExt*(ctx: MCF5307Ctx): uint16 =
   ## Read one extension word from the instruction stream and advance the pc
@@ -478,7 +546,8 @@ proc exceptionFormat*(sp: uint32): uint32 =
   ## frame base removed, so that `RTE` can put it back.
   4'u32 + (sp and 3'u32)
 
-proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32) =
+proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
+                    fs: uint32) =
   ## Stack a two-longword exception frame, then load the program counter from
   ## the vector table.
   ##
@@ -518,15 +587,15 @@ proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32) =
   ctx.sr = (ctx.sr or srSupervisor) and not srTrace
   let format = exceptionFormat(ctx.sp)
   let base = exceptionFrameBase(ctx.sp)
-  writeMem(ctx, base, 4,
-           frameFirstLongword(format, fsNotAnAccessError, vector, stackedSr))
+  stackingWrite(ctx, base, 4,
+                frameFirstLongword(format, fs, vector, stackedSr))
   if ctx.halted:
     return
-  writeMem(ctx, base + 4'u32, 4, stackedPc)
+  stackingWrite(ctx, base + 4'u32, 4, stackedPc)
   if ctx.halted:
     return
   ctx.sp = base
-  let handler = readMem(ctx, vectorAddress(0'u32, vector), 4)
+  let handler = stackingRead(ctx, vectorAddress(0'u32, vector), 4)
   if ctx.halted:
     return
   ctx.pc = handler
