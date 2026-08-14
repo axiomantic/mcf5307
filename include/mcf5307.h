@@ -82,6 +82,53 @@ typedef void (*mcf5307_write_fn)(void* user, uint32_t addr, int size,
  * latch when it takes the interrupt. */
 typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
 
+/* WHAT A BOARD MAY CALL BACK INTO WHILE THE CORE IS INSIDE ITS CALLBACKS, AND
+ * WHAT `mcf5307_reset` DOES TO INTERRUPT STATE.
+ *
+ * THE ACKNOWLEDGE CALLBACK MAY CALL `mcf5307_get_reg` AND `mcf5307_set_irq`,
+ * which is what a chained controller needs. The frame is already stacked when
+ * it runs, so the registers it reads are the machine as the handler will find
+ * it: a7 already below the 8-byte frame, the program counter at the handler's
+ * first instruction, and the status register already carrying the interrupt
+ * priority mask raised to the level being acknowledged.
+ *
+ * THE LEVEL-7 ARM IS DECIDED AGAINST THE PRESENTATION THE CALL HAS NOT YET
+ * OVERWRITTEN. `mcf5307_set_irq` arms an edge only on a transition to level 7
+ * from a lower presented level, and the level it compares against is the one
+ * in effect at entry to that call - the board's own last presentation, which
+ * TAKING an interrupt does not disturb. A board that presents level 7 while
+ * level 7 is already the presented level therefore arms nothing, from a
+ * callback or from anywhere else; to raise a fresh edge it must present a
+ * lower level, or `MCF5307_IRQ_NONE`, and then level 7.
+ *
+ * THE WRITE CALLBACK MAY CALL `mcf5307_set_irq` AS WELL, and the core reaches
+ * that callback while it is stacking the exception frame. An edge armed there
+ * arrives BEFORE THE FRAME IS COMPLETE and SURVIVES THE TAKE IN PROGRESS: the
+ * core clears the level-7 latch of the interrupt it is taking before it begins
+ * stacking, so a later edge is not swept away by that take. It is taken at the
+ * next instruction boundary, which is after the first handler instruction has
+ * executed, and it carries the vector and the autovector flag of the
+ * presentation that armed it.
+ *
+ * `mcf5307_reset` INHIBITS INTERRUPT SAMPLING FOR THE FIRST INSTRUCTION AT
+ * `initial_pc`. Reset is an exception, and sampling is inhibited during the
+ * first instruction of every exception handler - this one is a CITATION:
+ * User's Manual Table 3-1, closing paragraph, folio 3-13, with the reset
+ * exception's own entry at section 3.5.11, folio 3-17. A board that presents
+ * an interrupt immediately after `mcf5307_reset` does not get it taken at the
+ * reset program counter; it is taken at the boundary after that instruction.
+ *
+ * `mcf5307_reset` ALSO CLEARS THE LATCHED LEVEL-7 EDGE AND THEN RE-OBSERVES
+ * THE BOARD'S LAST PRESENTATION - and this one is an INFERENCE and not a
+ * citation, because the manual set is silent on reset against a latched edge.
+ * The argument for it is that a level 7 request must be held until the second
+ * interrupt-acknowledge bus cycle has begun (section 7.6.1, folio 7-24), so an
+ * edge whose pin has since been released has nothing left to acknowledge. The
+ * presentation itself survives the call: it is the board's state and reset has
+ * no newer answer for it. A level 7 STILL PRESENTED across `mcf5307_reset` is
+ * armed again, carrying the vector and the autovector flag of that
+ * presentation; one the board had already lowered is not. */
+
 /* Runs the Nim runtime's initialiser once. It is idempotent, and it is what
  * a C++ caller calls instead of ever naming `NimMain`. */
 void mcf5307_runtime_init(void);
