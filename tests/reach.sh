@@ -55,7 +55,7 @@
 #   reach.sh run NAME FILE OLD NEW     apply one mutation and measure it
 #                                      (NEW="" makes it the null control)
 #   reach.sh null                      the null control on its own
-#   reach.sh selftest                  ref + all three controls, with verdicts
+#   reach.sh selftest                  ref + the controls, with verdicts
 #
 #   FILE is repository-relative, e.g. `src/mcf5307/control.nim`. OLD must occur
 #   exactly once in it or the run aborts rather than mutate the wrong line.

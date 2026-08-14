@@ -5,10 +5,7 @@
 ## file may record that some change to the core "changes no reachable state",
 ## that "no case here separates it", or that a mutant is equivalent. A FALSE
 ## claim of that shape READS EXACTLY LIKE A TRUE ONE: both are a sentence, and
-## no run disagrees with either. `tests/t_irq.nim` carried such a sentence
-## about moving the level-7 latch clear to just after `takeException`, and a
-## review refuted it BY CONSTRUCTION - by writing the board the sentence had
-## not considered.
+## no run disagrees with either.
 ##
 ## SO THE CLAIM NAMES A MUTATION AND THIS PROGRAM IS THE WITNESS. The registry
 ## in `tests/t_claims.cmake` defines each mutation as text; the driver applies
@@ -22,10 +19,9 @@
 ## interface and prints what it observed. The comparison is between two RUNS of
 ## it, so an expectation written here would be a third thing to keep true.
 ##
-## THE SCENARIO SPACE IS THE PRODUCT OF FIVE AXES, AND THE LAST TWO ARE THE
-## ONES THAT ARE NOT OBVIOUS: every entry mask, every pre-take presentation
-## sequence, every cycle budget, every RE-ENTRY SCRIPT, and every PRESENTATION
-## PROFILE - the vector and the autovector flag each call carries.
+## THE SCENARIO SPACE IS A PRODUCT OF AXES: every entry mask, every pre-take
+## presentation sequence, every cycle budget, every RE-ENTRY SCRIPT, and every
+## PRESENTATION PROFILE - the vector and the autovector flag each call carries.
 ##
 ## The re-entry script is the axis a hand-written case does not think
 ## of: `takeException` stacks the frame THROUGH THE BOARD'S WRITE CALLBACK, so
@@ -34,51 +30,12 @@
 ## the interrupt state in the middle of an exception, and it is exactly where
 ## the order of two statements inside `takeInterrupt` becomes visible.
 ##
-## THE FOURTH AXIS IS THE PRESENTATION PROFILE, AND IT EXISTS BECAUSE ITS
-## ABSENCE MANUFACTURED A FALSE UPHELD. Until 2026-08-13 every
-## `mcf5307_set_irq` call in this file - in the pre-take sequence and in the
-## re-entry script alike - passed `userVector` and an `autovector` argument of
-## 1, so all 225 scenarios presented an AUTOVECTORED interrupt carrying ONE
-## vector value. `irq.nim`'s `vectorFor` returns the autovector WITHOUT READING
-## the stored vector whenever the flag is set, so `ctx.irq7Vector` and
-## `ctx.irqVector` were written by every scenario and read by none.
-##
-## WHAT THAT COST, MEASURED 2026-08-13 AND NOT ARGUED. The level-7 edge's vector
-## store moved OUT of its guard - a real semantic break, after which every later
-## presentation overwrites the edge's vector - was registered against this
-## observer as an `equivalent` claim, and the driver reported UPHELD over all
-## 225 scenarios with the reachability probe reporting both edits REACHED. A
-## mutation that changes only what an unread field holds cannot move a trace,
-## and the verdict that follows says nothing about the core.
-##
-## SO `pVectored` HANDS EVERY PRESENTATION A DISTINCT VECTOR AND CLEARS THE
-## FLAG. Two values on the flag alone would not have been enough: with one
+## `pVectored` HANDS EVERY PRESENTATION A DISTINCT VECTOR AND CLEARS THE
+## FLAG. Two values on the flag alone would not be enough: with one
 ## vector value in play, moving the store still leaves the same number in the
 ## field. It is the SECOND vector value that separates the edge's stored vector
 ## from the vector a later presentation carries, so the axis varies both
-## together and `pAutovectored` keeps the space this file had.
-##
-## MEASURED 2026-08-13 AFTER THE WIDENING: 450 scenarios, and the same mutation
-## is REFUTED - `pre @[7, 7]` presents a level-7 edge carrying one vector and
-## then a second level 7 carrying another, which is the arrangement no
-## autovectored scenario can express.
-##
-## THE SCENARIO COUNT IS NOT WHAT THIS COSTS. MEASURED 2026-08-13, this program
-## runs its 450 scenarios in single-digit milliseconds, while `t_claims` runs
-## for tens of seconds and spends essentially all of that in the Nim COMPILES
-## the driver makes.
-##
-## WHAT THE SPACE STILL DOES NOT VARY, STATED SO THAT ITS SILENCE IS NOT READ AS
-## COVERAGE. MEASURED 2026-08-13, and each of these is a field or an argument no
-## scenario here moves: the RESET state, which every scenario takes from one
-## `mcf5307_reset(ctx, startSp, execBase)`; the MEMORY the core executes, which
-## is NOPs from `execBase` to `codeEnd` in every scenario; the T and S and M bits
-## of the entry status register, which `srWithIpm` fixes; a level OUTSIDE 0 to 7,
-## which `irq.nim` stores and never takes and which no `preSequences` or
-## `writeScripts` entry carries; and the WRITE the re-entry script fires on,
-## which is always the FIRST bus write of the run. A claim that turns on any of
-## those is a claim this observer declines to refute for want of a scenario, and
-## not one it has measured.
+## together.
 ##
 ## WHAT IT CANNOT DO, STATED SO A PASS IS NOT READ AS A PROOF. It can REFUTE an
 ## unobservability claim and it can never ESTABLISH one. A claim it does not
@@ -105,7 +62,7 @@ const
   codeEnd = 0x700'u32       ## the end of the NOP region, below the stack
   userVector = 0x42'u8
   vectoredBase = 0x50'u8    ## the first of the distinct vectors `pVectored` hands out
-  vectoredCount = 8         ## more than any scenario here presents
+  vectoredCount = 8
 
 type
   TestBoard = object
@@ -116,7 +73,7 @@ type
     ## arguments move TOGETHER and not on two axes of their own: a cleared flag
     ## with one vector value in play reads the stored vector and cannot tell
     ## which presentation put it there.
-    pAutovectored   ## `userVector` and `autovector` 1 - the space this file had
+    pAutovectored   ## `userVector` and `autovector` 1
     pVectored       ## a DISTINCT vector per presentation, `autovector` 0
 
 var board: TestBoard
@@ -208,8 +165,8 @@ proc freshBoard() =
   acks = @[]
   writesSeen = 0
   presentationsMade = 0
-  # THE WHOLE CODE REGION IS NOPs, AND THAT IS NOT LAZINESS. `tests/t_irq.nim`
-  # records what a short NOP run costs: a run that passes its last NOP decodes
+  # THE WHOLE CODE REGION IS NOPs, AND THAT IS NOT LAZINESS. A run that passes
+  # its last NOP decodes
   # the ZERO word beyond it, the core halts, and every scenario that reached
   # that point reports `halted true` for a reason that has nothing to do with
   # interrupts. The scenarios here run to a CYCLE budget rather than to an

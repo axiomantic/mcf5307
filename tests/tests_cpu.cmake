@@ -526,7 +526,7 @@ endforeach()
 # `t_irq: 1 cases passed`, exited 0, and `ctest -R ^t_irq$` reported `Passed`
 # with twenty-two of twenty-three cases gone.
 #
-# `case_sites.cmake` states the five rules that replace the range with a
+# `case_sites.cmake` states the rules that replace the range with a
 # comparison, and `tests/case_sites.nim` states the run-time half.
 set(MCF5307_CASE_SITES_MODULE "${CMAKE_CURRENT_LIST_DIR}/case_sites.cmake")
 
@@ -581,20 +581,7 @@ endif()
 # The program prints `t_ea_masks: <N> cases passed`; failing cases make it
 # exit non-zero, which the check above already rejects. Anchoring the tail
 # here keeps a run that printed the banner but skipped the cases from passing.
-# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES, and this anchor read
-# `[0-9]+` until 2026-08-13, and it was not the only one: t_ea_masks,
-# t_sign_extend, t_alu and t_move all did - while `tests/case_sites.cmake` and
-# `tests/case_sites.nim` both stated that every driver carried the strong form.
-# THE ANCHORS ARE NAMED AND NOT COUNTED. This sentence read "four of the eight"
-# until 2026-08-13. The four names were the measurement; the denominator was a
-# separate figure that moves whenever a suite is added, and nothing in the tree
-# reads it or fails when it drifts. The names stay true as the suite list
-# grows, so the fraction was deleted rather than corrected.
-# MEASURED with `t_ea_masks`'s two
-# `check*Impl` procs returning at their first line: the suite printed
-# `t_ea_masks: 0 cases passed`, exited 0, and THIS LINE ACCEPTED IT. The
-# vanished-case rule caught it one check later, which is the rule doing its
-# job and not this anchor doing its own.
+# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES.
 if(NOT ea_run_out MATCHES "t_ea_masks: [1-9][0-9]* cases passed")
     message(FATAL_ERROR
         "t_ea_masks: the run exited 0 but did not report a full pass.\n"
@@ -603,7 +590,7 @@ endif()
 
 # THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
 # replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
 include("@MCF5307_CASE_SITES_MODULE@")
 mcf5307_check_case_sites("t_ea_masks" "@MCF5307_EA_SOURCE@" "${ea_run_out}"
     1)
@@ -732,20 +719,7 @@ endif()
 # The program prints `t_sign_extend: <N> cases passed`; failing cases make it
 # exit non-zero, which the check above already rejects. Anchoring the tail
 # here keeps a run that printed the banner but skipped the cases from passing.
-# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES, and this anchor read
-# `[0-9]+` until 2026-08-13, and it was not the only one: t_ea_masks,
-# t_sign_extend, t_alu and t_move all did - while `tests/case_sites.cmake` and
-# `tests/case_sites.nim` both stated that every driver carried the strong form.
-# THE ANCHORS ARE NAMED AND NOT COUNTED. This sentence read "four of the eight"
-# until 2026-08-13. The four names were the measurement; the denominator was a
-# separate figure that moves whenever a suite is added, and nothing in the tree
-# reads it or fails when it drifts. The names stay true as the suite list
-# grows, so the fraction was deleted rather than corrected.
-# MEASURED with `t_ea_masks`'s two
-# `check*Impl` procs returning at their first line: the suite printed
-# `t_ea_masks: 0 cases passed`, exited 0, and THIS LINE ACCEPTED IT. The
-# vanished-case rule caught it one check later, which is the rule doing its
-# job and not this anchor doing its own.
+# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES.
 if(NOT sign_run_out MATCHES "t_sign_extend: [1-9][0-9]* cases passed")
     message(FATAL_ERROR
         "t_sign_extend: the run exited 0 but did not report a full pass.\n"
@@ -754,7 +728,7 @@ endif()
 
 # THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
 # replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
 include("@MCF5307_CASE_SITES_MODULE@")
 mcf5307_check_case_sites("t_sign_extend" "@MCF5307_SIGN_SOURCE@" "${sign_run_out}"
     0)
@@ -878,20 +852,7 @@ endif()
 # The program prints `t_alu: <N> cases passed`; failing cases make it exit
 # non-zero, which the check above already rejects. Anchoring the tail here
 # keeps a run that printed the banner but skipped the cases from passing.
-# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES, and this anchor read
-# `[0-9]+` until 2026-08-13, and it was not the only one: t_ea_masks,
-# t_sign_extend, t_alu and t_move all did - while `tests/case_sites.cmake` and
-# `tests/case_sites.nim` both stated that every driver carried the strong form.
-# THE ANCHORS ARE NAMED AND NOT COUNTED. This sentence read "four of the eight"
-# until 2026-08-13. The four names were the measurement; the denominator was a
-# separate figure that moves whenever a suite is added, and nothing in the tree
-# reads it or fails when it drifts. The names stay true as the suite list
-# grows, so the fraction was deleted rather than corrected.
-# MEASURED with `t_ea_masks`'s two
-# `check*Impl` procs returning at their first line: the suite printed
-# `t_ea_masks: 0 cases passed`, exited 0, and THIS LINE ACCEPTED IT. The
-# vanished-case rule caught it one check later, which is the rule doing its
-# job and not this anchor doing its own.
+# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES.
 if(NOT alu_run_out MATCHES "t_alu: [1-9][0-9]* cases passed")
     message(FATAL_ERROR
         "t_alu: the run exited 0 but did not report a full pass.\n"
@@ -900,7 +861,7 @@ endif()
 
 # THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
 # replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
 include("@MCF5307_CASE_SITES_MODULE@")
 mcf5307_check_case_sites("t_alu" "@MCF5307_ALU_SOURCE@" "${alu_run_out}"
     0)
@@ -1019,20 +980,7 @@ endif()
 # The program prints `t_move: <N> cases passed`; failing cases make it exit
 # non-zero, which the check above already rejects. Anchoring the tail here
 # keeps a run that printed the banner but skipped the cases from passing.
-# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES, and this anchor read
-# `[0-9]+` until 2026-08-13, and it was not the only one: t_ea_masks,
-# t_sign_extend, t_alu and t_move all did - while `tests/case_sites.cmake` and
-# `tests/case_sites.nim` both stated that every driver carried the strong form.
-# THE ANCHORS ARE NAMED AND NOT COUNTED. This sentence read "four of the eight"
-# until 2026-08-13. The four names were the measurement; the denominator was a
-# separate figure that moves whenever a suite is added, and nothing in the tree
-# reads it or fails when it drifts. The names stay true as the suite list
-# grows, so the fraction was deleted rather than corrected.
-# MEASURED with `t_ea_masks`'s two
-# `check*Impl` procs returning at their first line: the suite printed
-# `t_ea_masks: 0 cases passed`, exited 0, and THIS LINE ACCEPTED IT. The
-# vanished-case rule caught it one check later, which is the rule doing its
-# job and not this anchor doing its own.
+# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES.
 if(NOT move_run_out MATCHES "t_move: [1-9][0-9]* cases passed")
     message(FATAL_ERROR
         "t_move: the run exited 0 but did not report a full pass.\n"
@@ -1041,7 +989,7 @@ endif()
 
 # THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
 # replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
 include("@MCF5307_CASE_SITES_MODULE@")
 mcf5307_check_case_sites("t_move" "@MCF5307_MOVE_SOURCE@" "${move_run_out}"
     0)
@@ -1188,11 +1136,6 @@ endif()
 # case and PASSES this test - which is the one outcome the paragraph above
 # says this anchor exists to reject. Measured: with `[0-9]+`, that reduced
 # program passes; with the pattern below it fails.
-#
-# THE FOUR OTHER BLOCKS IN THIS FILE CARRY THE SAME SENTENCE AND THE SAME
-# `[0-9]+`. They belong to their own tasks - section 7.4.2 makes CPU-26 the
-# owner of this file and admits a later cpu task only as a second writer of
-# ITS OWN registration - so they are not repaired here and they are filed.
 if(NOT logic_run_out MATCHES "t_logic: [1-9][0-9]* cases passed")
     message(FATAL_ERROR
         "t_logic: the run exited 0 but did not report a full pass.\n"
@@ -1201,7 +1144,7 @@ endif()
 
 # THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
 # replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
 include("@MCF5307_CASE_SITES_MODULE@")
 mcf5307_check_case_sites("t_logic" "@MCF5307_LOGIC_SOURCE@" "${logic_run_out}"
     0)
@@ -1355,10 +1298,9 @@ endif()
 # The count is `[1-9][0-9]*` and not `[0-9]+`, and the difference is the whole
 # check. `[0-9]+` matches `0`, so a `t_control.nim` reduced to nothing but
 # `echo "t_control: ", 0, " cases passed"` exits 0, prints the banner, runs no
-# case and passes this test - the one outcome the paragraph above says this
-# anchor exists to reject.
-#
-# The older blocks in this file still use `[0-9]+`.
+# case and PASSES this test - which is the one outcome the paragraph above says
+# this anchor exists to reject. The `t_logic` block above measured exactly that
+# and this block uses its tightened form.
 if(NOT control_run_out MATCHES "t_control: [1-9][0-9]* cases passed")
     message(FATAL_ERROR
         "t_control: the run exited 0 but did not report a full pass.\n"
@@ -1367,7 +1309,7 @@ endif()
 
 # THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
 # replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
 include("@MCF5307_CASE_SITES_MODULE@")
 mcf5307_check_case_sites("t_control" "@MCF5307_CONTROL_SOURCE@" "${control_run_out}"
     0)
@@ -1501,7 +1443,7 @@ endif()
 
 # THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
 # replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
 include("@MCF5307_CASE_SITES_MODULE@")
 mcf5307_check_case_sites("t_exception" "@MCF5307_EXCEPTION_SOURCE@" "${exception_run_out}"
     0)
@@ -1630,7 +1572,7 @@ endif()
 
 # THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
 # replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
 include("@MCF5307_CASE_SITES_MODULE@")
 mcf5307_check_case_sites("t_irq" "@MCF5307_IRQ_SOURCE@" "${irq_run_out}"
     0)
@@ -1764,7 +1706,7 @@ endif()
 
 # THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
 # replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
 include("@MCF5307_CASE_SITES_MODULE@")
 mcf5307_check_case_sites("t_state" "@MCF5307_STATE_SOURCE@" "${state_run_out}"
     0)
@@ -1876,7 +1818,7 @@ foreach(mcf5307_driver IN LISTS MCF5307_GENERATED_DRIVERS)
             string(REGEX REPLACE "^.*\\(\"([A-Za-z0-9_]+)\"$" "\\1"
                 mcf5307_hit_suite "${mcf5307_hit}")
             # A DRIVER MAY ONLY CHECK ITS OWN SUITE. Without this a single
-            # driver naming all eight suites would satisfy the comparison
+            # driver naming every suite would satisfy the comparison
             # below while seven runs went unexamined.
             if(NOT mcf5307_hit_suite STREQUAL mcf5307_driver_suite)
                 message(FATAL_ERROR

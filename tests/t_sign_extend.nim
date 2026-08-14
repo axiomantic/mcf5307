@@ -21,18 +21,13 @@
 ## input from 0x8000 to 0xFFFF - that is, every negative displacement - is
 ## such a value. The library is built with `--panics:on -d:release`, so a
 ## checked conversion there does not raise a catchable error; it ends the
-## process with a `RangeDefect`. This test compiles with the library's own
-## flag set, thus a helper that went back to a checked conversion kills this
-## program and the driver reports the failure.
-##
-## The positive cases are the positive control. Without them a helper that
-## returned a constant 0, or a program that cannot run at all, would not be
-## separable from a helper that extends the sign correctly.
+## process with a `RangeDefect`. This test compiles with THE LIBRARY'S OWN
+## FLAG SET.
 ##
 ## The helpers are not part of the C ABI and no C caller names
 ## them. This file uses `include` and not `import`: `include` puts
 ## the module's text in this program, which gives the test the private names
-## WITHOUT adding an export to the module under test. Exporting the two
+## WITHOUT adding an export to the module under test. Exporting the
 ## helpers to make them testable would enlarge the module's public surface for
 ## the test's convenience, and the surface is a thing the project controls.
 ##
@@ -63,7 +58,7 @@ template check(got: int32; want: int32; label: string) =
   ## `declaredSites` by the `static` below, and once at RUN TIME into
   ## `executedSites`, by the implementation and only when it reaches a
   ## verdict. `tests/case_sites.nim` states what the pair is for and
-  ## `tests/case_sites.cmake` states the five rules the driver applies.
+  ## `tests/case_sites.cmake` states the rules the driver applies.
   ## The template exists for `instantiationInfo`: a proc cannot see where
   ## it was called from.
   const site = instantiationInfo(-1).line
@@ -90,7 +85,7 @@ check(s8(0x00FF'u16),   -1'i32, "s8(0xFF)")
 check(s8(0xFF80'u16), -128'i32, "s8(0xFF80), high byte ignored")
 check(s8(0x1234'u16),   52'i32, "s8(0x1234), high byte ignored")
 
-# THE THREE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
+# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
 # program reports what its text declares and what its run adjudicated,
 # and the registered test's driver is what compares them - and what
 # compares the declared count against the call sites in this file.

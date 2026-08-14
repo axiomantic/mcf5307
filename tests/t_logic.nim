@@ -1,10 +1,8 @@
 ## `t_logic` - the logic, bit-operation and shift instruction group.
 ##
-## Why this file exists beside `mcf5307_conformance_logic`. Every case in that
-## corpus is a positive case: an encoding this part has, run against an
-## expected register state. A positive corpus cannot see either of the two
-## defects this file was written to catch, and the reason is structural rather
-## than a gap that more cases would close.
+## THE DOCUMENTS THIS FILE CITES ARE OUTSIDE THIS REPOSITORY, so each is
+## named in full here. A bare "section 6.1" is unreadable to a reader who holds
+## only the repository, and none of them may be copied into it.
 ##
 ##   DESIGN SECTION 6.1 is section 6 "The MCF5307 Core and the Board Model",
 ##   subsection 6.1 "The core", of the NMG2 emulator DESIGN DOCUMENT
@@ -20,12 +18,7 @@
 ##   semantics from - the ColdFire Family Programmer's Reference Manual Rev 3
 ##   and the MCF5307 User's Manual - and gives a download location for each.
 ##
-##   ONE OF THE TWO IS OBTAINABLE AND ONE IS NOT, AND AN EARLIER REVISION OF
-##   THIS PARAGRAPH SAID NEITHER WAS. That was false, it was never searched
-##   for, and it is the sentence that told the next reader not to look for a
-##   document that was in fact at hand.
-##
-##   THE MCF5307 USER'S MANUAL is the one that was found, and it is the
+##   THE MCF5307 USER'S MANUAL is the
 ##   document every table and page cited below refers to. Its full identity,
 ##   so that a reader can be sure of holding the same edition: Motorola,
 ##   "MCF5307 ColdFire Integrated Microprocessor User's Manual", order number
@@ -36,24 +29,15 @@
 ##   gives. That is why every citation here names table, page and row instead
 ##   of quoting.
 ##
-##   THE COLDFIRE FAMILY PROGRAMMER'S REFERENCE MANUAL IS PRESENT AFTER ALL,
-##   AND TWO EARLIER REVISIONS OF THIS PARAGRAPH WERE WRONG ABOUT IT. The
-##   first said both documents were absent; the second corrected the User's
-##   Manual and left this one recorded as "GENUINELY ABSENT - searched for by
-##   name and by content across the scratchpad, and the network is closed".
-##   IT IS ON DISK at `~/Development/datasheets/CFPRM.pdf` - Freescale,
-##   "ColdFire Family Programmer's Reference Manual", Rev. 3 - and the search
-##   that missed it looked in the scratchpad and not in the datasheet tree.
+##   THE COLDFIRE FAMILY PROGRAMMER'S REFERENCE MANUAL IS ON DISK at
+##   `~/Development/datasheets/CFPRM.pdf` - Freescale, "ColdFire Family
+##   Programmer's Reference Manual", Rev. 3.
 ##
-##   IT SETTLED THE SHIFT-OVERFLOW QUESTION AGAINST WHAT THIS FILE USED TO
-##   ASSERT. Its per-instruction pages carry the flag rules the User's Manual
+##   ITS PER-INSTRUCTION PAGES CARRY THE FLAG RULES THE USER'S MANUAL
 ##   never had: folio 4-12 gives ASL's V a flat "Always cleared" and notes
-##   that this is "unlike on the 68K family processors". The `logic.nim`
-##   uncertainty list is five entries now rather than six, that entry having
-##   been the one deleted, and its remaining entries were NOT re-checked
-##   against the manual by the change that deleted it.
+##   that this is "unlike on the 68K family processors".
 ##
-##   READ THE PDF AS RENDERED PAGES. Two tables in the OCR markdown at
+##   READ THE PDF AS RENDERED PAGES. Tables in the OCR markdown at
 ##   `~/Development/datasheets/MCF5307UM-md/` are known wrong, so a value
 ##   taken from text extraction is not evidence; `pdftoppm -png` and read the
 ##   image.
@@ -65,46 +49,16 @@
 ##   implemented opcode", which is the property the shift block below cites it
 ##   for.
 ##
-## Fifteen other files in this repository carry the same bare-citation style,
-## and one of them cites a path on the author's desktop. They belong to their
-## own tasks and are not repaired here.
-##
-## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_logic`. That corpus is 41
-## cases and every one of them is a POSITIVE case: an encoding this part has,
-## run against an expected register state. A positive corpus CANNOT SEE either
-## of the two defects this file was written to catch, and the reason is
+## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_logic`. That corpus holds
+## POSITIVE cases: an encoding this part has,
+## run against an expected register state. A positive corpus CANNOT SEE a
+## wrongly-claimed encoding, which produces a passing execution of a DIFFERENT
+## instruction, and it cannot see an operand the executor refuses but the
+## legality mask admits, because the corpus never offers one. The reason is
 ## structural rather than a gap that more cases would close.
 ##
-##   A WRONGLY-CLAIMED ENCODING PRODUCES A PASSING EXECUTION OF A DIFFERENT
-##   INSTRUCTION. `decode.nim` claimed line 1011 opmode 111 - which is CMPA.L -
-##   as an EOR, because its predicate read `>= 4` where the opmodes of EOR are
-##   100, 101 and 110. `opmodeSize(7)` answers 4, so the wrong claim presented
-##   as a well-formed long EOR and nothing downstream noticed. Measured against
-##   the source before the fix: `cmpa.l %d0,%a1` is `b3c0`, and running it with
-##   d0 = 0x0f0f0f0f and d1 = 0x12345678 left d0 = 0x1d3b5977, which is
-##   d0 xor d1. The core ran `EOR.L D1,D0`: it wrote a register CMPA must not
-##   touch and it computed no comparison. NO NUMBER OF GREEN CASES FINDS THAT.
-##   Only a case that asserts what must NOT decode can, which is what
-##   `decodeWord(0xb3c0).op == opIllegal` below is.
-##
-##   An operand the executor refuses is not an operand the corpus offers. The
-##   corpus holds no dynamic BTST against a PC-relative operand, so a
-##   disagreement between `eaLegalityFor(opBtst)` - which admits it - and
-##   `execBitOp` - which would refuse it if it resolved the operand through
-##   `eaResolve` - is invisible there. `btst %d1,(4,%pc)` (`033a 0004`) and
-##   `btst %d1,(4,%pc,%d2)` (`033b 2804`) both assemble on
-##   `m68k-elf-as -mcpu=5307`.
-##
-## Every case asserts a complete tuple, never one field, exactly as `t_alu`
-## does. A case that changes a register asserts (that register, the whole
-## status register, `fault`), so a right result with a wrong flag fails and a
-## right flag with a wrong result fails. A case that must trap asserts (the
-## register it must not have changed, `fault`, `halted`, the cycle return), so
-## "it trapped" is separable from "it executed and wrote nothing".
-##
-## Every trap case but one was offered to `m68k-elf-as -mcpu=5307` and
-## rejected, and every positive case was assembled by it. The encodings the
-## assembler refuses to emit are built from a measured base word by replacing
+## THE ENCODINGS THE
+## assembler refuses to emit are built from a MEASURED base word by replacing
 ## the low six bits, which is the effective-address field: `bset %d1,%d0` is
 ## `03c0`, so `bset %d1,(4,%pc)` is `03c0 or 3a` = `03fa`. That method is
 ## cross-checked by the two words the assembler does emit: `btst %d1,%d0` is
@@ -112,40 +66,20 @@
 ## exactly what the assembler produced for `btst %d1,(4,%pc)` and
 ## `btst %d1,#5`.
 ##
-## THE ONE EXCEPTION IS `btst %d1,#5`, AND IT IS NAMED HERE RATHER THAN LEFT
-## FOR A READER TO NOTICE. The assembler ACCEPTS that form and emits
-## `033c 0005`, and this file asserts that the core TRAPS it. That is the only
-## place in this file where a trap case contradicts the assembler, it is
+## `btst %d1,#5` IS THE FORM WHERE THIS FILE CONTRADICTS THE ASSEMBLER. The
+## assembler ACCEPTS that form and emits
+## `033c 0005`, and this file asserts that the core TRAPS it. It is
 ## deliberate, and the manual rows that put it there are on `eaBitDynamic` in
 ## `decode_types.nim`. It is uncertainty 3 in the `logic.nim` header - the one
 ## entry on that list which a future reader may have to REVERSE.
 ##
-## TWO ASSERTIONS GO RED WHEN THEY DO, NOT ONE, AND BOTH ARE NAMED HERE. An
-## earlier revision of this paragraph - and the message of the commit that
-## wrote it - said "this case is what would go red", which undercounts by one.
-## The two are this trap case and the
-## `checkMask(eaIsLegalFor(opBtst, decodeEa(0x3C)), false, ...)` row further
-## down, which that same commit flipped from `true`. MEASURED: `eaBitDynamic`'s
-## `ea7` restored to the full valid mode-7 set - then named `eaData7`, now
-## `eaValid7` - in a `git archive` extract of this commit,
-## confirmed in the generated C as `{253, 31}` against this commit's
-## `{253, 15}`, rebuilt from a fresh configure - `t_logic: 2 of 74 cases
-## failed`, exactly those two, and `mcf5307_conformance_logic` stayed
-## `41 cases, 0 failed`. The corpus does not pin this question either way.
-##
-## THE PC-RELATIVE CASES NOW PIN THE PC-RELATIVE BASE, AND THEY USED NOT TO.
-## An earlier revision of this paragraph said they did not pin it "and that is
-## deliberate", because `machine.nim` computed a `(d16,PC)` address from the
-## program counter AFTER the displacement word was consumed while the
-## assembler's base is the ADDRESS OF that word. Measured: `btst
+## THE PC-RELATIVE BASE IS THE ADDRESS OF THE DISPLACEMENT WORD. `btst
 ## %d1,(target,%pc)` with the opcode at 0 assembles to `033a 0004` and places
 ## `target` at 6, so the base is 2 and not 4, and
-## `m68k-elf-objdump -m m68k:5307` prints `btst %d1,%pc@(6 <target>)`. That was
-## a defect of `machine.nim` and it is repaired; `eaAddr` takes the base before
-## `fetchExt` advances the counter, and the comment on `fetchExt` that asserted
-## the wrong rule is gone.
+## `m68k-elf-objdump -m m68k:5307` prints `btst %d1,%pc@(6 <target>)`.
+## `eaAddr` takes the base before `fetchExt` advances the counter.
 ##
-## So the cases below no longer seed the same byte across both candidate
+## So the cases below do not seed the same byte across both candidate
 ## addresses. `pcWindow` gives the byte at the CORRECT address bit 7 set and
 ## bit 6 clear, and the byte at the address the old base reached the opposite
 ## pair, so each Z assertion separates the two bases. The exact addresses are
@@ -186,7 +120,7 @@ template check(ok: bool; label: string; got: string; want: string) =
   ## `declaredSites` by the `static` below, and once at RUN TIME into
   ## `executedSites`, by the implementation and only when it reaches a
   ## verdict. `tests/case_sites.nim` states what the pair is for and
-  ## `tests/case_sites.cmake` states the five rules the driver applies.
+  ## `tests/case_sites.cmake` states the rules the driver applies.
   ## The template exists for `instantiationInfo`: a proc cannot see where
   ## it was called from.
   const site = instantiationInfo(-1).line
@@ -250,14 +184,8 @@ type Outcome = object
     ## `mcf5307_exec(ctx, 1)`'s return, which is not a cycle count despite the
     ## name. `mcf5307_exec` saturates at its budget, and every instruction in
     ## this group costs 2 for the fetch plus at least one more, so the value is
-    ## 1 for an instruction that ran and 0 for one that trapped. THE `cycles: 1`
-    ## HALF OF EVERY TUPLE BELOW ASSERTS "IT RAN" AND ASSERTS NO COUNT.
-    ## MEASURED: ALL NINE cycle returns in `logic.nim` replaced by wrong
-    ## numbers - 44, 66, 45, 65, 66, 46, 41, 61 and 47 in source order - every
-    ## one confirmed in the generated C, on a fresh extract with a fresh
-    ## configure; all 74 cases here and all 74 corpus cases stayed green. That
-    ## is why uncertainty 2 in the `logic.nim` header says nothing asserts the
-    ## cycle counts.
+    ## 1 for an instruction that ran and 0 for one that trapped. Uncertainty 2
+    ## in the `logic.nim` header says nothing asserts the cycle counts.
   fault: bool
   halted: bool
   d: array[8, uint32]
@@ -316,27 +244,24 @@ proc mem32(address: uint32): uint32 =
 #   `btst %d1,(4,%pc,%d2)`  (`033b 2804`)  reads the BYTE at 0x106 + d2
 #   `and.l (4,%pc),%d1`     (`c2ba 0004`)  reads the LONGWORD at 0x106
 #
-# and a core that based the address AFTER the extension word - which this one
-# did until the `eaAddr` repair - reads two bytes higher in each.
+# and a core that based the address AFTER the extension word reads two bytes
+# higher in each.
 #
-# THE WINDOW IS NON-UNIFORM ON PURPOSE, and it used to be uniform on purpose.
-# The bytes it puts at the three addresses these cases can reach are:
+# THE WINDOW IS NON-UNIFORM ON PURPOSE.
+# The bytes it puts at the addresses these cases can reach are:
 #
 #   0x106  0x80   bit 7 SET,   bit 6 CLEAR   the (4,%pc) operand
 #   0x108  0x40   bit 7 CLEAR, bit 6 SET     where the old base read instead
 #   0x10a  0x80   bit 7 SET,   bit 6 CLEAR   the (4,%pc,%d2) operand, d2 = 4
 #   0x10c  0x40   bit 7 CLEAR, bit 6 SET     where the old base read instead
 #
-# so every Z assertion below comes out the OPPOSITE way under the old base.
-#
-# WHAT THIS WINDOW STILL DOES NOT PIN IS THE INDEX WIDTH. `033b 2804` selects a
+# THE INDEX WIDTH IS NOT SEPARABLE ON THIS BOARD. `033b 2804` selects a
 # LONG index at bit 11 of its extension word, and a core reading that select at
 # bit 8 would narrow the index to its low word and sign-extend it. The two
 # readings agree on every value this board can hold: separating them needs an
 # index whose low word sign-extends to something the whole longword is not,
 # which is at least 0x10000 away from its other reading, and this board is
-# 0x1000 bytes. `conformance/corpus/logic_00.json`'s `btst_b_pc_index` and
-# `btst_b_an_index` pin it instead - the runner's board is 1 MiB.
+# 0x1000 bytes.
 const pcWindow = @[(0x104'u32, 0xAABB80C3'u32),
                    (0x108'u32, 0x40558022'u32),
                    (0x10C'u32, 0x40AABBCC'u32)]
@@ -401,7 +326,7 @@ template checkMask(got: bool; want: bool; label: string) =
   ## `declaredSites` by the `static` below, and once at RUN TIME into
   ## `executedSites`, by the implementation and only when it reaches a
   ## verdict. `tests/case_sites.nim` states what the pair is for and
-  ## `tests/case_sites.cmake` states the five rules the driver applies.
+  ## `tests/case_sites.cmake` states the rules the driver applies.
   ## The template exists for `instantiationInfo`: a proc cannot see where
   ## it was called from.
   const site = instantiationInfo(-1).line
@@ -418,17 +343,9 @@ const bitDirty = srBase or ccrN or ccrV or ccrC or ccrX
 #
 # Line 1011 carries EOR in opmodes 100, 101 and 110. THE OTHER FIVE OPMODES
 # ARE CPU-10'S: CMP in 000, 001 and 010, CMPA.W in 011 and CMPA.L in 111.
-# FIVE AND NOT FOUR - an earlier revision of this comment omitted 011, where
-# `decode.nim`'s comment beside the same predicate counts five.
 #
-# THESE THREE ROWS USED TO ASSERT `opIllegal` AND THE SENTENCE THEY ASSERT IS
-# UNCHANGED: the encoding belongs to CPU-10 and not to the logic decoder. Until
-# CPU-10 landed, "belongs to CPU-10" and "not decoded" were the same
-# observable, and `opIllegal` was how this file said it. Now that the group
-# exists the same sentence has a stronger form - the encoding comes back as
-# CPU-10's own operation - and a defect that fed it back into `decodeLogicLine`
-# would show here exactly as it did before. `tests/t_control.nim` holds the
-# other half: that all three EOR opmodes stay EOR.
+# THE SENTENCE THESE ROWS ASSERT: the encoding belongs to CPU-10 and not to the
+# logic decoder.
 #
 # Opmode 111 is CMPA.L because the assembler put it there, and not by any
 # inference from `cmpa.w`. `b3c0` is what `m68k-elf-as -mcpu=5307` emitted for
@@ -440,26 +357,20 @@ block:
   expectDecode(0xB280'u16, opCmp,
     "cmp.l %d0,%d1 (b280) is CPU-10's CMP and not this group's EOR")
 
-  # THE POSITIVE CONTROLS. Without them a predicate that gave the WHOLE of
-  # line 1011 to CPU-10 would report the two cases above as passes, and EOR
-  # would be gone. All three EOR opmodes are still claimed, byte and word
-  # included - those two are not instructions on this part and they trap on
-  # the SIZE, which is the channel `decodeLogicLine` and CPU-13 both use.
+  # THE POSITIVE CONTROLS. The byte and word EOR opmodes are not instructions
+  # on this part and they trap on the SIZE, which is the channel
+  # `decodeLogicLine` and CPU-13 both use.
   expectDecode(0xB380'u16, opEor, "eor.l %d1,%d0 (b380) is still an EOR")
   expectDecode(0xB300'u16, opEor, "the byte EOR opmode (b300) is still an EOR")
   expectDecode(0xB340'u16, opEor, "the word EOR opmode (b340) is still an EOR")
 
-  # AND THE EXECUTION. THE DEFECT THIS ROW WAS WRITTEN FOR IS AN EOR, AND IT
-  # STILL IS. `b3c0` decoded as a well-formed long EOR once and left
-  # d0 = d0 xor d1 = 0x1d3b5977; the row asserted a trap while CPU-10 was
-  # unwritten and it asserts the CMPA now, and BOTH REFUSE THAT VALUE.
+  # AND THE EXECUTION.
   #
   # `cmpa.l %d0,%a1` computes a1 - d0 and DISCARDS it: 0x11223344 - 0x0f0f0f0f
   # is 0x02132435, which is non-zero, positive and borrows nothing, and
   # 0x0f0f0f0f and 0x11223344 are both positive so no signed overflow is
   # possible. The incoming `sr` is the reset word, so the whole 16-bit result
-  # is 0x2700 - and a core that wrote a register would have to leave `d0`,
-  # `d1` or `a1` different from the values named here.
+  # is 0x2700.
   let o = runIns([0xB3C0'u16],
                  d = [0x0F0F0F0F'u32, 0x12345678'u32, 0, 0, 0, 0, 0, 0],
                  a = [0'u32, 0x11223344'u32, 0, 0, 0, 0, 0, 0])
@@ -506,8 +417,7 @@ block:
 block:
   # The PC-relative operand, AND THE EXACT ADDRESS IT MUST REACH. `pcWindow`
   # puts 0x80 at 0x106 - the byte `(4,%pc)` names - and 0x40 at 0x108, where
-  # the old base read instead, so each of the two cases below comes out the
-  # opposite way under the old base. See `pcWindow`.
+  # a base taken after the extension word reads instead. See `pcWindow`.
   let oSet = runIns([0x033A'u16, 0x0004'u16],
                     d = [0'u32, 7, 0, 0, 0, 0, 0, 0], sr = bitDirty or ccrZ,
                     mem = pcWindow)
@@ -966,7 +876,7 @@ block:
   expectD(runIns([0x0A80'u16, 0x0000'u16, 0x000F'u16], d = two),
     0, 0x12345677'u32, srBase, "eori.l #0xf,%d0 flips the low four bits")
 
-# THE THREE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
+# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
 # program reports what its text declares and what its run adjudicated,
 # and the registered test's driver is what compares them - and what
 # compares the declared count against the call sites in this file.

@@ -65,7 +65,7 @@ template check(ok: bool; label: string; got: string; want: string) =
   ## `declaredSites` by the `static` below, and once at RUN TIME into
   ## `executedSites`, by the implementation and only when it reaches a
   ## verdict. `tests/case_sites.nim` states what the pair is for and
-  ## `tests/case_sites.cmake` states the five rules the driver applies.
+  ## `tests/case_sites.cmake` states the rules the driver applies.
   ## The template exists for `instantiationInfo`: a proc cannot see where
   ## it was called from.
   const site = instantiationInfo(-1).line
@@ -1020,7 +1020,7 @@ template checkMask(got: bool; want: bool; label: string) =
   ## `declaredSites` by the `static` below, and once at RUN TIME into
   ## `executedSites`, by the implementation and only when it reaches a
   ## verdict. `tests/case_sites.nim` states what the pair is for and
-  ## `tests/case_sites.cmake` states the five rules the driver applies.
+  ## `tests/case_sites.cmake` states the rules the driver applies.
   ## The template exists for `instantiationInfo`: a proc cannot see where
   ## it was called from.
   const site = instantiationInfo(-1).line
@@ -1084,7 +1084,7 @@ block:
   checkMask(isEaLegal(eaMemoryAlterable, decodeEa(0x3A'u16)), false,
     "the memory-alterable mask rejects (d16,PC)")
 
-# THE THREE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
+# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
 # program reports what its text declares and what its run adjudicated,
 # and the registered test's driver is what compares them - and what
 # compares the declared count against the call sites in this file.

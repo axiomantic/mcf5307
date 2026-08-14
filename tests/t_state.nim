@@ -1,23 +1,12 @@
 ## `t_state` - the snapshot block of `mcf5307/state`. Task CPU-18. Design
 ## section 5.3.
 ##
-## THREE CHOICES THIS FILE MAKES, AND WHY EACH ONE RATHER THAN THE OBVIOUS
-## ALTERNATIVE.
-##
 ##   1. THE EXPECTED FIELD LIST IS WRITTEN BY HAND AND `stateLayout` DERIVES
-##      THE OTHER SIDE FROM `MCF5307Ctx`. A file that derived both sides would
-##      agree with any walk at all. Holding a hand-written list against a
+##      THE OTHER SIDE FROM `MCF5307Ctx`. Holding a hand-written list against a
 ##      derived one is what makes a field ENTERING THE SNAPSHOT a decision
 ##      somebody takes, alongside the version word that moves with it.
 ##
-##   2. THE COMPARISON IS PER FIELD AND THE DESTINATION IS PRE-LOADED. Save,
-##      load and compare the whole context agrees with itself when BOTH
-##      directions drop one field, and a destination left fresh agrees with the
-##      source wherever the source happens to hold a default.
-##
-##   3. EVERY BYTE OFFSET IS WALKED AND NONE IS SAMPLED. A sample says nothing
-##      about the offsets it did not choose, and the offsets it did not choose
-##      are where an unguarded field sits.
+##   2. THE COMPARISON IS PER FIELD AND THE DESTINATION IS PRE-LOADED.
 ##
 ## THE DOCUMENT THIS FILE CITES IS OUTSIDE THIS REPOSITORY. DESIGN SECTION 5.3
 ## is "State save and load" of the NMG2 emulator DESIGN DOCUMENT
@@ -53,7 +42,7 @@ template check(ok: bool; label: string; got: string; want: string) =
   ## `declaredSites` by the `static` below, and once at RUN TIME into
   ## `executedSites`, by the implementation and only when it reaches a
   ## verdict. `tests/case_sites.nim` states what the pair is for and
-  ## `tests/case_sites.cmake` states the five rules the driver applies.
+  ## `tests/case_sites.cmake` states the rules the driver applies.
   ## The template exists for `instantiationInfo`: a proc cannot see where
   ## it was called from.
   const site = instantiationInfo(-1).line
@@ -65,8 +54,7 @@ template check(ok: bool; label: string; got: string; want: string) =
 #
 # THE EXPECTED LIST IS WRITTEN BY HAND AND THE MEASURED ONE IS DERIVED FROM
 # `MCF5307Ctx`. Holding a hand-written list against a derived one is what makes
-# a context field arriving in the snapshot visible; a test that derived both
-# sides would agree with any walk at all.
+# a context field arriving in the snapshot visible.
 
 const expectedLayout = @[
   ("pc", 4), ("sp", 4), ("sr", 4),
@@ -87,7 +75,6 @@ check(int(mcf5307_state_size()) == 100,
 # ---------------------------------------------------------------------------
 # BLOCK 2. The header words, and the bytes the save does not touch.
 #
-# THE GUARD BYTES ARE THE ASSERTION THAT `mcf5307_state_size` BOUNDS THE SAVE.
 # The published call hands the core a raw pointer and no length, so a save that
 # wrote one byte past the size it reported would be a buffer overrun in the
 # caller's memory with nothing in the C ABI able to say so.
@@ -138,22 +125,13 @@ check(headerGuardsIntact,
 # ---------------------------------------------------------------------------
 # BLOCK 3. One field at a time, through a save and a load.
 #
-# WHY A WHOLE-CONTEXT ROUND TRIP IS NOT ENOUGH ON ITS OWN. Save, load, save
-# again and compare the two blocks agrees with itself whenever BOTH directions
-# drop the same field, which is the single most likely way to get this wrong.
-# So the stamp below writes a value of its OWN into every field, the load goes
-# into a context that has never held any of them, and the comparison is per
-# field.
-#
 # THE STAMP WALKS `MCF5307Ctx` RATHER THAN A LIST, so a field added to the
 # context is stamped, compared and counted with no edit here. THE BOOLEANS
 # ALTERNATE rather than all reading true, because a uniform stamp cannot
 # separate two boolean fields from each other.
 #
-# THE DESTINATION IS STAMPED WITH THE OTHER SALT AND NOT LEFT FRESH. A fresh
-# context holds every field at its default, so a field the stamp happens to
-# leave at ITS default already agrees before the load and can say nothing
-# about it. The two salts differ by an ODD number, so every boolean flips and
+# THE DESTINATION IS STAMPED WITH THE OTHER SALT AND NOT LEFT FRESH. The two
+# salts differ by an ODD number, so every boolean flips and
 # every number moves, and no field starts the comparison already equal.
 
 proc stampContext(ctx: MCF5307Ctx; salt: uint32) =
@@ -206,18 +184,12 @@ for name, wantValue, gotValue in fieldPairs(stamped[], restored[]):
 # ---------------------------------------------------------------------------
 # BLOCK 4. A damaged block is refused, at every offset and by name.
 #
-# EVERY OFFSET IS WALKED AND NOT ONE SAMPLED. A check that perturbed a byte it
-# chose would say nothing about the offsets it did not choose, and the offsets
-# it did not choose are exactly where an unchecked field would sit. The case
-# below reports the offsets that were ACCEPTED, so a failure names them.
-#
-# THE STATUSES ARE ASSERTED BY NAME AND NOT MERELY AS `not stateOk`. The five
-# regions fail for five different reasons and a caller that cannot tell a wrong
-# version from a corrupted payload cannot tell an upgrade from a fault.
+# THE STATUSES ARE ASSERTED BY NAME AND NOT MERELY AS `not stateOk`. A caller
+# that cannot tell a wrong version from a corrupted payload cannot tell an
+# upgrade from a fault.
 
 proc renderContext(ctx: MCF5307Ctx): string =
-  ## Every field of the context, as one string. It is compared whole, so a
-  ## refusal that touched ANY field is a failure and not a near miss.
+  ## Every field of the context, as one string.
   for name, value in fieldPairs(ctx[]):
     when value is pointer:
       discard
@@ -265,10 +237,8 @@ check(namedStatuses == wantNamedStatuses,
       "damage: each region of the block is refused under its own name",
       $namedStatuses, $wantNamedStatuses)
 
-# THE REFUSAL LEAVES THE CONTEXT ALONE. The C entry point has no way to report
-# a refusal, so a caller that ignores the missing channel must be left holding
-# the state it had. A load that decoded first and validated afterwards would
-# leave a half-loaded core behind every refusal.
+# The C entry point has no way to report a refusal, so a caller that ignores
+# the missing channel must be left holding the state it had.
 let survivor = freshContext()
 stampContext(survivor, 1'u32)
 let beforeRefusal = renderContext(survivor)
@@ -293,11 +263,8 @@ check(nilStatuses == wantNilStatuses,
 # ---------------------------------------------------------------------------
 # BLOCK 5. The block holds no pointer.
 #
-# THE ASSERTION IS THAT THE POINTERS CANNOT REACH THE BYTES. Two contexts are
-# given the same serialised state and DIFFERENT board cookies and DIFFERENT
-# callbacks, and their blocks are compared byte for byte. A block that carried
-# any of the four would differ, and a snapshot carrying an address is one that
-# cannot be restored in another process.
+# A snapshot carrying an address is one that cannot be restored in another
+# process.
 
 proc boardReadA(user: pointer; address: uint32; size: cint;
                 status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
@@ -346,19 +313,11 @@ check(bytesA == bytesB,
 # ---------------------------------------------------------------------------
 # BLOCK 6. The core itself: run, save, run on, load, run the same on again.
 #
-# THIS IS THE SCENARIO DESIGN SECTION 5.3 NAMES, and the two runs after the
-# save are what make it bite. A snapshot that restored the registers and lost
-# the program counter passes a comparison taken at the moment of the load and
-# fails here at the first instruction that follows it.
+# THIS IS THE SCENARIO DESIGN SECTION 5.3 NAMES.
 #
 # THE INTERRUPT PRESENTATION IS MASKED AND IS THERE ON PURPOSE. Reset leaves
 # the status register at 0x2700, whose interrupt priority mask is 7, so a
-# level-3 presentation stays pending for the whole run and never perturbs it -
-# and the three presented fields carry values through the save that a core
-# ignoring them would lose.
-#
-# THE COMPARISON IS THE WHOLE CONTEXT AND NOT THE REGISTERS. `renderContext`
-# walks `MCF5307Ctx`, so a field this file never names is still compared.
+# level-3 presentation stays pending for the whole run and never perturbs it.
 
 const
   memSize = 0x1000
@@ -439,12 +398,11 @@ check(secondContinuation == firstContinuation,
 mcf5307_destroy(core)
 
 # ---------------------------------------------------------------------------
-# BLOCK 7. The two published C entry points that carry no failure channel.
+# BLOCK 7. The published C entry points that carry no failure channel.
 #
 # `mcf5307_state_load` IS DECLARED `void` IN `include/mcf5307.h`, so a C caller
 # is told nothing about a refusal. The only channel left is the state of its
-# own core, so that is what is read here: after an honest block the core is
-# what the block carried, and after a damaged one it is what it already was.
+# own core, so that is what is read here.
 
 let cCaller = freshCore()
 runInstructions(cCaller, runBeforeSave)
@@ -469,7 +427,7 @@ check(renderContext(cCaller) == cBeforeRefusal,
 
 mcf5307_destroy(cCaller)
 
-# THE THREE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
+# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
 # program reports what its text declares and what its run adjudicated,
 # and the registered test's driver is what compares them - and what
 # compares the declared count against the call sites in this file.
