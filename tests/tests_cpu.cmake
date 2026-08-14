@@ -1342,14 +1342,9 @@ add_test(NAME t_control
 # and neither an access error nor an address error can be assembled. The whole
 # of the evidence for this task is the registered name below.
 #
-# IT COMPILES A MODULE THE LIBRARY DOES NOT YET CARRY. `src/mcf5307.nim` imports
-# each submodule so that the compiler compiles it into the library, and it does
-# not name `exception.nim`: that file is CPU-1's and this task declares no write
-# to it. The module exports no C symbol, so its absence from the archive changes
-# nothing a caller can see - but it also means THIS TEST IS THE ONLY THING IN
-# THE TREE THAT COMPILES `src/mcf5307/exception.nim` at all, and it compiles it
-# with the library's own flag set for that reason. CPU-15 is the first consumer
-# and the task that puts the module into the library.
+# IT COMPILES `src/mcf5307/exception.nim` FOR ITS OWN RUN, with the library's
+# own flag set, so that the module this test asserts about is built the way the
+# library builds it.
 #
 # THE FLAG SET, THE COMPILE INSIDE THE TEST and the two-part failure check are
 # taken from the `t_control` block above, for the reasons that block gives. The
@@ -1478,8 +1473,8 @@ add_test(NAME t_exception
 # IT EXERCISES A MODULE THE LIBRARY DOES CARRY. `src/mcf5307/cpu.nim` imports
 # `mcf5307/irq`, so the entry module reaches it transitively and its
 # `mcf5307_set_irq` is in the archive; the test reaches the same module by
-# source. That import also puts `src/mcf5307/exception.nim` into the library
-# for the first time, because `irq.nim` imports it for `autovectorFor`.
+# source. That import also carries `src/mcf5307/exception.nim` into the library,
+# because `irq.nim` imports it for `autovectorFor`.
 #
 # THE FLAG SET, THE COMPILE INSIDE THE TEST and the two-part failure check are
 # taken from the `t_exception` block above, for the reasons that block gives.
@@ -1724,7 +1719,7 @@ mcf5307_check_case_sites("t_state" "@MCF5307_STATE_SOURCE@" "${state_run_out}"
 # to `MCF5307Ctx` moves this figure. That coupling is the point: a field that
 # enters the snapshot without anyone deciding it should is what this figure
 # refuses to let pass quietly.
-mcf5307_check_case_total("t_state" "${state_run_out}" 29)
+mcf5307_check_case_total("t_state" "${state_run_out}" 33)
 
 ]==])
 

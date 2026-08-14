@@ -92,12 +92,18 @@ proc stateChecksum(buf: StateBuf; upTo: int): uint32 =
     result = (result xor uint32(buf[index])) * 16777619'u32
 
 proc stateWalk(ctx: var Mcf5307CtxObj; buf: StateBuf; op: StateOp;
-               layout: var seq[(string, int)]): int =
+               layout: ptr seq[(string, int)]): int =
   ## Walks the payload once and returns its width in bytes.
   ##
   ## `buf` is read under `stateLoad`, written under `stateSave` and never
   ## touched under `stateMeasure`, which is what lets the width be computed
   ## against no buffer at all.
+  ##
+  ## `layout` IS A POINTER AND IS NIL UNDER THE SAVE AND THE LOAD, so those two
+  ## walks reach no heap at all. Only the description reader asks for it. A
+  ## `var seq` parameter has no way to say "no description wanted", so the two
+  ## operations that must stay allocation-free would each build a list and drop
+  ## it - one allocation per call for a value nobody reads.
   var at = 0
   for name, value in fieldPairs(ctx):
     when value is pointer:
@@ -143,13 +149,13 @@ proc stateWalk(ctx: var Mcf5307CtxObj; buf: StateBuf; op: StateOp;
             {.error: "mcf5307/state: an array of a type the walk cannot encode".}
       else:
         {.error: "mcf5307/state: a context field the walk cannot encode".}
-      layout.add((name, at - started))
+      if layout != nil:
+        layout[].add((name, at - started))
   at
 
 proc statePayloadWidth(): int =
   var probe: Mcf5307CtxObj
-  var described: seq[(string, int)]
-  stateWalk(probe, nil, stateMeasure, described)
+  stateWalk(probe, nil, stateMeasure, nil)
 
 const statePayloadBytes = statePayloadWidth()
 
@@ -157,7 +163,7 @@ proc stateLayout*(): seq[(string, int)] =
   ## The name and the byte width of every context field the snapshot carries,
   ## in the order the block carries them.
   var probe: Mcf5307CtxObj
-  discard stateWalk(probe, nil, stateMeasure, result)
+  discard stateWalk(probe, nil, stateMeasure, addr result)
 
 proc mcf5307_state_size*(): csize_t
     {.exportc: "mcf5307_state_size", cdecl, dynlib.} =
@@ -171,9 +177,8 @@ proc mcf5307_state_save*(ctx: MCF5307Ctx; dst: pointer)
   putBe32(buf, 0, stateMagic)
   putBe32(buf, 4, stateVersion)
   putBe32(buf, 8, uint32(statePayloadBytes))
-  var described: seq[(string, int)]
   discard stateWalk(ctx[], cast[StateBuf](addr buf[stateHeaderBytes]),
-                    stateSave, described)
+                    stateSave, nil)
   putBe32(buf, stateHeaderBytes + statePayloadBytes,
           stateChecksum(buf, stateHeaderBytes + statePayloadBytes))
 
@@ -197,9 +202,8 @@ proc stateLoad*(ctx: MCF5307Ctx; src: pointer): StateStatus =
   if getBe32(buf, stateHeaderBytes + statePayloadBytes) !=
       stateChecksum(buf, stateHeaderBytes + statePayloadBytes):
     return stateBadChecksum
-  var described: seq[(string, int)]
   discard stateWalk(ctx[], cast[StateBuf](addr buf[stateHeaderBytes]),
-                    stateLoad, described)
+                    stateLoad, nil)
   stateOk
 
 proc mcf5307_state_load*(ctx: MCF5307Ctx; src: pointer)
