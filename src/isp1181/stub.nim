@@ -25,16 +25,29 @@
 ## to the board, which answers `MCF5307_BUS_OK` for the whole window, so this
 ## model has no address it may refuse and no bus status of its own.
 ##
+## WHAT CPU-22 WROTE HERE, AND WHAT IT DELIBERATELY DID NOT. CPU-22 added the
+## import below and moved the two host-callback types to the module it names.
+## `cmake/Nim.cmake` compiles exactly ONE entry module and takes its `.c` files
+## from the `compile` array of Nim's own JSON, so a module no import chain
+## reaches is never compiled at all - and `src/mcf5307.nim` reaches this file
+## and no other under `src/isp1181/`. The import is therefore what puts the
+## full model in the library, and moving the two types makes it a dependency
+## the compiler enforces rather than a line a later edit could drop in silence.
+##
+## THE ENTRY POINTS BELOW STILL ANSWER WITH THE STUB, AND THAT IS NOT AN
+## OVERSIGHT. Which implementation stands behind them is an OPEN OPERATOR
+## DECISION, plan item W3-51: the design document's only sentence on the
+## run-time selection names no flag, no identifier, no type, no default and no
+## owner, and the row explicitly picks none of the three shapes it lists.
+## Wiring one here would take that decision by accident and would silently
+## remove the stub the milestone path boots against.
+##
 ## MIT licensed and clean-room with respect to GPL and LGPL code.
 
+import ./isp1181
+export Isp1181IrqFn, Isp1181TxFn
+
 type
-  Isp1181IrqFn* = proc (user: pointer; asserted: cint) {.cdecl.}
-    ## The LOGICAL interrupt state and not the pin state, as
-    ## `include/mcf5307.h` states it. The board owns the inversion.
-
-  Isp1181TxFn* = proc (user: pointer; endpoint: cint; data: ptr uint8;
-                       length: csize_t) {.cdecl.}
-
   ISP1181Ctx* = ref object
     ## Opaque to every caller: C sees `isp1181_ctx` and never its layout. It
     ## carries no field because the stub holds no state that a read could
