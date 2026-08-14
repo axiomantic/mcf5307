@@ -198,6 +198,8 @@ import mcf5307/control
 import mcf5307/machine
 
 var failures: seq[string]
+import ./case_sites
+
 var passCount = 0
 
 ## The figures the summary line carries, counted while the enumeration runs
@@ -220,23 +222,65 @@ const guardMeasurementDate = "2026-08-10"
   ## summary line carries it so a reader of a bare log can tell how old that
   ## evidence is.
 
-proc check(cond: bool; label: string) =
+proc checkImpl(site: int; cond: bool; label: string) =
   if cond:
     echo "PASSED  ", label
     inc passCount
+    executedSites.add(site)
   else:
     echo "FAILED  ", label
     failures.add(label)
+    executedSites.add(site)
 
-proc checkDetail(cond: bool; label: string; got: string) =
+
+template check(cond: bool; label: string) =
+  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
+  ## `declaredSites` by the `static` below, and once at RUN TIME into
+  ## `executedSites`, by the implementation and only when it reaches a
+  ## verdict. `tests/case_sites.nim` states what the pair is for and
+  ## `tests/case_sites.cmake` states the five rules the driver applies.
+  ## The template exists for `instantiationInfo`: a proc cannot see where
+  ## it was called from.
+  const site = instantiationInfo(-1).line
+  static: declaredSites.add(site)
+  checkImpl(site, cond, label)
+
+template checkOffGreenPath(cond: bool; label: string) =
+  ## THE ONE SITE IN THIS REPOSITORY A GREEN RUN DOES NOT REACH,
+  ## and it is written with its own template so that the exemption
+  ## is visible HERE and not in a list the driver keeps. Its only
+  ## call reports an operation whose legality mask is non-empty
+  ## and for which no `coverage` entry exists: when that call runs
+  ## the suite is already failing, so requiring it to have run
+  ## would make a healthy tree red. `tests/case_sites.nim` states
+  ## the rule the driver applies to the three registries.
+  const site = instantiationInfo(-1).line
+  static: declaredSites.add(site)
+  static: offGreenPathSites.add(site)
+  checkImpl(site, cond, label)
+proc checkDetailImpl(site: int; cond: bool; label: string; got: string) =
   if cond:
     echo "PASSED  ", label
     inc passCount
+    executedSites.add(site)
   else:
     echo "FAILED  ", label
     echo "          got  ", got
     failures.add(label)
+    executedSites.add(site)
 
+
+template checkDetail(cond: bool; label: string; got: string) =
+  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
+  ## `declaredSites` by the `static` below, and once at RUN TIME into
+  ## `executedSites`, by the implementation and only when it reaches a
+  ## verdict. `tests/case_sites.nim` states what the pair is for and
+  ## `tests/case_sites.cmake` states the five rules the driver applies.
+  ## The template exists for `instantiationInfo`: a proc cannot see where
+  ## it was called from.
+  const site = instantiationInfo(-1).line
+  static: declaredSites.add(site)
+  checkDetailImpl(site, cond, label, got)
 # ---------------------------------------------------------------------------
 # The board for the non-zero-cycle run: `MCF5307_BUS_OK` and a NOP for every
 # fetch.
@@ -839,7 +883,7 @@ block:
       # separate.
       inc opsInDomain
       if entry < 0:
-        check(false,
+        checkOffGreenPath(false,
           $op & ": carries a NON-EMPTY legality mask and NO coverage entry " &
           "reaches it - add one to `coverage`, with an illegal mode read " &
           "from the manual and not from `eaLegalityFor`")
@@ -1677,6 +1721,18 @@ proc attribution(): string =
       " no coverage entry exists - they are RED above, and their attribution" &
       " is UNKNOWN rather than false")
   result.add(")")
+
+# THE THREE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
+# program reports what its text declares and what its run adjudicated,
+# and the registered test's driver is what compares them - and what
+# compares the declared count against the call sites in this file.
+# A verdict printed here would be a self-assessment, and a run that
+# stopped early would simply not print one.
+const declaredCaseSites = declaredSites
+const declaredOffGreenPathSites = offGreenPathSites
+echo caseSiteLine("declared", "t_ea_masks", declaredCaseSites)
+echo caseSiteLine("executed", "t_ea_masks", executedSites)
+echo caseSiteLine("off-green-path", "t_ea_masks", declaredOffGreenPathSites)
 
 if failures.len > 0:
   echo ""

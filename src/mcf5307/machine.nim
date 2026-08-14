@@ -133,7 +133,37 @@ proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
 # A bus fault anywhere in an operand access halts the context with `fault`
 # set; the callers check `ctx.halted` after each step and unwind.
 
+# AN ABSENT CALLBACK IS A REFUSED ACCESS AND NOT AN ABORT. `mcf5307_create`
+# (`include/mcf5307.h`) forbids no argument, so a context whose board callbacks
+# are all nil is a context a caller may build, and `step` in `cpu.nim` opens by
+# faulting on a nil `readFn` rather than calling it - the core's own statement
+# that such a context is a state it survives. Design section 11.4, CPU-15, is
+# the requirement behind that statement: "Nothing aborts the process. An abort
+# inside a plugin destroys the host's session."
+#
+# THE GUARD IS HERE AND NOT ONLY AT THE HEAD OF `step` BECAUSE THIS IS WHERE THE
+# CALL HAPPENS. `step`'s guard answers for the paths that run THROUGH `step`;
+# `takeException` runs at the instruction boundary, ahead of the first fetch,
+# and reaches these two procedures without passing it. A guard at each caller
+# would be one guard per path and would be missing from the next path added.
+#
+# A NIL CALLBACK REPORTS THE SAME FAULT A BOARD'S REFUSAL REPORTS, which is the
+# behaviour the callers are already written for: every caller of these two
+# checks `ctx.halted` and unwinds. Inventing a second failure mode would give
+# each of them a second thing to check.
+#
+# `fetchExt` BELOW CALLS `ctx.readFn` WITHOUT SUCH A GUARD, AND IT IS NOT
+# REACHED WITH A NIL ONE. MEASURED 2026-08-13: `grep -rn fetchExt src/` gives
+# its call sites as the effective-address evaluator in this module and the four
+# executor modules, and each of those runs only from `step`, whose first
+# statement faults on a nil `readFn`. A guard there would be a line no case in
+# this repository can reach.
+
 proc readMem*(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
+  if ctx.readFn.isNil:
+    ctx.fault = true
+    ctx.halted = true
+    return 0'u32
   var st = Mcf5307BusStatus.busOk
   result = ctx.readFn(ctx.user, address, cint(size), addr st)
   if st != Mcf5307BusStatus.busOk:
@@ -141,6 +171,10 @@ proc readMem*(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
     ctx.halted = true
 
 proc writeMem*(ctx: MCF5307Ctx; address: uint32; size: uint8; value: uint32) =
+  if ctx.writeFn.isNil:
+    ctx.fault = true
+    ctx.halted = true
+    return
   var st = Mcf5307BusStatus.busOk
   ctx.writeFn(ctx.user, address, cint(size), value and sizeMask(size), addr st)
   if st != Mcf5307BusStatus.busOk:
@@ -426,9 +460,18 @@ proc eaRefWrite*(ctx: MCF5307Ctx; r: EaRef; size: uint8; value: uint32) =
 # vector table object, no fault-status computation and no double-fault
 # handling.
 
+# User's Manual section 3.2.2.1, folio 3-10, prints the whole 16-bit status
+# register over its bit numbers: T at 15, S at 13, M at 12 and I[2:0] at bits
+# 10 to 8. THE THREE NAMED HERE ARE THE ONES THIS MODULE'S OWN `takeException`
+# WRITES OR PRESERVES, and `srMaster` sits with them because a status-register
+# bit position is a fact about the register and not about the exception that
+# happens to clear it. It lived in `irq.nim` until 2026-08-13, which put one
+# field of this register in a different module from its neighbours for no
+# reason except that the interrupt was the first exception to need it.
 const
   srSupervisor* = 0x2000'u32   ## S, status register bit 13
   srTrace* = 0x8000'u32        ## T, status register bit 15
+  srMaster* = 0x1000'u32       ## M, status register bit 12
 
 proc exceptionFrameBase*(sp: uint32): uint32 =
   ## Where the two-longword frame goes, and it is not simply `sp - 8`.
@@ -499,6 +542,36 @@ proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32) =
   if ctx.halted:
     return
   ctx.pc = handler
+  # THE HANDLER'S FIRST INSTRUCTION HAS NOT RUN, AND THAT IS A FACT ABOUT THE
+  # MACHINE THAT OUTLIVES THIS CALL. MCF5307 User's Manual Table 3-1, closing
+  # paragraph, folio 3-13: "ColdFire processors inhibit sampling for interrupts
+  # during the first instruction of all exception handlers." `mcf5307_exec`
+  # reads this field at its sample and clears it; `decode_types.nim` states why
+  # it is a field of the context.
+  #
+  # IT IS WRITTEN HERE, AFTER THE PROGRAM COUNTER, AND THAT POSITION IS THE
+  # WHOLE OF THE RULE'S REACH. Every exception this core takes ends on this
+  # line, so no exception path can acquire the rule and none can be forgotten
+  # by it. A flag set by `execTrap` instead would be a rule about TRAP.
+  #
+  # NO CASE DECIDES THAT, AND SAYING SO IS THE POINT OF THIS PARAGRAPH.
+  # RE-MEASURED 2026-08-13 AGAINST THIS TREE - the one where `mcf5307_reset`
+  # SETS `atHandlerEntry` for the reset exception's own first instruction and
+  # GUARDS a nil context, and where `t_irq` carries 37 cases: moving this line
+  # out of here and into `execTrap` leaves every one of those cases GREEN,
+  # because TRAP is still the only exception an INSTRUCTION of this tree can
+  # take and the two spellings agree on every path that exists. THE RESET IS
+  # NOT A COUNTEREXAMPLE: it does
+  # not run through this procedure at all, it writes the field itself, and
+  # `cpu.nim` says why. The funnel is a reason and not a measurement until a
+  # SECOND path into this procedure from inside `step` exists; CPU-15's
+  # bus-fault exception is that path. `tests/t_irq.nim` records the same limit
+  # in its own header.
+  #
+  # A TAKE THAT FAULTED DOES NOT SET IT, because each early return above is
+  # ahead of this line and a machine that never reached a handler is not at
+  # one.
+  ctx.atHandlerEntry = true
 
 # ---------------------------------------------------------------------------
 # The register access the conformance harness needs. The C ABI in

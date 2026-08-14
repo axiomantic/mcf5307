@@ -86,21 +86,49 @@ import mcf5307/exception
 import mcf5307/machine
 
 var failures: seq[string]
+import ./case_sites
+
 var passCount = 0
 
-proc check(ok: bool; label: string; got: string; want: string) =
+proc checkImpl(site: int; ok: bool; label: string; got: string; want: string) =
   if ok:
     echo "PASSED  ", label
     inc passCount
+    executedSites.add(site)
   else:
     echo "FAILED  ", label
     echo "          got  ", got
     echo "          want ", want
     failures.add(label)
+    executedSites.add(site)
 
-proc checkEq(got: uint32; want: uint32; label: string) =
-  check(got == want, label, "0x" & toHex(got), "0x" & toHex(want))
 
+template check(ok: bool; label: string; got: string; want: string) =
+  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
+  ## `declaredSites` by the `static` below, and once at RUN TIME into
+  ## `executedSites`, by the implementation and only when it reaches a
+  ## verdict. `tests/case_sites.nim` states what the pair is for and
+  ## `tests/case_sites.cmake` states the five rules the driver applies.
+  ## The template exists for `instantiationInfo`: a proc cannot see where
+  ## it was called from.
+  const site = instantiationInfo(-1).line
+  static: declaredSites.add(site)
+  checkImpl(site, ok, label, got, want)
+proc checkEqImpl(site: int; got: uint32; want: uint32; label: string) =
+  checkImpl(site, got == want, label, "0x" & toHex(got), "0x" & toHex(want))
+
+
+template checkEq(got: uint32; want: uint32; label: string) =
+  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
+  ## `declaredSites` by the `static` below, and once at RUN TIME into
+  ## `executedSites`, by the implementation and only when it reaches a
+  ## verdict. `tests/case_sites.nim` states what the pair is for and
+  ## `tests/case_sites.cmake` states the five rules the driver applies.
+  ## The template exists for `instantiationInfo`: a proc cannot see where
+  ## it was called from.
+  const site = instantiationInfo(-1).line
+  static: declaredSites.add(site)
+  checkEqImpl(site, got, want, label)
 # ---------------------------------------------------------------------------
 # BLOCK 1. The first longword of the frame, as a number.
 #
@@ -422,6 +450,18 @@ check(addressErr == (sp: frameBase, pc: addressHandler, halted: false,
       "address error: vector 3, handler from $00C", $addressErr,
       "the $00C handler, VEC 3, one read of $00C")
 #   0100 | 00 | 00000011 | 00 | 0010011100000000 -> 0x400C2700
+
+# THE THREE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
+# program reports what its text declares and what its run adjudicated,
+# and the registered test's driver is what compares them - and what
+# compares the declared count against the call sites in this file.
+# A verdict printed here would be a self-assessment, and a run that
+# stopped early would simply not print one.
+const declaredCaseSites = declaredSites
+const declaredOffGreenPathSites = offGreenPathSites
+echo caseSiteLine("declared", "t_exception", declaredCaseSites)
+echo caseSiteLine("executed", "t_exception", executedSites)
+echo caseSiteLine("off-green-path", "t_exception", declaredOffGreenPathSites)
 
 if failures.len > 0:
   echo ""

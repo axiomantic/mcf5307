@@ -518,6 +518,19 @@ foreach(argument IN LISTS MCF5307_EA_COMMAND)
     string(APPEND NIM_EA_COMMAND_LITERAL "    \"${argument}\"\n")
 endforeach()
 
+# THE VANISHED-CASE CHECK EVERY `t_*` DRIVER BELOW INCLUDES.
+#
+# Each driver anchors its pass on `<suite>: <N> cases passed`, and MEASURED
+# 2026-08-13 that anchor accepts a suite that has stopped running its cases:
+# `t_irq` with `if passCount >= 1: return` at the head of its `check` printed
+# `t_irq: 1 cases passed`, exited 0, and `ctest -R ^t_irq$` reported `Passed`
+# with twenty-two of twenty-three cases gone.
+#
+# `case_sites.cmake` states the five rules that replace the range with a
+# comparison, and `tests/case_sites.nim` states the run-time half.
+set(MCF5307_CASE_SITES_MODULE "${CMAKE_CURRENT_LIST_DIR}/case_sites.cmake")
+
+
 set(MCF5307_EA_SOURCE "${CMAKE_CURRENT_LIST_DIR}/t_ea_masks.nim")
 set(MCF5307_EA_BINARY "${CMAKE_CURRENT_BINARY_DIR}/t_ea_masks_program")
 set(MCF5307_EA_NIMCACHE "${CMAKE_CURRENT_BINARY_DIR}/t_ea_masks_nimcache")
@@ -568,11 +581,41 @@ endif()
 # The program prints `t_ea_masks: <N> cases passed`; failing cases make it
 # exit non-zero, which the check above already rejects. Anchoring the tail
 # here keeps a run that printed the banner but skipped the cases from passing.
-if(NOT ea_run_out MATCHES "t_ea_masks: [0-9]+ cases passed")
+# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES, and this anchor read
+# `[0-9]+` until 2026-08-13, and it was not the only one: t_ea_masks,
+# t_sign_extend, t_alu and t_move all did - while `tests/case_sites.cmake` and
+# `tests/case_sites.nim` both stated that every driver carried the strong form.
+# THE ANCHORS ARE NAMED AND NOT COUNTED. This sentence read "four of the eight"
+# until 2026-08-13. The four names were the measurement; the denominator was a
+# separate figure that moves whenever a suite is added, and nothing in the tree
+# reads it or fails when it drifts. The names stay true as the suite list
+# grows, so the fraction was deleted rather than corrected.
+# MEASURED with `t_ea_masks`'s two
+# `check*Impl` procs returning at their first line: the suite printed
+# `t_ea_masks: 0 cases passed`, exited 0, and THIS LINE ACCEPTED IT. The
+# vanished-case rule caught it one check later, which is the rule doing its
+# job and not this anchor doing its own.
+if(NOT ea_run_out MATCHES "t_ea_masks: [1-9][0-9]* cases passed")
     message(FATAL_ERROR
         "t_ea_masks: the run exited 0 but did not report a full pass.\n"
         "  stdout : ${ea_run_out}\n  stderr : ${ea_run_err}")
 endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_ea_masks" "@MCF5307_EA_SOURCE@" "${ea_run_out}"
+    1)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
+# states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
+# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
+# CASE COUNT.
+mcf5307_check_case_total("t_ea_masks" "${ea_run_out}" 444)
+
 ]==])
 
 string(CONFIGURE "${MCF5307_EA_DRIVER_TEMPLATE}"
@@ -689,11 +732,41 @@ endif()
 # The program prints `t_sign_extend: <N> cases passed`; failing cases make it
 # exit non-zero, which the check above already rejects. Anchoring the tail
 # here keeps a run that printed the banner but skipped the cases from passing.
-if(NOT sign_run_out MATCHES "t_sign_extend: [0-9]+ cases passed")
+# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES, and this anchor read
+# `[0-9]+` until 2026-08-13, and it was not the only one: t_ea_masks,
+# t_sign_extend, t_alu and t_move all did - while `tests/case_sites.cmake` and
+# `tests/case_sites.nim` both stated that every driver carried the strong form.
+# THE ANCHORS ARE NAMED AND NOT COUNTED. This sentence read "four of the eight"
+# until 2026-08-13. The four names were the measurement; the denominator was a
+# separate figure that moves whenever a suite is added, and nothing in the tree
+# reads it or fails when it drifts. The names stay true as the suite list
+# grows, so the fraction was deleted rather than corrected.
+# MEASURED with `t_ea_masks`'s two
+# `check*Impl` procs returning at their first line: the suite printed
+# `t_ea_masks: 0 cases passed`, exited 0, and THIS LINE ACCEPTED IT. The
+# vanished-case rule caught it one check later, which is the rule doing its
+# job and not this anchor doing its own.
+if(NOT sign_run_out MATCHES "t_sign_extend: [1-9][0-9]* cases passed")
     message(FATAL_ERROR
         "t_sign_extend: the run exited 0 but did not report a full pass.\n"
         "  stdout : ${sign_run_out}\n  stderr : ${sign_run_err}")
 endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_sign_extend" "@MCF5307_SIGN_SOURCE@" "${sign_run_out}"
+    0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
+# states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
+# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
+# CASE COUNT.
+mcf5307_check_case_total("t_sign_extend" "${sign_run_out}" 10)
+
 ]==])
 
 string(CONFIGURE "${MCF5307_SIGN_DRIVER_TEMPLATE}"
@@ -805,11 +878,41 @@ endif()
 # The program prints `t_alu: <N> cases passed`; failing cases make it exit
 # non-zero, which the check above already rejects. Anchoring the tail here
 # keeps a run that printed the banner but skipped the cases from passing.
-if(NOT alu_run_out MATCHES "t_alu: [0-9]+ cases passed")
+# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES, and this anchor read
+# `[0-9]+` until 2026-08-13, and it was not the only one: t_ea_masks,
+# t_sign_extend, t_alu and t_move all did - while `tests/case_sites.cmake` and
+# `tests/case_sites.nim` both stated that every driver carried the strong form.
+# THE ANCHORS ARE NAMED AND NOT COUNTED. This sentence read "four of the eight"
+# until 2026-08-13. The four names were the measurement; the denominator was a
+# separate figure that moves whenever a suite is added, and nothing in the tree
+# reads it or fails when it drifts. The names stay true as the suite list
+# grows, so the fraction was deleted rather than corrected.
+# MEASURED with `t_ea_masks`'s two
+# `check*Impl` procs returning at their first line: the suite printed
+# `t_ea_masks: 0 cases passed`, exited 0, and THIS LINE ACCEPTED IT. The
+# vanished-case rule caught it one check later, which is the rule doing its
+# job and not this anchor doing its own.
+if(NOT alu_run_out MATCHES "t_alu: [1-9][0-9]* cases passed")
     message(FATAL_ERROR
         "t_alu: the run exited 0 but did not report a full pass.\n"
         "  stdout : ${alu_run_out}\n  stderr : ${alu_run_err}")
 endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_alu" "@MCF5307_ALU_SOURCE@" "${alu_run_out}"
+    0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
+# states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
+# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
+# CASE COUNT.
+mcf5307_check_case_total("t_alu" "${alu_run_out}" 165)
+
 ]==])
 
 string(CONFIGURE "${MCF5307_ALU_DRIVER_TEMPLATE}"
@@ -916,11 +1019,41 @@ endif()
 # The program prints `t_move: <N> cases passed`; failing cases make it exit
 # non-zero, which the check above already rejects. Anchoring the tail here
 # keeps a run that printed the banner but skipped the cases from passing.
-if(NOT move_run_out MATCHES "t_move: [0-9]+ cases passed")
+# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES, and this anchor read
+# `[0-9]+` until 2026-08-13, and it was not the only one: t_ea_masks,
+# t_sign_extend, t_alu and t_move all did - while `tests/case_sites.cmake` and
+# `tests/case_sites.nim` both stated that every driver carried the strong form.
+# THE ANCHORS ARE NAMED AND NOT COUNTED. This sentence read "four of the eight"
+# until 2026-08-13. The four names were the measurement; the denominator was a
+# separate figure that moves whenever a suite is added, and nothing in the tree
+# reads it or fails when it drifts. The names stay true as the suite list
+# grows, so the fraction was deleted rather than corrected.
+# MEASURED with `t_ea_masks`'s two
+# `check*Impl` procs returning at their first line: the suite printed
+# `t_ea_masks: 0 cases passed`, exited 0, and THIS LINE ACCEPTED IT. The
+# vanished-case rule caught it one check later, which is the rule doing its
+# job and not this anchor doing its own.
+if(NOT move_run_out MATCHES "t_move: [1-9][0-9]* cases passed")
     message(FATAL_ERROR
         "t_move: the run exited 0 but did not report a full pass.\n"
         "  stdout : ${move_run_out}\n  stderr : ${move_run_err}")
 endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_move" "@MCF5307_MOVE_SOURCE@" "${move_run_out}"
+    0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
+# states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
+# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
+# CASE COUNT.
+mcf5307_check_case_total("t_move" "${move_run_out}" 34)
+
 ]==])
 
 string(CONFIGURE "${MCF5307_MOVE_DRIVER_TEMPLATE}"
@@ -1065,6 +1198,22 @@ if(NOT logic_run_out MATCHES "t_logic: [1-9][0-9]* cases passed")
         "t_logic: the run exited 0 but did not report a full pass.\n"
         "  stdout : ${logic_run_out}\n  stderr : ${logic_run_err}")
 endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_logic" "@MCF5307_LOGIC_SOURCE@" "${logic_run_out}"
+    0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
+# states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
+# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
+# CASE COUNT.
+mcf5307_check_case_total("t_logic" "${logic_run_out}" 74)
+
 ]==])
 
 string(CONFIGURE "${MCF5307_LOGIC_DRIVER_TEMPLATE}"
@@ -1215,6 +1364,22 @@ if(NOT control_run_out MATCHES "t_control: [1-9][0-9]* cases passed")
         "t_control: the run exited 0 but did not report a full pass.\n"
         "  stdout : ${control_run_out}\n  stderr : ${control_run_err}")
 endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_control" "@MCF5307_CONTROL_SOURCE@" "${control_run_out}"
+    0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
+# states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
+# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
+# CASE COUNT.
+mcf5307_check_case_total("t_control" "${control_run_out}" 168)
+
 ]==])
 
 string(CONFIGURE "${MCF5307_CONTROL_DRIVER_TEMPLATE}"
@@ -1333,6 +1498,22 @@ if(NOT exception_run_out MATCHES "t_exception: [1-9][0-9]* cases passed")
         "t_exception: the run exited 0 but did not report a full pass.\n"
         "  stdout : ${exception_run_out}\n  stderr : ${exception_run_err}")
 endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_exception" "@MCF5307_EXCEPTION_SOURCE@" "${exception_run_out}"
+    0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
+# states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
+# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
+# CASE COUNT.
+mcf5307_check_case_total("t_exception" "${exception_run_out}" 39)
+
 ]==])
 
 string(CONFIGURE "${MCF5307_EXCEPTION_DRIVER_TEMPLATE}"
@@ -1343,6 +1524,540 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_exception_driver.cmake"
 add_test(NAME t_exception
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_exception_driver.cmake")
+
+# -------------------------------------------------------------------- CPU-17
+# `t_irq` - the interrupt model.
+#
+# ONE REGISTERED NAME, AND NO CORPUS BESIDE IT, for the reason the CPU-14
+# block above gives: the corpus runner executes ASSEMBLED encodings, and an
+# interrupt has no encoding. The whole of the evidence for this task is the
+# registered name below.
+#
+# IT EXERCISES A MODULE THE LIBRARY DOES CARRY. `src/mcf5307/cpu.nim` imports
+# `mcf5307/irq`, so the entry module reaches it transitively and its
+# `mcf5307_set_irq` is in the archive; the test reaches the same module by
+# source. That import also puts `src/mcf5307/exception.nim` into the library
+# for the first time, because `irq.nim` imports it for `autovectorFor`.
+#
+# THE FLAG SET, THE COMPILE INSIDE THE TEST and the two-part failure check are
+# taken from the `t_exception` block above, for the reasons that block gives.
+# The tail anchor is `[1-9][0-9]*`, which rejects a run of zero cases.
+
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_irq cannot be registered: MCF5307_NIM_COMMAND is not set. "
+        "The test takes its flag set from the library's own compile command, "
+        "and a test registered against an empty command would compile with no "
+        "flags at all and assert nothing.")
+endif()
+
+set(MCF5307_IRQ_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_IRQ_COMMAND "${argument}")
+endforeach()
+list(APPEND MCF5307_IRQ_COMMAND "--path:${PROJECT_SOURCE_DIR}/src")
+
+set(NIM_IRQ_COMMAND_LITERAL "")
+foreach(argument IN LISTS MCF5307_IRQ_COMMAND)
+    string(APPEND NIM_IRQ_COMMAND_LITERAL "    \"${argument}\"\n")
+endforeach()
+
+set(MCF5307_IRQ_SOURCE "${CMAKE_CURRENT_LIST_DIR}/t_irq.nim")
+set(MCF5307_IRQ_BINARY "${CMAKE_CURRENT_BINARY_DIR}/t_irq_program")
+set(MCF5307_IRQ_NIMCACHE "${CMAKE_CURRENT_BINARY_DIR}/t_irq_nimcache")
+
+set(MCF5307_IRQ_DRIVER_TEMPLATE [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t_irq`. It compiles the Nim test program
+# with THE LIBRARY'S OWN FLAG SET, runs it, and fails when the run exits
+# non-zero or does not report a full pass.
+
+set(nim_command
+@NIM_IRQ_COMMAND_LITERAL@)
+set(source "@MCF5307_IRQ_SOURCE@")
+set(binary "@MCF5307_IRQ_BINARY@")
+set(nimcache "@MCF5307_IRQ_NIMCACHE@")
+
+# The binary of an earlier run is REMOVED BEFORE THE COMPILE. Without this a
+# compile that failed would leave the earlier binary in place, and the run
+# would then execute code this run never produced.
+file(REMOVE "${binary}")
+
+execute_process(
+    COMMAND ${nim_command} "--nimcache:${nimcache}" "-o:${binary}" "${source}"
+    RESULT_VARIABLE irq_compile_rc
+    OUTPUT_VARIABLE irq_compile_out
+    ERROR_VARIABLE irq_compile_err)
+
+if(NOT irq_compile_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_irq: the Nim test program did not compile "
+        "(result: ${irq_compile_rc})\n"
+        "${irq_compile_out}\n${irq_compile_err}")
+endif()
+
+execute_process(
+    COMMAND "${binary}"
+    RESULT_VARIABLE irq_run_rc
+    OUTPUT_VARIABLE irq_run_out
+    ERROR_VARIABLE irq_run_err)
+message("${irq_run_out}")
+
+if(NOT irq_run_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_irq: the run exited ${irq_run_rc}\n${irq_run_err}")
+endif()
+
+# The program prints `t_irq: <N> cases passed`; failing cases make it exit
+# non-zero, which the check above already rejects. THE COUNT IS `[1-9][0-9]*`
+# AND NOT `[0-9]+`: `[0-9]+` matches `0`, so a test program reduced to its
+# banner alone would exit 0, run no case and PASS.
+if(NOT irq_run_out MATCHES "t_irq: [1-9][0-9]* cases passed")
+    message(FATAL_ERROR
+        "t_irq: the run exited 0 but did not report a full pass.\n"
+        "  stdout : ${irq_run_out}\n  stderr : ${irq_run_err}")
+endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the five rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_irq" "@MCF5307_IRQ_SOURCE@" "${irq_run_out}"
+    0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
+# states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
+# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
+# CASE COUNT.
+mcf5307_check_case_total("t_irq" "${irq_run_out}" 37)
+
+]==])
+
+string(CONFIGURE "${MCF5307_IRQ_DRIVER_TEMPLATE}" MCF5307_IRQ_DRIVER @ONLY)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_irq_driver.cmake"
+    "${MCF5307_IRQ_DRIVER}")
+
+add_test(NAME t_irq
+    COMMAND "${CMAKE_COMMAND}"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t_irq_driver.cmake")
+
+
+# ------------------------------------------- THE CHECK ON THE VANISHED-CASE
+# CHECK ITSELF. Nothing above pins HOW MANY drivers carry
+# `mcf5307_check_case_sites`, so the mechanism that refuses to let a case
+# vanish in silence could itself vanish in silence.
+#
+# MEASURED 2026-08-13 by the gate-4.4 judge: deleting the
+# `mcf5307_check_case_sites("t_irq" ...)` line from the `t_irq` driver template
+# above left `cmake` configuring cleanly and `ctest -R ^t_irq$` reporting
+# `Passed`, WITH NO COMPLAINT ANYWHERE. The rule that a count must be derived
+# rather than typed was applied to every suite's cases and to none of the
+# suites' checks.
+#
+# SO THE SET IS DERIVED FROM BOTH ENDS AND THE TWO ENDS ARE COMPARED, which is
+# the discipline `case_sites.cmake` rule 2 already applies to call sites:
+#
+#   A. THE SUITES THAT CARRY THE RUN-TIME HALF. A suite participates by
+#      importing `tests/case_sites.nim`; the import is what gives it
+#      `declaredSites`, `executedSites` and `caseSiteLine`, and a suite that
+#      drops the import does not compile, because it uses all three.
+#   B. THE SUITES THE GENERATED DRIVERS ACTUALLY CHECK, read out of the driver
+#      files THIS CONFIGURE JUST WROTE - the artifact that runs, not the
+#      template it was written from.
+#
+# NEITHER SIDE SPELLS A NUMBER, so a suite added to this file updates both at
+# once and there is nothing to maintain.
+#
+# IT RUNS AT CONFIGURE TIME AND IS NOT A REGISTERED TEST, deliberately. A check
+# on whether the tests are wired up must not be a test that a selection filter
+# can leave out - which is the defect REPO-6 recorded when CI selected three of
+# eleven T0 tests and could not see a suite vanish. A configure that fails here
+# builds nothing at all.
+#
+# WHAT IT DOES NOT REACH, STATED SO ITS SILENCE IS NOT READ AS COVERAGE. Both
+# sides fall together under ONE change: deleting a suite's `import
+# ./case_sites` AND its driver's check line in the same edit removes the suite
+# from side A and from side B, and this comparison stays green. That is the
+# same shape as `case_sites.cmake` rule 2's own residual - a call site deleted
+# from the text is deleted from the compiler's registry too - and it is not
+# closeable by comparing these two sides harder. What it does catch is either
+# half deleted on its own, which is what was measured.
+#
+# A STALE BUILD TREE REPORTS HERE. Side B globs the generated drivers, so a
+# driver left behind by a deleted suite is an extra name and is red. The repair
+# is a clean configure and never a relaxation of this check.
+file(GLOB MCF5307_SUITE_SOURCES "${CMAKE_CURRENT_LIST_DIR}/t_*.nim")
+set(MCF5307_SUITES_WITH_RUNTIME_HALF "")
+foreach(mcf5307_suite_source IN LISTS MCF5307_SUITE_SOURCES)
+    file(READ "${mcf5307_suite_source}" mcf5307_suite_text)
+    # THE IMPORT IS ANCHORED AT THE START OF A LINE so that the many `##`
+    # comments naming `tests/case_sites.nim` are not read as imports.
+    if(mcf5307_suite_text MATCHES "(^|\n)import[ \t]+\\./case_sites")
+        get_filename_component(mcf5307_suite_name "${mcf5307_suite_source}"
+            NAME_WE)
+        list(APPEND MCF5307_SUITES_WITH_RUNTIME_HALF "${mcf5307_suite_name}")
+    endif()
+endforeach()
+
+file(GLOB MCF5307_GENERATED_DRIVERS
+    "${CMAKE_CURRENT_BINARY_DIR}/t_*_driver.cmake")
+#
+# BOTH DRIVER-SIDE CHECKS ARE REQUIRED OF EVERY DRIVER, not just the older one.
+# `mcf5307_check_case_total` is exactly as deletable as
+# `mcf5307_check_case_sites` was, and exempting it here would rebuild the hole
+# this block exists to close one function further along. A driver missing
+# EITHER call leaves its suite out of the set below.
+set(MCF5307_SUITES_CHECKED_BY_A_DRIVER "")
+foreach(mcf5307_driver IN LISTS MCF5307_GENERATED_DRIVERS)
+    get_filename_component(mcf5307_driver_name "${mcf5307_driver}" NAME)
+    string(REGEX REPLACE "_driver\\.cmake$" "" mcf5307_driver_suite
+        "${mcf5307_driver_name}")
+    file(READ "${mcf5307_driver}" mcf5307_driver_text)
+    set(mcf5307_driver_checked "")
+    foreach(mcf5307_required_call IN ITEMS mcf5307_check_case_sites
+            mcf5307_check_case_total)
+        string(REGEX MATCHALL "${mcf5307_required_call}\\(\"[A-Za-z0-9_]+\""
+            mcf5307_driver_hits "${mcf5307_driver_text}")
+        set(mcf5307_call_names "")
+        foreach(mcf5307_hit IN LISTS mcf5307_driver_hits)
+            string(REGEX REPLACE "^.*\\(\"([A-Za-z0-9_]+)\"$" "\\1"
+                mcf5307_hit_suite "${mcf5307_hit}")
+            # A DRIVER MAY ONLY CHECK ITS OWN SUITE. Without this a single
+            # driver naming all eight suites would satisfy the comparison
+            # below while seven runs went unexamined.
+            if(NOT mcf5307_hit_suite STREQUAL mcf5307_driver_suite)
+                message(FATAL_ERROR
+                    "tests: the generated driver ${mcf5307_driver_name} calls "
+                    "${mcf5307_required_call} for `${mcf5307_hit_suite}`, "
+                    "which is not the suite it runs. A driver checks the "
+                    "output of its OWN run and has no other run to check.")
+            endif()
+            list(APPEND mcf5307_call_names "${mcf5307_hit_suite}")
+        endforeach()
+        if(NOT mcf5307_call_names STREQUAL "")
+            list(APPEND mcf5307_driver_checked "${mcf5307_required_call}")
+        endif()
+    endforeach()
+    # THE CASE TOTAL THE DRIVER RECORDS, read out of the GENERATED file rather
+    # than out of the template it was written from, for the reason side B above
+    # gives: the artifact that runs is the one whose figure the second-source
+    # comparison below has to be about.
+    if(mcf5307_driver_text MATCHES
+            "mcf5307_check_case_total\\(\"${mcf5307_driver_suite}\"[^\n]*[^0-9]([0-9]+)\\)")
+        set(MCF5307_CASE_TOTAL_${mcf5307_driver_suite} "${CMAKE_MATCH_1}")
+    endif()
+    list(LENGTH mcf5307_driver_checked mcf5307_driver_checked_count)
+    if(mcf5307_driver_checked_count EQUAL 2)
+        list(APPEND MCF5307_SUITES_CHECKED_BY_A_DRIVER
+            "${mcf5307_driver_suite}")
+    elseif(mcf5307_driver_checked_count EQUAL 1)
+        string(REPLACE ";" " " mcf5307_driver_checked_text
+            "${mcf5307_driver_checked}")
+        message(FATAL_ERROR
+            "tests: the generated driver ${mcf5307_driver_name} calls "
+            "${mcf5307_driver_checked_text} and not the other of the two "
+            "driver-side checks. `mcf5307_check_case_sites` fails on a case "
+            "that stopped running and `mcf5307_check_case_total` fails on a "
+            "table that got shorter; they are not two strengths of one check "
+            "and a suite carrying one of them is unguarded against the other "
+            "shape.")
+    endif()
+endforeach()
+
+list(REMOVE_DUPLICATES MCF5307_SUITES_WITH_RUNTIME_HALF)
+list(REMOVE_DUPLICATES MCF5307_SUITES_CHECKED_BY_A_DRIVER)
+list(SORT MCF5307_SUITES_WITH_RUNTIME_HALF)
+list(SORT MCF5307_SUITES_CHECKED_BY_A_DRIVER)
+list(LENGTH MCF5307_SUITES_WITH_RUNTIME_HALF MCF5307_RUNTIME_HALF_COUNT)
+list(LENGTH MCF5307_SUITES_CHECKED_BY_A_DRIVER MCF5307_DRIVER_CHECK_COUNT)
+
+if(NOT MCF5307_SUITES_WITH_RUNTIME_HALF STREQUAL
+        MCF5307_SUITES_CHECKED_BY_A_DRIVER)
+    string(REPLACE ";" " " MCF5307_RUNTIME_HALF_TEXT
+        "${MCF5307_SUITES_WITH_RUNTIME_HALF}")
+    string(REPLACE ";" " " MCF5307_DRIVER_CHECK_TEXT
+        "${MCF5307_SUITES_CHECKED_BY_A_DRIVER}")
+    message(FATAL_ERROR
+        "tests: ${MCF5307_RUNTIME_HALF_COUNT} suite(s) import "
+        "`tests/case_sites.nim` and carry the run-time half of the "
+        "vanished-case check:\n  ${MCF5307_RUNTIME_HALF_TEXT}\n"
+        "but ${MCF5307_DRIVER_CHECK_COUNT} generated driver(s) call "
+        "`mcf5307_check_case_sites`:\n  ${MCF5307_DRIVER_CHECK_TEXT}\n"
+        "A SUITE WHOSE DRIVER DOES NOT CALL IT REPORTS ITS OWN REGISTRIES AND "
+        "NOBODY READS THEM: it passes with its cases gone, which is exactly "
+        "the silence `tests/case_sites.cmake` exists to end. The two sides "
+        "here are derived - one from the suites' own imports, one from the "
+        "driver files this configure just wrote - and NEITHER may be brought "
+        "into agreement by deleting the import.")
+endif()
+message(STATUS
+    "mcf5307: the vanished-case check is wired into all "
+    "${MCF5307_DRIVER_CHECK_COUNT} suite(s) that carry its run-time half")
+
+
+# ----------------------------------- THE SECOND SOURCE FOR A TYPED CASE TOTAL.
+# `tests/case_sites.cmake` accepts ONE TYPED figure per suite because a table
+# that gets shorter fails no derived check. The round-2 audit of gate 4.4 then
+# asked what stops an author who meets that red from editing the figure instead
+# of restoring the cases, and until this block the answer was NOTHING.
+#
+# THE ARGUMENT THAT NO SECOND SOURCE EXISTED WAS WRONG, AND THE FILE THAT MADE
+# IT NAMED THE SOURCE ELSEWHERE IN ITSELF. `src/` carries dated transcripts of
+# runs of these suites, quoted inside the comments that record cycle-mutation
+# and mask-mutation measurements, and a transcript naming a suite and a case
+# count is a figure the driver's number can be held against. It is not derived
+# from the RUN - both sides are written down - but they are written down in
+# different files, by different tasks, for different reasons, and one of them is
+# production source that a test may not edit. An author moving one to silence a
+# red has to move the other in the same change, and the other is not a test.
+#
+# BOTH ENDS ARE DERIVED, as they are for the wiring check above. Side A is every
+# transcript found by READING `src/`; side B is the figure read out of the
+# GENERATED driver. No suite is named here and no count is typed here, so a
+# transcript added to or removed from `src/` moves this check with it.
+#
+# THIS BLOCK PRINTED A COVERAGE FIGURE UNTIL 2026-08-13 - `<N> of the 8 typed
+# case totals are corroborated by a transcript in src/`, with the suites named -
+# AND THAT LINE IS DELETED RATHER THAN REPAIRED. It was a present-tense claim
+# about the state of the tree with nothing keeping it true, which is the shape of
+# sentence this whole mechanism exists to make unsayable. The gate-4.4 judge
+# moved it in BOTH directions at rc 0, MEASURED 2026-08-13:
+#
+#   DOWNWARD, SILENTLY. Rewording a real transcript - `held its 168 cases` to
+#   `held its 168 unit cases` - dropped the figure from 3 to 2, and so did
+#   line-wrapping the same sentence so that the suite name and the number fell on
+#   different lines. Nothing failed. A STALE FIGURE THEN SURVIVES IN `src/` with
+#   the printed line reporting a smaller coverage that no reader is watching.
+#
+#   UPWARD. Prose naming a suite and a number, in a paragraph whose own words
+#   were "nothing here was measured from a run", raised the figure to 4 and
+#   printed that suite as corroborated.
+#
+# A NUMBER THAT MOVES IN BOTH DIRECTIONS WITHOUT FAILING MEASURES THE WORDING OF
+# COMMENTS AND NOT THE COVERAGE IT NAMES. The AGREEMENT GATE below stays, because
+# it is the half that fails: a transcript this scan DOES find and that DISAGREES
+# with the driver's figure stops the configure. What is gone is the half that
+# reported how much was found, because "found" was never a count of anything an
+# author could rely on.
+#
+# THE SCAN HAS MISSED A REAL TRANSCRIPT, and the miss is recorded because the
+# repair it drove is the loop below. `src/mcf5307/logic.nim`'s "All 74
+# `t_logic` cases stayed GREEN" went unread, because the number precedes the
+# suite name there and the scan read only a number that FOLLOWED it. THAT ONE
+# IS CLOSED: the loop below now reads both orders, and the comment at the two
+# branches records what the second may and may not match.
+#
+# HOW MANY TRANSCRIPTS THE SCAN READS IS DELIBERATELY NOT WRITTEN DOWN HERE.
+# Every figure this block has carried went stale inside a single round: the
+# last one enumerated the suites it had found, and the scan was already reading
+# one the enumeration did not name by the time it was committed. Nothing in the
+# tree reads such a figure, so nothing makes it fail. What DOES fail is the
+# AGREEMENT GATE below - a transcript that disagrees with the driver's own
+# figure stops the configure and names the file, the suite and both numbers.
+#
+# A DIFFERENT MISS OF THE SAME FAMILY IS NOT CLOSED AND IS NOT CLOSEABLE HERE.
+# A figure whose suite is named by an ANAPHOR - `src/mcf5307/cpu.nim` carried
+# "that suite carries 34 cases", with `t_irq` six lines above - is outside what
+# any per-line regex can resolve, and widening this scan until it guessed would
+# make it match prose. That is still the reason no figure derived from this scan
+# is printed as coverage: what it does not find, it cannot report on.
+#
+# WHAT IT DOES NOT REACH, STATED SO ITS SILENCE IS NOT READ AS COVERAGE. A suite
+# no transcript names is not covered and this check says nothing whatever about
+# it: the typed figure is still the only guard there. Neither is a suite whose
+# transcript is written in a shape this scan does not read, and the paragraph
+# above names one. Nor does it make the transcripts a specification - they are
+# dated records of past runs, so a DELIBERATE change in a suite's case count
+# makes them red. The repair for that is the one this project already uses where
+# a transcript would otherwise quote a total that moves: MEASURED 2026-08-13,
+# `src/mcf5307/decode_types.nim` quotes `t_ea_masks` as
+# `5 of <caseTotalMustMatchTranscripts> cases failed`, a named reference in place
+# of a number, which stays true at every date and leaves this scan nothing to
+# compare. Retyping the driver's figure to agree with a stale transcript is not a
+# repair, and neither is deleting this block.
+file(GLOB_RECURSE MCF5307_CORE_SOURCES "${PROJECT_SOURCE_DIR}/src/*.nim")
+foreach(mcf5307_core_source IN LISTS MCF5307_CORE_SOURCES)
+    # SPLIT BY HAND for the reason `tests/case_sites.cmake` gives at its own
+    # source-side rule: a `;` in the text would split one line into two list
+    # elements and take the front off both halves.
+    file(READ "${mcf5307_core_source}" mcf5307_core_text)
+    string(REPLACE ";" "\\;" mcf5307_core_text "${mcf5307_core_text}")
+    string(REPLACE "\n" ";" mcf5307_core_text "${mcf5307_core_text}")
+    foreach(mcf5307_core_line IN LISTS mcf5307_core_text)
+        if(NOT mcf5307_core_line MATCHES " cases")
+            continue()
+        endif()
+        foreach(mcf5307_suite IN LISTS MCF5307_SUITES_WITH_RUNTIME_HALF)
+            # THE SUITE NAME IS BOUNDED ON BOTH SIDES so that one suite's name
+            # inside a longer one does not answer for it, and the count must be
+            # DIGITS immediately before ` cases` so that the named-reference
+            # spelling above is not read as a figure.
+            #
+            # THE LEFT BOUND WAS MISSING UNTIL 2026-08-13 and only the right one
+            # was written. MEASURED that day: a line reading
+            # "`helper_t_alu` held its 999 cases" was read as `t_alu` quoting
+            # 999 and stopped the configure, naming a suite the line does not
+            # mention. A bound on one side of a name is not a bound.
+            #
+            # BOTH ORDERS ARE READ, AND ONLY ONE WAS UNTIL 2026-08-13. The
+            # paragraph above this loop recorded the miss and left it open:
+            # `src/mcf5307/logic.nim`'s "All 74 `t_logic` cases stayed GREEN"
+            # puts the number BEFORE the name, and a scan that reads only a
+            # number FOLLOWING the name never saw it. That is a real transcript
+            # quoting a real total, and a stale one would have survived in
+            # `src/` with nothing to say so. The second branch below reads it.
+            #
+            # WHAT THE SECOND BRANCH IS NOT ALLOWED TO DO is match a line the
+            # first branch would have rejected as prose. It is bounded on both
+            # sides of the name exactly as the first is, and it requires the
+            # word `cases` to FOLLOW the name, so a sentence that merely holds
+            # a number and a suite name in the same clause is not a figure.
+            # MEASURED 2026-08-13 over every line of `src/`: the second branch
+            # matches exactly ONE line that the first does not, and it is the
+            # `logic.nim` transcript named above.
+            #
+            # THE SECOND BRANCH DOES MATCH ORDINARY PROSE, AND IT IS KEPT
+            # ANYWAY. MEASURED 2026-08-13 by planting
+            # "Blocks 24, 25 `t_irq` cases are new" in `cpu.nim`: the configure
+            # stopped, reporting that the line quotes 25 cases. It is a real
+            # false positive and the shape is one this codebase writes often -
+            # block numbers, then a backticked suite name, then `cases`.
+            #
+            # WHAT WOULD BE TRADED FOR SILENCING IT IS THE REASON IT STAYS. The
+            # only feature separating that line from `logic.nim`'s real
+            # transcript is which noun the number counts, and no per-line
+            # regex reads nouns. Every narrowing available here - bounding the
+            # gap between the number and the name, refusing a number that
+            # follows a comma - also rejects transcripts an author may
+            # legitimately write, and a transcript this scan does not reach is
+            # a STALE FIGURE SURVIVING IN `src/` WITH NOTHING TO SAY SO. This
+            # branch exists because exactly that had already happened once.
+            # A false positive costs one rewording and prints the line it
+            # matched; a false negative costs nothing and says nothing.
+            #
+            # NEITHER BRANCH REACHES A FIGURE WHOSE SUITE IS AN ANAPHOR, and
+            # that limit is stated because it cannot be closed here.
+            # `src/mcf5307/cpu.nim` carried "that suite carries 34 cases" with
+            # the name `t_irq` six lines above it; no widening of a per-line
+            # regex resolves "that suite", and a window over adjacent lines
+            # does not reach six. The repair for that shape is in the SOURCE -
+            # write the suite's name where the number is - and `cpu.nim` now
+            # says so at the line this scan reads.
+            set(mcf5307_quoted "")
+            if(mcf5307_core_line MATCHES
+                    "(^|[^A-Za-z0-9_])${mcf5307_suite}[^A-Za-z0-9_].*[^0-9]([0-9]+) cases")
+                set(mcf5307_quoted "${CMAKE_MATCH_2}")
+            elseif(mcf5307_core_line MATCHES
+                    "([0-9]+)[^A-Za-z0-9_]+${mcf5307_suite}[^A-Za-z0-9_]+cases")
+                set(mcf5307_quoted "${CMAKE_MATCH_1}")
+            endif()
+            if(mcf5307_quoted STREQUAL "")
+                continue()
+            endif()
+            if(NOT DEFINED MCF5307_CASE_TOTAL_${mcf5307_suite})
+                message(FATAL_ERROR
+                    "tests: ${mcf5307_core_source}\n  quotes a case total for "
+                    "`${mcf5307_suite}` and no generated driver records one, "
+                    "so there is nothing to compare it against.")
+            endif()
+            if(NOT mcf5307_quoted EQUAL MCF5307_CASE_TOTAL_${mcf5307_suite})
+                string(STRIP "${mcf5307_core_line}" mcf5307_core_stripped)
+                message(FATAL_ERROR
+                    "tests: ${mcf5307_core_source}\n  quotes "
+                    "${mcf5307_quoted} cases for `${mcf5307_suite}` and the "
+                    "generated driver records "
+                    "${MCF5307_CASE_TOTAL_${mcf5307_suite}}:\n    "
+                    "${mcf5307_core_stripped}\n"
+                    "  THE TYPED FIGURE HAS A SECOND SOURCE AND THE TWO "
+                    "DISAGREE, AND THERE ARE THREE REPAIRS BECAUSE THERE ARE "
+                    "THREE WAYS TO GET HERE.\n"
+                    "  If the count fell without anyone meaning it to, the "
+                    "cases are missing and the figure is the symptom.\n"
+                    "  If it moved deliberately, the line above is a DATED "
+                    "RECORD of a run against a suite that no longer exists in "
+                    "that shape: re-measure it, or quote the live figure by "
+                    "name as `src/mcf5307/decode_types.nim` does for "
+                    "`t_ea_masks`.\n"
+                    "  IF THE LINE ABOVE IS NOT A TRANSCRIPT AT ALL - prose "
+                    "that happens to name this suite and a number - then there "
+                    "is nothing to re-measure and re-measuring it is the wrong "
+                    "advice. MEASURED 2026-08-13: this scan reads any line of "
+                    "`src/` carrying a suite name followed by digits and the "
+                    "word `cases`, including a sentence whose own words were "
+                    "\"nothing here was measured from a run\". Reword the line "
+                    "so it does not read as a figure for this suite - the "
+                    "named-reference spelling above does exactly that.\n"
+                    "  RETYPING THE DRIVER'S FIGURE TO AGREE WITH THIS LINE IS "
+                    "NOT ONE OF THE THREE.")
+            endif()
+        endforeach()
+    endforeach()
+endforeach()
+
+
+# -------------------------------------------------------------------- CPU-28
+# `t_claims` - the claims this repository's tests make about MUTATIONS, made
+# executable.
+#
+# THE MECHANISM IS ITS OWN TASK AND NOT PART OF CPU-17. This block, both
+# `t_claims` files and both `case_sites` files carried a CPU-17 label until
+# 2026-08-13, which read as though the interrupt task had written its own
+# grader. CPU-17 owns the core and the suite this driver MEASURES; what
+# measures a suite's claims is separable from the suite, and a grader labelled
+# with the task it grades is the arrangement CPU-28 exists to refuse.
+#
+# WHAT IT ADDS THAT NO OTHER REGISTERED NAME CARRIES. Every other test here
+# asserts what the core does. This one asserts what a TEST FILE SAYS about the
+# core: that a named mutation is unobservable, or that a named suite does not
+# separate it. Such a sentence cannot be reviewed by reading - a false one
+# reads exactly like a true one - and it cannot be repaired by rewording.
+# `tests/t_claims.cmake` holds the registry and the driver, and
+# `tests/t_claims.nim` is the observer the absolute claims are measured with.
+#
+# IT WRITES NOTHING INTO THE SOURCE TREE. Every mutation is applied to a COPY
+# of `src/` under this test's own working directory in the build tree.
+#
+# THE FLAG SET IS THE LIBRARY'S OWN, AS `t_irq`'s IS, AND WITH NO `--path`.
+# The driver passes the path of the tree under measurement itself, and a second
+# `--path` naming the pristine tree would leave which module the compiler reads
+# up to a search order this project does not control.
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_claims cannot be registered: MCF5307_NIM_COMMAND is not set.")
+endif()
+
+set(MCF5307_CLAIMS_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_CLAIMS_COMMAND "${argument}")
+endforeach()
+
+add_test(NAME t_claims
+    COMMAND "${CMAKE_COMMAND}"
+        "-DCLAIMS_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DCLAIMS_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/t_claims_work"
+        "-DCLAIMS_NIM_COMMAND=${MCF5307_CLAIMS_COMMAND}"
+        -P "${CMAKE_CURRENT_LIST_DIR}/t_claims.cmake")
 
 # The application binary interface smoke test `abi_smoke`. It takes the address
 # of every function `include/mcf5307.h` declares AND the library defines, which

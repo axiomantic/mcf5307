@@ -105,6 +105,47 @@ type
     halted*: bool
     fault*: bool
 
+    # The interrupt input, task CPU-17, design section 5.2.2. `mcf5307/irq`
+    # owns every rule about these six fields; they live here because the
+    # context type lives here and `irq.nim` is above this module.
+    #
+    # THE SPLIT INTO A PRESENTED LEVEL AND AN ARMED LATCH IS THE WHOLE MODEL,
+    # and it is what the User's Manual asks for. Section 7.6, folio 7-23,
+    # NOTE: "Interrupt levels 1 through 6 are level-sensitive only. Interrupt
+    # level 7 is both level sensitive and edge triggered". So the first three
+    # fields are the board's CURRENT presentation and carry no history at all,
+    # and the last three are the level-7 rising edge the core does latch.
+    # A model with one group and not two either latches a level source, which
+    # drops it at the acknowledge instead of at the device, or it re-recognizes
+    # a held level 7, which section 7.6.1 forbids.
+    irqLevel*: cint             ## the presented level: 0 for none, or 1 to 7
+    irqVector*: uint8           ## the presented vector, when not autovectored
+    irqAutovector*: bool        ## the presented autovector flag
+    irq7Armed*: bool            ## a rising edge to level 7 is latched
+    irq7Vector*: uint8          ## the vector THAT EDGE presented
+    irq7Autovector*: bool       ## the autovector flag THAT EDGE presented
+
+    # THE PROGRAM COUNTER IS AT THE ENTRY OF AN EXCEPTION HANDLER WHOSE FIRST
+    # INSTRUCTION HAS NOT RUN. MCF5307 User's Manual Table 3-1, closing
+    # paragraph, folio 3-13: "ColdFire processors inhibit sampling for
+    # interrupts during the first instruction of all exception handlers."
+    #
+    # IT IS A FIELD AND NOT A LOCAL OF `mcf5307_exec` BECAUSE THE CALLER OWNS
+    # THE BOUNDARY. A budget can expire on the instruction that takes the
+    # exception, so the handler's entry and the handler's first instruction
+    # can fall in two different calls; a local would forget the inhibition
+    # between them and the interrupt would land at the entry after all.
+    #
+    # IT IS SET BY `takeException` IN `machine.nim` AND BY NOTHING ELSE, which
+    # is what makes the rule hold for EVERY exception rather than for the one
+    # exception that happens to be implemented. Nothing here names an
+    # instruction. MEASURED 2026-08-13: `grep -rn takeException src/` gives one
+    # definition, in `machine.nim`, and two callers - `irq.nim` for the
+    # interrupt and `control.nim`'s `execTrap` - so that procedure is the whole
+    # of the core's exception path. CPU-15's bus-fault exception is the third
+    # caller and it inherits the rule by arriving there.
+    atHandlerEntry*: bool       ## the next instruction is a handler's first
+
 # ---------------------------------------------------------------------------
 # The width of one word of the instruction stream.
 #
