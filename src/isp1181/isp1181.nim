@@ -28,6 +28,17 @@
 ## this model assigns none and says so on every delivery. The alternative was a
 ## bit chosen here, which the firmware would then obey.
 ##
+## TWO SEQUENCING RULES BELOW ARE THIS FILE'S AND NOT THE AUTHORITY'S, and they
+## are named here because no document on this machine states either way.
+## FIRST, a command this model refuses leaves a transfer already in progress
+## LIVE, so a data byte written after a refusal lands in the earlier command's
+## operand; hardware would more plausibly read any command-port write as a new
+## command and abandon the previous one. SECOND, `peek` reads the FIFO of the
+## endpoint an endpoint-CONFIGURATION command last selected, which couples
+## selection to configuration where nothing here couples them. Both are
+## recorded as choices rather than as findings, and settling either is an
+## operator decision and not a repair.
+##
 ## THE MODEL IS NOT WIRED TO THE FIVE C ENTRY POINTS. `src/isp1181/stub.nim`
 ## carries those, and which implementation stands behind them is an OPEN
 ## OPERATOR DECISION recorded as plan item W3-51: the design document's only
@@ -232,6 +243,10 @@ proc beginTransfer(m: ISP1181; opcode: uint8; kind: Transfer; width: int;
 
 proc writeCommand(m: ISP1181; opcode: uint8) =
   let command = classify(opcode)
+  # BOTH REFUSALS BELOW RETURN WITHOUT TOUCHING `pending`, `transfer`, `width`
+  # or `index`, so a transfer already in progress survives the refusal. That
+  # sequencing is this file's choice where the authority is silent, and the
+  # head block names it.
   case command.class
   of ccNotImplemented:
     m.note("isp1181: command 0x" & toHex(opcode) & " (" & command.name &
@@ -263,6 +278,9 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
   of 0xC3'u8: m.beginTransfer(opcode, tfRead, 4, m.interruptEnable)
   of 0xC0'u8: m.beginTransfer(opcode, tfRead, 4, m.interruptRegister)
   of peekCommand:
+    # `m.selected` IS SET ONLY BY AN ENDPOINT-CONFIGURATION COMMAND, so this
+    # couples the peek target to configuration. That coupling is this file's
+    # choice where the authority is silent, and the head block names it.
     let index = outFifoOfEndpoint[m.selected]
     let head = m.fifos[index].peek()
     if head.ok:

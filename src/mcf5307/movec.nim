@@ -8,9 +8,9 @@
 ## needs a context, and it is what makes every predicate above REACHABLE from
 ## `mcf5307_exec`.
 ##
-## THE EXECUTOR IS ALSO THIS MODULE'S ONLY ROUTE INTO THE LIBRARY, AND THAT IS
-## A BUILD FACT RATHER THAN A STYLE CHOICE. `cmake/Nim.cmake` step 3 takes the
-## library's compilation units from the `compile` array of Nim's own cache,
+## THE ROUTE INTO THE LIBRARY IS A BUILD FACT RATHER THAN A STYLE CHOICE.
+## `cmake/Nim.cmake` step 3 takes the library's compilation units from the
+## `compile` array of Nim's own cache,
 ## which holds what the entry module's import graph REACHED. A module this
 ## graph does not reach is never compiled, never enters the archive, and its
 ## procedures cannot be called through `mcf5307_exec` - while a suite built
@@ -123,18 +123,12 @@ proc controlRegisterFor*(rc: uint16): ControlRegister =
   else: crUnimplemented
 
 # ---------------------------------------------------------------------------
-# The executor. `cpu.nim`'s `step` calls this for `opMovec` and for nothing
-# else.
+# The executor.
 
 const
   vecPrivilegeViolation = 8'u8
     ## MCF5307 User's Manual Table 3-1, "Exception Vector Assignments", folio
     ## 3-13: vector 8, at vector offset `$020`, is "Privilege violation".
-    ##
-    ## IT IS DECLARED HERE AND NOT IN `exception.nim` BECAUSE NOTHING ELSE IN
-    ## THIS TREE STATES IT. That file names the vectors ITS OWN callers take,
-    ## and this is the only path that takes this one, so declaring it here
-    ## puts the fact in exactly one place rather than in two.
 
   movecExecuteCycles = 9'u32
     ## MCF5307 User's Manual Table 3-14, "Miscellaneous Instruction Execution
