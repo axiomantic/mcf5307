@@ -110,8 +110,7 @@ const
   instructions = 10_000_000
   burstInstructions = 1_000
   nopCycles = 4'u32     ## what one NOP costs this core: the fetch plus the
-                        ## execution pipe. It is read back from the return of
-                        ## the burst call rather than asserted from `cpu.nim`.
+                        ## execution pipe.
 
 var page: array[pageBytes, uint8]
 var fetchCount = 0
@@ -192,23 +191,26 @@ let afterDestroy = counts()
 #
 # THE BUDGET IS EXACT AND NOT GENEROUS. At `nopCycles` a NOP the budget below
 # is spent to the cycle on the last instruction, so the run ends because the
-# budget ran out and not because the loop saturated - and the returned cycle
-# count is then a figure the case can pin.
+# budget ran out and not because the loop saturated.
+#
+# THE RETURN OF `mcf5307_exec` IS NOT ASSERTED, AND THAT IS A LIMIT RATHER THAN
+# AN OVERSIGHT. The loop saturates at its budget, so a non-halting run returns
+# the budget whatever it cost - an assertion on it would compare the budget to
+# itself.
 
 let burstContext = mcf5307_create(addr page, bRead, bWrite, bIack)
 mcf5307_reset(burstContext, stackBase, execBase)
 let fetchesBeforeBurst = fetchCount
 
 let beforeBurst = counts()
-let burstCycles = mcf5307_exec(burstContext, nopCycles * uint32(burstInstructions))
+discard mcf5307_exec(burstContext, nopCycles * uint32(burstInstructions))
 let afterBurst = counts()
 
 let bursted = (fetches: fetchCount - fetchesBeforeBurst,
                lastFetch: lastFetchAddress,
                pc: mcf5307_get_reg(burstContext, 17),
                halted: burstContext.halted,
-               fault: burstContext.fault,
-               cycles: burstCycles)
+               fault: burstContext.fault)
 mcf5307_destroy(burstContext)
 
 # ---------------------------------------------------------------------------
@@ -269,8 +271,7 @@ check(bursted,
        lastFetch: execBase + 2'u32 * uint32(burstInstructions - 1),
        pc: execBase + 2'u32 * uint32(burstInstructions),
        halted: false,
-       fault: false,
-       cycles: nopCycles * uint32(burstInstructions)),
+       fault: false),
       "the single call ran its whole budget of instructions")
 
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this program reports

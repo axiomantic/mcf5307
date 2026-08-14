@@ -3,8 +3,8 @@
 ##
 ## THE CLASSIFICATION IS TOTAL AND HAS THREE CLASSES, NOT TWO. Design section
 ## 9.2 gives a list of commands the model needs and a list it does not, and
-## between them those two lists number only 33 of the 256 command bytes. A
-## model with two classes has to put the remaining 223 somewhere, and either
+## between them those two lists leave most of the command byte's range
+## unnamed. A model with two classes has to put the rest somewhere, and either
 ## choice is wrong in a way that is hard to see later: called implemented, they
 ## answer plausibly; called not-implemented, a real gap in the specification is
 ## reported as a decision somebody took.
