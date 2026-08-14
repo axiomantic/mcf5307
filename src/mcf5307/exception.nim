@@ -3,15 +3,12 @@
 ## procedure is a function of plain integers, so CPU-11, CPU-15 and CPU-17 can
 ## reach it without an edge to an executor.
 ##
-## THREE LIMITS, EACH CLOSED BY A LATER TASK:
+## TWO LIMITS, EACH CLOSED BY A LATER TASK:
 ##
-##   1. IT TAKES NO EXCEPTION. `machine.nim`'s `takeException` does, one layer
-##      BELOW this module where it cannot import it, so the frame's first
-##      longword has TWO expressions in this tree.
-##   2. NOTHING PRODUCES A NON-ZERO `FS` YET. The MCF5307 raises an access
+##   1. NOTHING PRODUCES A NON-ZERO `FS` YET. The MCF5307 raises an access
 ##      error only on a store to write-protected space; CPU-15 owns that path
 ##      and is the first caller of `fsWriteProtected`.
-##   3. THERE IS NO VBR TO PASS IN YET. The context holds no such field, and
+##   2. THERE IS NO VBR TO PASS IN YET. The context holds no such field, and
 ##      CPU-11's `MOVEC` is the only thing that could write one.
 ##
 ## THE TWO MANUALS DISAGREE ABOUT VECTOR 5 AND NOTHING RECONCILES IT, read as
