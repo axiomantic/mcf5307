@@ -328,11 +328,9 @@ proc decodeWord*(word: uint16): Decoded =
     #
     # Size 11 is not decoded here, exactly as it is not for CLR, NEG, NEGX and
     # NOT: `0101 cccc 11 <ea>` is the Scc space - 128 `Scc Dn` words, three
-    # TRAPF words and no DBcc at all - and claiming those words as an ADDQ
-    # whose size is wrong takes them away from Scc silently, because `alu.nim`
-    # traps a size of zero and a trap is what an unwritten opcode looks like.
-    # `tests/t_control.nim` asserts `decodeWord(0x50c0).op == opScc` and keeps
-    # `5040`, `5080` and `5180` as the ADDQ and SUBQ they were.
+    # TRAPF words and no DBcc at all - which CPU-10 owns, and claiming them as
+    # an ADDQ whose size is wrong would take 1024 encodings away from that
+    # task.
     let data = (word shr 9) and 0x7'u16
     return Decoded(op: opAddq, ea: decodeEa(word), size: sizeField(word),
                    imm: (if data == 0'u16: 8'u8 else: uint8(data)))
@@ -479,11 +477,10 @@ proc decodeWord*(word: uint16): Decoded =
     #        `opScc` and the `{Dn}` mask in `decode_types` refuses them at
     #        execution.
     #
-    # TRAPF is not implemented here, and the three words are left unclaimed.
-    # Deciding they were Scc would execute a TRAPF as a byte write into a data
-    # register.
-    # `tests/t_control.nim` asserts all three as `opIllegal` and keeps `51c0`,
-    # `51f9` and `51fd` as the Scc controls beside them.
+    # TRAPF IS NOT IMPLEMENTED HERE. It is not in this task's opcode list, and
+    # the three words are left unclaimed for whichever task owns them - the
+    # same thing CPU-9 did with line-B opmodes 0, 1, 2, 3 and 7. Deciding they
+    # were Scc would execute a TRAPF as a byte write into a data register.
     return Decoded(op: opScc, ea: decodeEa(word), size: 1'u8,
                    destReg: uint8((word shr 8) and 0xF'u16))
   elif (word and 0xFF00'u16) == 0x4A00'u16 and sizeField(word) != 0'u8:

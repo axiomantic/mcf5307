@@ -62,8 +62,7 @@ proc mcf5307_NimMain() {.importc: "mcf5307_NimMain", cdecl.}
 #
 # `mcf5307_runtime_init` runs before the Nim runtime exists. Anything it calls
 # must therefore work without that runtime. These declarations name C library
-# functions directly, and they add no Nim module to the unit list. Measured on
-# Nim 2.2.10: the unit count is six with them and six without them.
+# functions directly, and they add no Nim module to the unit list.
 #
 # The deadline uses a monotonic clock and not the wall clock. `time` is wrong
 # here for two separate reasons.
@@ -83,9 +82,8 @@ proc mcf5307_NimMain() {.importc: "mcf5307_NimMain", cdecl.}
 # Windows equivalent and it counts milliseconds since boot.
 #
 # `sched_yield`, or `SwitchToThread` on Windows, hands the core to another
-# thread. The wait loop below calls it; `cpuRelax` alone yields to nothing. The
-# Windows branch of both is unmeasured. This host is macOS and it builds the
-# other branch.
+# thread. The wait loop below calls it. THE WINDOWS BRANCH OF BOTH IS
+# UNMEASURED. This host is macOS and it builds the other branch.
 
 when defined(windows):
   proc mcf5307TickCount(): uint64 {.
