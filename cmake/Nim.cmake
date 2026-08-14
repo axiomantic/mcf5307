@@ -187,7 +187,7 @@ set(MCF5307_NIM_COMMAND_mcf5307
 # configure step is the last place at which the fault is still local to this
 # project.
 #
-# The check has three steps and only the second one is fatal.
+# Only the second step of the check is fatal.
 #
 #   1  count the entry modules
 #   2  assert that every entry module's command carries a `--nimMainPrefix:`

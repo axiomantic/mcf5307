@@ -156,14 +156,9 @@
 ##      "Logical Condition (example: NE for not equal)" in Table 3-6 (page
 ##      3-21), and it prints no table of the sixteen tests anywhere.
 ##
-##      `tests/t_control.nim` runs all sixteen conditions over all sixteen
-##      condition-code words, for `Bcc` and again for `Scc`, and compares each
-##      against a literal 16-bit vector. A reader who reverses one condition
-##      must change that vector, and the corpus cases that sample it.
-##
-##   2. Whether a comparison writes X. This module leaves X alone, which is
-##      the M68000 family rule for CMP, CMPA and CMPI. Cutting the other way,
-##      section 3.2.1.5 ends, on page 3-9, with the unattached sentence "Set
+##   2. WHETHER A COMPARISON WRITES X. This module leaves X alone, which is
+##      the M68000 Family rule for CMP, CMPA and CMPI. CUTTING THE OTHER WAY,
+##      section 3.2.1.5 ENDS, on page 3-9, with the unattached sentence "Set
 ##      to the value of the C-bit for arithmetic operations; otherwise not
 ##      affected". That sentence is printed after the C-bit paragraph and the
 ##      section's `X` bullet carries no text of its own, so it reads as the X
@@ -173,14 +168,8 @@
 ##      X bit and not as a per-instruction rule, Table 3-7 gives CMP no flag
 ##      column at all, and this module follows the family rule.
 ##
-##      Every CMP, CMPA and CMPI case in
-##      `conformance/corpus/control_00.json` enters with X set and expects it
-##      set, so a reader who reverses this reading must change all of them.
-##
-##   3. The exact cycle count of every instruction in this group. Nothing
-##      asserts it, and `tests/t_control.nim`'s `cycles` field is not a
-##      counter-case though its name reads like one; `cpu.nim` states the
-##      mechanism once, above its cycle constants.
+##   3. THE EXACT CYCLE COUNT of every instruction in this group. `cpu.nim`
+##      states the mechanism once, above its cycle constants.
 ##
 ##   4. What an `RTE` with a bad format field should do. Section 3.5.7, "RTE
 ##      and Format Error Exceptions", page 3-16, is unambiguous that it

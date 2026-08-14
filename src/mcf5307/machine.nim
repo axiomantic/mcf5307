@@ -110,9 +110,8 @@ proc mergeSized*(old: uint32; value: uint32; size: uint8): uint32 =
   ## to all ones and this reduces to the value, which is why the long forms
   ## need no case of their own.
   ##
-  ## There is one copy of this rule and every sized register write goes through
-  ## it. `move.b %d0,%d1` with d1 = 0x12345678 and d0 = 0xAA gives 0x123456AA,
-  ## not 0x000000AA.
+  ## THERE IS ONE COPY OF THIS RULE AND EVERY SIZED REGISTER WRITE GOES THROUGH
+  ## IT.
   (old and not sizeMask(size)) or (value and sizeMask(size))
 
 proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
@@ -153,11 +152,9 @@ proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
 # each of them a second thing to check.
 #
 # `fetchExt` BELOW CALLS `ctx.readFn` WITHOUT SUCH A GUARD, AND IT IS NOT
-# REACHED WITH A NIL ONE. MEASURED 2026-08-13: `grep -rn fetchExt src/` gives
-# its call sites as the effective-address evaluator in this module and the four
-# executor modules, and each of those runs only from `step`, whose first
-# statement faults on a nil `readFn`. A guard there would be a line no case in
-# this repository can reach.
+# REACHED WITH A NIL ONE. Its call sites are the effective-address evaluator in
+# this module and the executor modules, and each of those runs only from
+# `step`, whose first statement faults on a nil `readFn`.
 
 proc readMem*(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
   if ctx.readFn.isNil:
@@ -239,10 +236,9 @@ proc indexOperand*(ctx: MCF5307Ctx; ext: uint16): uint32 =
   ## in every encoding this core can legally be given and the narrowing branch
   ## below is unreachable from assembled code.
   ##
-  ## That address error is not raised here, and nothing asserts it. This
-  ## procedure narrows a word index rather than faulting on one, and it applies
-  ## a scale of 8 rather than faulting on that. See the uncertainty note in
-  ## `eaAddr` below.
+  ## THAT ADDRESS ERROR IS NOT RAISED HERE. This procedure narrows a word
+  ## index rather than faulting on one, and it applies a scale of 8 rather than
+  ## faulting on that. See the uncertainty note in `eaAddr` below.
   let isAn = (ext and 0x8000'u16) != 0'u16
   let n = (ext shr 12) and 0x7'u16
   let scale = (ext shr 9) and 0x3'u16
@@ -269,13 +265,8 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
   ##      hand-written word would be asserting a trap this core does not have.
   ##      Raising it belongs to whoever owns the exception model.
   ##
-  ##   2. The sign extension of `(xxx).W`. `ea7AbsW` sign-extends its one
-  ##      extension word, so `0x8000.w` addresses `0xFFFF8000`. Nothing pins
-  ##      it: the conformance runner's board is 1 MiB, an access above it
-  ##      reports `busUnmapped`, and a case whose operand access faults fails
-  ##      on the run state rather than on the address. Every `(xxx).W` case in
-  ##      the corpus therefore uses a positive short address, at which
-  ##      sign-extending and zero-extending are the same answer.
+  ##   2. THE SIGN EXTENSION OF `(xxx).W`. `ea7AbsW` sign-extends its one
+  ##      extension word, so `0x8000.w` addresses `0xFFFF8000`.
   case ea.mode
   of eaAnInd:
     result = regA(ctx, ea.reg)
@@ -302,9 +293,7 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
       # at address N + 2." The extension pair is a longword in the instruction
       # stream, so the word at the lower address is the high half.
       # `m68k-elf-as -mcpu=5307` agrees: `btst %d1,0x00030004` assembles to
-      # `0339 0003 0004`. The two other readers of a longword in the
-      # instruction stream - `ea7Imm` below and `execImmediate` in `logic.nim`
-      # - take the high half first as well.
+      # `0339 0003 0004`.
       let hi = fetchExt(ctx)
       let lo = fetchExt(ctx)
       result = (uint32(hi) shl 16) or uint32(lo)
@@ -465,9 +454,7 @@ proc eaRefWrite*(ctx: MCF5307Ctx; r: EaRef; size: uint8; value: uint32) =
 # 10 to 8. THE THREE NAMED HERE ARE THE ONES THIS MODULE'S OWN `takeException`
 # WRITES OR PRESERVES, and `srMaster` sits with them because a status-register
 # bit position is a fact about the register and not about the exception that
-# happens to clear it. It lived in `irq.nim` until 2026-08-13, which put one
-# field of this register in a different module from its neighbours for no
-# reason except that the interrupt was the first exception to need it.
+# happens to clear it.
 const
   srSupervisor* = 0x2000'u32   ## S, status register bit 13
   srTrace* = 0x8000'u32        ## T, status register bit 15
@@ -554,7 +541,6 @@ proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32) =
   # line, so no exception path can acquire the rule and none can be forgotten
   # by it. A flag set by `execTrap` instead would be a rule about TRAP.
   #
-  # NO CASE DECIDES THAT, AND SAYING SO IS THE POINT OF THIS PARAGRAPH.
   # RE-MEASURED 2026-08-13 AGAINST THIS TREE - the one where `mcf5307_reset`
   # SETS `atHandlerEntry` for the reset exception's own first instruction and
   # GUARDS a nil context, and where `t_irq` carries 37 cases: moving this line
@@ -565,8 +551,7 @@ proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32) =
   # not run through this procedure at all, it writes the field itself, and
   # `cpu.nim` says why. The funnel is a reason and not a measurement until a
   # SECOND path into this procedure from inside `step` exists; CPU-15's
-  # bus-fault exception is that path. `tests/t_irq.nim` records the same limit
-  # in its own header.
+  # bus-fault exception is that path.
   #
   # A TAKE THAT FAULTED DOES NOT SET IT, because each early return above is
   # ahead of this line and a machine that never reached a handler is not at

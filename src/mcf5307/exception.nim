@@ -7,9 +7,7 @@
 ##
 ##   1. IT TAKES NO EXCEPTION. `machine.nim`'s `takeException` does, one layer
 ##      BELOW this module where it cannot import it, so the frame's first
-##      longword has TWO expressions in this tree. `tests/t_exception.nim`
-##      holds both against the same hand-derived numbers; nothing else keeps
-##      them from drifting apart in silence.
+##      longword has TWO expressions in this tree.
 ##   2. NOTHING PRODUCES A NON-ZERO `FS` YET. The MCF5307 raises an access
 ##      error only on a store to write-protected space; CPU-15 owns that path
 ##      and is the first caller of `fsWriteProtected`.
@@ -52,8 +50,7 @@ const
 # CFPRM section 11.1.2, Figure 11-1, folio 11-4, prints those bit numbers over
 # the fields, and User's Manual section 3.4, Figure 3-7, folio 3-13, prints the
 # same figure. `FS` IS SPLIT AND ITS HALVES ARE NOT ADJACENT; `1001` is the one
-# defined code that separates this layout from a contiguous one, and
-# `tests/t_exception.nim` pins it.
+# defined code that separates this layout from a contiguous one.
 
 proc frameFirstLongword*(format: uint32; fs: uint32; vector: uint8;
                          sr: uint32): uint32 =

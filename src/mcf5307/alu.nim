@@ -339,8 +339,7 @@ proc execMulWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # MCF5307 User's Manual Table 3-13, folio 3-28, `muls.w`/`mulu.w <ea>,Dx`:
   # `3(0/0)` under `Rn` and under `#xxx`. The equality is not a model. The rest
   # of the row is `6(1/0)` for the four memory modes, `7(1/0)` for
-  # `(d8,An,Xi*SF)` and `6(1/0)` for `xxx.wl`, none of which this core returns,
-  # and nothing checks the number.
+  # `(d8,An,Xi*SF)` and `6(1/0)` for `xxx.wl`, none of which this core returns.
   3'u32
 
 proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
@@ -446,13 +445,7 @@ proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
     # computes. What would settle it is a run on silicon or on a hardware
     # model - `divs.w` with a dividend of -65536 and a divisor of 2, reading V
     # afterwards - or an erratum or a later revision of the folio that states
-    # the boundary. Until then this is a reading and not a measurement.
-    #
-    # `tests/t_alu.nim` brackets it: the -32768 case is labelled [INFERENCE]
-    # and its -32769 neighbour overflows under either reading, so a reversal
-    # reds the labelled case and leaves the neighbour green. The conformance
-    # corpus carries the same boundary as
-    # `divs_w_quotient_of_minus_32768_does_not_overflow`.
+    # the boundary. Until then this is a READING and not a measurement.
     if q < -32768'i64 or q > 32767'i64:
       overflowed = true
     else:
@@ -512,8 +505,7 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
     # 4-71 (REMS, REMU) all read "N Cleared if overflow is detected;
     # otherwise ..." and "Z Cleared if overflow is detected; otherwise ...",
     # with "V Set if an overflow occurs" and "C Always cleared". X is "Not
-    # affected" and is the one bit that survives. N and Z are not undefined
-    # here: the four folios state the rule directly.
+    # affected" and is the one bit that survives.
     ctx.sr = (ctx.sr and not (ccrC or ccrN or ccrZ)) or ccrV
     return 10'u32
   var quotient: uint32
@@ -540,9 +532,8 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # quotient is negative, cleared if positive" and "Z ... set if the quotient
   # is zero, cleared if nonzero", though the operation line of each is
   # "Destination/Source -> Remainder". So the flags and the destination come
-  # from different numbers, and `quotient` is computed above for the REMx
-  # forms purely to feed this line. Passing `written` here would take the
-  # flags from the remainder.
+  # from DIFFERENT NUMBERS, and `quotient` is computed above for the REMx
+  # forms purely to feed this line.
   setNzClearVc(ctx, quotient, 4)
   # `divs.l`/`divu.l <ea>,Dx` reads `35(0/0)` under `Rn` and `35(1/0)` under
   # the four memory modes, Table 3-13 folio 3-28, and dashes the rest. 10 is

@@ -131,9 +131,8 @@ const
   # read as a rendered image: `(xxx).W` and `(xxx).L` carry an `X` under `Data`,
   # `Memory` and `Control` and a dash under `Alterable`. An ADDQ to an absolute
   # destination writes memory and the pinned assembler emits it, so the column
-  # is read here as a coarse-table artefact. That disagreement is recorded and
-  # not settled; `tests/t_ea_masks.nim` block (16) pins the behaviour so a
-  # narrowing that follows the column goes red rather than passing quietly.
+  # is read here as a coarse-table artefact. THAT DISAGREEMENT IS RECORDED AND
+  # NOT SETTLED.
   eaAlterable7* = {ea7AbsW, ea7AbsL}
 
   # Data alterable: alterable without An. CLR takes this class - measured
@@ -158,15 +157,13 @@ const
   # `#<data>`, `(d16,PC)` and `(d8,PC,Xi)`. `m68k-elf-as -mcpu=5307` answers
   # the same twelve cells for all four operations.
   #
-  # `eaMulDivLong7` is dead for these operations at run time: it records the
-  # folios and constrains nothing the core evaluates. `isEaLegal` below returns
-  # at `ea.mode notin leg.modes` before it reaches `ea7`, and the mode set on
-  # the line above has no `eaMode7`, so the only read of the field anywhere in
-  # the core - `EA7(ea.reg) in leg.ea7` - is unreachable through this mask. The
-  # emptiness is not what rejects a mode-7 operand here; the absent `eaMode7`
-  # is. `t_ea_masks` block (19) holds the whole `EaLegality` of each mask
-  # against a literal, so both halves are pinned whether the core reads them or
-  # not.
+  # `eaMulDivLong7` IS DEAD FOR THESE OPERATIONS AT RUN TIME. IT RECORDS THE
+  # FOLIOS AND IT CONSTRAINS NOTHING THE CORE EVALUATES. `isEaLegal` below
+  # returns at `ea.mode notin leg.modes` before it reaches `ea7`, and the mode
+  # set on the line above has no `eaMode7`, so the ONLY read of the field
+  # anywhere in the core - `EA7(ea.reg) in leg.ea7` - is unreachable through
+  # this mask. The emptiness is therefore not what rejects a mode-7 operand
+  # here; the absent `eaMode7` is.
   eaMulDivLongModes* = {eaDn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp}
   eaMulDivLong7*: set[EA7] = {}
 

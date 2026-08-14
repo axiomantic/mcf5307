@@ -138,12 +138,8 @@ type
     #
     # IT IS SET BY `takeException` IN `machine.nim` AND BY NOTHING ELSE, which
     # is what makes the rule hold for EVERY exception rather than for the one
-    # exception that happens to be implemented. Nothing here names an
-    # instruction. MEASURED 2026-08-13: `grep -rn takeException src/` gives one
-    # definition, in `machine.nim`, and two callers - `irq.nim` for the
-    # interrupt and `control.nim`'s `execTrap` - so that procedure is the whole
-    # of the core's exception path. CPU-15's bus-fault exception is the third
-    # caller and it inherits the rule by arriving there.
+    # exception that happens to be implemented. A new exception path inherits
+    # the rule by arriving there, and must not set this field itself.
     atHandlerEntry*: bool       ## the next instruction is a handler's first
 
 # ---------------------------------------------------------------------------
@@ -382,9 +378,7 @@ const eaLeaPeaTarget* = EaLegality(
   ## `MOVEM` does not read this and must not. Table 3-14's two `movem.l` rows
   ## are timed under `(An)` and `(d16,An)` only and are dashed under
   ## `xxx.wl`, and the assembler rejects `movem.l %d0-%d1,0x1234.w` with
-  ## "operands mismatch". `tests/t_move.nim` asserts that MOVEM still traps
-  ## there, which is the case that fails if this constant is ever wired to
-  ## the MOVEM arm of `eaLegalityFor`.
+  ## "operands mismatch".
 
 const table313LastRowOnPage328* = "mulu"
   ## The last opcode row Table 3-13 prints on page 3-28; `or.l`, `ori.l`,
@@ -445,8 +439,7 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # the longword table alone on the continuation page. Read as rendered
     # images. `m68k-elf-as -mcpu=5307` (GNU Binutils
     # 2.47.20260726) was offered all twelve modes of all eight forms and
-    # agreed on every cell. `tests/t_ea_masks.nim` block (12) asserts the
-    # split.
+    # agreed on every cell.
     #
     # The size reaching here is `Decoded.size`, which `decodeLogicLine` sets
     # to 2 for the single-word forms and `decodeWord` sets to 4 for the
@@ -615,11 +608,6 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # at `ea.mode notin leg.modes` before it reads `ea7`, and `eaMode7` is not
     # in the mode set above. The absent `eaMode7` is the rejection; the empty
     # set is unreachable through this mask and constrains nothing.
-    #
-    # `tests/t_move.nim`
-    # carries the execution-level trap for `(xxx).W`, `(xxx).L` and
-    # `(d8,An,Xi)`, and block (13) of `tests/t_ea_masks.nim` carries all
-    # twelve cells at the mask level.
     EaLegality(modes: {eaAnInd, eaAnDisp}, ea7: {})
   of opSwap:
     # A data register and nothing else. Table 3-7, page 3-25, gives the
@@ -646,11 +634,11 @@ proc eaIsLegalFor*(op: Operation; ea: EA; size: uint8): bool =
   ## with no effective address carries the empty mask and no mode is inside
   ## it.
   ##
-  ## THE EMPTY MASK IS THE TEST, and it used to be a second list of the
-  ## operations `eaLegalityFor` names. Two lists drift: an operation added to
-  ## the table above and forgotten here would have had every effective
-  ## address rejected, which reads as "the opcode is strict" and is really
-  ## "the opcode is unreachable".
+  ## THE EMPTY MASK IS THE TEST, AND NOT A SECOND LIST of the operations
+  ## `eaLegalityFor` names. Two lists drift: an operation added to the table
+  ## above and forgotten in a second list has every effective address
+  ## rejected, which reads as "the opcode is strict" and is really "the opcode
+  ## is unreachable".
   let legality = eaLegalityFor(op, size)
   result = legality.modes != {} and isEaLegal(legality, ea)
 
