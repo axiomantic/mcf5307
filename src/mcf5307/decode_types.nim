@@ -152,12 +152,8 @@ type
     #
     # IT IS SET BY `takeException` IN `machine.nim` AND BY NOTHING ELSE, which
     # is what makes the rule hold for EVERY exception rather than for the one
-    # exception that happens to be implemented. Nothing here names an
-    # instruction. MEASURED 2026-08-13: `grep -rn takeException src/` gives one
-    # definition, in `machine.nim`, and two callers - `irq.nim` for the
-    # interrupt and `control.nim`'s `execTrap` - so that procedure is the whole
-    # of the core's exception path. CPU-15's bus-fault exception is the third
-    # caller and it inherits the rule by arriving there.
+    # exception that happens to be implemented. A new exception path inherits
+    # the rule by arriving there, and must not set this field itself.
     atHandlerEntry*: bool       ## the next instruction is a handler's first
 
 # ---------------------------------------------------------------------------
@@ -304,10 +300,9 @@ const eaBitStatic* = EaLegality(
   ## from the dynamic one and are not a property of the bit operations as a
   ## family.
   ##
-  ## AN EARLIER REVISION SAID THE MANUAL'S TABLE DOES NOT SHOW THESE
-  ## RESTRICTIONS AND THAT ONLY BINUTILS ENFORCED THEM. It shows every one of
-  ## them, in the rows printed above. The assembler measurement stands as
-  ## CORROBORATION and no longer as the authority: `m68k-elf-as -mcpu=5307`
+  ## THE MANUAL'S TABLE SHOWS EVERY ONE OF THESE RESTRICTIONS, in the rows
+  ## printed above. The assembler measurement stands as CORROBORATION and not
+  ## as the authority: `m68k-elf-as -mcpu=5307`
   ## rejects `btst #3,(4,%a0,%d2)`, `btst #3,0x12345678`, `btst #3,0x1234.w`
   ## and `btst #3,(4,%pc)`, and `m68k-elf-objdump -m m68k:5307` decodes none
   ## of `0830`, `0838`, `0839`, `083a`, `08f8` or `08f9` as an instruction.
@@ -352,45 +347,26 @@ const eaJumpTarget* = EaLegality(
   ## `4ec0` and `4ec8` as an instruction on NEITHER `-m m68k:5307` nor
   ## `-m m68k:68020`.
   ##
-  ## IT WAS A CONSTANT OF ITS OWN AND NOT `eaControl7NoAbsW`, AND THE TWO
-  ## COULD NOT BE MERGED. `eaControl7NoAbsW` HELD
-  ## `{ea7AbsL, ea7PCDisp, ea7PCIndex}` in `ea.nim` - no `(xxx).W` - UNTIL IT
-  ## WAS RETIRED on 2026-08-11. `ea.nim` DECLARES NO SUCH CONSTANT TODAY, and
-  ## the mask on the line above reads `eaControl7`, which holds the full
-  ## control mode-7 class with `(xxx).W` in it. Measured on the pinned
-  ## assembler: `lea 0x1234.w,%a0` (`41f8 1234`) and `pea 0x1234.w`
-  ## (`4878 1234`) ARE accepted, so LEA's and PEA's exclusion of the absolute
-  ## short form was wrong; `eaLeaPeaTarget` below is CPU-7's repair, and
-  ## `tests/t_control.nim` records the measurement.
+  ## `lea 0x1234.w,%a0` (`41f8 1234`) AND `pea 0x1234.w` (`4878 1234`) ARE
+  ## ACCEPTED by the pinned assembler, so LEA and PEA must not exclude the
+  ## absolute short form; `eaLeaPeaTarget` below carries the same mode-7 class.
   ##
-  ## MOVEM NO LONGER READS `eaControl7NoAbsW`, AND AN EARLIER REVISION OF THIS
-  ## PARAGRAPH SAID IT DID. It read "LEA, PEA and MOVEM read it through the
-  ## entry below" and concluded that "WIDENING `eaControl7NoAbsW` WOULD BREAK
-  ## MOVEM". Both sentences were true when written and stopped being true on
-  ## 2026-08-11: MOVEM's arm carries `{eaAnInd, eaAnDisp}` with an EMPTY `ea7`,
-  ## because folios 4-50 and 4-51 dash every row but `(An)` and `(d16,An)` in
-  ## both directions. The old wording is recorded rather than deleted because
-  ## it is what kept MOVEM on a control-class mask that was four cells too
-  ## wide: `(xxx).W` was the only cell anyone checked, and it was the only one
-  ## the set happened to exclude.
-  ##
-  ## SO THE TWO READERS OF `eaControl7` ARE THIS CONSTANT AND `eaLeaPeaTarget`.
-  ## Widening `eaControl7` today would move JMP, JSR, LEA and PEA together and
-  ## would NOT touch MOVEM.
+  ## MOVEM DOES NOT READ THIS CLASS. Its arm carries `{eaAnInd, eaAnDisp}` with
+  ## an EMPTY `ea7`, because folios 4-50 and 4-51 dash every row but `(An)` and
+  ## `(d16,An)` in both directions. A control-class mask is four cells too wide
+  ## for MOVEM, so widening `eaControl7` moves JMP, JSR, LEA and PEA together
+  ## and must NOT be made to reach MOVEM.
 
 const eaLeaPeaTarget* = EaLegality(
   modes: eaControlModes, ea7: eaControl7)
   ## THE OPERAND OF `LEA` AND `PEA`: control addressing INCLUDING the absolute
-  ## SHORT form. CPU-7 added it. The entry above records, AS HISTORY, why it
-  ## could not simply widen the set then called `eaControl7NoAbsW`, and why
-  ## that obstacle no longer exists.
+  ## SHORT form.
   ##
-  ## IT IS A THIRD CONSTANT AND NOT A REUSE OF `eaJumpTarget`, WHICH IT
-  ## CURRENTLY EQUALS. The two are equal by measurement rather than by
-  ## definition: `eaJumpTarget` is the class of a BRANCH TARGET and this is
-  ## the class of an ADDRESS an instruction computes. Folding them together
-  ## would mean a later correction to one silently moving the other, and the
-  ## entry above already records that this family has drifted once.
+  ## IT IS A CONSTANT OF ITS OWN AND NOT A REUSE OF `eaJumpTarget`, WHICH IT
+  ## EQUALS. The two are equal by measurement rather than by definition:
+  ## `eaJumpTarget` is the class of a BRANCH TARGET and this is the class of an
+  ## ADDRESS an instruction computes. Folding them together would mean a later
+  ## correction to one silently moving the other.
   ##
   ## THE MANUAL TIMES BOTH INSTRUCTIONS UNDER THE ABSOLUTE COLUMN, AND EACH
   ## HAS ITS OWN ROW. Read as RENDERED IMAGES - the `SWAP` row of Table 3-7
@@ -426,15 +402,13 @@ const eaLeaPeaTarget* = EaLegality(
   ## `MOVEM` DOES NOT READ THIS AND MUST NOT. Table 3-14's two `movem.l` rows
   ## are timed under `(An)` and `(d16,An)` ONLY and are DASHED under
   ## `xxx.wl`, and the assembler rejects `movem.l %d0-%d1,0x1234.w` with
-  ## "operands mismatch". `tests/t_move.nim` asserts that MOVEM still traps
-  ## there, which is the case that fails if this constant is ever wired to
-  ## the MOVEM arm of `eaLegalityFor`.
+  ## "operands mismatch".
 
 const table313LastRowOnPage328* = "mulu"
   ## The last opcode row Table 3-13 prints on page 3-28; `or.l`, `ori.l`,
   ## `sub.l`, `subi.l`, `subq.l` and `subx.l` are on the continuation page
-  ## 3-29. An earlier revision of the `opAnd, opOr` arm below put both rows on
-  ## the first page, which is why the break is recorded.
+  ## 3-29. The page break is recorded because the two pages read as one table
+  ## and a citation that ignores the break lands on the wrong page.
 
 proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
   ## The legality mask the opcode carries. An opcode with no effective
@@ -494,11 +468,7 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # the longword table alone on the continuation page. Read as RENDERED
     # IMAGES. `m68k-elf-as -mcpu=5307` (GNU Binutils
     # 2.47.20260726) was offered all twelve modes of all eight forms and
-    # agreed on every cell. `tests/t_ea_masks.nim` block (12) asserts the
-    # split. COLLAPSING THIS ARM TO THE SINGLE SHARED MASK REDS 24 OF THAT
-    # BLOCK'S 96 CELL ASSERTIONS AND LEAVES 72 GREEN - measured 2026-08-11;
-    # an earlier revision of this line said EACH of them reds. The block
-    # names which 24 and why the rest cannot see the collapse.
+    # agreed on every cell.
     #
     # THE SIZE REACHING HERE IS `Decoded.size`, which `decodeLogicLine` sets
     # to 2 for the single-word forms and `decodeWord` sets to 4 for the
@@ -551,8 +521,7 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     #     dashes belong to this row.
     #   - Table 3-13: `andi.l | #imm,Dx` and `eori.l | #imm,Dx` on page 3-28,
     #     and `ori.l | #imm,Dx` on the continuation page 3-29, each read
-    #     `1(0/0)` under `Rn` and a dash everywhere else, `#xxx` included. An
-    #     earlier revision of this line put all three on 3-28.
+    #     `1(0/0)` under `Rn` and a dash everywhere else, `#xxx` included.
     #   - Table 3-13 again: `asl.l`, `asr.l`, `lsl.l` and `lsr.l` all read
     #     `<ea>,Dx` with `1(0/0)` under `Rn` AND under `#xxx` - the immediate
     #     COUNT - and a dash under all six memory columns.
@@ -623,69 +592,24 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # word whose operand is an ADDRESS REGISTER, and no DBcc at all, because
     # manual section 3.9, which begins on page 3-21, lists "decrement and
     # branch" among the removed instructions, and `m68k-elf-as -mcpu=5307`
-    # rejects `dbra %d0,.` and `dbf %d0,.`. CPU-13 owns the negative case and
-    # this mask is the mechanism it asserts through.
+    # rejects `dbra %d0,.` and `dbf %d0,.`.
     EaLegality(modes: {eaDn}, ea7: {})
   of opLea, opPea:
-    # CONTROL ADDRESSING INCLUDING `(xxx).W`. This arm USED TO BE SHARED WITH
-    # `opMovem` on `eaControl7NoAbsW`, and that was a live defect: the set
-    # excludes `(xxx).W`, so `lea 0x1234.w,%a0` and `pea 0x1234.w` - two
-    # forms the pinned assembler emits - trapped. `eaLeaPeaTarget` carries
-    # the manual rows and the measurements. The SPLIT that repair created is
-    # what later let MOVEM be narrowed on its own, in the arm below.
+    # CONTROL ADDRESSING INCLUDING `(xxx).W`. A mode-7 set that excludes
+    # `(xxx).W` traps `lea 0x1234.w,%a0` and `pea 0x1234.w`, two forms the
+    # pinned assembler emits. `eaLeaPeaTarget` carries the manual rows and the
+    # measurements. It is NOT shared with `opMovem`, whose class is narrower
+    # still.
     eaLeaPeaTarget
   of opMovem:
     # `(An)` AND `(d16,An)`, AND NOTHING ELSE. MOVEM IS NOT A CONTROL-CLASS
     # OPERAND ON THIS PART.
     #
-    # THIS ARM READ `EaLegality(modes: eaControlModes, ea7: eaControl7NoAbsW)`
-    # UNTIL 2026-08-11, WHICH WAS FOUR CELLS TOO WIDE: `(d8,An,Xi)` from the
+    # A CONTROL-CLASS MASK IS FOUR CELLS TOO WIDE HERE: `(d8,An,Xi)` from the
     # mode set and `(xxx).L`, `(d16,PC)` and `(d8,PC,Xi)` from the mode-7 set.
-    # The comment on `eaLeaPeaTarget` above ALREADY SAID SO - "Table 3-14's
-    # two `movem.l` rows are timed under `(An)` and `(d16,An)` ONLY" - and the
-    # arm was wired to a wider class anyway. The prose was right and the code
-    # was wrong, so the disagreement between them is what this arm records.
-    #
-    # IT WAS A LIVE DEFECT AND NOT A LATENT ONE. Measured 2026-08-11 against
-    # the wide mask: `movem.l %d0-%d1,0x400.l`, hand-assembled as
-    # `48f9 0003 0000 0400`, reached the executor and COMPLETED ITS STORE -
-    # 0xAABBCCDD at 0x400, 0x11223344 at 0x404, `fault` false. A permissive
-    # core executing an addressing mode the silicon rejects is the exact
-    # failure design section 6.1 exists to prevent.
-    #
-    # PUTTING THE WIDE MASK BACK REDS THREE `t_move` CASES AND NOT TWO. The
-    # two sentences above describe the `(xxx).L` pair alone - the `fault`
-    # assertion and the read-back of the two stored words - and an earlier
-    # revision of this record stopped there. Measured 2026-08-11 by restoring
-    # `EaLegality(modes: eaControlModes, ea7: eaControl7 - {ea7AbsW})` on this
-    # arm - the retired `eaControl7NoAbsW` written in terms of the set that
-    # replaced it - configuring FRESH, rebuilding and running through `ctest`:
-    # `t_move` prints `3 of 34 cases failed` - `movem.l to (xxx).L traps`,
-    # `movem.l to (xxx).L stores nothing before it traps` AND
-    # `movem.l to (d8,An,Xi) traps`, which the pair above omits. `t_ea_masks`
-    # prints `5 of <caseTotalMustMatchTranscripts> cases failed` - one for each
-    # cell block (13) names, and one more for block (19)'s `opMovem` row, which
-    # holds the whole mask against a literal and so reds on any change to it.
-    # Nothing else in the suite moves. RE-MEASURED 2026-08-12 with that file's
-    # blocks (18) and (19) in place, because (18) is itself a case that moved
-    # the denominator and (19) moved this mutation's blast radius.
-    #
-    # THE DENOMINATOR IS A NAMED CONSTANT AND NOT A NUMBER. It is
-    # `caseTotalMustMatchTranscripts`, declared once in `tests/t_ea_masks.nim`,
-    # and block (18) of that file holds it against the case count of the run
-    # that prints it, so adding or removing a case there is RED until the
-    # constant moves.
-    #
-    # THAT MECHANIZES THE VALUE AND NOT THE SYMBOL, AND THE GAP IS UNGUARDED.
-    # `caseTotalMustMatchTranscripts` is a NON-EXPORTED constant in a test
-    # file; the line above names it as TEXT, and nothing links the two.
-    # Renaming or deleting it leaves this comment stale with nothing red, and
-    # an import cannot close that - `src/` does not import `tests/`.
-    #
-    # THE REST OF THE TRANSCRIPT IS PROSE IN TWO PLACES - the `4`, the
-    # `3 of 34` and every citation - because it is duplicated in
-    # `tests/t_ea_masks.nim` block (13). A change to either copy has to be
-    # made in both.
+    # Under a mask that wide, `movem.l %d0-%d1,0x400.l` - `48f9 0003 0000
+    # 0400` - reaches the executor and COMPLETES ITS STORE with `fault` false,
+    # which is the permissive core design section 6.1 exists to prevent.
     #
     # THE CFPRM SETTLES BOTH DIRECTIONS AND THEY ARE THE SAME SHAPE. Folio
     # 4-50 carries the register-to-memory table for `<ea>x` and folio 4-51 the
@@ -700,8 +624,7 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # `48fb` and their `4cxx` partners as `.short`.
     #
     # THE 68020 CROSS-CHECK DISCRIMINATES EIGHT OF THOSE TEN AND NOT ALL TEN.
-    # An earlier revision of this comment said all ten, and that was wrong.
-    # Measured 2026-08-11, each encoding disassembled on its own: under
+    # Each encoding disassembled on its own: under
     # `-m m68k:68020` the eight `48f0`, `48f8`, `48f9`, `4cf0`, `4cf8`,
     # `4cf9`, `4cfa` and `4cfb` decode as a real `moveml`, so for those the
     # ColdFire `.short` is a statement about the PART. `48fa` and `48fb`
@@ -712,20 +635,14 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # PC-relative, which the 68020 does allow - which is exactly why the load
     # direction discriminates where the store direction cannot.
     #
-    # THAT IS A CORRECTION AND NOT A RETRACTION. Eight encodings still
-    # discriminate, and folios 4-50 and 4-51 and the pinned assembler each
-    # cover all ten independently of any disassembler.
+    # Folios 4-50 and 4-51 and the pinned assembler each cover all ten
+    # independently of any disassembler.
     #
     # THE `ea7` SET IS EMPTY AND THAT IS NOT WHAT REJECTS A MODE-7 OPERAND,
     # for the reason `eaMulDivLong7` states in `ea.nim`: `isEaLegal` returns
     # at `ea.mode notin leg.modes` before it reads `ea7`, and `eaMode7` is not
     # in the mode set above. The absent `eaMode7` is the rejection; the empty
     # set is unreachable through this mask and constrains nothing.
-    #
-    # `MOVEM -(An)` remains the CPU-13 negative case. `tests/t_move.nim`
-    # carries the execution-level trap for `(xxx).W`, `(xxx).L` and
-    # `(d8,An,Xi)`, and block (13) of `tests/t_ea_masks.nim` carries all
-    # twelve cells at the mask level.
     EaLegality(modes: {eaAnInd, eaAnDisp}, ea7: {})
   of opSwap:
     # A DATA REGISTER AND NOTHING ELSE. Table 3-7, page 3-25, gives the
@@ -755,11 +672,11 @@ proc eaIsLegalFor*(op: Operation; ea: EA; size: uint8): bool =
   ## with no effective address carries the empty mask and no mode is inside
   ## it.
   ##
-  ## THE EMPTY MASK IS THE TEST, and it used to be a second list of the
-  ## operations `eaLegalityFor` names. Two lists drift: an operation added to
-  ## the table above and forgotten here would have had every effective
-  ## address rejected, which reads as "the opcode is strict" and is really
-  ## "the opcode is unreachable".
+  ## THE EMPTY MASK IS THE TEST, AND NOT A SECOND LIST of the operations
+  ## `eaLegalityFor` names. Two lists drift: an operation added to the table
+  ## above and forgotten in a second list has every effective address
+  ## rejected, which reads as "the opcode is strict" and is really "the opcode
+  ## is unreachable".
   let legality = eaLegalityFor(op, size)
   result = legality.modes != {} and isEaLegal(legality, ea)
 

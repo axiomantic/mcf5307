@@ -110,9 +110,9 @@ proc mcf5307_set_irq*(ctx: MCF5307Ctx; level: cint; vector: uint8;
 
 proc resetInterruptEdge*(ctx: MCF5307Ctx) =
   ## What a RESET does to the level-7 edge latch: clear it, then re-observe the
-  ## pin. `mcf5307_reset` in `cpu.nim` is its one caller today, and the nil
-  ## guard below is what makes that a fact about the tree rather than a
-  ## precondition this procedure depends on.
+  ## pin. `mcf5307_reset` in `cpu.nim` calls it. The nil guard below is what
+  ## makes the caller set a fact about the tree rather than a precondition this
+  ## procedure depends on.
   ##
   ## THIS IS AN INFERENCE AND NOT A CITATION, AND THE MANUALS ARE SILENT RATHER
   ## THAN BRIEF. Section 3.5.11, folio 3-17 (PDF page 74), enumerates the reset
@@ -187,7 +187,7 @@ proc resetInterruptEdge*(ctx: MCF5307Ctx) =
   ## returns BEFORE it reaches this call, so nothing upstream protects this
   ## procedure either, and a second caller forwarding a nil would fault on the
   ## first executable line below. A SENTENCE NAMING THE CALLERS CANNOT FAIL
-  ## WHEN A CALLER IS ADDED; this guard and `tests/t_irq.nim` block 26 can.
+  ## WHEN A CALLER IS ADDED; this guard can.
   if ctx.isNil:
     return
   let level = ctx.irqLevel
@@ -204,18 +204,8 @@ proc resetInterruptEdge*(ctx: MCF5307Ctx) =
   # THAT THE SPELLING IS LOAD-BEARING IS PINNED AND NOT ASSERTED, by M3's own
   # registry entry: a `suite-red` claim whose mutated tree does not compile is
   # a FATAL_ERROR in that driver, so the day this line stops accepting M3's
-  # retype is the day `t_claims` stops.
-  #
-  # WHAT A `false` HERE WOULD DO IS NOT SILENT, AND THE SENTENCE THAT SAID IT
-  # WAS IS DELETED RATHER THAN REWORDED. It read that the claim "would go
-  # unmeasured with nothing to say so". MEASURED 2026-08-13 by respelling this
-  # line as `ctx.irq7Armed = false` and running the suite: `t_claims` stops at
-  # rc 8 and NAMES the claim - `M3_suite_t_irq: t_irq does not compile against
-  # the mutated tree. A mutation that does not compile is not a mutation this
-  # suite failed to catch.` - over Nim's own `type mismatch: got 'bool' for
-  # 'false' but expected 'int'`. The difference the spelling buys is a
-  # MEASUREMENT instead of a stopped run, and not a loud failure instead of a
-  # quiet one.
+  # retype is the day `t_claims` stops. What the spelling buys is a MEASUREMENT
+  # instead of a stopped run, and not a loud failure instead of a quiet one.
   ctx.irq7Armed = default(typeof(ctx.irq7Armed))
   ctx.irqLevel = 0
   mcf5307_set_irq(ctx, level, vector, autovector)

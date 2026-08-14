@@ -11,9 +11,6 @@
 ## address whose mode is outside the mask is illegal and must trap. Design
 ## section 6.1 makes this a mandatory property of the core: a permissive core
 ## hides a firmware fault by executing an addressing mode the silicon rejects.
-## The instruction-specific negative cases (a memory shift, byte and word
-## arithmetic, `MOVEM -(An)`, ...) are CPU-13's, and this module provides the
-## mechanism they assert through.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. The
 ## addressing-mode encoding and the classes below are facts about Motorola
@@ -75,52 +72,14 @@ const
   # values of `EAMode`, `eaAn` INCLUDED, so it is not the manual's DATA class
   # and never was.
   #
-  # RENAMED FROM `eaDataModes` 2026-08-11, VALUE UNCHANGED. The old name read
-  # as the manual's DATA category, which EXCLUDES `An`; a reader taking it at
-  # face value would have concluded that the nine operations reading this set
-  # reject an address register, and all nine ACCEPT one. The DATA class is
-  # `eaDataAlterableModes` below, reached through `eaDataAddressing`.
+  # THE DATA CLASS IS `eaDataAlterableModes` BELOW, reached through
+  # `eaDataAddressing`. The manual's DATA category EXCLUDES `An`; this set does
+  # not, so a reader must not take it for that class.
   #
   # THE `eaAn` MEMBERSHIP IS LOAD-BEARING AND IS NOT AN OVERSIGHT TO TIDY.
   # `m68k-elf-as -mcpu=5307` emits `4a88` for `tst.l %a0`, `b288` for
   # `cmp.l %a0,%d1` and `b3c8` for `cmpa.l %a0,%a1`, and MOVE and the ADD/SUB
   # pair take an address register source.
-  #
-  # MEASURED 2026-08-12 BY DELETING `eaAn` FROM THIS SET. TWENTY-TWO DISTINCT
-  # CASES GO RED:
-  #
-  #   t_ea_masks 13  block (19) 11 - one per mask that names this set, which is
-  #                  MOVE, MOVEA, ADDQ, SUBQ, ADD, SUB, ADDA, SUBA, TST, CMP and
-  #                  CMPA - and block (16) 2, `opAddq`/`opSubq: the mask accepts
-  #                  An`
-  #   t_alu       3  `add.l a0,d1 reads the address register`,
-  #                  `addq.l #1,a1 wraps and leaves the condition codes alone`,
-  #                  `the ADDQ mask admits An`
-  #   t_control   3  `tst.w %a0 (4a48) runs: the word form reaches An`,
-  #                  `tst %a0 is legal`, `cmp %a0 is legal`
-  #   conformance 3  `move_l_a0_to_a1`, `tst_l_address_register`,
-  #                  `cmp_l_address_register_source`
-  #
-  # The three conformance cases each print TWICE - once in their per-group
-  # target and once in `mcf5307_conformance_all`, which re-runs the whole
-  # corpus - so a reader counting failure LINES and a reader counting CASES get
-  # different figures. The count above is CASES.
-  #
-  # ELEVEN OF THE TWENTY-TWO ARE A WIDER READERSHIP AND NOT BETTER COVERAGE, and
-  # the two are easy to confuse. Every operation naming this set contributes its
-  # block (19) row, and ADDQ and SUBQ read it only because `eaAlterableModes`
-  # was retired into it, so the cases guarding THEIR address-register operand
-  # joined a blast radius they were never part of. Measured 2026-08-12 by
-  # narrowing the ADDQ/SUBQ ARM ALONE to `eaAllModes - {eaAn}`, configured FRESH
-  # and run through `ctest`: SIX red - `t_alu` 2, and `t_ea_masks` 4, which is
-  # block (16) 2 and block (19) 2 - and nothing else in the suite moves.
-  #
-  # THE MASK LEVEL SEES THIS DELETION FOR ALL ELEVEN, AND IT DID NOT USED TO.
-  # For MOVE, MOVEA, ADD, SUB, ADDA, SUBA, TST, CMP and CMPA the `t_ea_masks`
-  # `coverage` row cites a RESERVED mode-7 encoding as the illegal mode and
-  # never `An`, so those nine rows are blind to it; block (19) holds each mask
-  # against its literal value and is what covers them. ADDQ and SUBQ are covered
-  # twice over, there and in block (16)'s hand-written cells.
   #
   # WIDENING THIS SET IS NOT A MEASURABLE DIRECTION. It already holds all eight
   # members of `EAMode`, so there is no mode to add and no widening mutation to
@@ -133,14 +92,9 @@ const
   # members; three of them - `ea7Unused5`, `ea7Invalid` and `ea7Unused7` - are
   # encodings this part does not define, and this set is the other five.
   #
-  # RENAMED FROM `eaData7` 2026-08-11, VALUE UNCHANGED; `tests/t_ea_masks.nim`
-  # block (19) holds every mask that names this set against a literal spelling
-  # these five members, so the rename could not move one. Block (17), which held
-  # the set itself by name, was deleted 2026-08-12 because it could not red
-  # without block (19) reddening too, and the tombstone there carries the runs.
-  # The old name claimed the manual's DATA class, and `decode_types.nim`
-  # pairs this set with `eaAllModes` for nine operations that ACCEPT `An` -
-  # which DATA excludes - so the pair is the widest class and not DATA.
+  # THIS SET IS NOT THE MANUAL'S DATA CLASS. `decode_types.nim` pairs it with
+  # `eaAllModes` for operations that ACCEPT `An` - which DATA excludes - so the
+  # pair is the widest class and not DATA.
   #
   # THE GENUINE DATA-CLASS MASK IS `eaDataAddressing` in `decode_types.nim`,
   # which pairs `eaDataAlterableModes` - every mode but `An` - with this set.
@@ -168,54 +122,17 @@ const
   # "operands mismatch". The absolute-short encodings are `4ef8 1234`,
   # `4eb8 1234`, `41f8 1234` and `4878 1234`.
   #
-  # THIS CONSTANT DID NOT EXIST UNTIL 2026-08-11 AND ITS ABSENCE COST TWO
-  # REPAIRS. The control class MINUS `(xxx).W` was the declared primitive and
-  # the class itself was written down nowhere; `eaJumpTarget` and
-  # `eaLeaPeaTarget` each RECONSTRUCTED it as `<that set> + {ea7AbsW}`. LEA and
-  # PEA were wired to the narrow set and trapped `lea 0x1234.w,%a0` and
-  # `pea 0x1234.w`, forms the pinned assembler emits. A future operand class
-  # that really excludes `(xxx).W` belongs at its site as
-  # `eaControl7 - {ea7AbsW}`, not back here as a second declaration.
-  #
-  # THE NARROW SET IS GONE RATHER THAN DERIVED, AND THE MEASURED FACT IS ZERO
-  # CODE READERS: once both readers took this set directly, no expression
-  # anywhere in `src/` read the old name. THE STATED LIMIT IS THAT THIS IS A
-  # CLAIM ABOUT CODE AND NOT ABOUT PROSE - the old name still appears in
-  # comment text, and no run can see that. Measured 2026-08-11 by grepping the
-  # name over each directory in turn: EIGHT mentions under `src/`, every one of
-  # them in `decode_types.nim`; TWO under `tests/`, one each in
-  # `t_ea_masks.nim` and `t_move.nim`; and ZERO under `conformance/`. MOVEM
-  # reads neither set and carries `{eaAnInd, eaAnDisp}`.
-  #
-  # WHAT THAT EXPRESSION COSTS IF IT IS EVER WRITTEN ON THIS DECLARATION
-  # INSTEAD OF AT A SITE. Measured 2026-08-12 by narrowing THIS set to
-  # `{ea7AbsL, ea7PCDisp, ea7PCIndex}`, configured FRESH and run through
-  # `ctest`: FOURTEEN distinct cases red -
-  #
-  #   t_ea_masks   6  `opLea`/`opPea: the mask accepts (xxx).W` and block (19)'s
-  #                   four rows for `opLea`, `opPea`, `opJmp` and `opJsr`
-  #   t_move       5  the three `lea (xxx).W` cases and the two `pea (xxx).W`
-  #   t_control    2  `jmp (xxx).w is legal`, `jsr (xxx).w is legal`
-  #   conformance  1  `group=control case=jmp_absolute_short
-  #                   instruction="jmp 0x1234.w"`
-  #
-  # THE CONFORMANCE CASE IS THE ONE A COUNT TAKEN FROM THE `t_*` SUITES ALONE
-  # LEAVES OUT, and leaving it out is how the records in this family have been
-  # wrong before. Thirteen is the number a reader gets by stopping at `ctest`'s
-  # Nim suites; fourteen is the number.
-  #
-  # JMP AND JSR ARE COVERED BY `tests/t_control.nim` AND NOT BY `t_ea_masks`.
-  # Its twelve-row `eaIsLegalFor(opJmp/opJsr, ...)` table is where the two
-  # `(xxx).w is legal` cases above come from.
+  # THE CONTROL CLASS IS DECLARED HERE ONCE AND IS NEVER RECONSTRUCTED. Both
+  # `eaJumpTarget` and `eaLeaPeaTarget` take this set directly. A future operand
+  # class that really excludes `(xxx).W` belongs at its site as
+  # `eaControl7 - {ea7AbsW}`, not back here as a second declaration: LEA and PEA
+  # wired to such a narrow set trap `lea 0x1234.w,%a0` and `pea 0x1234.w`, forms
+  # the pinned assembler emits.
   eaControl7* = {ea7AbsW, ea7AbsL, ea7PCDisp, ea7PCIndex}
 
   # THE MODE-7 SUB-VARIANTS OF A WRITTEN OPERAND. There is no companion mode
   # set: an ALTERABLE operand may take EVERY mode, so the readers pair this with
   # `eaAllModes` and the whole of the restriction is here.
-  #
-  # `eaAlterableModes` HELD THAT MODE LIST UNTIL 2026-08-11 AND WAS
-  # BYTE-IDENTICAL TO `eaAllModes`. It is gone; the ADDQ and SUBQ arm names
-  # `eaAllModes`, which claims no class and is therefore true.
   #
   # WHY THE MODE LIST CANNOT RESTRICT ANYTHING HERE. Seven of the eight modes
   # are alterable outright, and the eighth is mode 7, whose sub-variants split
@@ -237,19 +154,15 @@ const
   # `Memory` and `Control` and a DASH under `Alterable`. An ADDQ to an absolute
   # destination writes memory and the pinned assembler emits it, so the column
   # is read here as a coarse-table artefact. THAT DISAGREEMENT IS RECORDED AND
-  # NOT SETTLED; `tests/t_ea_masks.nim` block (16) pins the behaviour so a
-  # narrowing that follows the column goes red rather than passing quietly.
+  # NOT SETTLED.
   eaAlterable7* = {ea7AbsW, ea7AbsL}
 
   # Data alterable: alterable without An. CLR takes this class - measured
   # against `m68k-elf-as -mcpu=5307`, which rejects `clr.l %a0` and accepts
   # every other mode this set names.
   #
-  # THE MULTIPLY AND DIVIDE DO NOT TAKE THIS CLASS AT EITHER SIZE, AND AN
-  # EARLIER REVISION OF THIS COMMENT SAID THEY DID. It read "and so does the
-  # source of the ColdFire 32-bit multiply and divide ... rejects `clr.l %a0`,
-  # `mulu.l %a0,%d1`, `mulu.l (4,%pc),%d1` and `mulu.l #5,%d1` AND ACCEPTS THE
-  # REST". The last four words were wrong: the assembler also rejects
+  # THE MULTIPLY AND DIVIDE DO NOT TAKE THIS CLASS AT EITHER SIZE. The
+  # assembler rejects `mulu.l %a0,%d1`, `mulu.l (4,%pc),%d1`, `mulu.l #5,%d1`,
   # `mulu.l 0x1234.w,%d1`, `mulu.l 0x12345678,%d1` and
   # `mulu.l (4,%a0,%d2),%d1`. The two masks those four operations really carry
   # are below.
@@ -274,24 +187,6 @@ const
   # anywhere in the core - `EA7(ea.reg) in leg.ea7` - is unreachable through
   # this mask. The emptiness is therefore not what rejects a mode-7 operand
   # here; the absent `eaMode7` is.
-  #
-  # BOTH HALVES ARE NEVERTHELESS GUARDED NOW, AND THEY DID NOT USED TO BE.
-  # `t_ea_masks` block (19) holds the whole `EaLegality` of each mask against a
-  # literal, which reads the `ea7` field whether the core ever does or not.
-  # Measured 2026-08-12, each mutation configured FRESH and run through `ctest`:
-  #
-  #   this set widened to all EIGHT sub-variants      4 red, all block (19)
-  #   `eaMode7` added to the mode set, this set empty 4 red, all block (19)
-  #   BOTH widened together                          32 red, of which 4 are
-  #                                                   block (19) and 28 are the
-  #                                                   cases that were the whole
-  #                                                   of the coverage before it
-  #
-  # THE TWO SINGLE-HALF MUTATIONS LEFT THE ENTIRE SUITE GREEN before block (19)
-  # existed, so a reader who took either line alone for a tested constraint had
-  # the same wrong picture that the defect this split was written to close had.
-  # That is now a statement about a value pinned in one place and a run-time
-  # path reached in another, which is the honest shape of it.
   eaMulDivLongModes* = {eaDn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp}
   eaMulDivLong7*: set[EA7] = {}
 

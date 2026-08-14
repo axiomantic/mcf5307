@@ -16,12 +16,9 @@
 ##            cpu               `step`, the dispatch, and the lifecycle ABI
 ##
 ## `cpu.nim` owns `step` and the `mcf5307_*` lifecycle calls, because `step`
-## is the one procedure that needs both the decoder and every executor. This
-## module held `step` before, and therefore imported `move`. That inversion
-## made the decoder depend on an executor and it added one import for each
-## new instruction group. A new group (CPU-8 to CPU-10) now adds one module,
-## one import in `cpu.nim` and one `case` arm there. It adds no dependency
-## here.
+## is the one procedure that needs both the decoder and every executor. A new
+## group (CPU-8 to CPU-10) adds one module, one import in `cpu.nim` and one
+## `case` arm there. It adds no dependency here.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. Opcode
 ## encoding and the addressing-mode placement are facts about Motorola

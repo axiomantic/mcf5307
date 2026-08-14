@@ -1,7 +1,7 @@
 # CMake drives Nim. Task CPU-1 creates this file.
 #
 # The repository ships Nim source plus build integration, and never a prebuilt
-# `.a`. Design section 20.1 gives six integration steps. This file runs them in
+# `.a`. Design section 20.1 gives the integration steps. This file runs them in
 # that order, at configure time, and reports each one by number.
 #
 #   1  Read `.nim-version`, run `nim --version`, fail the configure step on a
@@ -159,9 +159,9 @@ set(MCF5307_NIM_HEADER "mcf5307_nim.h")
 set(MCF5307_NIM_FLAGS --mm:arc --panics:on -d:release)
 
 # The Nim entry modules of this project. Design section 5.5 keeps the
-# one-project convention and the list holds one name today. A second Nim
-# library appends its name here and writes its own command below, with its own
-# `--nimMainPrefix:` value. Step 2a reads this list.
+# one-project convention. A second Nim library appends its name here and writes
+# its own command below, with its own `--nimMainPrefix:` value. Step 2a reads
+# this list.
 set(MCF5307_NIM_ENTRIES mcf5307)
 
 # Each entry module's source file and its command are written out, and neither
@@ -191,7 +191,7 @@ set(MCF5307_NIM_COMMAND_mcf5307
 # `--nimMainPrefix:` renames the Nim runtime entry point of one Nim project.
 # Two Nim projects in one binary that keep the default names collide on
 # `NimMain`, `NimMainInner` and `NimMainModule` at link. THE FLAG IS WHAT
-# PREVENTS THAT COLLISION AND NOTHING IN THIS FILE ENFORCED IT.
+# PREVENTS THAT COLLISION.
 #
 # WHY THE FAULT MUST BE CAUGHT HERE. With the flag deleted the configure step
 # succeeds, the build succeeds and the archive is written, all without one
@@ -201,7 +201,7 @@ set(MCF5307_NIM_COMMAND_mcf5307
 # different repository, at a later time. The configure step is the last place
 # at which the fault is still local to this project.
 #
-# The check has three steps and only the second one is fatal.
+# Only the second step of the check is fatal.
 #
 #   1  count the entry modules
 #   2  assert that every entry module's command carries a `--nimMainPrefix:`
@@ -654,7 +654,7 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # whole block exists to end.
 #
 # `-DMCF5307_ABI_GATE=OFF` configures such a host. IT DOES NOT TURN OFF ONE
-# CHECK. It skips all three parts of step 4a and all nine of step 4a's own
+# CHECK. It skips every part of step 4a and every one of step 4a's own
 # controls, and the warning it prints enumerates them by name rather than
 # naming the visibility gate alone.
 #
@@ -681,7 +681,7 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 #
 #   2810 ms   the whole configure run, from an empty build tree
 #   1570 ms   step 4a, from this switch to the end of the stub verdict
-#    198 ms   controls E through I together - SIX compiles and SIX `nm` runs
+#    198 ms   controls E through I together - the compiles and `nm` runs
 #             that exist only to make the gate's own fatal branches fire
 #    149 ms   control H alone, the largest single control
 #

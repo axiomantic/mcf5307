@@ -1,11 +1,10 @@
 # The root of the `mcf5307` CMake project. Task CPU-26 creates this file and
 # every registration list under it, and it is the only task that creates one.
 #
-# CPU-26 REGISTERS NO TEST OF ITS OWN. `tests/tests_cpu.cmake` and
-# `conformance/conformance_cpu.cmake` are created EMPTY on purpose, and each
-# later cpu task adds its own `add_test(NAME <name> ...)` line to the list that
-# governs its own directory. A skeleton that registered a test would make the
-# emptiness of those lists unobservable.
+# EACH TASK REGISTERS ITS OWN TESTS. A cpu task adds its own
+# `add_test(NAME <name> ...)` line to the list that governs its own directory -
+# `tests/tests_cpu.cmake` or `conformance/conformance_cpu.cmake` - and never to
+# this file.
 #
 # 3.20 is the floor because `--no-tests=error` is a CTest flag that the earlier
 # releases do not carry, and without that flag every `-R` check in this project
@@ -21,9 +20,8 @@ project(mcf5307
 
 # `enable_testing()` is what makes the test tree reachable. Without it CTest
 # reports no test project at all, which is a DIFFERENT shape from a project
-# that registers no test: the first is a broken build tree and the second is
-# this skeleton. CPU-26's negative case deletes this line and asserts the two
-# shapes are distinguishable.
+# that registers no test: the first is a broken build tree and the second is a
+# tree with nothing yet to run.
 #
 # IT IS NOT GUARDED BY `PROJECT_IS_TOP_LEVEL` AND THE SUITE BELOW IT IS. A
 # guarded one writes no `CTestTestfile.cmake` for this directory in a consumer's
@@ -44,7 +42,7 @@ enable_testing()
 # `-Ofast` with `argument '-Ofast' is deprecated; use '-O3 -ffast-math'
 # [-Wdeprecated-ofast]`. That diagnostic is about the COMMAND LINE the consumer
 # built and not about one line of this project's source, so `-Werror` promotes
-# it to an error and seven registered tests become Not Run. The same warning is
+# it to an error and the registered tests become Not Run. The same warning is
 # printed about a hundred times elsewhere in that build and is harmless there,
 # because only these targets carry `-Werror`.
 #
@@ -91,9 +89,8 @@ add_custom_target(mcf5307_tests
     COMMENT "Building the mcf5307 T0 test set")
 
 # CMake drives Nim. Task CPU-1 adds this line and owns the file it includes.
-# The six integration steps of design section 20.1 run there, at configure
-# time, and they leave `mcf5307_nim_objs`, `mcf5307` and `mcf5307::mcf5307`
-# defined. THE INCLUDE COMES BEFORE THE TEST DIRECTORIES because a test that
+# The integration steps of design section 20.1 run there, at configure time,
+# and they leave `mcf5307_nim_objs`, `mcf5307` and `mcf5307::mcf5307` defined. THE INCLUDE COMES BEFORE THE TEST DIRECTORIES because a test that
 # links the core needs the target to exist when its own list is read.
 include(cmake/Nim.cmake)
 

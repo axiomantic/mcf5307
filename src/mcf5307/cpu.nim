@@ -50,107 +50,24 @@ import mcf5307/control
 import mcf5307/irq
 
 # ---------------------------------------------------------------------------
-# THE CYCLE COUNTS, AND WHY NOTHING CHECKS THEM. Stated once here; the four
-# executor modules point at this block instead of repeating it.
+# THE CYCLE COUNTS, AND WHY NOTHING CHECKS THEM. Stated once here; the executor
+# modules point at this block instead of repeating it.
 #
 # `mcf5307_exec` SATURATES AT ITS BUDGET, and that is the whole mechanism. The
 # conformance runner passes 1 (`kBudget`, `conformance/runner.cpp`) and so do
-# `t_alu`, `t_move`, `t_logic` and `t_control`, so the return is 1 for an
-# instruction that ran and 0 for one that trapped and carries no count at all.
-# The `cycles` field of those four drivers is that return, and MOST OF THEIR
-# TUPLES LEAVE IT OUT. Measured 2026-08-12 over the `let`-bound named-field
-# tuple literals of the four, 24 of 86 carry a `cycles` member: `t_logic` 14 of
-# 18, `t_alu` 8 of 28, `t_control` 2 of 22, and `t_move` 0 of 18, which fills
-# the field and reads it in no assertion at all. `expectPc` in `t_alu` is one
-# of the omitting sites. Where a tuple does carry it, flattened to 0-or-1 it
-# reads like a counter and is not one. THREE assertions read a return not
-# flattened to 0-or-1, and every one of them asserts its DIRECTION and never
-# its value. `t_ea_masks` assertion (5) is `check(cycles > 0'u32, ...)` in
-# `tests/t_ea_masks.nim`, over the `mcf5307_exec(ctx, 64'u32)` beside it and
-# its budget of 64: EVERY non-zero return passes it, so it cannot tell 64
-# from 1. It saturates as well - its board answers NOP to every fetch, and
-# measured 2026-08-12 against this tree, with that assertion temporarily
-# strengthened to `cycles == 64'u32`, the 4-cycle NOP fills the budget exactly
-# and returns 64 while `nopCycles` at 1044 makes the 1046-cycle NOP take the
-# saturation clause and return 64 AGAIN.
-# Assertions (3) and (4) of the same file read a return that never entered
-# `mcf5307_exec` at all - `runFamily` calls the family procs directly - and
-# assert only that a legal operand costs something and a trapped one costs
-# nothing. No cycle count is asserted anywhere.
+# the executor suites, so the return is 1 for an instruction that ran and 0 for
+# one that trapped and carries no count at all. Flattened to 0-or-1 it reads
+# like a counter and is not one.
 #
-# MEASURED 2026-08-12 AGAINST THIS TREE - the one where `step` advances the pc
-# by `insWordBytes` and `fetchCycles` prices the fetch alone. EVERY non-zero
-# cycle expression in `src/mcf5307` given a distinct wrong value in one build -
-# 45 of them over 40 sites, 41..49 in `move`, 51..65 in `alu`, 71..79 in
-# `logic`, 81..90 in `control` and 91 and 92 here. The census counts each ARM
-# of an `if` expression and each COEFFICIENT of a sum separately, which is what
-# makes `move` 9 over 8 sites and `logic` 9 over 7. Reach: 44 of the 45 appear
-# as their own literal in the generated C of a fresh configure, the Nim
-# transpile being a configure-time step; the forty-fifth is `nopCycles`, which
-# is constant-folded and reaches the C only as the sum `fetchCycles +
-# nopCycles` - `((NU32)183)` present, `((NU32)4)` absent. EVERY SUITE HELD ITS
-# BASELINE: t_alu 165, t_ea_masks <caseTotalMustMatchTranscripts>, t_move 34,
-# t_logic 74, t_control 168, t_sign_extend 10, conformance 23/32/48/82/185,
-# ctest exit 8 with `abi_smoke` - which fails to LINK against the ABI symbols
-# nothing implements yet - the one failure.
+# `fetchCycles` PRICES THE FETCH AND DOES NOT ADVANCE THE PROGRAM COUNTER. The
+# pc advances by `insWordBytes`, a width in bytes that shares the value 2 with
+# `fetchCycles` by arithmetic accident. `insWordBytes` is declared in
+# `decode_types.nim`, not here, because it is not a cycle count.
 #
-# THAT COUNT USED TO BE SPELLED HERE AS A NUMBER AND THE NUMBER WENT STALE.
-# It read 13, and CPU-17 is the change that moved it: `mcf5307_set_irq` was the
-# thirteenth and this task implements it. MEASURED 2026-08-13 against this
-# tree, the link reports 12 - `isp1181_create`, `isp1181_destroy`,
-# `isp1181_read`, `isp1181_rx`, `isp1181_state_load`, `isp1181_state_save`,
-# `isp1181_state_size`, `isp1181_tick`, `isp1181_write`, `mcf5307_state_load`,
-# `mcf5307_state_save` and `mcf5307_state_size` - and every one of the twelve
-# belongs to CPU-18 or to chain B, so the figure moves again when they land.
-# THE LESSON IS THE ONE THIS FILE ALREADY RECORDS 200 LINES BELOW: a stale
-# sentence turns a repaired defect back into a documented invariant. What is
-# written above is the SHAPE of the failure, which is what the surrounding
-# measurement needs; the count is here, dated, and named as a thing that moves.
-#
-# THE `t_ea_masks` COLUMN NAMES A CONSTANT AND THE OTHERS SPELL A NUMBER, AND
-# THAT ASYMMETRY IS DELIBERATE. `t_ea_masks` is the one suite whose total is
-# GUARDED - `caseTotalMustMatchTranscripts`, declared once in
-# `tests/t_ea_masks.nim` and held against the live count by block (18) of that
-# file - and it is also the one that moves when a block is added there. A bare
-# literal in this line went stale on exactly that event and no run could see it,
-# because the copy sits in PRODUCTION SOURCE, which that guard does not count
-# and cannot reach. Naming the constant is the only spelling here that cannot go
-# silently wrong. The `opMovem` arm of `decode_types.nim` names it the same way
-# and records the limit both share: this is TEXT IN A COMMENT, nothing links it
-# to the symbol, and `src/` cannot import `tests/` to close that.
-#
-# A DATE IS NOT A TREE STATE, and this result is a property of the tree above
-# rather than of the calendar. The SAME 45-value mutation applied to the tree
-# at HEAD c374e8c, where `step` still advanced the pc by `fetchCycles`, reds 63
-# unit cases - t_alu 27, t_move 7, t_logic 6, t_control 23 - and 120 corpus
-# cases - 14, 13, 17 and 76 - measured 2026-08-12 by reconstructing that tree
-# and rerunning. Any measurement recorded here names the tree it ran against
-# and not only the day it ran.
-#
-# `fetchCycles` IS IN THAT POPULATION AND IS NOT SPECIAL. It used to advance
-# the program counter as well as price the fetch, and a wrong value then red
-# unit and corpus cases through the pc. The pc now advances by `insWordBytes`,
-# a width in bytes sharing the value 2 by arithmetic accident, and measured
-# 2026-08-12 `fetchCycles` alone at 1091 reds NOTHING - 0 unit cases, 0 corpus
-# cases, every suite at its baseline.
-#
-# `insWordBytes` IS WHAT THE SUITE ACTUALLY GUARDS, and it is declared in
-# `decode_types.nim`, not here, because it is not a cycle count. Its red count
-# MOVES WITH THE WRONG VALUE, so a count quoted without its value does not
-# reproduce. Measured 2026-08-12: 63 unit cases at 99, 63 at 3, 64 at 8 and 65
-# at 4 - `t_logic` supplies the movement at 6, 6, 7 and 8 - against 120 corpus
-# cases at all four.
-#
-# THE TWO PC SITES ARE NOW ONE CONSTANT, AND COUPLING THEM COST ONE CASE. Both
+# THE TWO PC SITES ARE ONE CONSTANT, AND THAT COUPLING CAN HIDE AN ERROR. Both
 # `step` below and `fetchExt` in `machine.nim` advance the pc by that constant,
 # so a wrong value moves the opcode word and every extension word TOGETHER and
-# the two errors can cancel. Measured 2026-08-12 against the same tree with the
-# two sites separate: the opcode site alone at 3 reds 64 unit cases where the
-# shared constant reds 63, and the case that recovers is `t_logic`'s
-# `andi.l #5,%d0 = 0 and sets Z`, whose displaced immediate still ANDs to zero.
-# The extension site was never unguarded - separate and wrong alone at 6 it
-# reds 8 unit cases and 36 corpus cases - so this change bought one name for
-# one concept and not new coverage.
+# the two errors can cancel.
 #
 # HOW TO READ ANY NUMBER HERE OR IN AN EXECUTOR. None was derived from the
 # manual, and the split into a fetch cost plus an executor return is this
@@ -235,23 +152,14 @@ proc mcf5307_reset*(ctx: MCF5307Ctx; initialSp: uint32; initialPc: uint32)
   # the field (`machine.nim` states why the write sits on that procedure's last
   # line).
   #
-  # AN EARLIER REVISION WROTE `false` HERE AND ARGUED FOR IT, and the argument
-  # was right about a different question. It read that the field "says the
-  # program counter is at an exception handler's entry, and the line above has
-  # just made the program counter something else", so carrying it over "would
-  # skip one sample on behalf of a handler this call has already left". A STALE
-  # inhibition would indeed be wrong. This is not one: the reset does not carry
-  # a previous handler's inhibition over, it acquires its OWN, and the
-  # instruction that spends it is the one this call has just installed. With
-  # `false` the core could take an interrupt at the reset program counter before
-  # retiring a single instruction, which is the state the sentence above forbids.
-  # `tests/t_irq.nim` block 22 pins it in both directions, and it is not the
-  # only block that does. `tests/t_claims.cmake` registers this line's mutation
-  # as `reset_inhibit_suite_t_irq`, which carries the count and refutes when it
-  # moves, so the coverage this comment names is held by that entry rather than
-  # by this sentence. THE NUMBER IS DELIBERATELY NOT REPEATED HERE: a second
-  # copy of it in `src/` is one nothing reads and nothing fails on, which is
-  # the shape of second source this file guards against everywhere else.
+  # `true` AND NOT `false`, AND THE DISTINCTION IS BETWEEN A CARRIED INHIBITION
+  # AND AN ACQUIRED ONE. A STALE inhibition - one skipping a sample on behalf of
+  # a handler this call has already left - would be wrong. This is not one: the
+  # reset acquires its OWN, and the instruction that spends it is the one this
+  # call has just installed. With `false` the core could take an interrupt at
+  # the reset program counter before retiring a single instruction, which is the
+  # state the sentence above forbids. `tests/t_claims.cmake` registers this
+  # line's mutation as `reset_inhibit_suite_t_irq` and refutes when it moves.
   ctx.atHandlerEntry = true
   # THE LEVEL-7 EDGE LATCH IS CLEARED AND THE PIN IS THEN RE-OBSERVED, AND THAT
   # IS AN INFERENCE RATHER THAN A CITATION. `resetInterruptEdge` in
@@ -343,27 +251,18 @@ proc step(ctx: MCF5307Ctx): uint32 =
     # the tables' and the assembler's. Nothing decodes them because there is
     # nothing to decode. This is a property of the part.
     #
-    # `opSwap` WAS THE FOURTH MEMBER OF THIS ARM AND IT HAS MOVED, BECAUSE
-    # ITS PRESENCE HERE WAS A DEFECT WEARING THE COSTUME OF A PROPERTY.
-    # SWAP is on this part - Table 3-7, page 3-25, carries `SWAP | Dn | 16 |
-    # MSW of Dn <-> LSW of Dn`, Table 3-12, page 3-27, times `swap Dx` at
-    # 1(0/0), section 3.9's removed list does not name it, and the shipped
-    # G2 operating system executes it 339 times. It reached this arm only
-    # because `decode.nim`'s PEA mask `word and 0xFFC0 == 0x4840` spans
-    # `4840`-`487f` and swallowed all eight SWAP encodings before any
-    # `opSwap` arm could be reached. `decode.nim` now tests `0xFFF8`/`0x4840`
-    # AHEAD of the PEA arm, `move.nim` executes it, and it is dispatched
-    # with the data-movement group above, which is the group Table 3-7 puts
-    # it in.
+    # `opSwap` IS NOT IN THIS ARM. SWAP is on this part - Table 3-7, page
+    # 3-25, carries `SWAP | Dn | 16 | MSW of Dn <-> LSW of Dn`, Table 3-12,
+    # page 3-27, times `swap Dx` at 1(0/0), and section 3.9's removed list
+    # does not name it. It is dispatched with the data-movement group above,
+    # which is the group Table 3-7 puts it in. `decode.nim` must test
+    # `0xFFF8`/`0x4840` AHEAD of its PEA arm, whose mask `word and 0xFFC0 ==
+    # 0x4840` spans `4840`-`487f` and would otherwise swallow every SWAP
+    # encoding.
     #
-    # THE LESSON IS WORTH MORE THAN THE REPAIR. Gate 4.4's 65,536-word sweep
-    # CONFIRMED the sentence that used to stand here - "no arm produces
-    # `opSwap`" - and the sentence was true, for the wrong reason. A
-    # measurement that verifies the LETTER of a claim can miss its MEANING,
-    # and an unreachable-opcode note is exactly the shape that makes a live
-    # defect look like a property of the silicon. What now keeps this
-    # honest is not a comment: `tests/t_move.nim` fails if the decoder
-    # stops producing `opSwap`.
+    # AN UNREACHABLE-OPCODE NOTE IS THE SHAPE THAT MAKES A LIVE DEFECT LOOK
+    # LIKE A PROPERTY OF THE SILICON, so a sweep confirming that no arm
+    # produces an opcode is not evidence that the part lacks it.
     ctx.halted = true
     result = 0
   of opIllegal:
@@ -401,31 +300,10 @@ proc mcf5307_exec*(ctx: MCF5307Ctx; maxCycles: uint32): uint32
     # the next one - so the sample at the top of the NEXT iteration would land
     # on an instruction that has not run.
     #
-    # THE SAMPLE AND THE `step` BELOW ARE ONE ITERATION, AND AN EARLIER
-    # REVISION OF THIS BLOCK CLAIMED THAT SHAPE WAS WHAT IMPLEMENTED THE FIRST
-    # SENTENCE: "making the take `continue` instead would sample again before
-    # the handler had executed anything". THAT SENTENCE IS DELETED RATHER THAN
-    # KEPT, because the field above made it false and a false sentence left
-    # standing is how a repaired defect becomes a documented invariant.
-    # MEASURED 2026-08-13 against this tree: adding that `continue` reds NO
-    # case of `tests/t_irq.nim`, where against the tree before the field it
-    # redded two. The take's own `atHandlerEntry` inhibits the sample the extra
-    # iteration would make, so the edit is now an equivalent loop and not a
-    # defect. What the one iteration still buys is stated at the clear below.
-    # RE-MEASURED 2026-08-13 against the tree `mcf5307_reset` NOW leaves - the
-    # one where the reset acquires its own inhibition, re-observes the level-7
-    # pin and guards a nil context, and where `t_irq` carries 37 cases: still
-    # 0 red. A measurement names the tree it ran against, and the reset change
-    # moved the tree under both of the two in this block.
-    #
-    # THE SUITE IS NAMED ON THE SAME LINE AS THE FIGURE ON PURPOSE. This
-    # sentence read "that suite carries 34 cases" until 2026-08-13, and the
-    # second-source scan in `tests/tests_cpu.cmake` reads a suite name and a
-    # count out of ONE LINE of `src/` - so a figure whose suite is named by an
-    # ANAPHOR six lines up was invisible to it. That is not a wrapping the scan
-    # can be widened to reach: no textual scan resolves "that suite". The
-    # repair is to write the name where the number is, and the scan then holds
-    # this figure against the generated driver.
+    # THE SAMPLE AND THE `step` BELOW ARE ONE ITERATION. Making the take
+    # `continue` instead is an equivalent loop rather than a defect: the take's
+    # own `atHandlerEntry` inhibits the sample the extra iteration would make.
+    # What the one iteration still buys is stated at the clear below.
     #
     # THE CLEAR SITS BETWEEN THE SAMPLE AND THE `step`, AND EACH OF ITS TWO
     # NEIGHBOURS IS A REASON FOR THAT POSITION. Ahead of `step` it cannot wipe
@@ -436,14 +314,10 @@ proc mcf5307_exec*(ctx: MCF5307Ctx; maxCycles: uint32): uint32
     # instruction in the `step` below, IN THIS SAME ITERATION, and inhibiting
     # the next sample as well would cost the handler a second instruction the
     # manual does not give it. That is the one thing the single iteration is
-    # still load-bearing for. MEASURED 2026-08-13, and RE-MEASURED the same day
-    # against the tree `mcf5307_reset` now leaves: moving this line ahead of
-    # the sample, so that a take keeps its own inhibition, reds the two cases
-    # of `tests/t_irq.nim` that present a SECOND interrupt across a handler's
-    # first instruction - blocks 15 and 17 - and no other. THE RESET'S OWN
-    # INHIBITION IS SPENT BY THIS SAME CLEAR and does not add a third: the
-    # reset installs the instruction that spends it, so the clear is reached
-    # with no take of this iteration's own to keep.
+    # still load-bearing for. THE RESET'S OWN INHIBITION IS SPENT BY THIS SAME
+    # CLEAR and does not add a second: the reset installs the instruction that
+    # spends it, so the clear is reached with no take of this iteration's own
+    # to keep.
     #
     # IT COSTS NO CYCLES, AND THAT IS A REFUSAL TO CLAIM RATHER THAN A
     # MEASUREMENT. The block at the head of this file records that no cycle

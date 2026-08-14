@@ -65,9 +65,7 @@
 ##   same bytes as `bral`. That is the disassembler declining to model the
 ##   marker, the same laxity that makes it print `4690` as `notl %d0` though
 ##   that word's low six bits are an address-register indirect (see
-##   `logic.nim`). `tests/t_control.nim` asserts the trap for all three of
-##   BRA, Bcc and BSR, and asserts a displacement of 0xFE and one of 0x00 as
-##   the controls that keep it from becoming "every branch traps".
+##   `logic.nim`).
 ##
 ## THE CONDITION CODES, AND WHERE EACH RULE COMES FROM.
 ##
@@ -101,10 +99,9 @@
 ##       Section 3.3, page 3-11: the processor copies SR, then sets the S-bit
 ##       and clears the T-bit. `machine.nim`'s `takeException` carries it.
 ##
-## CYCLES. The block above the constants in `cpu.nim` says why nothing checks
-## any of them, and uncertainty 3 below is this group's entry. THE NUMBERS ARE
-## NOT A TRANSCRIPTION OF THE TABLES. Read on the rendered pages, against what
-## the code returns:
+## CYCLES. See the block above the constants in `cpu.nim`; uncertainty 3 below
+## is this group's entry. THE NUMBERS ARE NOT A TRANSCRIPTION OF THE TABLES.
+## Read on the rendered pages, against what the code returns:
 ##
 ##   FOUR ARE EXACT, each of them a row carrying a SINGLE cell that the one
 ##   return equals, which is why no effective address can pull them apart the
@@ -112,8 +109,7 @@
 ##   folio 3-27, gives `scc Dx` 1(0/0); `execRts` returns 8 and Table 3-15,
 ##   folio 3-30, gives `rts` 8(1/0); `execRte` returns 14 and the same table
 ##   gives `rte` 14(2/0); `execTrap` returns 18 and Table 3-14, folio 3-29,
-##   gives `trap #imm` 18(1/2). An exact number is still unchecked, but it was
-##   not invented.
+##   gives `trap #imm` 18(1/2). An exact number was not invented.
 ##
 ##   THREE ARE FLATTENED ACROSS THE EFFECTIVE ADDRESS. `execJump` returns 5 for
 ##   every operand; Table 3-15 gives `jmp`/`jsr` 5 for `(An)` and `(d16,An)`
@@ -168,11 +164,7 @@
 ## THIS LIST SAYS SO. The document that would settle numbers 1, 2 and 4 is the
 ## ColdFire Family Programmer's Reference Manual, whose per-instruction pages
 ## give the flag rules and the condition tests directly. AGENTS.md section 11
-## names it and gives a download location for it. IT WAS NOT AVAILABLE WHEN
-## THIS GROUP WAS WRITTEN - searched for by name and by content, and the only
-## ColdFire document that search found was the MCF5307 User's Manual
-## (MCF5307UM/AD) - and the network is closed, so it could not be fetched
-## either. Both halves of that are why this list exists.
+## names it, and it is on disk at `~/Development/datasheets/CFPRM.pdf`.
 ##
 ##   1. THE BOOLEAN TEST OF EACH OF THE SIXTEEN CONDITIONS. The four-bit
 ##      ENCODING is measured and is not in doubt: `m68k-elf-as -mcpu=5307` put
@@ -186,14 +178,6 @@
 ##      "Logical Condition (example: NE for not equal)" in Table 3-6 (page
 ##      3-21), and it prints no table of the sixteen tests anywhere.
 ##
-##      THIS ONE IS ASSERTED, and heavily, because a condition must be one
-##      thing or another and a branch nothing measures is a branch nothing
-##      holds. `tests/t_control.nim` runs all sixteen conditions over all
-##      sixteen condition-code words, for `Bcc` and again for `Scc`, and
-##      compares each against a LITERAL 16-bit vector. A future reader who
-##      reverses one condition must change that vector, and the corpus cases
-##      that sample it.
-##
 ##   2. WHETHER A COMPARISON WRITES X. This module leaves X alone, which is
 ##      the M68000 Family rule for CMP, CMPA and CMPI. CUTTING THE OTHER WAY,
 ##      section 3.2.1.5 ENDS, on page 3-9, with the unattached sentence "Set
@@ -206,20 +190,8 @@
 ##      X BIT and not as a per-instruction rule, Table 3-7 gives CMP no flag
 ##      column at all, and this module follows the family rule.
 ##
-##      THIS ONE IS ASSERTED TOO. Every CMP, CMPA and CMPI case in
-##      `conformance/corpus/control_00.json` enters with X SET and expects it
-##      SET, so a reader who reverses this reading must change all of them.
-##
-##   3. THE EXACT CYCLE COUNT of every instruction in this group. Nothing
-##      asserts it, and `tests/t_control.nim`'s `cycles` field is not a
-##      counter-case though its name reads like one; `cpu.nim` states the
-##      mechanism once, above its cycle constants. MEASURED 2026-08-12 AGAINST
-##      THIS TREE, as part of the project-wide run recorded there: all ten
-##      cycle expressions of this module - ten over eight return sites, by the
-##      census convention stated there - given distinct wrong values (81..90),
-##      each confirmed as its own literal in the generated C of a fresh
-##      configure; `t_control` held its 168 cases and the control corpus held
-##      its 82.
+##   3. THE EXACT CYCLE COUNT of every instruction in this group. `cpu.nim`
+##      states the mechanism once, above its cycle constants.
 ##
 ##   4. WHAT AN `RTE` WITH A BAD FORMAT FIELD SHOULD DO. Section 3.5.7, "RTE
 ##      and Format Error Exceptions", page 3-16, is unambiguous that it
@@ -229,9 +201,7 @@
 ##      CPU-14's and a trap is this core's one observable for "the core
 ##      refused", the same channel every illegal size and illegal operand in
 ##      every group uses; `alu.nim`'s header makes the identical statement
-##      about a divide by zero. What `tests/t_control.nim` asserts is the
-##      DISCRIMINATION - a format of 3 is refused and a format of 4 is not -
-##      and not the shape of the refusal.
+##      about a divide by zero.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
 ## semantics, the condition-code rules and the encodings are facts about

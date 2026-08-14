@@ -33,17 +33,8 @@ env:
   # `t0_` is NOT the tier marker. A tier is a property of a check AT RUN TIME
   # -- T0 is the set of checks that run with no firmware byte -- and it is not
   # a property of the name. The Nim-side suites this repository registers carry
-  # a bare `t_` prefix with no tier digit, and every one of them is produced by
-  # a task the plan heads `-- T0`: `t_ea_masks`, `t_sign_extend`, `t_alu`,
-  # `t_move`, `t_logic`, `t_control`, `t_exception`, `t_checks_on`.
-  #
-  # A `^t0_` pattern selected THREE of the eleven registered T0 names and
-  # reported success, because `ctest -R` that matches something cannot tell you
-  # about what it did not match. `--no-tests=error` did not help: the pattern
-  # matched three tests, so the run was not empty and the flag stayed silent.
-  # That is the shape this file's own note warns about -- a check whose regular
-  # expression matches nothing is not a weak check, it is a check that cannot
-  # fail -- except here it matched too little rather than nothing at all.
+  # a bare `t_` prefix with no tier digit, so a `^t0_` pattern alone leaves them
+  # unselected while still matching enough that `--no-tests=error` stays silent.
   #
   # NO `t1_` OR `t2_oracle` ALTERNATIVE MAY EVER BE ADDED HERE. Both are
   # firmware-gated, and the matrix at the top of this file is T0 only.
@@ -160,18 +151,14 @@ jobs:
       # the listing exits 0 whether or not any test matched. So this step reads
       # what the listing PRINTS.
       #
-      # IT COMPARES SETS OF NAMES AND IT WRITES DOWN NO COUNT. Its predecessor
-      # asserted only that the listing did not say `Total Tests: 0`, which is
-      # blind in both of the directions that matter. A suite that stops reaching
-      # the build tree still leaves a non-zero total, so the check cannot see a
-      # suite vanish. And whether a listed suite is one any job RUNS is not a
-      # property of the listing at all, so the check could not see that eight of
-      # the eleven T0 names were selected by no pattern.
+      # IT COMPARES SETS OF NAMES AND IT WRITES DOWN NO COUNT. A total is blind
+      # in both of the directions that matter: a suite that stops reaching the
+      # build tree still leaves a non-zero total, and whether a listed suite is
+      # one any job RUNS is not a property of the listing at all.
       #
-      # A HAND-WRITTEN COUNT IS NOT THE REPAIR EITHER. A count of names in this
-      # repository went stale inside a day and had to be re-measured. So both
-      # comparisons below DERIVE BOTH OF THEIR SIDES, and the only roster that
-      # is typed out is the exclusion roster, whose whole purpose is to be typed.
+      # A HAND-WRITTEN COUNT IS NOT THE REPAIR EITHER. So both comparisons below
+      # DERIVE BOTH OF THEIR SIDES, and the only roster that is typed out is the
+      # exclusion roster, whose whole purpose is to be typed.
       - name: Assert that every registered test reaches the build tree and a job
         shell: bash
         run: |
@@ -210,17 +197,15 @@ jobs:
           #    the roster below. THE ROSTER IS THE ONE THING HERE THAT IS WRITTEN
           #    DOWN RATHER THAN DERIVED, and that is the point of it: a test that
           #    neither matches the pattern nor appears here fails this step, so
-          #    "this does not run in CI" has to be a sentence somebody typed. The
-          #    three-of-eleven silence this step replaces is precisely what an
-          #    unwritten exclusion looks like from the outside.
+          #    "this does not run in CI" has to be a sentence somebody typed.
           #
-          #    `abi_smoke` does not LINK at this commit -- it takes the address
-          #    of thirteen C ABI symbols that are not implemented yet, so the
-          #    build step above fails before this one is reached. Its roster
-          #    entry is not what keeps it out of the run; it is here so that the
-          #    day it links, the entry has to be deleted deliberately.
+          #    `abi_smoke` does not LINK: it takes the address of published C
+          #    ABI symbols that are not implemented yet, so the build step above
+          #    fails before this one is reached. Its roster entry is not what
+          #    keeps it out of the run; it is here so that the day it links, the
+          #    entry has to be deleted deliberately.
           #
-          #    `mcf5307_conformance_*` are the corpus runner's five groups. They
+          #    `mcf5307_conformance_*` are the corpus runner's groups. They
           #    need no firmware and no cross assembler at RUN time -- the
           #    assembler regenerates the corpus, and these read the committed
           #    one -- so nothing about them is inherently T1. They are held out

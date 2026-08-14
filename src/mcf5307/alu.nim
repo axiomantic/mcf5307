@@ -10,17 +10,14 @@
 ## rows of Table 3-13 EIGHT rather than four.
 ##
 ## THIS MODULE IS A SIBLING OF `move.nim` AND OF `decode.nim`. It imports
-## neither, and neither imports it. Adding this group cost one new module, one
-## `import` line in `cpu.nim` and one arm of the `case` there; `decode.nim`
-## gained the opcodes and NO import. The rule and the reason are in
+## neither, and neither imports it. The rule and the reason are in
 ## `~/Desktop/avoiding-cycles.md`: an executor that reaches into another
-## executor for a helper is the decoder-under-executor cycle one layer down,
-## and it is bad at two siblings and worse at four.
+## executor for a helper is the decoder-under-executor cycle one layer down.
 ##
 ## THE SIZE IS LONG AND THE EXCEPTIONS ARE NAMED. Arithmetic on this part is
 ## 32-bit. `ADD.B`, `ADD.W`, `ADDA.W`, `ADDI.B`, `ADDQ.W`, `NEG.W`, `ADDX.W`
 ## and the rest of the byte and word forms are 68000 encodings that ISA_A
-## dropped, and each one TRAPS here; CPU-13 carries them as negative cases.
+## dropped, and each one TRAPS here.
 ## `CLR` is the exception: it keeps all three sizes, which
 ## `m68k-elf-as -mcpu=5307` confirms by accepting `clr.b` and `clr.w`.
 ##
@@ -350,9 +347,7 @@ proc execMulWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # MCF5307 User's Manual Table 3-13, folio 3-28, `muls.w`/`mulu.w <ea>,Dx`:
   # `3(0/0)` under `Rn` AND under `#xxx`. THE EQUALITY IS NOT A MODEL. The rest
   # of the row is `6(1/0)` for the four memory modes, `7(1/0)` for
-  # `(d8,An,Xi*SF)` and `6(1/0)` for `xxx.wl`, none of which this core returns,
-  # and nothing checks the number: it was 61 in the census the cycle block in
-  # `cpu.nim` records, and every suite held its baseline count.
+  # `(d8,An,Xi*SF)` and `6(1/0)` for `xxx.wl`, none of which this core returns.
   3'u32
 
 proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
@@ -381,12 +376,6 @@ proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # MULU that is bit 31 of the UNSIGNED product, so it is not always zero - and
   # Z from those same 32 bits. `setNzClearVc` is exactly that rule.
   #
-  # AN EARLIER REVISION SET V WHEN THE 32 BITS WRITTEN WERE NOT THE WHOLE
-  # PRODUCT, so that a product whose low half is zero could be told from a
-  # multiply by zero. That is the 68K rule and it is the one the CFPRM note
-  # singles out as not this part's. The distinction it bought is real and this
-  # part simply does not report it.
-  #
   # THE SIGNED BIT SELECTS NOTHING IN THIS FORM, and the multiply is written
   # once because of it. A 32x32 product's low 32 bits are the same under both
   # readings - multiplication modulo 2^32 does not depend on how the operands'
@@ -405,9 +394,7 @@ const divWordCycles = 20'u32
   ## MCF5307 User's Manual Table 3-13, folio 3-28, `divs.w`/`divu.w <ea>,Dx`:
   ## `20(0/0)` under `Rn` AND under `#xxx`. THE EQUALITY IS NOT A MODEL - the
   ## rest of the row is `23(1/0)` for the four memory modes, `24(1/0)` for
-  ## `(d8,An,Xi*SF)` and `23(1/0)` for `xxx.wl` - and nothing checks it: this
-  ## constant was 63 in the census the cycle block in `cpu.nim` records, and
-  ## every suite held its baseline count.
+  ## `(d8,An,Xi*SF)` and `23(1/0)` for `xxx.wl`.
 
 proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## DIVU.W and DIVS.W: a 32-bit dividend in Dx over a 16-bit source, with
@@ -466,14 +453,6 @@ proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
     # model - `divs.w` with a dividend of -65536 and a divisor of 2, reading V
     # afterwards - or an erratum or a later revision of the folio that states
     # the boundary. Until then this is a READING and not a measurement.
-    #
-    # `tests/t_alu.nim` brackets it: the -32768 case is labelled [INFERENCE]
-    # and its -32769 neighbour overflows under either reading, so a reversal
-    # reds the labelled case and leaves the neighbour green. Measured
-    # 2026-08-11 by moving this boundary to the other reading: it reds TWO
-    # cases across the suite and not one, because the conformance corpus
-    # carries the same boundary as
-    # `divs_w_quotient_of_minus_32768_does_not_overflow`. Both name it.
     if q < -32768'i64 or q > 32767'i64:
       overflowed = true
     else:
@@ -535,12 +514,6 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
     # otherwise ..." and "Z Cleared if overflow is detected; otherwise ...",
     # with "V Set if an overflow occurs" and "C Always cleared". X is "Not
     # affected" and is the one bit that survives.
-    #
-    # AN EARLIER REVISION LEFT N AND Z AS IT FOUND THEM and called them
-    # undefined - "the one choice a reader can predict". They are not
-    # undefined; the four folios state the rule directly, and the choice was
-    # unguarded because the only overflow case entered with N and Z already
-    # clear and so could not tell the two behaviours apart.
     ctx.sr = (ctx.sr and not (ccrC or ccrN or ccrZ)) or ccrV
     return 10'u32
   var quotient: uint32
@@ -569,12 +542,6 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # "Destination/Source -> Remainder". So the flags and the destination come
   # from DIFFERENT NUMBERS, and `quotient` is computed above for the REMx
   # forms purely to feed this line.
-  #
-  # FOR DIVU AND DIVS THIS IS THE SAME VALUE it always was - an equal register
-  # pair writes the quotient - so only the REMx forms change behaviour here.
-  # An earlier revision passed `written`, which took the flags from the
-  # remainder; the two REMx cases that covered it happened to have a quotient
-  # and a remainder agreeing on both N and Z, so nothing caught it.
   setNzClearVc(ctx, quotient, 4)
   # `divs.l`/`divu.l <ea>,Dx` reads `35(0/0)` under `Rn` and `35(1/0)` under
   # the four memory modes, Table 3-13 folio 3-28, and dashes the rest. 10 IS

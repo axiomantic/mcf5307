@@ -4,14 +4,11 @@
 ## This module executes MOVE, MOVEA, MOVEQ, MOVEM, LEA, PEA, LINK and UNLK,
 ## AND NOTHING ELSE.
 ##
-## CPU-7 also owned the register file, the condition-code bits, the board
-## accesses and the effective-address evaluation, because `move` was then the
-## only executor. CPU-8 LIFTED all of those into `mcf5307/machine`, which sits
-## at the `decode_types` level and which both this module and `alu.nim` import.
+## The register file, the condition-code bits, the board accesses and the
+## effective-address evaluation live in `mcf5307/machine`, which sits at the
+## `decode_types` level and which both this module and `alu.nim` import.
 ## `alu.nim` importing `move.nim` for them would have put one executor under
-## another - the same inversion, one layer down, that CPU-7 spent three commits
-## removing between the decoder and this module. What is left here is the
-## data-movement SEMANTICS alone.
+## another. What is left here is the data-movement SEMANTICS alone.
 ##
 ## The decoder (`mcf5307/decode`, CPU-6) recognizes the instruction words and
 ## supplies the effective address in bits 5..0 of the word; this module
@@ -29,7 +26,7 @@
 ## any of them. Every instruction in this group HAS a timing row - MOVE and
 ## MOVEA in Tables 3-9 and 3-10 (folios 3-26 and 3-27), MOVEQ and LEA in Table
 ## 3-13 (3-28), SWAP in Table 3-12 (3-27), and PEA, LINK, UNLK and MOVEM in
-## Table 3-14 (3-29) - and NONE OF THE RETURNS HERE WAS DERIVED FROM ONE. Four
+## Table 3-14 (3-29) - and NONE OF THE RETURNS HERE WAS DERIVED FROM ONE. Some
 ## of those rows carry a SINGLE cell that the return contradicts outright, so
 ## no effective-address flattening explains them: `moveq #imm,Dx` is 1(0/0)
 ## against the 4 returned, `swap Dx` is 1(0/0) against 4, `link.w Ay,#imm` is
@@ -128,8 +125,7 @@ proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## operation is none of those things" - and guards X on a shift by zero
   ## from the same "otherwise not affected". One derivation used twice.
   ##
-  ## SECTION 3.9 IS NOT AN ORACLE, AND AN EARLIER REVISION OF THIS COMMENT
-  ## MADE IT ONE. Two independent reasons it cannot be:
+  ## SECTION 3.9 IS NOT AN ORACLE. Two independent reasons it cannot be:
   ##
   ##   Its removed list is not reliable. Page 3-21 names "integer division"
   ##   among the removed instructions, while Table 3-7 on page 3-23 carries
@@ -151,20 +147,16 @@ proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## the 16-bit half takes N from bit 15 and Z from the low half. This core
   ## reads it as the whole 32-bit register, because the register is what the
   ## instruction writes - THE SIZE ARGUMENT IS 4 AND NOT 2 FOR EXACTLY THAT
-  ## REASON. The ambiguity is why `tests/t_move.nim` carries an N-SEPARATOR
-  ## case on each side of it, `0x0000FFFF` and `0xFFFF0000`, the two shapes
-  ## whose halves disagree in their top bit. The CFPRM would close the width
-  ## question outright; it is unobtainable (AGENTS.md section 11).
+  ## REASON. The CFPRM would close the width question outright; it is
+  ## unobtainable (AGENTS.md section 11).
   ##
-  ## THE CPU-9 PRECEDENT IS DISCIPLINE, NOT LICENCE, and an earlier revision
-  ## here had it backwards. CPU-9 met the same CFPRM wall on `ASL`'s overflow
-  ## reading and on the status word of a shift by zero (section 24.6 row
-  ## W3-28), derived from section 3.2.1.5 everything it could, and then
-  ## DECLINED to pin the residue - "the corpus asserts the destination of
-  ## that case and not its status word, which is what keeps the choice
-  ## unpinned". Citing CPU-9 as permission to infer inverts that. These flags
-  ## are pinned because 3.2.1.5 DERIVES them; the width, which 3.2.1.5 does
-  ## not derive, is called out above rather than asserted.
+  ## THE CPU-9 PRECEDENT IS DISCIPLINE, NOT LICENCE. CPU-9 met the same CFPRM
+  ## wall on `ASL`'s overflow reading and on the status word of a shift by
+  ## zero (section 24.6 row W3-28), derived from section 3.2.1.5 everything it
+  ## could, and then DECLINED to pin the residue. Citing CPU-9 as permission
+  ## to infer inverts that. These flags are pinned because 3.2.1.5 DERIVES
+  ## them; the width, which 3.2.1.5 does not derive, is called out above
+  ## rather than asserted.
   let v = regD(ctx, d.destReg)
   let swapped = (v shr 16'u32) or (v shl 16'u32)
   setRegD(ctx, d.destReg, swapped)
@@ -281,11 +273,11 @@ proc moveFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
     # For that to be correct, `eaLegalityFor(opSwap)` must still be `{eaDn}`
     # - the legality table, not this call site, is where SWAP's operand rule
     # lives. Deleting the guard would also make `opSwap` the only arm of this
-    # `case` without the check its five siblings all perform.
+    # `case` without the check its siblings all perform.
     #
-    # NO TEST REACHES IT, AND NONE SHOULD BE WRITTEN TO. Reaching it needs a
-    # decoder change, so a test that covered it would have to introduce the
-    # very defect the mask ordering prevents.
+    # NO TEST SHOULD BE WRITTEN TO REACH IT. Reaching it needs a decoder
+    # change, so a test that covered it would have to introduce the very
+    # defect the mask ordering prevents.
     if not eaIsLegalFor(opSwap, d.ea):
       ctx.fault = true
       ctx.halted = true
