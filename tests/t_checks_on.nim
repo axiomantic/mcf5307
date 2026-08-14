@@ -20,7 +20,7 @@
 
 import std/[os, strutils]
 
-# The scratch region. FOUR ELEMENTS AND FOUR DISTINCT VALUES, so that a read
+# The scratch region. THE VALUES ARE DISTINCT, so that a read
 # of the wrong element cannot return the value the right element holds.
 var scratch: array[4, uint32] = [10'u32, 20'u32, 30'u32, 40'u32]
 

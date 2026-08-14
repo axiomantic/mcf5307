@@ -1,8 +1,8 @@
 ## `t_sign_extend` - the sign-extension helpers of `mcf5307/machine`.
 ##
-## TEN CASES, AND EACH ONE CAN FAIL. `s16` and `s8` turn a displacement or an
+## `s16` and `s8` turn a displacement or an
 ## immediate value from the instruction stream into the signed 32-bit value
-## the address arithmetic adds. The four boundary values of each helper are
+## the address arithmetic adds. The boundary values of each helper are
 ## asserted with their exact results:
 ##
 ##   s16  0x0000 -> 0        the low end of the positive half
@@ -22,23 +22,12 @@
 ## such a value. The library is built with `--panics:on -d:release`, so a
 ## checked conversion there does not raise a catchable error; it ends the
 ## process with a `RangeDefect`. This test compiles with THE LIBRARY'S OWN
-## FLAG SET, thus a helper that went back to a checked conversion kills this
-## program on case 3 and the driver reports the failure.
+## FLAG SET.
 ##
-## The positive cases are the POSITIVE CONTROL. Without them a helper that
-## returned a constant 0, or a program that cannot run at all, would not be
-## separable from a helper that extends the sign correctly.
-##
-## THE HELPERS FOLLOWED THE CODE THEY SERVE. CPU-7 wrote `s16` and `s8` inside
-## `mcf5307/move`; CPU-8 lifted them, with the rest of the machine substrate,
-## into `mcf5307/machine`, so this file includes that module instead. The
-## boundary values it pins are unchanged, and the reason it pins them is
-## unchanged.
-##
-## They are not part of the C ABI and no C caller names
+## The helpers are not part of the C ABI and no C caller names
 ## them. This file uses `include` and not `import`: `include` puts
 ## the module's text in this program, which gives the test the private names
-## WITHOUT adding an export to the module under test. Exporting the two
+## WITHOUT adding an export to the module under test. Exporting the
 ## helpers to make them testable would enlarge the module's public surface for
 ## the test's convenience, and the surface is a thing the project controls.
 ##
@@ -71,7 +60,7 @@ template check(got: int32; want: int32; label: string) =
   ## `declaredSites` by the `static` below, and once at RUN TIME into
   ## `executedSites`, by the implementation and only when it reaches a
   ## verdict. `tests/case_sites.nim` states what the pair is for and
-  ## `tests/case_sites.cmake` states the five rules the driver applies.
+  ## `tests/case_sites.cmake` states the rules the driver applies.
   ## The template exists for `instantiationInfo`: a proc cannot see where
   ## it was called from.
   const site = instantiationInfo(-1).line
@@ -98,7 +87,7 @@ check(s8(0x00FF'u16),   -1'i32, "s8(0xFF)")
 check(s8(0xFF80'u16), -128'i32, "s8(0xFF80), high byte ignored")
 check(s8(0x1234'u16),   52'i32, "s8(0x1234), high byte ignored")
 
-# THE THREE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
+# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
 # program reports what its text declares and what its run adjudicated,
 # and the registered test's driver is what compares them - and what
 # compares the declared count against the call sites in this file.
