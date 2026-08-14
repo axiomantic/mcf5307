@@ -21,13 +21,6 @@
 ## the bit string it came from, and NOT a second call of the procedure under
 ## test.
 ##
-## THE MODEL AND THE CORE ARE ASSERTED AGAINST THE SAME LITERALS, ON PURPOSE.
-## `mcf5307/exception` owns the frame layout, and `machine.nim`'s
-## `takeException` - which CPU-10 wrote, one layer BELOW this module, where it
-## cannot import it - builds the same longword from its own expression. The two
-## expressions are held against the same hand-derived numbers here, so that a
-## drift between them is a failing case rather than a silent disagreement.
-##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. The frame
 ## layout, the vector assignments and the format encoding are facts about
 ## Motorola silicon, taken from the two manuals named above.

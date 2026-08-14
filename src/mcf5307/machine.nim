@@ -36,6 +36,7 @@
 
 import mcf5307/decode_types
 import mcf5307/ea
+import mcf5307/exception
 
 # ---------------------------------------------------------------------------
 # The register file.
@@ -518,14 +519,14 @@ proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32) =
   let format = exceptionFormat(ctx.sp)
   let base = exceptionFrameBase(ctx.sp)
   writeMem(ctx, base, 4,
-           (format shl 28) or (uint32(vector) shl 18) or stackedSr)
+           frameFirstLongword(format, fsNotAnAccessError, vector, stackedSr))
   if ctx.halted:
     return
   writeMem(ctx, base + 4'u32, 4, stackedPc)
   if ctx.halted:
     return
   ctx.sp = base
-  let handler = readMem(ctx, 4'u32 * uint32(vector), 4)
+  let handler = readMem(ctx, vectorAddress(0'u32, vector), 4)
   if ctx.halted:
     return
   ctx.pc = handler
