@@ -32,11 +32,9 @@ import mcf5307/ea
 # ---------------------------------------------------------------------------
 # The decoder.
 #
-# CPU-6 recognizes the instruction families that carry the effective-address
-# legality demonstration, together with the two instructions that have no
-# effective address. The full opcode table with per-group semantics is the
-# work of CPU-7 to CPU-12; the decoder is structured so those tasks extend
-# the `case` below and the legality table rather than rewrite it.
+# The full opcode table with per-group semantics is the work of CPU-7 to
+# CPU-12; the decoder is structured so those tasks extend the `case` below and
+# the legality table rather than rewrite it.
 
 
 proc sizeField(word: uint16): uint8 =
@@ -101,11 +99,8 @@ proc decodeLogicLine(word: uint16; opBase: Operation): Decoded =
   ##                        Line 1100 gives MULU.W (011) and MULS.W (111);
   ##                        line 1000 gives DIVU.W (011) and DIVS.W (111).
   ##
-  ## THE WORD MULTIPLY AND DIVIDE ARE REAL INSTRUCTIONS ON THIS PART AND AN
-  ## EARLIER REVISION OF THIS PROCEDURE RETURNED `opIllegal` FOR BOTH OPMODES.
-  ## The comment justifying that read "the WORD multiply and divide of the
-  ## 68000, which this part does not have". Two independent oracles contradict
-  ## it and no oracle supports it:
+  ## THE WORD MULTIPLY AND DIVIDE ARE REAL INSTRUCTIONS ON THIS PART. Two
+  ## independent oracles say so:
   ##
   ##   - `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726) assembles
   ##     `mulu.w %d1,%d0` to `c0c1`, `muls.w %d1,%d0` to `c1c1`,
@@ -127,17 +122,17 @@ proc decodeLogicLine(word: uint16; opBase: Operation): Decoded =
   ## THE BYTE AND WORD OPMODES ARE DECODED AND THEY CARRY THEIR OWN SIZE.
   ## They are not instructions on this part - `m68k-elf-as -mcpu=5307` rejects
   ## `and.b %d0,%d1` - and the executor traps them on the size, which is the
-  ## same channel `alu.nim` uses for byte and word arithmetic and the one
-  ## CPU-13's negative cases assert through. Decoding them as an unrecognised
-  ## word instead would report "no such instruction" for an encoding that is a
-  ## real AND on a 68000, which says less about why the core refused.
+  ## same channel `alu.nim` uses for byte and word arithmetic. Decoding them as
+  ## an unrecognised word instead would report "no such instruction" for an
+  ## encoding that is a real AND on a 68000, which says less about why the
+  ## core refused.
   ##
   ## THE 68000 SLOTS INSIDE THE `Dn op <ea>` OPMODES COME OUT AS TRAPS TOO.
   ## `1100 rrr 1 00 00 rrr` is ABCD and `1100 rrr 1 01 00 rrr` is EXG on that
   ## part, and both are byte or word opmodes here, so both trap on the size.
   ## `1100 rrr 1 10 001 rrr` is `EXG Dn,An`, a long opmode whose effective
   ## address is an address register, and the memory-alterable destination mask
-  ## rejects it. EXG is one of CPU-13's negative cases and it traps either way.
+  ## rejects it. EXG traps either way.
   let opmode = (word shr 6) and 0x7'u16
   if opmode == 3'u16 or opmode == 7'u16:
     # THE LINE SELECTS THE FAMILY AND THE OPMODE SELECTS THE SIGN. `opBase` is
@@ -174,7 +169,6 @@ proc decodeShift(word: uint16): Decoded =
   ## refuses the memory operand. Decoding it here rather than calling it an
   ## unrecognised word keeps the "which operands may this opcode reach"
   ## question in the one table that answers it for every other opcode.
-  ## CPU-13 owns the negative case.
   let shiftType = (word shr 3) and 0x3'u16
   let toLeft = (word and 0x0100'u16) != 0'u16
   if (word and 0x00C0'u16) == 0x00C0'u16:
@@ -291,17 +285,16 @@ proc decodeWord*(word: uint16): Decoded =
     # words `4840`-`4847` are the sub-range whose mode field is 000 - a data
     # register, which is not control addressing and so is no PEA operand at
     # all. PEA's mask `word and 0xFFC0 == 0x4840` spans `4840`-`487f` and
-    # SWALLOWED all eight, and because `eaLegalityFor(opPea)` excludes `Dn`
-    # every `swap` then faulted as an illegal PEA operand instead of
-    # executing. Table 3-7, page 3-25, carries `SWAP | Dn | 16 | MSW of Dn
+    # covers all eight, and `eaLegalityFor(opPea)` excludes `Dn`.
+    # Table 3-7, page 3-25, carries `SWAP | Dn | 16 | MSW of Dn
     # <-> LSW of Dn`; Table 3-12, page 3-27, times `swap Dx` at 1(0/0) under
     # `Rn`; section 3.9, page 3-21, does not list SWAP among the removed
     # instructions; and `m68k-elf-as -mcpu=5307` emits `4840` for
     # `swap %d0` and `4847` for `swap %d7`. The shipped G2 operating system
     # uses it 339 times, the first at `0x3000066c`.
     #
-    # IF THIS ARM IS MOVED BELOW THE PEA ARM, OR ITS MASK WIDENED BACK TO
-    # `0xFFC0`, the `swap` cases in `tests/t_move.nim` go red.
+    # IF THIS ARM IS MOVED BELOW THE PEA ARM, OR ITS MASK WIDENED TO `0xFFC0`,
+    # EVERY `swap` FAULTS AS AN ILLEGAL PEA OPERAND INSTEAD OF EXECUTING.
     return Decoded(op: opSwap, ea: decodeEa(word), size: 4'u8,
                    destReg: uint8(word and 0x7'u16))
   elif (word and 0xFFC0'u16) == 0x4840'u16:
@@ -350,13 +343,7 @@ proc decodeWord*(word: uint16): Decoded =
     # NOT: `0101 cccc 11 <ea>` is the Scc space - 128 `Scc Dn` words, three
     # TRAPF words and no DBcc at all - which CPU-10 owns, and claiming them as
     # an ADDQ whose size is wrong would take 1024 encodings away from that
-    # task. IT DID. Measured on a sweep of all 65536 words against the decoder
-    # before this guard: of those 1024 words, 512 came back `opAddq` and 512
-    # `opSubq`, and NOT ONE came back unclaimed. Nothing
-    # saw it, because `alu.nim` traps a size of zero and a trap is what an
-    # opcode nobody has written yet looks like.
-    # `tests/t_control.nim` asserts `decodeWord(0x50c0).op == opScc` and keeps
-    # `5040`, `5080` and `5180` as the ADDQ and SUBQ they were.
+    # task.
     let data = (word shr 9) and 0x7'u16
     return Decoded(op: opAddq, ea: decodeEa(word), size: sizeField(word),
                    imm: (if data == 0'u16: 8'u8 else: uint8(data)))
@@ -419,12 +406,10 @@ proc decodeWord*(word: uint16): Decoded =
     #
     # THE RANGE IS 100 TO 110 AND NOT "100 OR ABOVE". EOR has THREE opmodes -
     # byte, word and long - and 111 is the fourth value of that range, which
-    # is CMPA.L. A `>= 4` predicate claimed it, and the claim was SILENT:
-    # `opmodeSize(7)` answers 4, so `cmpa.l %d0,%a1` (`b3c0`) decoded as a
-    # well-formed long EOR and executed as one. Measured before the fix, it
-    # left d0 = d0 xor d1 - it wrote a register CMPA must not touch and
-    # computed no comparison. `tests/t_logic.nim` asserts the encoding comes
-    # back as an unrecognised word.
+    # is CMPA.L. A `>= 4` predicate would claim it SILENTLY: `opmodeSize(7)`
+    # answers 4, so `cmpa.l %d0,%a1` (`b3c0`) would decode as a well-formed
+    # long EOR and execute as one, writing a register CMPA must not touch and
+    # computing no comparison.
     #
     # `1011 rrr 1 ss 001 rrr` is CMPM on a 68000, a byte or word opmode whose
     # effective address is an address register. It traps on the size and on
@@ -450,8 +435,7 @@ proc decodeWord*(word: uint16): Decoded =
   # illegal `11`. Putting the Scc arm above them would work and would leave a
   # trap that a reordering could spring, so the ADDQ and SUBQ arms carry a
   # `sizeField(word) != 0` guard instead - the same guard CLR, NEG, NEGX and
-  # NOT already carried - and this arm is safe wherever it sits. See those
-  # arms for the measurement.
+  # NOT already carried - and this arm is safe wherever it sits.
   elif (word and 0xF000'u16) == 0x6000'u16:
     # `0110 cccc dddddddd`. Condition 0000 is BRA and 0001 is BSR; the other
     # fourteen are the conditional branches.
@@ -520,8 +504,6 @@ proc decodeWord*(word: uint16): Decoded =
     # the three words are left unclaimed for whichever task owns them - the
     # same thing CPU-9 did with line-B opmodes 0, 1, 2, 3 and 7. Deciding they
     # were Scc would execute a TRAPF as a byte write into a data register.
-    # `tests/t_control.nim` asserts all three as `opIllegal` and keeps `51c0`,
-    # `51f9` and `51fd` as the Scc controls beside them.
     return Decoded(op: opScc, ea: decodeEa(word), size: 1'u8,
                    destReg: uint8((word shr 8) and 0xF'u16))
   elif (word and 0xFF00'u16) == 0x4A00'u16 and sizeField(word) != 0'u8:

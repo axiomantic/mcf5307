@@ -71,11 +71,10 @@ proc mcf5307_NimMain() {.importc: "mcf5307_NimMain", cdecl.}
 #
 # `mcf5307_runtime_init` runs before the Nim runtime exists. Anything it calls
 # must therefore work without that runtime. These declarations name C library
-# functions directly, and they add no Nim module to the unit list. Measured on
-# Nim 2.2.10: the unit count is six with them and six without them.
+# functions directly, and they add no Nim module to the unit list.
 #
-# THE DEADLINE USES A MONOTONIC CLOCK AND NOT THE WALL CLOCK. `time` was here
-# before and it was wrong for two separate reasons.
+# THE DEADLINE USES A MONOTONIC CLOCK AND NOT THE WALL CLOCK. `time` is wrong
+# for two separate reasons.
 #
 #   Its resolution is one second, and the deadline is `time() + 5`. The start
 #   is truncated to a whole second and the comparison is truncated again, so
@@ -97,9 +96,8 @@ proc mcf5307_NimMain() {.importc: "mcf5307_NimMain", cdecl.}
 # costs nothing new.
 #
 # `sched_yield`, or `SwitchToThread` on Windows, hands the core to another
-# thread. The wait loop below calls it. The loop it replaces called `cpuRelax`
-# alone and yielded to nothing. THE WINDOWS BRANCH OF BOTH IS UNMEASURED. This
-# host is macOS and it builds the other branch.
+# thread. The wait loop below calls it. THE WINDOWS BRANCH OF BOTH IS
+# UNMEASURED. This host is macOS and it builds the other branch.
 
 when defined(windows):
   proc mcf5307TickCount(): uint64 {.
@@ -300,7 +298,7 @@ proc mcf5307RuntimeInit() {.exportc: "mcf5307_runtime_init", mcf5307Abi.} =
       # race between the load above and this line. The initializing thread can
       # store `latchDone` in that window. The exchange then fails, `running`
       # comes back holding `latchDone`, and the runtime IS initialized. A
-      # discarded result aborted a process whose runtime had just come up.
+      # discarded result aborts a process whose runtime has just come up.
       #
       # A failure that reports any other value is a real stall. `latchRunning`
       # means the initializing thread is still inside and out of time.
