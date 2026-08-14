@@ -29,13 +29,9 @@
  *     a re-entrant call that crashes is a regression in the runtime. C++
  *     never names `NimMain`; the C names are the whole contract.
  *
- * This test links the real library and no stub. `t0_abi_header` cases 3 and 4
- * link the whole eighteen-name surface against `tests/abi_stub.c` and are the
- * check that the CONTRACT is linkable; this is the check that the LIBRARY is.
- * Its address set is therefore the set of published names the library defines,
- * measured by the configure step and not written out here. A name no
- * compilation unit defines cannot be renamed and cannot be dropped, so taking
- * its address here would assert nothing and would only make the link fail.
+ * Asserting no core behaviour is
+ * what makes this test right at this task's completion and still right
+ * after every later task that supersedes the implementation.
  *
  * The address set is generated and it grows on its own.
  * `tests/tests_cpu.cmake` writes `abi_smoke_implemented.h` into the build tree
@@ -73,19 +69,11 @@ namespace {
  * `volatile` qualifier is what keeps the compiler honest: without it, the
  * compiler can prove the array is read only through `abi_addr_all[0]`,
  * elide the rest, and then elide the address-of expressions that fed
- * them, and this test would pass against a library that defined none of
- * the functions the runtime does not yet implement. With `volatile`
+ * them. With `volatile`
  * the compiler must materialise every store, and the linker must resolve
  * every symbol.
  *
- * Neither the list nor a count of it is in this file. The names come from
- * `abi_smoke_implemented.h`, which is generated into the build tree by
- * `tests/tests_cpu.cmake` from the set `cmake/Nim.cmake` step 4a measured
- * with `nm`. This file includes it twice - once to declare the pointers and
- * once to gather them - so the array's length is the length of the
- * measurement by construction and there is no place a person types a number.
- * Implementing a published name brings that name under this test with no edit
- * to this file.
+ * THE LIST IS NOT IN THIS FILE AND NO COUNT IS EITHER.
  *
  * What keeps the measurement honest is a second, committed file.
  * `tests/abi_smoke_symbols.inc` names the exported symbols this project

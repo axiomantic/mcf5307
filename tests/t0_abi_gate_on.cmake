@@ -118,9 +118,7 @@ endforeach()
 # The site counter. Step 4a's three parts and nine controls each add one where
 # they finish, and control A runs on both reads, so a branch with every site in
 # it records thirteen. A part or a control deleted from cmake/Nim.cmake takes
-# its increment with it and lands here as a shortfall. The counts below cannot
-# do this: they come from three readings and name no site, so they read the
-# same for three parts as for two.
+# its increment with it and lands here as a shortfall.
 if(NOT stamp_SITES EQUAL 13)
     message(FATAL_ERROR
         "t0_abi_gate_on: ${GATE_STAMP} records SITES=${stamp_SITES} and 13 are "
@@ -132,11 +130,10 @@ if(NOT stamp_SITES EQUAL 13)
         "not the branch this test is written against.")
 endif()
 
-# The three counts came from three separate measurements - the published set
-# read out of the contract header, `nm` on the measurement shared object, and
-# `nm` on the link-partner stub object - so holding them against each other is
-# a check and not a restatement. A branch that ran but measured nothing writes
-# zeroes, and zeroes satisfy neither line below.
+# The counts came from separate measurements - the published set read out of
+# the contract header, `nm` on the measurement shared object, and `nm` on the
+# link-partner stub object - so holding them against each other is a check and
+# not a restatement.
 if(stamp_PUBLISHED LESS 1)
     message(FATAL_ERROR
         "t0_abi_gate_on: ${GATE_STAMP} records PUBLISHED=${stamp_PUBLISHED}. "

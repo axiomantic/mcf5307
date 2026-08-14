@@ -626,9 +626,9 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 #
 # The enumeration of what OFF skips is written once, in the warning below. The
 # docstring here and the failure message of the registered test
-# `t0_abi_gate_on` point at it rather than restating it, because three copies
-# of one enumeration are three texts nothing holds in step, and the weaker copy
-# is the one a reader meets.
+# `t0_abi_gate_on` point at it rather than restating it, because copies of one
+# enumeration are texts nothing holds in step, and the weaker copy is the one a
+# reader meets.
 set(MCF5307_ABI_GATE ON CACHE BOOL
     "Run step 4a. cmake/Nim.cmake enumerates what OFF skips")
 

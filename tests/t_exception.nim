@@ -17,37 +17,9 @@
 ##   error channel" of the NMG2 emulator DESIGN DOCUMENT
 ##   (`2026-08-04-nmg2-emulator-design.md`).
 ##
-## WHAT THIS FILE PINS, AND WHAT ITS SILENCE WOULD MEAN.
-##
-##   1. THE FIRST LONGWORD OF THE FRAME, AS A NUMBER. `FS` is SPLIT across two
-##      non-adjacent fields - bits 27-26 carry `FS[3:2]` and bits 17-16 carry
-##      `FS[1:0]` - and an implementation that laid the four bits out
-##      contiguously produces a different number for the same fault. EVERY
-##      EXPECTED VALUE IN BLOCK 1 IS A HAND-DERIVED LITERAL, written beside the
-##      bit string it came from, and NOT a second call of the procedure under
-##      test. A test that built the frame with the encoder's own expression
-##      would agree with a wrong encoder.
-##
-##      `FS` = `1001`, an attempted write to write-protected space, is the ONE
-##      encoding the MCF5307 actually generates (User's Manual section 3.5.1,
-##      folio 3-14) and the ONLY defined encoding whose two halves DIFFER. It
-##      is therefore the case that separates a split layout from a contiguous
-##      one, and block 1 carries it.
-##
-##   2. THE VECTOR TABLE. Vector 2 at `$008` is the ACCESS error and vector 3
-##      at `$00C` is the ADDRESS error. They are different exceptions and the
-##      core must not conflate them; a test that asserted vector 2 alone could
-##      not see a core that took vector 2 for both. Block 6 raises BOTH through
-##      `takeException` - neither has a producer the C ABI can reach yet - with
-##      a DIFFERENT handler address in each slot, and asserts the handler each
-##      one reached AND the vector-table address each one read. Block 5 is the
-##      one that goes through the published entry points.
-##
-##   3. THE `FORMAT` FIELD AND THE `RTE` RESTORE, THROUGH THE CORE. Block 5
-##      runs `trap #0` from all four A7 alignments and then executes the `RTE`,
-##      and asserts that A7 comes back to the value it started from - 0x800,
-##      0x801, 0x802 and 0x803, not a longword-aligned approximation of it. A
-##      core that added a fixed 8 restores three of the four wrongly.
+## EVERY EXPECTED VALUE IN BLOCK 1 IS A HAND-DERIVED LITERAL, written beside
+## the bit string it came from, and NOT a second call of the procedure under
+## test.
 ##
 ## THE MODEL AND THE CORE ARE ASSERTED AGAINST THE SAME LITERALS, ON PURPOSE.
 ## `mcf5307/exception` owns the frame layout, and `machine.nim`'s
@@ -55,24 +27,6 @@
 ## cannot import it - builds the same longword from its own expression. The two
 ## expressions are held against the same hand-derived numbers here, so that a
 ## drift between them is a failing case rather than a silent disagreement.
-##
-## THE CORE-BINDING BLOCKS ARE CHARACTERISATION AND THEY WERE PROVED
-## FALSIFIABLE BY MUTATION. Blocks 5 and 6 assert behaviour CPU-10 already
-## shipped, so they could not be red before the code existed. Five mutations,
-## measured 2026-08-12 against this tree, each applied alone and reverted, out
-## of 39 cases:
-##
-##   `takeException`'s `format shl 28` at 24            12 red
-##   `takeException`'s `uint32(vector) shl 18` at 16     7 red
-##   `exceptionFormat`'s `4'u32 +` at `5'u32 +`         12 red
-##   `execRte`'s `4'u32 + format` at `8'u32`             3 red
-##   `takeException`'s vector fetch pinned to vector 2  11 red
-##
-## THE LAST TWO ROWS ARE THE POINTED ONES. The fixed-8 `RTE` reds the 0x801,
-## 0x802 and 0x803 cases and LEAVES 0x800 GREEN, which is why one alignment
-## would not have been a test. The pinned vector fetch reds the ADDRESS-error
-## case and leaves the access-error case green, which is what conflating the
-## two looks like from outside.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. The frame
 ## layout, the vector assignments and the format encoding are facts about
@@ -144,10 +98,6 @@ checkEq(frameFirstLongword(4'u32, fsWriteProtected, 2'u8, 0x2700'u32),
         "frame: format 4, FS 1001, vector 2, SR 0x2700")
 #   0100 | 10 | 00000010 | 01 | 0010011100000000
 #   -> 0100 1000 0000 1001 0010 0111 0000 0000 = 0x48092700
-#   THE SPLIT IS WHAT THIS CASE HOLDS. An encoder that wrote `FS[3:2]` and
-#   dropped the other half gives 0x48082700; one that packed all four bits at
-#   27-24 and left VEC where it is gives 0x49082700. Both differ from the
-#   number above, and no other defined `FS` code would separate them.
 
 checkEq(frameFirstLongword(7'u32, fsOperandRead, 3'u8, 0x2000'u32),
         0x7C0C2000'u32,
@@ -177,12 +127,10 @@ checkEq(frameFirstLongword(4'u32, fsInstructionFetch, 25'u8, 0x2700'u32),
 # BLOCK 2. Reading the fields back out of a longword written by hand.
 #
 # The literal is block 1's first case and it is READ HERE rather than produced:
-# the decoders are held against the same bit string from the other side, so a
-# decoder that agreed with a wrong encoder still fails.
+# the decoders are held against the same bit string from the other side.
 #
 # `frameFaultStatus` REJOINS TWO HALVES THAT ARE NOT ADJACENT. `1001` is the
-# encoding whose halves differ, so a decoder that dropped bits 17-16 answers
-# `1000` here.
+# encoding whose halves differ.
 
 const handWritten = 0x48092700'u32
 
@@ -204,10 +152,6 @@ checkEq(uint32(frameVector(0x7C0C2000'u32)), 3'u32,
 # MCF5307 User's Manual section 3.4, Table 3-1, "Exception Vector Assignments",
 # folios 3-12 and 3-13; CFPRM Rev. 3 section 11.1, Table 11-1, folios 11-2 and
 # 11-3. Both tables carry a VECTOR NUMBER column and a VECTOR OFFSET column,
-# and the two blocks below hold the two columns SEPARATELY: the constants
-# against the numbers, and `vectorAddress` against the offsets the table
-# PRINTS. A `vectorAddress` that scaled by anything but four passes the first
-# and fails the second.
 #
 # THE TWO TABLES ARE NOT IDENTICAL and this file cites only rows where they
 # agree. Their disagreement is recorded in `src/mcf5307/exception.nim`.
@@ -236,9 +180,7 @@ checkEq(vectorAddress(0'u32, vecUserLast), 0x3FC'u32,
         "vector offset: last user-defined vector at $3FC")
 
 # The table is 1024 bytes (User's Manual section 3.3, folio 3-12; CFPRM section
-# 11.1, folio 11-2) and its last longword is the one at $3FC. Those are two
-# facts printed in two different places and this case holds them against each
-# other.
+# 11.1, folio 11-2) and its last longword is the one at $3FC.
 checkEq(vectorTableBytes, 1024'u32, "vector table: 1024 bytes")
 checkEq(vectorAddress(0'u32, vecUserLast) + 4'u32, vectorTableBytes,
         "vector table: the $3FC longword is its last")
@@ -252,9 +194,6 @@ checkEq(vectorAddress(0'u32, vecUserLast) + 4'u32, vectorTableBytes,
 # CONSEQUENCE - section 3.3, folio 3-12, "aligned on any 1 MByte address
 # boundary" - and not the mechanism, so the low bits of VBR are pinned from the
 # CFPRM alone.
-#
-# THE MIDDLE CASE IS THE ONE THAT BITES. A model that added VBR whole agrees
-# with the other two and answers 0x0010000C for a VBR of 0x00100004.
 
 checkEq(vectorAddress(0x0010_0000'u32, vecAccessError), 0x0010_0008'u32,
         "VBR 0x00100000: access error at 0x00100008")
@@ -269,9 +208,7 @@ checkEq(vectorAddress(0x000F_FFFF'u32, vecAccessError), 0x008'u32,
 #
 # IT RECORDS EVERY READ BELOW `vectorTableBytes`, which is the vector table and
 # nothing else: the code sits at `execBase`, above the whole 1024-byte table,
-# and the stack is higher still. Block 6 asserts the recorded list exactly, so
-# a core that read the wrong slot, or read both, fails on the list even when it
-# happens to land on the right handler.
+# and the stack is higher still.
 
 const
   memSize = 0x1000
@@ -326,8 +263,7 @@ proc freshBoard() =
   for i in 0 ..< memSize:
     board.bytes[i] = 0'u8
   vectorReads = @[]
-  # The three handler addresses are DIFFERENT so that a core which fetched the
-  # wrong vector lands somewhere the assertions can see.
+  # The handler addresses are DIFFERENT.
   boardWrite(board, vectorAddress(0'u32, 32'u8), 4, trapHandler)
   boardWrite(board, vectorAddress(0'u32, vecAccessError), 4, accessHandler)
   boardWrite(board, vectorAddress(0'u32, vecAddressError), 4, addressHandler)
@@ -399,8 +335,7 @@ runTrapAndRte(0x803'u32, srReset, 0x70802700'u32, "A7 0x803, FORMAT 7")
 # IT. Section 3.3, folio 3-11: the processor "makes an internal copy of the SR
 # and then enters supervisor mode by setting the S-bit and disabling trace mode
 # by clearing the T-bit". Entered with T set, the FRAME must carry T and the
-# HANDLER must not, so this case separates the copy from the modified word;
-# every case above enters with T already clear and cannot.
+# HANDLER must not.
 #   0100 | 00 | 00100000 | 00 | 1010011100000000 -> 0x4080A700
 runTrapAndRte(0x800'u32, 0xA700'u32, 0x4080A700'u32, "A7 0x800, T set")
 
@@ -414,9 +349,7 @@ runTrapAndRte(0x800'u32, 0xA700'u32, 0x4080A700'u32, "A7 0x800, T set")
 # through `takeException`, which is the procedure every producer will call.
 #
 # THE TWO SLOTS HOLD DIFFERENT HANDLER ADDRESSES AND THE READ LIST IS ASSERTED
-# EXACTLY. A core that took vector 2 for both lands on `accessHandler` twice; a
-# core that read both slots fails on the list; a core that stacked the wrong
-# vector number fails on the frame's VEC field.
+# EXACTLY.
 
 type Taken = tuple[sp: uint32, pc: uint32, halted: bool, vec: uint8,
                    frame: uint32, framePc: uint32, reads: seq[uint32]]
