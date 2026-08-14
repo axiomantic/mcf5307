@@ -1,20 +1,19 @@
 /* t0_abi_header.c - case 3 of the registered test `t0_abi_header`.
  *
  * THE DECLARED SURFACE IS ASSERTED BY MECHANISM AND NOT BY PROSE, and the
- * two mechanisms are different failures on purpose:
+ * mechanisms are different failures on purpose:
  *
  *   - one `_Static_assert` for each declared TYPE, so a deleted or renamed
  *     type is a COMPILE error;
- *   - EIGHTEEN ADDRESS-OF EXPRESSIONS, written out below as a FIXED LIST and
+ *   - ADDRESS-OF EXPRESSIONS, written out below as a FIXED LIST and
  *     not derived from what the header happens to hold, so a MISSING
  *     declaration is a compile error and a RENAMED one is a LINK error
  *     against `abi_stub.c`.
  *
  * THE FIXED LIST IS THE POINT. An assertion written as "one address-of
  * expression for each declared function" takes its assertion set from the
- * artifact under test, so a header missing four declarations satisfies it.
- * The eighteen names below come from the plan's table and from nowhere else,
- * and the count of address-of expressions is eighteen.
+ * artifact under test. The names below come from the plan's table and from
+ * nowhere else.
  *
  * Each pointer also carries the EXACT declared signature, so a changed
  * parameter type or a changed return type is an initialisation diagnostic
@@ -28,14 +27,14 @@
 
 /* ------------------------------- one _Static_assert for each declared type */
 
-/* The two opaque context types. Neither is complete here and neither may be,
+/* The opaque context types. Neither is complete here and neither may be,
  * so the assertion is over a pointer to it: the type NAME must exist. */
 _Static_assert(sizeof(mcf5307_ctx*) == sizeof(void*),
                "mcf5307_ctx must be declared as an opaque context type");
 _Static_assert(sizeof(isp1181_ctx*) == sizeof(void*),
                "isp1181_ctx must be declared as an opaque context type");
 
-/* The bus status enumeration, and each of its four enumerators by VALUE.
+/* The bus status enumeration, and each of its enumerators by VALUE.
  * The values are part of the contract: the board writes them and the core
  * reads them across a compiled boundary. */
 _Static_assert(sizeof(mcf5307_bus_status) >= 1u,
@@ -49,7 +48,7 @@ _Static_assert(MCF5307_BUS_FAULT == 3, "MCF5307_BUS_FAULT must be 3");
 /* The named zero of the interrupt level. */
 _Static_assert(MCF5307_IRQ_NONE == 0, "MCF5307_IRQ_NONE must be 0");
 
-/* The five function-pointer types. Each must exist as a type name and each
+/* The function-pointer types. Each must exist as a type name and each
  * must be a function pointer, which is what the comparison against a bare
  * function-pointer type asserts. The SIGNATURES are asserted below, where
  * `mcf5307_create` and `isp1181_create` take them as parameters. */
@@ -64,16 +63,16 @@ _Static_assert(sizeof(isp1181_irq_fn) == sizeof(void (*)(void)),
 _Static_assert(sizeof(isp1181_tx_fn) == sizeof(void (*)(void)),
                "isp1181_tx_fn must be a function-pointer type");
 
-/* --------------------------------------- the eighteen address-of expressions
+/* ------------------------------------------------ the address-of expressions
  *
- * The `status` out-parameter of the two memory callbacks is asserted here as
+ * The `status` out-parameter of the memory callbacks is asserted here as
  * well: a draft that returned the status instead of writing it through a
  * pointer would not match these declared types.
  */
 
 int main(void)
 {
-    /* The nine mcf5307_* functions. */
+    /* The mcf5307_* functions. */
     void (*const p01)(void) = &mcf5307_runtime_init;
     mcf5307_ctx* (*const p02)(void*, mcf5307_read_fn, mcf5307_write_fn,
                               mcf5307_iack_fn) = &mcf5307_create;
@@ -85,7 +84,7 @@ int main(void)
     void (*const p08)(const mcf5307_ctx*, void*) = &mcf5307_state_save;
     void (*const p09)(mcf5307_ctx*, const void*) = &mcf5307_state_load;
 
-    /* The nine isp1181_* functions. */
+    /* The isp1181_* functions. */
     isp1181_ctx* (*const p10)(void*, isp1181_irq_fn,
                               isp1181_tx_fn) = &isp1181_create;
     void (*const p11)(isp1181_ctx*) = &isp1181_destroy;
@@ -98,7 +97,7 @@ int main(void)
     void (*const p17)(const isp1181_ctx*, void*) = &isp1181_state_save;
     void (*const p18)(isp1181_ctx*, const void*) = &isp1181_state_load;
 
-    /* Every one of the eighteen is counted, so that no declaration can be
+    /* Every one is counted, so that no declaration can be
      * dropped from the list above without changing the result. The
      * comparison is over the VARIABLES and not over the function names,
      * because the address of a function is never null and a compiler says

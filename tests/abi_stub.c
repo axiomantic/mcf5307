@@ -9,18 +9,11 @@
  * contract, so a check that waited for it could never pass at this task's
  * completion. This stub breaks that circle.
  *
- * THE OPENING SENTENCE WAS FALSE AND NOTHING MEASURED IT. Measured at
- * `ed85588`: the contract declared twenty-two functions and this file defined
- * eighteen. `mcf5307_set_reg` and `mcf5307_get_reg` reached the contract with
- * CPU-7, `mcf5307_halted` and `mcf5307_faulted` reached it with CPU-5, and
- * none of the four reached this file. The prose also contradicted itself: the
- * first sentence claimed every function and a later one named eighteen.
- * `cmake/Nim.cmake` step 4a, part three now COMPILES this file, reads the
+ * `cmake/Nim.cmake` step 4a, part three COMPILES this file, reads the
  * symbols the object defines with `nm`, and compares that set against the
  * published set it parses out of the contract with a C compiler. NO COUNT IS
  * WRITTEN HERE OR THERE. A count is a third number beside the header and the
- * code, and it falls behind them both - which is exactly what the word
- * `eighteen` did.
+ * code, and it falls behind them both.
  *
  * WHAT NO LATER TASK MAY DO TO THIS FILE, AND WHAT THE FREEZE NEVER MEANT.
  * The freeze is on BEHAVIOUR and it still holds: every body stays empty,
@@ -45,20 +38,10 @@
  * nothing in `t0_abi_header`, whatever this file defines. That gap belongs to
  * those two files and is not this one's to close.
  *
- * THE FOUR NAMES ARE WRITTEN HERE AND THE SIZE OF THAT LIST IS NOT. A name is
+ * THE NAMES ARE WRITTEN HERE AND THE SIZE OF THAT LIST IS NOT. A name is
  * falsifiable against the two files that hold it - `grep -c mcf5307_halted
  * tests/t0_abi_header.c` answers this paragraph, and no reader has to trust
  * this one.
- *
- * THE WORD REMOVED FROM THE PARAGRAPH ABOVE WAS `EIGHTEEN`, AND IT WAS
- * CORRECT. It is not the stale `eighteen` of the opening paragraph. It counted
- * the address-of expressions in `t0_abi_header.c` and `t0_abi_header.cpp`, and
- * each of those files takes exactly eighteen and then holds itself to it with
- * `if (found != 18) { return 1; }`. It was right the day it was written and it
- * was right the day it was removed. What it lacked is anything HERE: that
- * check lives in those two files and never tells this one, so the copy in this
- * paragraph was correct because the author remembered - which is the property
- * being removed, and not a stale number.
  *
  * `tests/abi_smoke.cpp` does take the address of EVERY published name, through
  * `tests/abi_smoke_symbols.inc`, and step 4a holds that list against the

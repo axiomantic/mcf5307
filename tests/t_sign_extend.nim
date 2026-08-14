@@ -77,8 +77,7 @@ check(s16(0xFFFF'u16),     -1'i32, "s16(0xFFFF)")
 
 # ---------------------------------------------------------------------------
 # `s8` - the 8-bit displacement of an indexed extension word and the immediate
-# value of MOVEQ. It takes a whole word and uses the low byte alone, so the
-# last two cases carry a high byte that the helper must ignore.
+# value of MOVEQ. It takes a whole word and uses the low byte alone.
 
 check(s8(0x0000'u16),    0'i32, "s8(0x00)")
 check(s8(0x007F'u16),  127'i32, "s8(0x7F)")

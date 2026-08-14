@@ -1,6 +1,6 @@
 /* tests/abi_smoke.cpp - the application binary interface smoke test (CPU-3).
  *
- * ONE TEST, TWO ASSERTIONS, AND EACH ONE CAN FAIL.
+ * ONE TEST, AND EACH ASSERTION CAN FAIL.
  *
  * (1) THE LINK ITSELF. The test takes the address of every function
  *     `include/mcf5307.h` declares. A renamed declaration, a dropped
@@ -9,9 +9,8 @@
  *     That is the assertion - the executable does not build is the failure
  *     mode, and the test never needs to say so in a message.
  *
- *     `EVERY` IS MEASURED AND IS NOT A CLAIM THIS COMMENT MAKES. The
- *     sentence above was false for two symbols for as long as nothing
- *     checked it. `cmake/Nim.cmake` step 4a now compares
+ *     `EVERY` IS MEASURED AND IS NOT A CLAIM THIS COMMENT MAKES.
+ *     `cmake/Nim.cmake` step 4a compares
  *     `tests/abi_smoke_symbols.inc` against the set it parses out of the
  *     contract header, in both directions, on every configure run.
  *
@@ -22,9 +21,7 @@
  *     function. C++ never names `NimMain`; the C names are the whole
  *     contract.
  *
- * The test asserts NO CORE BEHAVIOUR. It does not exercise
- * `mcf5307_create`, `mcf5307_exec`, `isp1181_read`, or any other entry point
- * whose semantics belong to a later task. Asserting no core behaviour is
+ * Asserting no core behaviour is
  * what makes this test right at this task's completion and still right
  * after every later task that supersedes the implementation.
  *
@@ -53,19 +50,13 @@ namespace {
  * `volatile` qualifier is what keeps the compiler honest: without it, the
  * compiler can prove the array is read only through `abi_addr_all[0]`,
  * elide the rest, and then elide the address-of expressions that fed
- * them, and this test would pass against a library that defined none of
- * the functions the runtime does not yet implement. With `volatile`
+ * them. With `volatile`
  * the compiler must materialise every store, and the linker must resolve
  * every symbol.
  *
- * THE LIST IS NOT IN THIS FILE AND NO COUNT IS EITHER. Both were the defect.
- * `include/mcf5307.h` declares 22 functions and this file named 20 of them:
- * `mcf5307_set_reg` and `mcf5307_get_reg` reached the contract with CPU-7 and
- * never reached this list, so a rename of either one was a fault the one test
- * whose stated job is the ABI surface did not catch. Nothing measured the
- * gap, because the array length was a number a person typed.
+ * THE LIST IS NOT IN THIS FILE AND NO COUNT IS EITHER.
  *
- * The names now live in `tests/abi_smoke_symbols.inc`, which this file
+ * The names live in `tests/abi_smoke_symbols.inc`, which this file
  * includes TWICE - once to declare the pointers and once to gather them - so
  * the array's length is the length of that list BY CONSTRUCTION and there is
  * no second place to keep in step. `cmake/Nim.cmake` step 4a reads the same
@@ -85,8 +76,7 @@ namespace {
  * and still satisfy the reference.
  *
  * THE ARRAY BOUND IS DEDUCED AND IS NEVER WRITTEN. A written bound is a
- * second statement of the list's length, and the two fell apart once
- * already. */
+ * second statement of the list's length. */
 #define MCF5307_ABI_FN(name)                                                   \
     reinterpret_cast<void const*>(abi_addr_##name),
 

@@ -71,8 +71,7 @@
 ## assembler ACCEPTS that form and emits
 ## `033c 0005`, and this file asserts that the core TRAPS it. It is
 ## deliberate, and the manual rows that put it there are on `eaBitDynamic` in
-## `decode_types.nim`. It is uncertainty 3 in the `logic.nim` header - the one
-## entry on that list which a future reader may have to REVERSE.
+## `decode_types.nim`. It is uncertainty 3 in the `logic.nim` header.
 ##
 ## THE PC-RELATIVE BASE IS THE ADDRESS OF THE DISPLACEMENT WORD. `btst
 ## %d1,(target,%pc)` with the opcode at 0 assembles to `033a 0004` and places
@@ -450,34 +449,12 @@ block:
     "and sets Z",
     $gotClear, $wantClear)
 
-  # THE INDEXED PC-RELATIVE OPERAND BECAME REACHABLE BY THE SAME REPAIR, and
-  # nothing executed it. `eaLegalityFor(opBtst)` admits `(d8,PC,Xn)` - the
-  # `eaIsLegalFor(opBtst, ...)` row further down asserts exactly that - and
-  # before this commit `execBitOp` refused it through `eaResolve` exactly as
-  # it refused the two operands the commit names. Measured: under the
-  # pre-repair shape, where every bit operation resolves its operand through
-  # `eaResolve`, this case goes red beside those four. An asserted table entry
-  # that no case executes is a claim about the table and not about the core,
-  # so here is the case.
+  # An asserted table entry that no case executes is a claim about the table
+  # and not about the core, so here is the case.
   # `btst %d1,(4,%pc,%d2)` is `033b 2804`, assembled by `m68k-elf-as
   # -mcpu=5307`.
   #
-  # THE EXACT ADDRESS IS NOW PINNED AND THE INDEX WIDTH IS STILL NOT, and the
-  # two halves of that sentence have different reasons. An earlier revision of
-  # this comment said the index is "a small positive number on purpose" so that
-  # the case would stay green whichever way `machine.nim` read the word/long
-  # select, and that select is now repaired - it is bit 11, not bit 8.
-  #
-  # With d2 = 4 the operand is the byte at 0x10a, which `pcWindow` seeds 0x80,
-  # while the old base reached 0x10c, seeded 0x40. So this case now separates
-  # the two BASES exactly as the two above it do.
-  #
-  # IT STILL CANNOT SEPARATE THE TWO WIDTHS, and no case on this 0x1000-byte
-  # board can: the readings differ only for an index whose low word
-  # sign-extends to something the whole longword is not, and those two
-  # addresses are at least 0x10000 apart. `btst_b_pc_index` and
-  # `btst_b_an_index` in `conformance/corpus/logic_00.json` pin the width on
-  # the runner's 1 MiB board.
+  # With d2 = 4 the operand is the byte at 0x10a, which `pcWindow` seeds 0x80.
   let oIndex = runIns([0x033B'u16, 0x2804'u16],
                       d = [0'u32, 7, 4, 0, 0, 0, 0, 0], sr = bitDirty or ccrZ,
                       mem = pcWindow)
@@ -493,47 +470,10 @@ block:
 block:
   # THE WIDENING IS BTST'S ALONE. `BSET`, `BCLR` and `BCHG` WRITE their
   # operand, so a PC-relative or an immediate destination stays refused. Each
-  # of the four words below is the measured base word with the low six bits
+  # of the words below is the measured base word with the low six bits
   # replaced: `bset %d1,%d0` is `03c0`, `bclr %d1,%d0` is `0380` and
   # `bchg %d1,%d0` is `0340`. `m68k-elf-as -mcpu=5307` rejects every one of
   # `bset %d1,(4,%pc)`, `bset %d1,#5`, `bclr %d1,(4,%pc)` and `bchg %d1,#5`.
-  #
-  # MORE THAN ONE GUARD REFUSES THESE FOUR AND NO CASE HERE CAN NAME ONE OF
-  # THEM. The per-operation mask in `execBitOp` runs first and `eaResolve`
-  # runs second, and the two IMMEDIATE cases meet a third underneath both:
-  # `eaAddr` has no address for an immediate and faults on its own.
-  #
-  # MEASURED, FOUR WAYS, and the last two are why the two halves of this group
-  # are not the same case twice:
-  #   - widening `eaResolve` to admit `ea7PCDisp` and `ea7PCIndex`: all four
-  #     stay green;
-  #   - widening the BSET/BCLR/BCHG mask to `eaAllModes` + `eaValid7` (then
-  #     spelled `eaAlterableModes` + `eaData7`):
-  #     all four stay green;
-  #   - widening BOTH: the two PC-RELATIVE cases go red, the two IMMEDIATE
-  #     ones stay green;
-  #   - widening both AND adding `ea7Imm` to `eaResolve`: the two immediate
-  #     cases STILL stay green, because `eaAddr` refuses the immediate
-  #     underneath everything above it.
-  #
-  # AN EARLIER REVISION OF THIS COMMENT CLAIMED THESE WERE "the cases that
-  # fail if `eaResolve` is widened instead of the executor being fixed". That
-  # claim was never run and it is false. The four cases assert that the
-  # encoding DOES NOT EXECUTE, which is worth asserting and is all they
-  # assert.
-  #
-  # EACH GUARD IS MEASURED SOMEWHERE THAT CAN SEE IT, and the places are named
-  # here so that no property rests on a case that cannot fail on it:
-  #   - the DYNAMIC mask is measured by the BSET, BCLR and BCHG rows of the
-  #     `eaIsLegalFor` block further down, which went red under the mask
-  #     widening, and by the three An cases at the end of this block, which
-  #     are the only cases in THIS block that trap on the mask alone;
-  #   - the STATIC mask `eaBitStatic` is measured by its own `checkMask` rows
-  #     and by the two `btst #3,...` cases beside them, which go red both when
-  #     that mask is widened and when the mask check is deleted;
-  #   - `eaResolve`'s own refusal is measured by the block that follows this
-  #     one, which calls it directly, because no instruction in this group can
-  #     see a widened `eaResolve` at all.
   let d1only = [0'u32, 3'u32, 0, 0, 0, 0, 0, 0]
   expectTrapD(runIns([0x03FA'u16, 0x0004'u16], d = d1only), 1, 3'u32,
     "bset %d1,(4,%pc) still traps")
@@ -544,32 +484,9 @@ block:
   expectTrapD(runIns([0x037C'u16, 0x0005'u16], d = d1only), 1, 3'u32,
     "bchg %d1,#5 still traps")
 
-  # AND THE ONE OPERAND THE MASK REFUSES ON ITS OWN. `eaResolve` RESOLVES AN
+  # AND THE OPERAND THE MASK REFUSES ON ITS OWN. `eaResolve` RESOLVES AN
   # ADDRESS REGISTER - it answers `erAn`, and `eaRefWrite` puts the result
-  # INTO that register - so nothing under the executor stops these three. The
-  # per-operation mask is the only guard they meet, which is what makes them
-  # cases that go red when it is removed, and what the four cases above
-  # cannot be.
-  #
-  # THEY ARE THREE OF SIX AND NOT THE WHOLE OF IT. Deleting the mask check
-  # from `execBitOp` reddens SIX cases in this file as it stands: these three,
-  # the two `btst #3,...` cases in the `eaBitStatic` block below, whose static
-  # mask is checked by the same line, and the `btst %d1,#5` trap case at the
-  # top of this file, which sits behind that same line too.
-  #
-  # THE COUNT WAS FIVE AND THE COMMIT THAT WROTE "FIVE" IS THE COMMIT THAT
-  # MADE IT SIX. `btst %d1,#5` became a trap case here, so it joined the five;
-  # a count measured before that change was true when it was written and is
-  # not true of this file. MEASURED BOTH WAYS, each on its own `git archive`
-  # extract with a fresh configure and the guard confirmed absent from the
-  # generated C: at `aa13eb4`, `t_logic: 5 of 75 cases failed`; at this commit,
-  # `t_logic: 6 of 74 cases failed` - `btst %d1,#5`, `bset %d1,%a0`,
-  # `bclr %d1,%a0`, `bchg %d1,%a0`, `btst #3,(4,%pc)` and `btst #3,0x200.w`,
-  # and nothing else.
-  #
-  # MEASURED with the mask check deleted from `execBitOp`:
-  # `bset %d1,%a0` reported no fault, returned a cycle, and left a0 at
-  # 0x0000123c - the seeded 0x00001234 with bit 3 set.
+  # INTO that register - so nothing under the executor stops these.
   #
   # `m68k-elf-as -mcpu=5307` rejects `bset %d1,%a0`, `bclr %d1,%a0` and
   # `bchg %d1,%a0`; each word is the measured base word with the low six bits
@@ -584,8 +501,7 @@ block:
   expectTrapA(runIns([0x0348'u16], d = d1only, a = a0only), 0, 0x1234'u32,
     "bchg %d1,%a0 traps: An is not data alterable")
 
-  # THE POSITIVE CONTROL FOR THE WRITING BIT OPERATIONS. Without it the seven
-  # trap cases above would pass against a `BSET` that refused every operand.
+  # THE POSITIVE CONTROL FOR THE WRITING BIT OPERATIONS.
   # `bset %d1,%d0` is `03c0`; d0 starts at 0 and bit 3 is set, so Z takes the
   # complement of the bit AS IT WAS FOUND and is set.
   expectD(runIns([0x03C0'u16], d = [0'u32, 3, 0, 0, 0, 0, 0, 0],
@@ -594,24 +510,17 @@ block:
     "bset %d1,%d0 sets the bit and reports the bit it found in Z")
 
 # ---------------------------------------------------------------------------
-# `eaResolve` STAYS NARROW, AND THIS IS THE ONLY PLACE IN THIS FILE THAT CAN
-# SAY SO.
+# `eaResolve` STAYS NARROW.
 #
 # `logic.nim` says of the BTST repair "THE FIX IS HERE AND NOT IN
 # `eaResolve`", because widening that procedure would let a WRITE reach a
 # PC-relative or an immediate operand and it has callers outside this module.
-# That is a claim about `machine.nim`, and the three assertions below are what
-# make it a measured one: they call `eaResolve` directly and require it to
-# refuse, with `fault` and `halted` set and no usable reference returned.
 #
 # THEY HAVE TO BE DIRECT. Every writing path in `logic.nim` - the
 # `Dn op <ea> -> <ea>` direction of AND and OR, EOR, and BSET, BCLR and BCHG -
 # checks a mask that already excludes these three sub-variants BEFORE it calls
 # `eaResolve`, so a widened `eaResolve` changes the behaviour of no
-# instruction this group executes. Measured: widening it to admit
-# `ea7PCDisp` and `ea7PCIndex` left every executor case in this file green.
-# A case routed through an instruction would therefore be a case that cannot
-# fail on the thing it names.
+# instruction this group executes.
 
 block:
   expectUnresolvable(ea7PCDisp,
@@ -653,9 +562,8 @@ block:
 
   # And through the executor. `btst #3,(%a0)` reads ONE BYTE - a memory
   # operand of a bit operation is 8 bits wide - so the byte at 0x200 is 0x08,
-  # whose bit 3 is set, and Z is cleared. The three bytes beside it are given
-  # distinct values and asserted unchanged, because a core that read or wrote
-  # a longword here would answer a different question.
+  # whose bit 3 is set, and Z is cleared. The bytes beside it are given
+  # distinct values and asserted unchanged.
   let o = runIns([0x0810'u16, 0x0003'u16],
                  a = [0x200'u32, 0, 0, 0, 0, 0, 0, 0],
                  sr = bitDirty or ccrZ,
@@ -668,19 +576,13 @@ block:
     "btst #3,(%a0) reads one byte, clears Z, and disturbs no neighbour",
     $got, $want)
 
-  # The two encodings the static form may not reach.
+  # The encodings the static form may not reach.
   #
   # EACH OPERAND IS AN ADDRESS THE BOARD ANSWERS, so the mask is the only
-  # thing that can refuse it. The absolute-short case used to name 0x1234,
-  # which is off this 0x1000 board, and an address off the board traps on
-  # `busUnmapped` whatever the mask says. Measured: with `eaBitStatic` widened
-  # to mode 7 the 0x1234 case stayed GREEN while its `(d16,PC)` sibling went
-  # red. 0x200 is on this board, so the widened core executes it here and the
-  # case goes red - which is what a case about a mask has to do.
+  # thing that can refuse it. An address off the board traps on `busUnmapped`
+  # whatever the mask says, and 0x200 is on this board.
   #
-  # d0 IS SEEDED NON-ZERO in both. These two used to take the default zero
-  # register file, so their "unchanged register" half asserted 0 == 0 - the
-  # only two trap cases in this file that did.
+  # d0 IS SEEDED NON-ZERO in both.
   let dSeed = [0x12345678'u32, 0, 0, 0, 0, 0, 0, 0]
   expectTrapD(runIns([0x083A'u16, 0x0003'u16, 0x0004'u16], d = dSeed),
     0, 0x12345678'u32,
@@ -696,12 +598,7 @@ block:
 # the immediate are in and the address register is out. MCF5307 User's Manual
 # Table 3-13: the `and.l <ea>,Rx` row on page 3-28 and the `or.l <ea>,Rx` row
 # on the CONTINUATION PAGE 3-29 carry a time in every column including `#xxx`,
-# where both read `1(0/0)`. The table spans two pages and an earlier revision
-# of this comment put both rows on the first.
-#
-# A DYNAMIC BTST NO LONGER READS THIS MASK. It reads `eaBitDynamic`, which is
-# this class minus the immediate; the rows behind that difference are on the
-# constant itself and the block below asserts both ends of it.
+# where both read `1(0/0)`. The table spans two pages.
 #
 # Measured: `m68k-elf-as -mcpu=5307` accepts `and.l (4,%pc),%d1` (`c2ba 0004`)
 # and rejects `and.l %a0,%d1`; `c0bc 0000 0005` disassembles as `andl #5,%d0`
@@ -721,12 +618,9 @@ block:
   checkMask(isEaLegal(eaDataAddressing, decodeEa(0x3D'u16)), false,
     "the data-addressing mask rejects the reserved mode-7 encoding")
 
-  # THE DYNAMIC BIT OPERATION'S MASK IS `eaBitDynamic`, and these rows are
-  # what say so. They read `eaLegalityFor` through `eaIsLegalFor`, which is
-  # the call `execBitOp` makes, so a table entry changed under the executor
-  # fails here. The immediate row is the one that separates this mask from
-  # `eaDataAddressing` above, and it is asserted at both ends: that mask
-  # admits the immediate two rows up, this one rejects it.
+  # THE DYNAMIC BIT OPERATION'S MASK IS `eaBitDynamic`. These rows read
+  # `eaLegalityFor` through `eaIsLegalFor`, which is the call `execBitOp`
+  # makes.
   checkMask(eaIsLegalFor(opBtst, decodeEa(0x3A'u16)), true,
     "the BTST mask admits (d16,PC)")
   checkMask(eaIsLegalFor(opBtst, decodeEa(0x3B'u16)), true,
@@ -754,13 +648,9 @@ block:
   # immediate effective address, so that word is not a measured encoding and
   # is not asserted here. `and.l (4,%pc),%d1` IS one: `c2ba 0004`.
   #
-  # THE SOURCE IS THE LONGWORD AT 0x106, and `pcWindow` makes that a different
-  # longword from the one at 0x108 that the old PC-relative base reached:
-  # 0x80c34055 against 0x40558022. An earlier revision seeded both with
-  # 0x0f0f0f0f so that the case could not tell them apart.
+  # THE SOURCE IS THE LONGWORD AT 0x106, which `pcWindow` seeds 0x80c34055.
   #
-  #   0x12345678 and 0x80c34055 = 0x00004050   (this case)
-  #   0x12345678 and 0x40558022 = 0x00140020   (the old base)
+  #   0x12345678 and 0x80c34055 = 0x00004050
   expectD(runIns([0xC2BA'u16, 0x0004'u16],
                  d = [0'u32, 0x12345678'u32, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrX,
@@ -798,17 +688,11 @@ block:
   # ONE ILLEGAL MODE PER SHIFT OPERATION - the property CPU-6's plan row
   # states for every implemented opcode (the file header says what that
   # document is). The memory form is the encoding that carries an effective
-  # address at all, and these four cases assert that the core REFUSES it.
+  # address at all.
   #
-  # THEY DO NOT ATTRIBUTE THE REFUSAL TO THE MASK, and an earlier revision of
-  # this comment said "the memory shift is the encoding that reaches the
-  # mask", which reads as though it did. `decodeShift` gives the memory form
-  # `size: 2`, so `execShift`'s two guards - the `{eaDn}` mask and the
-  # long-size rule - each refuse it ON THEIR OWN. Measured: removing the
-  # `eaIsLegalFor` call from `execShift` leaves every case in this file green,
-  # and removing the `d.size != 4` check instead leaves every case green too.
-  # The MASK is measured by the four `checkMask` rows just above, which read
-  # it directly; these four cases measure that the encoding does not execute.
+  # THEY DO NOT ATTRIBUTE THE REFUSAL TO THE MASK. `decodeShift` gives the
+  # memory form `size: 2`, so `execShift`'s guards - the `{eaDn}` mask and the
+  # long-size rule - each refuse it ON THEIR OWN.
   expectTrapD(runIns([0xE1D0'u16], d = [0x12345678'u32, 0, 0, 0, 0, 0, 0, 0],
                      a = [0x200'u32, 0, 0, 0, 0, 0, 0, 0]), 0, 0x12345678'u32,
     "the memory form of asl traps")
@@ -822,8 +706,7 @@ block:
                      a = [0x200'u32, 0, 0, 0, 0, 0, 0, 0]), 0, 0x12345678'u32,
     "the memory form of lsr traps")
 
-  # THE POSITIVE CONTROLS. Without them the four cases above would pass
-  # against a shift group that refused every operand. Each word is the
+  # THE POSITIVE CONTROLS. Each word is the
   # assembler's: `asl.l #1,%d0` is `e380`, `asr.l #1,%d0` is `e280`,
   # `lsl.l #1,%d0` is `e388` and `lsr.l #1,%d0` is `e288`.
   #
@@ -834,7 +717,7 @@ block:
   # rule would set it. CFPRM folio 4-12: V "Always cleared", and "Note that
   # CCR[V] is always cleared by ASL and ASR, unlike on the 68K family
   # processors"; folio 4-11: "The overflow bit is always zero". The case enters
-  # with V SET so that a core which never writes V fails it too.
+  # with V SET.
   expectD(runIns([0xE380'u16], d = [0x80000000'u32, 0, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrV),
     0, 0'u32, srBase or ccrC or ccrX or ccrZ,
@@ -865,16 +748,6 @@ block:
 
   # EOR writes its effective address, so the class is DATA ALTERABLE: no
   # PC-relative operand and no address register.
-  #
-  # THE TWO CASES ARE NOT EQUALLY SHARP AND THE DIFFERENCE IS `eaResolve`.
-  # `eaResolve` refuses a PC-relative destination on its own, so the
-  # PC-relative case is refused twice over and cannot name the guard that
-  # stopped it - measured, it stayed green when the EOR mask was widened to
-  # `eaAllModes` + `eaValid7` (then spelled `eaAlterableModes` + `eaData7`).
-  # `eaResolve` RESOLVES an address register,
-  # so the An case meets the mask alone, and it went red under that same
-  # widening. Both are kept and they say different things: the first asserts
-  # the encoding does not execute, the second asserts WHICH guard stops it.
   expectTrapD(runIns([0xB3BA'u16, 0x0004'u16], d = two), 0, 0x12345678'u32,
     "eor.l %d1,(4,%pc) traps: an EOR destination is not PC-relative")
   expectTrapA(runIns([0xB388'u16], d = two,
@@ -895,8 +768,7 @@ block:
     "eori.l #5,(%a0) traps: the destination is a data register only")
 
   # THE POSITIVE CONTROLS for the same four operations, each the assembler's
-  # own word. Without them the five cases above would pass against executors
-  # that refused every operand.
+  # own word.
   expectD(runIns([0xB380'u16], d = two, sr = srBase or ccrX or ccrC or ccrV),
     0, 0x1D3B5977'u32, srBase or ccrX,
     "eor.l %d1,%d0 combines the two registers, clears V and C, and keeps X")
@@ -905,8 +777,7 @@ block:
   expectD(runIns([0x0080'u16, 0x0000'u16, 0x0005'u16], d = two),
     0, 0x1234567D'u32, srBase, "ori.l #5,%d0 sets the two low bits")
   # THE EORI CONTROL USES A DIFFERENT IMMEDIATE FROM THE ORI ONE ON PURPOSE.
-  # `0x12345678 or 5` and `0x12345678 xor 5` are the same word, so a pair that
-  # shared an immediate would pass against an executor that confused the two.
+  # `0x12345678 or 5` and `0x12345678 xor 5` are the same word.
   # `eori.l #0xf,%d0` is `0a80 0000 000f`, and 0x78 xor 0x0f is 0x77 where
   # 0x78 or 0x0f is 0x7f.
   expectD(runIns([0x0A80'u16, 0x0000'u16, 0x000F'u16], d = two),

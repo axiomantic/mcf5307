@@ -2,18 +2,7 @@
 ## file. Design section 6.1.
 ##
 ## WHY THIS FILE EXISTS BESIDE THE CONFORMANCE CORPUS. The CPU-8 Check: line is
-## `mcf5307_conformance_alu`, and that corpus asserted REGISTER RESULTS ALONE.
-## Measured on the committed corpus at CPU-8's start: not one case in any of
-## the four groups named `sr` in its `expected` state, and the runner asserts
-## only the registers a case names. THE CONDITION CODES WERE THEREFORE
-## INVISIBLE TO THE CORPUS. A core that computed every arithmetic result
-## correctly and set no flag at all reported 9 of 9.
-##
-## THE CORPUS NOW NAMES `sr` AND THIS FILE STAYS. `conformance/generate.py`
-## gives every `move` and `alu` case a dirty incoming `sr` and an exact
-## expected word, and five mutations that previously left the group green -
-## ADD's carry-out, ADD's signed overflow, SUB's and NEG's borrow, the
-## multiply's V, and the ADDQ 000 data field - are each caught there now. This
+## `mcf5307_conformance_alu`. This
 ## file is deliberately NOT reduced to match: it carries the sticky-Z rule of
 ## ADDX/SUBX/NEGX, the trap cases for encodings this part does not have, and
 ## the direct reads of `eaIsLegalFor`, none of which the corpus expresses.
@@ -29,17 +18,14 @@
 ## not of an internal helper reached around the back.
 ##
 ## EVERY CASE ASSERTS A COMPLETE TUPLE, never one field. A case that changes a
-## register asserts (that register, the whole status register, `fault`), so a
-## result that is right with a flag that is wrong fails, and a flag that is
-## right with a result that is wrong fails. A case that must TRAP asserts
-## (the register it must not have changed, `fault`, `halted`, the cycle
-## return), so "it trapped" is separable from "it executed and wrote nothing".
+## register asserts (that register, the whole status register, `fault`). A case
+## that must TRAP asserts (the register it must not have changed, `fault`,
+## `halted`, the cycle return).
 ##
 ## THE TRAP CASES ARE THE GREEN-MIRAGE CONTROL of the group. Byte and word
 ## arithmetic does not exist on this part, and neither does an `ADDI` to
 ## memory, a `NEG` to memory, a PC-relative `ADDQ` destination or a 64-bit
-## `MULU.L`. The instruction encodings for all of those exist and a permissive
-## core executes them silently. Each one below was checked against
+## `MULU.L`. Each one below was checked against
 ## `m68k-elf-as -mcpu=5307`, which REJECTS every one of them; the assembler is
 ## the ground truth for what the part has, and the corresponding encodings are
 ## asserted here to trap.
@@ -384,8 +370,7 @@ block:
     "clr.l sets Z, clears N, V and C, and leaves X alone")
 
   # clr.w and clr.b exist on this part (the assembler accepts both) and each
-  # clears ITS OWN WIDTH ALONE. A core that cleared the whole register would
-  # pass a long-only test and corrupt the upper half here.
+  # clears ITS OWN WIDTH ALONE.
   expectD(runIns([0x4240'u16], d = [0x12345678'u32, 0, 0, 0, 0, 0, 0, 0]),
     0, 0x12340000'u32, srBase or ccrZ, "clr.w clears the low word alone")
   expectD(runIns([0x4200'u16], d = [0x12345678'u32, 0, 0, 0, 0, 0, 0, 0]),
@@ -434,7 +419,7 @@ block:
   # really is indistinguishable from a multiply by zero on this part - and
   # CFPRM folio 4-57 says so: V "Always cleared", "Note that CCR[V] is always
   # cleared by MULU, unlike the 68K family processors". THE CASE ENTERS WITH V
-  # SET so that a core which never writes V fails it too.
+  # SET.
   expectD(runIns([0x4C00'u16, 0x1000'u16],
                  d = [0x10000'u32, 0x10000'u32, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrV),
@@ -452,9 +437,7 @@ block:
     "mulu.l sets N from bit 31 of the unsigned product")
 
   # muls.l %d0,%d1 = 4c00 1800. THE SIGNED FLAG IS BIT 11 OF THE SECOND WORD.
-  # -1 * 3 is -3 unsigned-wrong and signed-right, so a core that ignores the
-  # bit gives 0xFFFFFFFD here too - which is why the overflow case below is
-  # the one that separates them.
+  # -1 * 3 is -3 unsigned-wrong and signed-right.
   expectD(runIns([0x4C00'u16, 0x1800'u16],
                  d = [0xFFFFFFFF'u32, 3, 0, 0, 0, 0, 0, 0]),
     1, 0xFFFFFFFD'u32, srBase or ccrN, "muls.l -1 * 3 = -3")
@@ -468,18 +451,10 @@ block:
                  sr = srBase or ccrV),
     1, 0'u32, srBase or ccrZ, "muls.l losing the whole product CLEARS V")
 
-  # NOTHING SEPARATES MULS.L FROM MULU.L, AND THAT IS THE POINT OF THIS PAIR.
-  # An earlier revision called these two "THE ONE CASE THAT SEPARATES SIGNED
-  # FROM UNSIGNED OVERFLOW": -1 * -1 is 1 and sets no signed overflow, while
-  # the same two words read as unsigned are a 64-bit product, so the two
-  # differed in V alone. WITH V ALWAYS CLEARED THAT DIFFERENCE IS GONE. The low
+  # NOTHING SEPARATES MULS.L FROM MULU.L. The low
   # 32 bits of a 32x32 product do not depend on how the sign bits are read, and
   # every flag comes from those 32 bits, so the signed bit is UNOBSERVABLE in
-  # this form and the pair now asserts exactly that. Both enter with V set.
-  #
-  # THE SIGNED BIT IS STILL MEASURED, by the DIVIDE cases in the next block,
-  # where the quotient itself differs. Nothing here is left unpinned by the
-  # collapse of these two.
+  # this form. Both enter with V set.
   expectD(runIns([0x4C00'u16, 0x1800'u16],
                  d = [0xFFFFFFFF'u32, 0xFFFFFFFF'u32, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrV),
@@ -497,7 +472,7 @@ block:
     1, 5'u32, srBase, "divu.l 17 / 3 = 5")
 
   # divs.l %d0,%d1 = 4c40 1801. THE SIGNED QUOTIENT TRUNCATES TOWARD ZERO:
-  # 17 / -3 is -5 and not -6. A core that used a flooring division gives -6.
+  # 17 / -3 is -5 and not -6.
   expectD(runIns([0x4C40'u16, 0x1801'u16],
                  d = [0xFFFFFFFD'u32, 17, 0, 0, 0, 0, 0, 0]),
     1, 0xFFFFFFFB'u32, srBase or ccrN,
@@ -512,8 +487,6 @@ block:
 block:
   # remu.l %d0,%d2:%d1 = 4c40 1002. Dq is d1 and Dr is d2. COLDFIRE'S REMx.L
   # PRODUCES THE REMAINDER ONLY: d2 takes the remainder and d1 IS UNCHANGED.
-  # A core that wrote the quotient into Dq as the 68020 DIVUL does fails on
-  # the d1 half of this tuple.
   let o = runIns([0x4C40'u16, 0x1002'u16], d = [5'u32, 17, 0, 0, 0, 0, 0, 0])
   let got = (d1: o.d[1], d2: o.d[2], sr: o.sr, fault: o.fault)
   let want = (d1: 17'u32, d2: 2'u32, sr: srBase, fault: false)
@@ -536,12 +509,6 @@ block:
   # nonzero". The register still takes the REMAINDER - "Destination/Source ->
   # Remainder" - so the two halves of each case below come from different
   # numbers, which is the whole point.
-  #
-  # THE TWO CASES ABOVE CANNOT SEE THIS, BY ACCIDENT RATHER THAN BY DESIGN. In
-  # `remu.l 17 / 5` the quotient is 3 and the remainder 2, both nonzero and
-  # both positive; in `rems.l -17 rem 5` the quotient is -3 and the remainder
-  # -2, both nonzero and both negative. Quotient and remainder happen to agree
-  # on N and Z in each, so either rule passes them.
 
   # Z SEPARATES THEM: 20 / 5 is a quotient of 4 with a remainder of ZERO. The
   # remainder rule sets Z, the quotient rule clears it. d2 takes the remainder
@@ -573,18 +540,15 @@ block:
     1, 0x80000000'u32, srBase or ccrV,
     "divs.l of the most negative value by -1 sets V and writes nothing")
 
-  # AN OVERFLOW CLEARS N AND Z RATHER THAN LEAVING THEM AS IT FOUND THEM, and
-  # THE CASE ABOVE CANNOT SEE THE DIFFERENCE because it enters with both
-  # already clear. CFPRM folios 4-31 and 4-33: "N Cleared if overflow is
+  # AN OVERFLOW CLEARS N AND Z RATHER THAN LEAVING THEM AS IT FOUND THEM.
+  # CFPRM folios 4-31 and 4-33: "N Cleared if overflow is
   # detected; otherwise set if the quotient is negative, cleared if positive"
   # and "Z Cleared if overflow is detected; otherwise set if the quotient is
   # zero, cleared if nonzero".
   #
   # THIS CASE ENTERS WITH N, Z AND C SET AND X SET. It pins all five bits at
   # once: V set, N cleared, Z cleared, C cleared ("C Always cleared" on both
-  # folios), and X CARRIED THROUGH UNCHANGED ("X Not affected"). A core that
-  # leaves N and Z alone fails on the status word while still writing the
-  # right register, which is exactly the shape the case above missed.
+  # folios), and X CARRIED THROUGH UNCHANGED ("X Not affected").
   expectD(runIns([0x4C40'u16, 0x1801'u16],
                  d = [0xFFFFFFFF'u32, 0x80000000'u32, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrN or ccrZ or ccrC or ccrX),
@@ -604,10 +568,7 @@ block:
 # ---------------------------------------------------------------------------
 # MULU.W, MULS.W, DIVU.W and DIVS.W - THE SINGLE-WORD FORMS.
 #
-# THIS PART HAS THEM AND AN EARLIER REVISION OF `decodeLogicLine` SAID IT DID
-# NOT. That procedure answered `opIllegal` for opmodes 011 and 111 of lines
-# 1000 and 1100, with the comment "the WORD multiply and divide of the 68000,
-# which this part does not have". Both oracles contradict it:
+# THIS PART HAS THEM, AND BOTH ORACLES SAY SO:
 #
 #   - `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726) assembles
 #     `mulu.w %d1,%d0` to `c0c1`, `muls.w %d1,%d0` to `c1c1`,
@@ -622,13 +583,10 @@ block:
 # THE WORD FORM CARRIES NO EXTENSION WORD. The long form is the 68020 two-word
 # encoding whose second word names the registers and selects signedness; the
 # word form names Dx in bits 11..9 of the opcode and selects signedness in
-# bits 8..6. An executor that fetches an extension word unconditionally
-# consumes the NEXT INSTRUCTION as its own operand register field.
+# bits 8..6.
 
 block:
-  # (a) THE DECODER. Asserted directly rather than inferred from a mask,
-  # because a decoder that still answers `opIllegal` makes every execution
-  # case below fail for a reason that says nothing about the executor.
+  # (a) THE DECODER. Asserted directly rather than inferred from a mask.
   #
   # The tuple carries the SIZE, which is what separates the word form from the
   # long one and what the executor branches on, and `destReg`, which is where
@@ -652,16 +610,13 @@ block:
 
   # THE UPPER WORD OF EITHER OPERAND IS IGNORED ON INPUT. CFPRM folio 4-57:
   # "A register operand is the low-order word; the upper word of the register
-  # is ignored." Both registers carry a distinctive upper half here, so a core
-  # that multiplied the full 32 bits gives neither 12 nor anything near it.
+  # is ignored." Both registers carry a distinctive upper half here.
   expectD(runIns([0xC2C0'u16],
                  d = [0xDEAD0003'u32, 0xBEEF0004'u32, 0, 0, 0, 0, 0, 0]),
     1, 12'u32, srBase,
     "mulu.w IGNORES the upper word of the source AND of the destination")
 
-  # ALL 32 BITS OF THE PRODUCT ARE SAVED - folio 4-57's own sentence. A core
-  # that wrote only the low word, or that widened a 16-bit result, gives
-  # 0x0000FFFD here.
+  # ALL 32 BITS OF THE PRODUCT ARE SAVED - folio 4-57's own sentence.
   expectD(runIns([0xC2C0'u16], d = [0xFFFF'u32, 3, 0, 0, 0, 0, 0, 0]),
     1, 0x0002FFFD'u32, srBase,
     "mulu.w 0xFFFF * 3 = 0x2FFFD - all 32 bits of the product are written")
@@ -688,7 +643,7 @@ block:
   # same condition-code table the long form reads: folios 4-55 and 4-57 print
   # ONE table each, above the word Instruction Format, and neither
   # continuation page (4-56, 4-58) carries a second. THE CASE ENTERS WITH V
-  # SET so that a core which never writes V fails it too.
+  # SET.
   expectD(runIns([0xC2C0'u16], d = [0'u32, 5, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrV),
     1, 0'u32, srBase or ccrZ, "mulu.w by zero CLEARS V and sets Z")
@@ -722,9 +677,7 @@ block:
     "divs.w 17 / -3 = -5 remainder +2, truncating toward zero")
 
   # THE REMAINDER TAKES THE DIVIDEND'S SIGN - folios 4-31 and 4-33: "Note that
-  # the sign of the remainder is the same as the sign of the dividend." A core
-  # using a FLOORING division gives quotient -6 and remainder +1 here, which
-  # is 0x0001FFFA and fails on both halves at once.
+  # the sign of the remainder is the same as the sign of the dividend."
   expectD(runIns([0x83C0'u16],
                  d = [3'u32, 0xFFFFFFEF'u32, 0, 0, 0, 0, 0, 0]),
     1, 0xFFFEFFFB'u32, srBase or ccrN,
@@ -773,13 +726,6 @@ block:
   # integer, so under the folios' wording - "larger than a 16-bit (.W) signed
   # integer" - it does not overflow. -65536 / 2 is -32768 and -65538 / 2 is
   # -32769, which is one step outside and overflows under every reading.
-  #
-  # IF THE INFERENCE IS WRONG, THIS PAIR IS WHERE IT SHOWS IN THIS FILE: the
-  # first case goes red and the second stays green. Measured 2026-08-11 by
-  # moving the boundary in `alu.nim` to the other reading - exactly one case
-  # in `t_alu` reds and it is the labelled one. IT IS NOT THE ONLY PLACE IN
-  # THE SUITE: the conformance corpus carries the same boundary as
-  # `divs_w_quotient_of_minus_32768_does_not_overflow` and reds beside it.
   expectD(runIns([0x83C0'u16], d = [2'u32, 0xFFFF0000'u32, 0, 0, 0, 0, 0, 0]),
     1, 0x00008000'u32, srBase or ccrN,
     "divs.w whose quotient is exactly -32768 does NOT overflow [INFERENCE]")
@@ -847,28 +793,11 @@ block:
   # four-byte one. `divu.w 0x200.w,%d1` is `82f8 0200`; the seed puts the
   # divisor in the HIGH half of the longword at 0x200, so a four-byte read
   # yields 0x00030000, narrows to zero and TRAPS instead of dividing.
-  #
-  # THAT MUTATION DOES NOT NEED THIS CASE TO BE CAUGHT, AND AN EARLIER
-  # REVISION OF THIS COMMENT SAID IT DID. It read "Measured: with the divide's
-  # `eaRead` size mutated from 2 to 4 and this case absent, the whole suite
-  # stayed green. It is here because of that run." Measured 2026-08-11: with
-  # that mutation and this case absent the suite goes RED, on
-  # `divs.w takes an IMMEDIATE source` and `divs.w takes an INDIRECT source`.
-  # Both read their operand from outside a register - one from the
-  # instruction stream, one from memory - so both widen exactly the way this
-  # one does, and neither needs a seed in the high half to show it.
-  #
-  # IT EARNS ITS PLACE ON COVERAGE INSTEAD, WHICH IS A WEAKER CLAIM HONESTLY
-  # STATED. It is the only case in this file that runs DIVU.W - as against
-  # DIVS.W - over a source that is not a data register: every other `divu.w`
-  # here is `0x82C0`, a `Dn` source. Deleting it would leave the UNSIGNED word
-  # divide with no memory operand at any addressing mode. With it present the
-  # same mutation reds three cases rather than two, this one among them.
   expectD(runIns([0x82F8'u16, 0x0200'u16], d = [0'u32, 17, 0, 0, 0, 0, 0, 0],
                  mem = @[(0x200'u32, 0x00030000'u32)]),
     1, 0x00020005'u32, srBase, "divu.w takes an ABSOLUTE SHORT source")
   # `divs.w (%a0),%d1` is `83d0` - an indirect source, the commonest memory
-  # mode and one no word-form case above reaches.
+  # mode.
   expectD(runIns([0x83D0'u16], d = [0'u32, 17, 0, 0, 0, 0, 0, 0],
                  a = [0x200'u32, 0, 0, 0, 0, 0, 0, 0],
                  mem = @[(0x200'u32, 0xFFFD0000'u32)]),

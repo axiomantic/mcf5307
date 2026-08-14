@@ -11,10 +11,9 @@
  *
  * WHY A SECOND READER OF THIS FILE IS SAFE WHEN A SECOND READER OF THE
  * CONTRACT HEADER IS NOT. Step 4a says at length why a regular expression may
- * not be trusted to say what a C header declares - seven ordinary C shapes
- * defeated the reader it replaced, and the calibration header in the build
- * tree still proves it on every configure run. NONE OF THOSE SHAPES CAN OCCUR
- * HERE. This file's whole grammar is blank lines, comment lines and the one
+ * not be trusted to say what a C header declares, and the calibration header
+ * in the build tree proves it on every configure run. NONE OF THOSE SHAPES
+ * CAN OCCUR HERE. This file's whole grammar is blank lines, comment lines and the one
  * macro form above. The step 4a reader accepts that form ANCHORED at both
  * ends and FAILS THE CONFIGURE STEP over any line it cannot classify,
  * including a line that carries the entry macro with a leading space, a

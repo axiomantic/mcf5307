@@ -1,6 +1,6 @@
 /* t0_abi_header.cpp - case 4 of the registered test `t0_abi_header`.
  *
- * The C++ half of the same assertion. It makes the same eighteen address-of
+ * The C++ half of the same assertion. It makes the same address-of
  * expressions and the same per-type assertions THROUGH `extern "C"`, which
  * `include/mcf5307.h` supplies for a C++ translation unit. That linkage is
  * what makes this file link against `abi_stub.c`, a C translation unit, and
@@ -10,7 +10,7 @@
  * THE C++ BUILD IS WHAT MAKES THE FORBIDDEN LIST TESTABLE. A C++ reference
  * parameter, a namespace, a template, an overload, a C++ object or a
  * reference in the header is either a syntax error in the C build of case 3
- * or a diagnostic under `-Wall -Wextra -pedantic -Werror` in one of the two.
+ * or a diagnostic under `-Wall -Wextra -pedantic -Werror`.
  * Nothing here catches an exception, because nothing may throw one across
  * this boundary in either direction.
  */
@@ -48,7 +48,7 @@ static_assert(sizeof(isp1181_irq_fn) == sizeof(void (*)()),
 static_assert(sizeof(isp1181_tx_fn) == sizeof(void (*)()),
               "isp1181_tx_fn must be a function-pointer type");
 
-/* --------------------------------------- the eighteen address-of expressions
+/* ------------------------------------------------ the address-of expressions
  *
  * Each pointer variable carries `extern "C"` linkage through the type it is
  * declared with, because the header declares every one of these functions
@@ -57,7 +57,7 @@ static_assert(sizeof(isp1181_tx_fn) == sizeof(void (*)()),
 
 int main()
 {
-    /* The nine mcf5307_* functions. */
+    /* The mcf5307_* functions. */
     void (*const p01)() = &mcf5307_runtime_init;
     mcf5307_ctx* (*const p02)(void*, mcf5307_read_fn, mcf5307_write_fn,
                               mcf5307_iack_fn) = &mcf5307_create;
@@ -69,7 +69,7 @@ int main()
     void (*const p08)(const mcf5307_ctx*, void*) = &mcf5307_state_save;
     void (*const p09)(mcf5307_ctx*, const void*) = &mcf5307_state_load;
 
-    /* The nine isp1181_* functions. */
+    /* The isp1181_* functions. */
     isp1181_ctx* (*const p10)(void*, isp1181_irq_fn,
                               isp1181_tx_fn) = &isp1181_create;
     void (*const p11)(isp1181_ctx*) = &isp1181_destroy;
