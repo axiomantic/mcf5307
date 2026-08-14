@@ -64,63 +64,82 @@ const expectedLayout = @[
   ("irq7Armed", 1), ("irq7Vector", 1), ("irq7Autovector", 1),
   ("atHandlerEntry", 1)]
 
-check(stateLayout() == expectedLayout,
-      "layout: the snapshot carries these context fields at these widths",
-      $stateLayout(), $expectedLayout)
+# EVERY MEASURED VALUE IS TAKEN ONCE INTO A `let` AND THE CASE READS THE `let`.
+# `check` is a TEMPLATE, so an expression written into it is evaluated once for
+# the verdict and again for the report. A case whose subject is the call itself -
+# a load, say - would then run the operation twice and compare the second run's
+# world against the first run's verdict.
 
-check(int(mcf5307_state_size()) == 100,
+let measuredLayout = stateLayout()
+check(measuredLayout == expectedLayout,
+      "layout: the snapshot carries these context fields at these widths",
+      $measuredLayout, $expectedLayout)
+
+let measuredSize = int(mcf5307_state_size())
+check(measuredSize == 100,
       "size: header, payload and checksum",
-      $int(mcf5307_state_size()), "100")
+      $measuredSize, "100")
 
 # ---------------------------------------------------------------------------
-# BLOCK 2. The header words, and the bytes the save does not touch.
+# BLOCK 2. The header words, and the buffer every save in this file writes into.
 #
-# The published call hands the core a raw pointer and no length, so a save that
-# wrote one byte past the size it reported would be a buffer overrun in the
-# caller's memory with nothing in the C ABI able to say so.
+# The bytes the save does NOT touch are adjudicated once, at the foot of this
+# file, over every save any block here performs. `savedBlock` below is what
+# surrounds each destination with filler, and BLOCK 8 states why the verdict is
+# one case there rather than a result returned to each caller.
 
 const
   blockBytes = 100
   guardBytes = 8
+  filler = 0xEE'u8
 
 proc freshContext(): MCF5307Ctx =
   new(result)
 
-proc saveWithGuards(ctx: MCF5307Ctx): (seq[uint8], bool) =
-  ## The saved block, and whether every byte outside it kept its filler.
+var everySaveStayedInBounds = true
+
+proc savedBlock(ctx: MCF5307Ctx): seq[uint8] =
+  ## The saved block, out of a buffer whose surrounding bytes carry filler.
+  ##
+  ## WHETHER THE SAVE STAYED INSIDE THE BUFFER IS ACCUMULATED INTO ONE FLAG AND
+  ## NOT RETURNED TO THE CALLER. A returned flag is one a call site can drop -
+  ## `let (bytes, _) = ...` reads as ordinary Nim and silently costs the whole
+  ## check - and an overrun is not a property of whichever context happened to
+  ## be saved at the site that remembered to read it. The verdict on the
+  ## accumulated flag is at the foot of this file, after every save has run.
   var raw: array[guardBytes + blockBytes + guardBytes, uint8]
   for index in 0 ..< raw.len:
-    raw[index] = 0xEE'u8
+    raw[index] = filler
   mcf5307_state_save(ctx, addr raw[guardBytes])
-  var saved = newSeq[uint8](blockBytes)
+  result = newSeq[uint8](blockBytes)
   for index in 0 ..< blockBytes:
-    saved[index] = raw[guardBytes + index]
-  var intact = true
+    result[index] = raw[guardBytes + index]
   for index in 0 ..< guardBytes:
-    if raw[index] != 0xEE'u8:
-      intact = false
-    if raw[guardBytes + blockBytes + index] != 0xEE'u8:
-      intact = false
-  (saved, intact)
+    if raw[index] != filler:
+      everySaveStayedInBounds = false
+    if raw[guardBytes + blockBytes + index] != filler:
+      everySaveStayedInBounds = false
 
 proc be32(bytes: seq[uint8]; at: int): uint32 =
   (uint32(bytes[at]) shl 24) or (uint32(bytes[at + 1]) shl 16) or
     (uint32(bytes[at + 2]) shl 8) or uint32(bytes[at + 3])
 
-let (headerProbe, headerGuardsIntact) = saveWithGuards(freshContext())
+# THE EXPECTED HEADER IS WRITTEN OUT AND NOT READ BACK OUT OF `state`. A header
+# built from `stateMagic` and `stateVersion` and compared against a header built
+# from those same two names agrees with itself whatever they hold: the version
+# word could move without the layout moving, and two builds would then refuse
+# each other's blocks while carrying one version number. These literals are the
+# format; the module is an implementation of it.
+let headerProbe = savedBlock(freshContext())
 let headerWords = (magic: be32(headerProbe, 0),
                    version: be32(headerProbe, 4),
                    payload: be32(headerProbe, 8))
-let wantHeaderWords = (magic: stateMagic, version: stateVersion,
+let wantHeaderWords = (magic: 0x4D435335'u32, version: 1'u32,
                        payload: 84'u32)
 
 check(headerWords == wantHeaderWords,
       "header: the magic, the version word and the payload width",
       $headerWords, $wantHeaderWords)
-
-check(headerGuardsIntact,
-      "header: the save writes inside mcf5307_state_size and nowhere else",
-      $headerGuardsIntact, "true")
 
 # ---------------------------------------------------------------------------
 # BLOCK 3. One field at a time, through a save and a load.
@@ -132,7 +151,14 @@ check(headerGuardsIntact,
 #
 # THE DESTINATION IS STAMPED WITH THE OTHER SALT AND NOT LEFT FRESH. The two
 # salts differ by an ODD number, so every boolean flips and
-# every number moves, and no field starts the comparison already equal.
+# every number moves, and no field starts the comparison already equal. THAT
+# LAST SENTENCE IS A CASE BELOW AND NOT A PROMISE: a field the two stamps left
+# equal would make its own round-trip case pass on `0 == 0`, whatever the module
+# did with it, and reading the sentence is no way to find out that it has.
+#
+# THE FINAL `else` STOPS THE COMPILE, MIRRORING THE WALK. A field of a type the
+# stamp has no arm for would otherwise be left at its default under BOTH salts,
+# and the case comparing it would then read one default against the other.
 
 proc stampContext(ctx: MCF5307Ctx; salt: uint32) =
   var seed = 1'u32 + salt
@@ -158,13 +184,39 @@ proc stampContext(ctx: MCF5307Ctx; salt: uint32) =
       for index in low(value) .. high(value):
         value[index] = 0xC3C3_0000'u32 + seed
         seed += 1'u32
+    else:
+      {.error: "t_state: stampContext cannot stamp this field type".}
 
 let stamped = freshContext()
 stampContext(stamped, 0'u32)
-let (stampedBytes, _) = saveWithGuards(stamped)
+let stampedBytes = savedBlock(stamped)
 
 let restored = freshContext()
 stampContext(restored, 1'u32)
+
+# The two stamped contexts, held against each other BEFORE any block moves
+# between them. A field named here is one whose round-trip case below cannot
+# fail.
+var equalUnderBothSalts: seq[string]
+for name, zeroValue, oneValue in fieldPairs(stamped[], restored[]):
+  when zeroValue is pointer:
+    discard
+  elif zeroValue is Mcf5307ReadFn or zeroValue is Mcf5307WriteFn or
+       zeroValue is Mcf5307IackFn:
+    discard
+  elif zeroValue is array:
+    for index in low(zeroValue) .. high(zeroValue):
+      if zeroValue[index] == oneValue[index]:
+        equalUnderBothSalts.add(name & "[" & $index & "]")
+  else:
+    if zeroValue == oneValue:
+      equalUnderBothSalts.add(name)
+
+let noFieldEqual = newSeq[string]()
+check(equalUnderBothSalts == noFieldEqual,
+      "round trip: the two salts leave no field equal before the load",
+      $equalUnderBothSalts, $noFieldEqual)
+
 let restoreStatus = stateLoad(restored, unsafeAddr stampedBytes[0])
 
 check(restoreStatus == stateOk,
@@ -180,6 +232,47 @@ for name, wantValue, gotValue in fieldPairs(stamped[], restored[]):
   else:
     check(gotValue == wantValue, "round trip: " & name,
           $gotValue, $wantValue)
+
+# ---------------------------------------------------------------------------
+# BLOCK 3A. The byte stream itself, written out.
+#
+# EVERY CASE ABOVE COMPARES THE BLOCK AGAINST SOMETHING THE SAME MODULE
+# PRODUCED, so all of them agree with each other under an encoding that changed
+# whole. A save that switched to little-endian, reordered the payload or seeded
+# its checksum differently still round-trips against itself, and a reader on
+# another machine or another build gets a block it refuses while the version
+# word says the format did not move.
+#
+# THE VECTOR IS DATA A CHECK READS, WHICH IS THE ONE GROUND ON WHICH WRITING IT
+# DOWN IS ALLOWED HERE. It is the specification of the byte stream, not a record
+# of a run: every byte was rebuilt from the magic string, the version, the
+# payload width, the stamp rule above and a SEPARATE FNV-1a implementation, and
+# only then pinned. A vector copied out of this module's own output would agree
+# with whatever that output became, which is the defect this block exists to
+# close and not a cheaper way to close it.
+#
+# THE LAST FOUR BYTES ARE WHY IT REACHES FURTHER THAN A LAYOUT ASSERTION. The
+# checksum's SEED and PRIME are inside them, and nothing else in this file reads
+# a checksum it did not also compute with the same constants.
+
+const goldenStampedBlock = @[
+  0x4D'u8, 0x43'u8, 0x53'u8, 0x35'u8, 0x00'u8, 0x00'u8, 0x00'u8, 0x01'u8,
+  0x00'u8, 0x00'u8, 0x00'u8, 0x54'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x01'u8,
+  0xA5'u8, 0xA5'u8, 0x00'u8, 0x02'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x03'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x04'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x05'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x06'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x07'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x08'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x09'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x0A'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x0B'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x0C'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x0D'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x0E'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x0F'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x10'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x11'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x12'u8, 0x01'u8, 0x00'u8, 0x00'u8, 0x00'u8,
+  0x01'u8, 0x15'u8, 0x56'u8, 0x01'u8, 0x00'u8, 0x59'u8, 0x00'u8, 0x01'u8,
+  0x18'u8, 0x07'u8, 0xEA'u8, 0x85'u8]
+
+check(stampedBytes == goldenStampedBlock,
+      "wire format: the salt-0 context saves these exact bytes",
+      $stampedBytes, $goldenStampedBlock)
 
 # ---------------------------------------------------------------------------
 # BLOCK 4. A damaged block is refused, at every offset and by name.
@@ -260,6 +353,43 @@ check(nilStatuses == wantNilStatuses,
       "damage: a nil context and a nil source are refused by name",
       $nilStatuses, $wantNilStatuses)
 
+# THE SAVE HAS THE SAME TWO NIL ARGUMENTS AND NO STATUS TO REPORT THEM WITH, so
+# what each case reads is the memory the call was pointed at.
+#
+# THE TWO CASES DO NOT READ THE SAME THING, and that is why there are two.
+# Against a NIL CONTEXT the destination is real: the header words are written
+# before the walk reaches the context at all, so a save that ran would leave
+# them in the buffer and the filler below would be gone. Against a NIL
+# DESTINATION there is no buffer to inspect and the content of the case is that
+# it was REACHED: the alternative to the guard's `return` is a write through a
+# null pointer, which ends the run rather than failing a comparison.
+
+proc bufferAfterSave(ctx: MCF5307Ctx; toNilDestination: bool): seq[uint8] =
+  var raw: array[guardBytes + blockBytes + guardBytes, uint8]
+  for index in 0 ..< raw.len:
+    raw[index] = filler
+  if toNilDestination:
+    mcf5307_state_save(ctx, nil)
+  else:
+    mcf5307_state_save(ctx, addr raw[guardBytes])
+  result = newSeq[uint8](raw.len)
+  for index in 0 ..< raw.len:
+    result[index] = raw[index]
+
+var untouchedBuffer = newSeq[uint8](guardBytes + blockBytes + guardBytes)
+for index in 0 ..< untouchedBuffer.len:
+  untouchedBuffer[index] = filler
+
+let afterNilContext = bufferAfterSave(nil, false)
+check(afterNilContext == untouchedBuffer,
+      "damage: mcf5307_state_save writes nothing when the context is nil",
+      $afterNilContext, $untouchedBuffer)
+
+let afterNilDestination = bufferAfterSave(freshContext(), true)
+check(afterNilDestination == untouchedBuffer,
+      "damage: mcf5307_state_save returns when the destination is nil",
+      $afterNilDestination, $untouchedBuffer)
+
 # ---------------------------------------------------------------------------
 # BLOCK 5. The block holds no pointer.
 #
@@ -303,8 +433,8 @@ withPointersB.readFn = boardReadB
 withPointersB.writeFn = boardWriteFn
 withPointersB.iackFn = boardIackB
 
-let (bytesA, _) = saveWithGuards(withPointersA)
-let (bytesB, _) = saveWithGuards(withPointersB)
+let bytesA = savedBlock(withPointersA)
+let bytesB = savedBlock(withPointersB)
 
 check(bytesA == bytesB,
       "pointers: two boards with one state save the same bytes",
@@ -373,16 +503,17 @@ proc runInstructions(ctx: MCF5307Ctx; count: int) =
 
 let core = freshCore()
 runInstructions(core, runBeforeSave)
-let (snapshot, _) = saveWithGuards(core)
+let snapshot = savedBlock(core)
 
 runInstructions(core, runAfterSave)
 let firstContinuation = renderContext(core)
 
-check(stateLoad(core, unsafeAddr snapshot[0]) == stateOk,
+let coreReloadStatus = stateLoad(core, unsafeAddr snapshot[0])
+check(coreReloadStatus == stateOk,
       "core: the snapshot of a running core loads back into it",
-      $stateLoad(core, unsafeAddr snapshot[0]), $stateOk)
+      $coreReloadStatus, $stateOk)
 
-let (reloaded, _) = saveWithGuards(core)
+let reloaded = savedBlock(core)
 
 check(reloaded == snapshot,
       "core: a save taken straight after the load is the block that was loaded",
@@ -406,26 +537,45 @@ mcf5307_destroy(core)
 
 let cCaller = freshCore()
 runInstructions(cCaller, runBeforeSave)
-let (cSnapshot, _) = saveWithGuards(cCaller)
+let cSnapshot = savedBlock(cCaller)
 let cSaved = renderContext(cCaller)
 
 runInstructions(cCaller, runAfterSave)
 mcf5307_state_load(cCaller, unsafeAddr cSnapshot[0])
+let cAfterLoad = renderContext(cCaller)
 
-check(renderContext(cCaller) == cSaved,
+check(cAfterLoad == cSaved,
       "C ABI: mcf5307_state_load restores the state the block carries",
-      renderContext(cCaller), cSaved)
+      cAfterLoad, cSaved)
 
 let cDamaged = perturbed(cSnapshot, 20)
 runInstructions(cCaller, runAfterSave)
 let cBeforeRefusal = renderContext(cCaller)
 mcf5307_state_load(cCaller, unsafeAddr cDamaged[0])
+let cAfterRefusal = renderContext(cCaller)
 
-check(renderContext(cCaller) == cBeforeRefusal,
+check(cAfterRefusal == cBeforeRefusal,
       "C ABI: mcf5307_state_load leaves the core alone when it refuses",
-      renderContext(cCaller), cBeforeRefusal)
+      cAfterRefusal, cBeforeRefusal)
 
 mcf5307_destroy(cCaller)
+
+# ---------------------------------------------------------------------------
+# BLOCK 8. Every save in this file stayed inside the buffer it was given.
+#
+# THE PUBLISHED CALL HANDS THE CORE A RAW POINTER AND NO LENGTH, so a save that
+# wrote one byte past the size it reported would be an overrun in the caller's
+# memory with nothing in the C ABI able to say so. `savedBlock` surrounds every
+# destination with filler and lowers the flag below when any of it moves.
+#
+# IT IS ONE CASE AT THE FOOT AND NOT A RESULT EACH CALLER READS, for the reason
+# `savedBlock` gives: a returned flag is one a call site can drop, and the
+# contexts saved in this file differ from each other in exactly the way that
+# decides whether an overrun happens at all.
+
+check(everySaveStayedInBounds,
+      "bounds: every save wrote inside mcf5307_state_size and nowhere else",
+      $everySaveStayedInBounds, "true")
 
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
 # program reports what its text declares and what its run adjudicated,
