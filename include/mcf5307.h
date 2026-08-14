@@ -88,9 +88,11 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * THE ACKNOWLEDGE CALLBACK MAY CALL `mcf5307_get_reg` AND `mcf5307_set_irq`,
  * which is what a chained controller needs. The frame is already stacked when
  * it runs, so the registers it reads are the machine as the handler will find
- * it: a7 already below the 8-byte frame, the program counter at the handler's
- * first instruction, and the status register already carrying the interrupt
- * priority mask raised to the level being acknowledged.
+ * it: a7 holding the ADDRESS OF the 8-byte frame and not an address below it -
+ * the frame's first longword is AT a7 and the stacked program counter at
+ * `a7+4`, which is what Figure 3-7 draws - the program counter register at the
+ * handler's first instruction, and the status register already carrying the
+ * interrupt priority mask raised to the level being acknowledged.
  *
  * THE LEVEL-7 ARM IS DECIDED AGAINST THE PRESENTATION THE CALL HAS NOT YET
  * OVERWRITTEN. `mcf5307_set_irq` arms an edge only on a transition to level 7
@@ -103,20 +105,38 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  *
  * THE WRITE CALLBACK MAY CALL `mcf5307_set_irq` AS WELL, and the core reaches
  * that callback while it is stacking the exception frame. An edge armed there
- * arrives BEFORE THE FRAME IS COMPLETE and SURVIVES THE TAKE IN PROGRESS: the
- * core clears the level-7 latch of the interrupt it is taking before it begins
- * stacking, so a later edge is not swept away by that take. It is taken at the
- * next instruction boundary, which is after the first handler instruction has
- * executed, and it carries the vector and the autovector flag of the
- * presentation that armed it.
+ * arrives BEFORE THE FRAME IS COMPLETE and SURVIVES THE TAKE IN PROGRESS, for
+ * a different reason on each side of the level split: a take OF LEVEL 7 clears
+ * its own edge latch before it begins stacking, so an edge armed during the
+ * stacking is later than that clear; a take OF LEVELS 1 TO 6 never touches the
+ * latch at all. It is taken at the next instruction boundary, which is after
+ * the first handler instruction has executed, and it carries the vector and
+ * the autovector flag of the presentation that armed it.
  *
  * `mcf5307_reset` INHIBITS INTERRUPT SAMPLING FOR THE FIRST INSTRUCTION AT
  * `initial_pc`. Reset is an exception, and sampling is inhibited during the
- * first instruction of every exception handler - this one is a CITATION:
- * User's Manual Table 3-1, closing paragraph, folio 3-13, with the reset
- * exception's own entry at section 3.5.11, folio 3-17. A board that presents
- * an interrupt immediately after `mcf5307_reset` does not get it taken at the
- * reset program counter; it is taken at the boundary after that instruction.
+ * first instruction of every exception handler - and this one is a DEDUCTION
+ * FROM QUOTED PREMISES rather than a quotation of the conclusion. Both
+ * premises are printed exactly as cited: User's Manual Table 3-1, closing
+ * paragraph, folio 3-13, and the reset exception's own entry at section
+ * 3.5.11, folio 3-17. Neither states the conclusion - Table 3-1 carries no
+ * reset row, and section 3.5.11 never calls the reset program counter a
+ * handler - so the step between them is this header's: the instruction at
+ * `initial_pc` is the first instruction of an exception handler, and the
+ * sentence about all exception handlers therefore governs it.
+ *
+ * `mcf5307_reset` ALSO RAISES THE INTERRUPT PRIORITY MASK TO 7, and THAT one
+ * is a citation: section 3.5.11, folio 3-17, "sets the processor's interrupt
+ * priority mask in the SR to the highest level (level 7)". A board that
+ * presents a LEVEL 1 TO 6 interrupt immediately after `mcf5307_reset` does not
+ * get it taken at the reset program counter, nor at the boundary after that
+ * instruction, nor at any boundary at all: the mask inhibits every level at or
+ * below itself, so nothing under 7 is taken until the program lowers the mask
+ * itself. LEVEL 7 IS THEREFORE THE ONLY INTERRUPT THE INHIBITION ABOVE CAN
+ * DEFER, because it is the only one a mask of 7 leaves takeable at all: it is
+ * nonmaskable, and `mcf5307_reset` re-arms it as the paragraph below states.
+ * That is the one a board sees held off the reset program counter and taken at
+ * the boundary after that instruction.
  *
  * `mcf5307_reset` ALSO CLEARS THE LATCHED LEVEL-7 EDGE AND THEN RE-OBSERVES
  * THE BOARD'S LAST PRESENTATION - and this one is an INFERENCE and not a
