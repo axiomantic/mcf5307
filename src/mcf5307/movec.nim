@@ -1,12 +1,29 @@
-## `movec` - the `MOVEC` encoding, the privilege rule and the control-register
-## map. Task CPU-11. Design sections 6.1, 6.2 and 6.3.
+## `movec` - the `MOVEC` encoding, the privilege rule, the control-register map
+## and the group's executor. Task CPU-11. Design sections 6.1, 6.2 and 6.3.
 ##
-## THIS MODULE IS THE ENCODING AND THE MAP, AND IT IS NOT AN EXECUTOR. Every
-## procedure here is a function of the instruction stream and of the status
-## register, so it can be asserted value by value without a machine to run.
-## Nothing here writes a control register: a control register this core kept
-## would be context state, and the task that owns the context type is the task
-## that adds a field to it.
+## THE MAP AND THE EXECUTOR ARE BOTH HERE, AND THE SPLIT INSIDE THE FILE IS
+## WHAT MATTERS. Everything above `movecFamily` is a function of the
+## instruction stream and of the status register, so it can be asserted value
+## by value without a machine to run. `movecFamily` is the one procedure that
+## needs a context, and it is what makes every predicate above REACHABLE from
+## `mcf5307_exec`.
+##
+## THE EXECUTOR IS ALSO THIS MODULE'S ONLY ROUTE INTO THE LIBRARY, AND THAT IS
+## A BUILD FACT RATHER THAN A STYLE CHOICE. `cmake/Nim.cmake` step 3 takes the
+## library's compilation units from the `compile` array of Nim's own cache,
+## which holds what the entry module's import graph REACHED. A module this
+## graph does not reach is never compiled, never enters the archive, and its
+## procedures cannot be called through `mcf5307_exec` - while a suite built
+## with `--path:src` still compiles it from source and passes. So a predicate
+## here is only as reachable as `cpu.nim`'s arm that calls it.
+##
+## NOTHING HERE WRITES A CONTROL REGISTER, AND THAT IS A LIMITATION RATHER
+## THAN AN OVERSIGHT. A control register this core kept would be context
+## state, and the task that owns the context type is the task that adds a
+## field to it; the value the instruction carries is therefore discarded. The
+## one consequence a reader must not miss: `machine.nim`'s `takeException`
+## still bases the vector table at zero, so a `MOVEC` to VBR is accepted and
+## does not move it.
 ##
 ## MBAR IS WHY THIS INSTRUCTION IS FIRST. Design section 6.2: MBAR is reachable
 ## only through `MOVEC`, so no peripheral is visible until software programs
@@ -21,6 +38,7 @@
 ## silicon, from the MCF5307 User's Manual (1998) and the ColdFire Family
 ## Programmer's Reference Manual, Rev. 3.
 
+import mcf5307/decode_types
 import mcf5307/machine
 
 # CFPRM Rev. 3, `MOVEC`, folio 8-13, prints the sixteen bits of the opcode word
@@ -103,3 +121,63 @@ proc controlRegisterFor*(rc: uint16): ControlRegister =
   of 0xC05'u16: crRambar1   # CFPRM Table 8-3 folio 8-14; design section 6.3
   of 0xC0F'u16: crMbar      # UM Table B-2 folio B-5; CFPRM Table 8-3 folio 8-14
   else: crUnimplemented
+
+# ---------------------------------------------------------------------------
+# The executor. `cpu.nim`'s `step` calls this for `opMovec` and for nothing
+# else.
+
+const
+  vecPrivilegeViolation = 8'u8
+    ## MCF5307 User's Manual Table 3-1, "Exception Vector Assignments", folio
+    ## 3-13: vector 8, at vector offset `$020`, is "Privilege violation".
+    ##
+    ## IT IS DECLARED HERE AND NOT IN `exception.nim` BECAUSE NOTHING ELSE IN
+    ## THIS TREE STATES IT. That file names the vectors ITS OWN callers take,
+    ## and this is the only path that takes this one, so declaring it here
+    ## puts the fact in exactly one place rather than in two.
+
+  movecExecuteCycles = 9'u32
+    ## MCF5307 User's Manual Table 3-14, "Miscellaneous Instruction Execution
+    ## Times", folio 3-29, times `movec Ry,Rc` at `11(0/1)` WHOLE. `cpu.nim`
+    ## adds its own fetch cost to this return, and the pair sums to that 11.
+    ## The decomposition is this core's and not the manual's, exactly as the
+    ## block at the head of `cpu.nim` states for every other return.
+
+proc movecFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
+  ## Execute one `MOVEC`. Returns the cycles the execution pipe spent, 0 for an
+  ## instruction that did not run.
+  ##
+  ## THE PRIVILEGE IS TESTED BEFORE THE EXTENSION WORD IS FETCHED, AND THE
+  ## ORDER IS A DECISION THE MANUALS DO NOT SETTLE. CFPRM folio 8-13 states
+  ## the operation as a conditional whose first test is supervisor state, and
+  ## `fetchExt` can itself take an ACCESS ERROR - so fetching first would let
+  ## an instruction the core is about to refuse for privilege report the wrong
+  ## exception instead. The stacked program counter is the same either way,
+  ## so an `RTE` from the handler re-executes the whole instruction and
+  ## re-reads the word this path did not.
+  if movecPrivilegeViolation(ctx.sr):
+    # THE STACKED PROGRAM COUNTER IS THIS INSTRUCTION AND NOT THE NEXT ONE.
+    # Table 3-1's STACKED PROGRAM COUNTER column reads "Fault" for vector 8,
+    # which its own footnote defines as "the PC of the instruction that caused
+    # the exception". `step` has already advanced the pc past the opcode word,
+    # so the faulting address is one word back. `execTrap` in `control.nim` is
+    # the other side of this distinction: its vectors read "Next" and it
+    # stacks `ctx.pc` unchanged.
+    takeException(ctx, vecPrivilegeViolation, ctx.pc - insWordBytes)
+    return 0'u32
+  let ext = fetchExt(ctx)
+  if ctx.halted:
+    return 0'u32
+  if controlRegisterFor(movecControlField(ext)) == crUnimplemented:
+    # CFPRM folio 8-13: "Attempted access to undefined or unimplemented
+    # control register space produces undefined results." This core HALTS
+    # rather than running on, which is the posture `cpu.nim`'s
+    # `opExg`/`opTas`/`opNbcd` arm already takes for the same shape - a valid
+    # encoding whose semantics this core does not carry - and `fault` stays
+    # clear for that same reason. A core that accepted the write instead would
+    # let firmware configure a register that does not exist and report
+    # nothing, which is the permissive failure design section 17 row 7.10
+    # names.
+    ctx.halted = true
+    return 0'u32
+  movecExecuteCycles

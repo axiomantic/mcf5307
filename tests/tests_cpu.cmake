@@ -601,7 +601,7 @@ mcf5307_check_case_sites("t_ea_masks" "@MCF5307_EA_SOURCE@" "${ea_run_out}"
 # states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
 # what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
 # CASE COUNT.
-mcf5307_check_case_total("t_ea_masks" "${ea_run_out}" 446)
+mcf5307_check_case_total("t_ea_masks" "${ea_run_out}" 447)
 
 ]==])
 
@@ -1457,7 +1457,7 @@ mcf5307_check_case_sites("t_movec" "@MCF5307_MOVEC_SOURCE@" "${movec_run_out}"
 # states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
 # what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
 # CASE COUNT.
-mcf5307_check_case_total("t_movec" "${movec_run_out}" 25)
+mcf5307_check_case_total("t_movec" "${movec_run_out}" 35)
 
 ]==])
 
