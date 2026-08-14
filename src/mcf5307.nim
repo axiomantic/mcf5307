@@ -28,6 +28,10 @@ import mcf5307/logic
 import mcf5307/machine
 import mcf5307/move
 import mcf5307/state
+# The ISP1181 device model. It is a sibling of the core rather than a part of
+# it, and it is named here for the same reason the core submodules are: the
+# compiler builds a module this entry module reaches and no other.
+import isp1181/stub
 {.pop.}
 
 # ---------------------------------------------------------------------------
