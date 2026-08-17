@@ -191,8 +191,7 @@ proc irqAsserted*(m: ISP1181): bool =
 
 proc softct*(m: ISP1181): bool =
   ## Design section 9.2 names the SOFTCT bit as state the model needs, so it is
-  ## readable as itself and not only as a bit of the mode byte. CPU-24 drives
-  ## the timer it gates.
+  ## readable as itself and not only as a bit of the mode byte.
   (not m.isNil) and (m.mode and softctBit) != 0
 
 proc fifoAt*(m: ISP1181; index: int): Fifo =
