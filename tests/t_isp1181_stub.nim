@@ -272,6 +272,326 @@ check(nilOutcome == wantNil,
 
 isp1181_destroy(ctx)
 
+# ---------------------------------------------------------------------------
+# BLOCK 7. The three-item field specification of task CPU-21.
+#
+# THE FIELD SET IS ASSERTED AS A WHOLE AND NEVER FIELD BY FIELD. Item 3 of the
+# specification is a NEGATIVE - no SOFTCT timer field - and a negative is only
+# checkable against a CLOSED set. A per-field assertion passes with a timer
+# field sitting beside the two that were asked for, which is the one outcome
+# item 3 exists to refuse.
+#
+# SOFTCT IS A BIT AND THE BIT LIVES IN THE FULL MODEL's MODE BYTE. Nothing on
+# this context advances it and nothing here is a timer.
+
+type BackendShape = tuple[names: string, count: int]
+
+proc backendShape(): BackendShape =
+  var names = ""
+  var count = 0
+  for value in ISP1181Backend:
+    if names.len > 0:
+      names.add(" ")
+    names.add($value)
+    inc count
+  (names: names, count: count)
+
+const wantBackendShape: BackendShape = (names: "Stub FullModel", count: 2)
+
+let backendSeen = backendShape()
+check(backendSeen == wantBackendShape,
+      "backend: the enum carries exactly Stub and FullModel, in that order",
+      $backendSeen, $wantBackendShape)
+
+let selector = isp1181_create(addr hostToken, recordIrq, recordTx)
+
+type SelectorWalk = tuple[atCreate: string, atSet: string, atSetBack: string]
+
+proc walkSelector(handle: ISP1181Ctx): SelectorWalk =
+  # THE WALK MOVES THE SELECTOR AND MOVES IT BACK. A setter that ignored its
+  # argument and a setter that latched on the first call are different defects,
+  # and only the return leg separates them.
+  let atCreate = $backend(handle)
+  setBackend(handle, FullModel)
+  let atSet = $backend(handle)
+  setBackend(handle, Stub)
+  (atCreate: atCreate, atSet: atSet, atSetBack: $backend(handle))
+
+const wantSelector: SelectorWalk = (atCreate: "Stub", atSet: "FullModel",
+                                    atSetBack: "Stub")
+
+let selectorWalk = walkSelector(selector)
+check(selectorWalk == wantSelector,
+      "backend: a fresh handle selects the stub and the setter moves it back " &
+        "and forth",
+      $selectorWalk, $wantSelector)
+
+proc ctxFieldNames(handle: ISP1181Ctx): string =
+  var names: seq[string]
+  for name, _ in handle[].fieldPairs:
+    names.add(name)
+  names.join(" ")
+
+const wantCtxFields = "backend frameNumber model"
+
+let ctxFields = ctxFieldNames(selector)
+check(ctxFields == wantCtxFields,
+      "fields: ISP1181Ctx carries exactly the declared set and no SOFTCT timer",
+      ctxFields, wantCtxFields)
+
+# ---------------------------------------------------------------------------
+# BLOCK 8. The USB frame counter: 11 bits, wrapping at 2048.
+#
+# THE MODULUS BELOW IS THIS FILE'S OWN HAND-WRITTEN LITERAL and never the
+# module's constant. A test that imported the constant would move with it under
+# mutation and would assert that the code agrees with itself.
+#
+# THE WIDTH IS THE USB SPECIFICATION'S FRAME-NUMBER FIELD AND NOT A MEASURED
+# DEVICE FACT. No ISP1181 datasheet exists on this machine.
+#
+# THE COUNTER'S NO-OP VALUE IS ZERO, WHICH IS WHY A FIRST-MISMATCH ASSERTION IS
+# NOT ENOUGH ON ITS OWN. A counter that never advanced reads 0, and so does one
+# that completed a full cycle. The cycle case therefore asserts the value at
+# EVERY tick against the tick index, the highest value seen, and the number of
+# ticks taken - so a counter that stood still, one that stopped early and one
+# that ran past its width are three different reds.
+
+const frameModulus = 2048       ## Hand-written. Not the module's constant.
+
+type FrameWalk = tuple[start: uint16, firstMismatch: string, ticks: int,
+                       maxSeen: uint16, final: uint16]
+
+proc walkFrames(handle: ISP1181Ctx; ticks: int): FrameWalk =
+  let start = frameNumber(handle)
+  var firstMismatch = ""
+  var maxSeen = start
+  var taken = 0
+  for step in 1 .. ticks:
+    advanceFrames(handle, 1)
+    let seen = frameNumber(handle)
+    inc taken
+    if seen > maxSeen:
+      maxSeen = seen
+    let want = uint16((int(start) + step) mod frameModulus)
+    if seen != want and firstMismatch.len == 0:
+      firstMismatch = "tick " & $step & " read " & $seen & ", want " & $want
+  (start: start, firstMismatch: firstMismatch, ticks: taken, maxSeen: maxSeen,
+   final: frameNumber(handle))
+
+let counter = isp1181_create(addr hostToken, recordIrq, recordTx)
+let cycle = walkFrames(counter, frameModulus)
+const wantCycle: FrameWalk = (start: 0'u16, firstMismatch: "", ticks: 2048,
+                              maxSeen: 2047'u16, final: 0'u16)
+check(cycle == wantCycle,
+      "frames: a fresh handle starts at 0 and one full cycle advances by " &
+        "exactly one per tick and ends where it began",
+      $cycle, $wantCycle)
+
+# THE WRAP ON ITS OWN, because the cycle case above passes its own start and
+# end value through the same wrap and a reader should not have to take the
+# discriminating step on trust.
+let wrapping = isp1181_create(addr hostToken, recordIrq, recordTx)
+advanceFrames(wrapping, 2047)
+
+type Wrap = tuple[before: uint16, after: uint16]
+
+let wrapBefore = frameNumber(wrapping)
+advanceFrames(wrapping, 1)
+let wrapSeen: Wrap = (before: wrapBefore, after: frameNumber(wrapping))
+const wantWrap: Wrap = (before: 2047'u16, after: 0'u16)
+check(wrapSeen == wantWrap,
+      "frames: a counter at 2047 advanced by one reads 0",
+      $wrapSeen, $wantWrap)
+
+# THE COUNT FORM AND THE REPEATED FORM AGREE, which is the property a state
+# restore and a fast-forward both need. EVERY `want` BELOW IS HAND-WRITTEN:
+# comparing the two forms alone would pass for any modulus they shared.
+type BulkRow = tuple[start: int, frames: int, want: uint16]
+
+const bulkRows: array[6, BulkRow] = [
+  (start: 0, frames: 5, want: 5'u16),
+  (start: 2045, frames: 5, want: 2'u16),
+  (start: 0, frames: 2048, want: 0'u16),
+  (start: 0, frames: 2049, want: 1'u16),
+  (start: 2000, frames: 100, want: 52'u16),
+  (start: 1, frames: 4095, want: 0'u16)]
+
+type BulkOutcome = tuple[rows: int, firstBad: string]
+
+proc runBulk(): BulkOutcome =
+  var firstBad = ""
+  var rows = 0
+  for row in bulkRows:
+    let bulkCtx = isp1181_create(addr hostToken, recordIrq, recordTx)
+    advanceFrames(bulkCtx, row.start)
+    advanceFrames(bulkCtx, row.frames)
+    let bulk = frameNumber(bulkCtx)
+
+    let singleCtx = isp1181_create(addr hostToken, recordIrq, recordTx)
+    advanceFrames(singleCtx, row.start)
+    for _ in 1 .. row.frames:
+      advanceFrames(singleCtx, 1)
+    let singles = frameNumber(singleCtx)
+
+    inc rows
+    if (bulk != row.want or singles != row.want) and firstBad.len == 0:
+      firstBad = "start " & $row.start & " + " & $row.frames & " -> bulk " &
+        $bulk & ", singles " & $singles & ", want " & $row.want
+    isp1181_destroy(bulkCtx)
+    isp1181_destroy(singleCtx)
+  (rows: rows, firstBad: firstBad)
+
+const wantBulk: BulkOutcome = (rows: 6, firstBad: "")
+let bulkOutcome = runBulk()
+check(bulkOutcome == wantBulk,
+      "frames: one call of N frames equals N calls of one, at and across the " &
+        "wrap",
+      $bulkOutcome, $wantBulk)
+
+# ---------------------------------------------------------------------------
+# BLOCK 9. The four entry points BRANCH on the selector and REACH the backend.
+#
+# EACH CASE DRIVES THE SAME BYTES THROUGH BOTH BACKENDS AND ASSERTS THE PAIR.
+# THE PAIR IS THE ASSERTION AND A SINGLE SIDE IS NOT. A branch that was written
+# and never taken answers with the stub on both sides; a branch that lost the
+# stub answers with the model on both. Only the pair separates either from a
+# selector that works - which is the same reason an empty function body links
+# and satisfies a symbol check.
+#
+# THE COMMAND BYTES ARE DESIGN SECTION 9.2's: `0xBA` writes the hardware
+# configuration, `0xBB` reads it back, `0x20` configures endpoint 0 and `0xD2`
+# peeks the buffer that endpoint's deliveries land in. `0x2300` is the firmware
+# value that section records.
+
+const
+  hwConfigWrite = 0xBA'u8
+  hwConfigRead = 0xBB'u8
+  endpointConfig0 = 0x20'u8
+  peekByte = 0xD2'u8
+
+type Pair = tuple[stub: string, model: string]
+
+proc driveHwConfig(select: ISP1181Backend): string =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, select)
+  isp1181_write(handle, commandPort, hwConfigWrite)
+  isp1181_write(handle, dataPort, 0x00'u8)
+  isp1181_write(handle, dataPort, 0x23'u8)
+  isp1181_write(handle, commandPort, hwConfigRead)
+  let low = isp1181_read(handle, dataPort)
+  let high = isp1181_read(handle, dataPort)
+  isp1181_destroy(handle)
+  "0x" & toHex(low) & " 0x" & toHex(high)
+
+let hwPair: Pair = (stub: driveHwConfig(Stub), model: driveHwConfig(FullModel))
+const wantHwPair: Pair = (stub: "0x00 0x00", model: "0x00 0x23")
+check(hwPair == wantHwPair,
+      "branch: a write and a read reach the stub or the full model as the " &
+        "selector says",
+      $hwPair, $wantHwPair)
+
+const packetBytes: array[4, uint8] = [0xA5'u8, 0x5A'u8, 0x3C'u8, 0xC3'u8]
+
+proc peekEndpoint0(handle: ISP1181Ctx): uint8 =
+  isp1181_write(handle, commandPort, endpointConfig0)
+  isp1181_write(handle, dataPort, 0x00'u8)
+  isp1181_write(handle, commandPort, peekByte)
+  isp1181_read(handle, dataPort)
+
+proc driveRx(select: ISP1181Backend): string =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, select)
+  # A CALLER WITH NOTHING TO DELIVER MUST NOT OCCUPY A BUFFER, and endpoint 0
+  # OUT is SINGLE-buffered. An empty delivery that took the slot would make the
+  # real packet below a NAK, and the peek would then answer absent - so this
+  # line is what separates "nothing was delivered" from "an empty packet was".
+  isp1181_rx(handle, cint(0), nil, csize_t(0))
+  var packet = packetBytes
+  isp1181_rx(handle, cint(0), addr packet[0], csize_t(packet.len))
+  let seen = peekEndpoint0(handle)
+  isp1181_destroy(handle)
+  "0x" & toHex(seen)
+
+let rxPair: Pair = (stub: driveRx(Stub), model: driveRx(FullModel))
+const wantRxPair: Pair = (stub: "0x00", model: "0xA5")
+check(rxPair == wantRxPair,
+      "branch: a delivery reaches the stub or the full model as the selector " &
+        "says",
+      $rxPair, $wantRxPair)
+
+# DESTROY RELEASES THE SELECTED BACKEND, and the read after it is the only
+# thing that can tell a release from a branch that did nothing. A destroyed
+# handle answers benignly rather than aborting, which is the posture design
+# section 5.6 already requires of a nil handle.
+type DestroyWalk = tuple[before: string, after: string]
+
+proc driveDestroy(select: ISP1181Backend): DestroyWalk =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, select)
+  var packet = packetBytes
+  isp1181_rx(handle, cint(0), addr packet[0], csize_t(packet.len))
+  let before = peekEndpoint0(handle)
+  isp1181_destroy(handle)
+  let after = peekEndpoint0(handle)
+  (before: "0x" & toHex(before), after: "0x" & toHex(after))
+
+type DestroyPair = tuple[stub: DestroyWalk, model: DestroyWalk]
+
+let destroyPair: DestroyPair = (stub: driveDestroy(Stub),
+                                model: driveDestroy(FullModel))
+const wantDestroyPair: DestroyPair = (
+  stub: (before: "0x00", after: "0x00"),
+  model: (before: "0xA5", after: "0x00"))
+check(destroyPair == wantDestroyPair,
+      "branch: destroy releases the full model and leaves the stub with " &
+        "nothing to release",
+      $destroyPair, $wantDestroyPair)
+
+# THE HOST IS STILL SILENT AFTER THE FULL MODEL HAS BEEN DRIVEN. Block 5
+# asserted this over the stub alone, and the selector adds a path that block
+# could not reach.
+type Callbacks = tuple[irq: Callback, tx: Callback]
+
+let callbacksAfter: Callbacks = (irq: (calls: irqCalls, first: irqFirst),
+                                 tx: (calls: txCalls, first: txFirst))
+const wantCallbacksAfter: Callbacks = (irq: (calls: 0, first: ""),
+                                       tx: (calls: 0, first: ""))
+check(callbacksAfter == wantCallbacksAfter,
+      "branch: neither callback fired on any access through either backend",
+      $callbacksAfter, $wantCallbacksAfter)
+
+# ---------------------------------------------------------------------------
+# BLOCK 10. The Nim-side accessors answer a nil handle.
+#
+# The five C entry points already do, for design section 5.6's reason, and the
+# accessors this task adds are reachable from the same plugin host through
+# CPU-24's state entry points.
+
+type NilAccess = tuple[atStart: string, frame: uint16, afterAdvance: uint16,
+                       afterSet: string]
+
+proc driveNilAccess(): NilAccess =
+  let handle: ISP1181Ctx = nil
+  let atStart = $backend(handle)
+  let frame = frameNumber(handle)
+  advanceFrames(handle, 5)
+  let afterAdvance = frameNumber(handle)
+  setBackend(handle, FullModel)
+  (atStart: atStart, frame: frame, afterAdvance: afterAdvance,
+   afterSet: $backend(handle))
+
+let nilAccess = driveNilAccess()
+const wantNilAccess: NilAccess = (atStart: "Stub", frame: 0'u16,
+                                  afterAdvance: 0'u16, afterSet: "Stub")
+check(nilAccess == wantNilAccess,
+      "nil handle: the selector, the counter and their setters answer and " &
+        "change nothing",
+      $nilAccess, $wantNilAccess)
+
+isp1181_destroy(selector)
+isp1181_destroy(counter)
+isp1181_destroy(wrapping)
+
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this program reports
 # what its text declares and what its run adjudicated, and the registered
 # test's driver is what compares them.
