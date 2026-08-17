@@ -71,7 +71,22 @@ type
     opMovec
     opIllegal
 
-  Decoded* = ref object
+  # A VALUE AND NOT A `ref`, WHICH IS THE OPPOSITE CHOICE FROM `MCF5307Ctx`
+  # BELOW AND IS DELIBERATE. One of these is produced for each instruction
+  # decoded and none of them outlives the dispatch that reads it, so a `ref`
+  # would put an allocation and a free on the execute path - which design
+  # section 5.6 keeps clear of the allocator, because the delivery form may
+  # enter it from a real-time thread. This type carries no identity to share
+  # and no state to mutate through, so a copy loses nothing a reader could
+  # observe. The context below is the opposite on every count.
+  #
+  # THE ZERO VALUE IS A REACHABLE RESULT AND IT IS NOT A TRAP VALUE: it reads
+  # as `opNop`, which the enum above pins at ordinal 0 for this reason. A `ref`
+  # would answer nil there and fault on the first field read. So a decoder arm
+  # that must refuse a word has to SAY SO with `opIllegal`; leaving a branch
+  # without naming a result is silent under this declaration and loud under a
+  # `ref`.
+  Decoded* = object
     op*: Operation
     ea*: EA
     size*: uint8
