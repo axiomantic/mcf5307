@@ -267,8 +267,7 @@ void isp1181_write(isp1181_ctx* ctx, uint32_t addr, uint8_t value);
 void isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
                 size_t len);
 
-/* Advances the USB frame counter and the SOFTCT timer by `sof_frames` USB
- * Start-of-Frame frames.
+/* Advances the USB frame number by `sof_frames` USB Start-of-Frame frames.
  *
  * ONE SOF FRAME IS 1 ms. THE UNIT IS NOT THE 96 kHz AUDIO FRAME. At a 96 kHz
  * frame rate and a scheduler quantum of one audio frame, one SOF frame spans
