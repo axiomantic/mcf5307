@@ -29,18 +29,11 @@
  *     a re-entrant call that crashes is a regression in the runtime. C++
  *     never names `NimMain`; the C names are the whole contract.
  *
- * Asserting no core behaviour is
- * what makes this test right at this task's completion and still right
- * after every later task that supersedes the implementation.
- *
- * The address set is generated and it grows on its own.
- * `tests/tests_cpu.cmake` writes `abi_smoke_implemented.h` into the build tree
- * from the same measured set the visibility gate reports, so implementing a
- * published name brings that name under this test with no edit to this file
- * and no edit to the registration list.
- *
- * The test asserts no core behaviour, so it stays right across every later
- * change to the implementation.
+ * The address-taking is the only way to make a rename a fail. The C++
+ * translation unit reads no field of any function pointer, and the linker
+ * is what turns a missing symbol into a build error. The test is C++17
+ * clean, links against the `mcf5307` static library, and exits 0 on
+ * success.
  */
 
 #include <cstddef>

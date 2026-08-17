@@ -1,54 +1,5 @@
 ## `t_logic` - the logic, bit-operation and shift instruction group.
 ##
-## THE DOCUMENTS THIS FILE CITES ARE OUTSIDE THIS REPOSITORY, so each is
-## named in full here. A bare "section 6.1" is unreadable to a reader who holds
-## only the repository, and none of them may be copied into it.
-##
-##   DESIGN SECTION 6.1 is section 6 "The MCF5307 Core and the Board Model",
-##   subsection 6.1 "The core", of the NMG2 emulator DESIGN DOCUMENT
-##   (`2026-08-04-nmg2-emulator-design.md`, in the nord-modular-emulator plan
-##   set). Opened and checked: it is the section that makes the legality mask a
-##   MANDATORY property of this core - "Each opcode carries its own legality
-##   mask. An illegal mode traps." - and it is the section that sizes the core
-##   and forbids a Musashi fork.
-##
-##   AGENTS.MD SECTION 11 is section 11 "External resources" of the
-##   nord-modular-emulator project's `AGENTS.md`. Opened and checked: it is the
-##   section that names the two Motorola documents this file takes instruction
-##   semantics from - the ColdFire Family Programmer's Reference Manual Rev 3
-##   and the MCF5307 User's Manual - and gives a download location for each.
-##
-##   THE MCF5307 USER'S MANUAL is the
-##   document every table and page cited below refers to. Its full identity,
-##   so that a reader can be sure of holding the same edition: Motorola,
-##   "MCF5307 ColdFire Integrated Microprocessor User's Manual", order number
-##   MCF5307UM/AD, (c) 1998 - the order number is printed at the top right of
-##   the cover and the title is the title page. IT IS NOT IN THIS REPOSITORY,
-##   it may not be copied into it, and a reader who has only this tree must
-##   obtain it separately from the download location AGENTS.md section 11
-##   gives. That is why every citation here names table, page and row instead
-##   of quoting.
-##
-##   THE COLDFIRE FAMILY PROGRAMMER'S REFERENCE MANUAL IS ON DISK at
-##   `~/Development/datasheets/CFPRM.pdf` - Freescale, "ColdFire Family
-##   Programmer's Reference Manual", Rev. 3.
-##
-##   ITS PER-INSTRUCTION PAGES CARRY THE FLAG RULES THE USER'S MANUAL
-##   never had: folio 4-12 gives ASL's V a flat "Always cleared" and notes
-##   that this is "unlike on the 68K family processors".
-##
-##   READ THE PDF AS RENDERED PAGES. Tables in the OCR markdown at
-##   `~/Development/datasheets/MCF5307UM-md/` are known wrong, so a value
-##   taken from text extraction is not evidence; `pdftoppm -png` and read the
-##   image.
-##
-##   CPU-6'S PLAN ROW is the CPU-6 row of section 11.3 "The instruction set" of
-##   the NMG2 emulator IMPLEMENTATION PLAN
-##   (`2026-08-04-nmg2-emulator-impl.md`). Opened and checked: its Check line
-##   reads "The test asserts a trap for at least one illegal mode for each
-##   implemented opcode", which is the property the shift block below cites it
-##   for.
-##
 ## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_logic`. That corpus holds
 ## POSITIVE cases: an encoding this part has,
 ## run against an expected register state. A positive corpus CANNOT SEE a
@@ -87,7 +38,7 @@
 ## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
 ## semantics, the condition-code rules and the encodings are facts about
 ## Motorola silicon; they are taken from the ColdFire Family Programmer's
-## Reference Manual and the MCF5307 User's Manual (AGENTS.md section 11) and
+## Reference Manual and the MCF5307 User's Manual and
 ## from this project's own measurements with the pinned cross assembler.
 
 import mcf5307/cpu
@@ -337,11 +288,11 @@ template checkMask(got: bool; want: bool; label: string) =
 const bitDirty = srBase or ccrN or ccrV or ccrC or ccrX
 
 # ---------------------------------------------------------------------------
-# BLOCKING 1. `CMP` AND `CMPA.L` ARE NOT THIS GROUP'S, AND CPU-10 HAS TAKEN
-# THEM.
+# BLOCKING 1. `CMP` AND `CMPA.L` ARE NOT THIS GROUP'S.
 #
-# Line 1011 carries EOR in opmodes 100, 101 and 110. THE OTHER FIVE OPMODES
-# ARE CPU-10'S: CMP in 000, 001 and 010, CMPA.W in 011 and CMPA.L in 111.
+# Line 1011 carries EOR in opmodes 100, 101 and 110. The remaining opmodes are
+# the comparison group's: CMP in 000, 001 and 010, CMPA.W in 011 and CMPA.L
+# in 111.
 #
 # The sentence these rows assert: the encoding belongs to the comparison group
 # and not to the logic decoder.
@@ -394,11 +345,10 @@ block:
 # `btst %d1,(4,%pc)` is `033a 0004` and `btst %d1,(4,%pc,%d2)` is `033b 2804`,
 # both assembled by `m68k-elf-as -mcpu=5307`.
 #
-# Why the immediate is out, and why the assembler does not settle it. See the
-# `eaBitDynamic` doc comment in `decode_types.nim` for the manual rows and the
-# toolchain measurements. The short form: MCF5307 User's Manual Table 3-13
-# (page 3-28) dashes the `#xxx` column of the `btst Dy,<ea>` row, and that
-# dash is the same mark the table uses for every form this part does not have.
+# WHY THE IMMEDIATE IS OUT, AND WHY THE ASSEMBLER DOES NOT SETTLE IT. See the
+# `eaBitDynamic` doc comment in `decode_types.nim`. The short form: the timing
+# table dashes the `#xxx` column of the `btst Dy,<ea>` row, and that dash is
+# the same mark the table uses for every form this part does not have.
 # `m68k-elf-as -mcpu=5307` does assemble `btst %d1,#5` as `033c 0005`, and
 # that acceptance is byte-for-byte the plain-68000 one - the assembler
 # narrows the static bit-operation modes for ColdFire and leaves this form
@@ -586,11 +536,10 @@ block:
 # ---------------------------------------------------------------------------
 # `eaDataAddressing` - the manual's DATA class, which does not include `An`.
 # It is the source mask of the `<ea> op Dn -> Dn` direction of AND and OR, and
-# those two only. Both read and neither writes, so the PC-relative pair and
-# the immediate are in and the address register is out. MCF5307 User's Manual
-# Table 3-13: the `and.l <ea>,Rx` row on page 3-28 and the `or.l <ea>,Rx` row
-# on the CONTINUATION PAGE 3-29 carry a time in every column including `#xxx`,
-# where both read `1(0/0)`. The table spans two pages.
+# THOSE TWO ONLY. Both READ and neither writes, so the PC-relative pair and
+# the immediate are in and the address register is out. The `and.l <ea>,Rx` and
+# `or.l <ea>,Rx` rows of the timing table carry a time in every column
+# including `#xxx`.
 #
 # Measured: `m68k-elf-as -mcpu=5307` accepts `and.l (4,%pc),%d1` (`c2ba 0004`)
 # and rejects `and.l %a0,%d1`; `c0bc 0000 0005` disassembles as `andl #5,%d0`
@@ -677,9 +626,8 @@ block:
   checkMask(eaIsLegalFor(opAsl, decodeEa(0x3C'u16)), false,
     "the shift mask rejects an immediate")
 
-  # One illegal mode per shift operation. The memory form is the encoding that
-  # carries an effective address at all, and these cases assert that the core
-  # refuses it.
+  # ONE ILLEGAL MODE PER SHIFT OPERATION. The memory form is the encoding that
+  # carries an effective address at all.
   #
   # THEY DO NOT ATTRIBUTE THE REFUSAL TO THE MASK. `decodeShift` gives the
   # memory form `size: 2`, so `execShift`'s guards - the `{eaDn}` mask and the
@@ -705,10 +653,8 @@ block:
   # dirty X and asserts the value the shift put there rather than the value it
   # inherited.
   # ASL LEAVES V CLEAR EVEN HERE, where the sign leaves the word and the 68K
-  # rule would set it. CFPRM folio 4-12: V "Always cleared", and "Note that
-  # CCR[V] is always cleared by ASL and ASR, unlike on the 68K family
-  # processors"; folio 4-11: "The overflow bit is always zero". The case enters
-  # with V SET.
+  # rule would set it: on this family V is always cleared by ASL and ASR. The
+  # case enters with V SET.
   expectD(runIns([0xE380'u16], d = [0x80000000'u32, 0, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrV),
     0, 0'u32, srBase or ccrC or ccrX or ccrZ,

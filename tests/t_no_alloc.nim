@@ -235,7 +235,6 @@ check((taken: taken(beforeRegisters, afterRegisters), readBack: readBack),
       (taken: noneTaken, readBack: seedD0),
       "mcf5307_set_reg and mcf5307_get_reg allocate nothing")
 
-# The property under test.
 check(taken(beforeExec, afterExec), noneTaken,
       "mcf5307_exec allocates nothing over ten million instructions")
 

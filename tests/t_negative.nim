@@ -1,34 +1,5 @@
-## `t_negative` - the negative corpus. Encodings the core must refuse, and the
+## `t_negative` - the negative corpus. Encodings the core must REFUSE, and the
 ## legal neighbours it must still execute.
-##
-##   The refused encodings: `DBRA`, `EXG`,
-##   `ROL`, a memory shift, `MOVEM -(An)`, byte arithmetic, word arithmetic
-##   apart from `MULS.W`, `MULU.W`, `DIVS.W` and `DIVU.W`, and `Bcc` with an
-##   8-bit displacement of `0xFF`. Each is placed at the reset program counter
-##   and run through the shipped path, and the whole machine state is compared
-##   rather than the fault bit alone.
-##
-##   The legal neighbours, and why a negative corpus is worthless without
-##   them. "This encoding is refused" is satisfied by a core that refuses
-##   everything, so a corpus of refusals alone passes against a decoder that
-##   is broadly broken, and passes in exactly the way it passes when the core
-##   is right. Every refused encoding here therefore names a neighbour: a
-##   legal encoding one field away from it, which the core must still execute.
-##   A decoder that over-refuses reddens on the neighbour in the same run that
-##   it stays green on the refusal.
-##
-##   The four 16-bit multiply and divide forms are neighbours of exactly this
-##   kind: they are carved out of the same "word arithmetic must trap" clause
-##   that puts `ADD.W` in the trap set, so they are the sharpest available
-##   control on that clause. A negative case that asserts a trap for a legal
-##   instruction pins a defect, and `MULS.W`, `MULU.W`, `DIVS.W` and `DIVU.W`
-##   are where that standard bites.
-##
-##   The pairing and the oracle are themselves asserted, not left to
-##   convention. A refusal added without a neighbour, and a case whose
-##   recorded assembler evidence contradicts its own expected outcome, are
-##   both adjudicated below. Without those two the corpus could drift back
-##   into a list of refusals whose only oracle is what somebody believed.
 ##
 ## The expected values are not transcribed. Each
 ## encoding in `conformance/corpus/negative_00.json` was emitted by
@@ -39,17 +10,7 @@
 ## assembler's and not this project's, which is what keeps the corpus from
 ## being a transcription of a belief about the part.
 ##
-## What this suite does not assert, stated so its silence is not read as
-## coverage. A neighbour is adjudicated on whether it was refused and never on
-## what it computed. The arithmetic and the condition codes of these
-## instructions belong to `t_alu`, `t_logic`, `t_move` and the positive
-## corpora, and repeating them here would be a second home for a fact with an
-## owner.
-##
-## How the ground is divided with `t_lines`: that suite owns the line-A and
-## line-F opcode spaces, exhaustively - space this core declines to claim - and
-## this suite is the removed 68000 instructions, which live in lines the core
-## does claim and decode. No encoding here is in line A or line F.
+## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import std/json
 import std/strutils
@@ -206,8 +167,6 @@ type Outcome = object
   pc: uint32
 
 proc runCase(c: Case): Outcome =
-  ## Place one encoding at the reset program counter, seed the registers, and
-  ## run one `mcf5307_exec`.
   for i in 0 ..< memSize:
     board.bytes[i] = 0'u8
   for index, word in c.words:
@@ -237,17 +196,12 @@ proc runCase(c: Case): Outcome =
 # The decoder's answer, asked of the legal encodings only. The asymmetry is
 # deliberate and it is the one place this suite declines to make a claim.
 #
-# Refusal in this core is not decided in one place, which is measured and not
-# assumed. Of the refused encodings here, `decodeWord` returns
-# `opIllegal` for one. The others reach an operation and are refused by
-# an executor arm instead - `cpu.nim` documents that contract for each group,
-# naming an illegal size, an illegal effective address and the 32-bit branch
-# displacement - and two of them are refused under an alias, the encoding
-# being read as a legal opcode at a size this part does not have. So "which
-# layer refuses this encoding" is a fact about how the core is built, and a
-# per-case expectation for it would be a transcription of the implementation
-# rather than a requirement the part imposes. This suite asserts the
-# requirement, which is that the encoding does not execute, and the machine
+# REFUSAL IN THIS CORE IS NOT DECIDED IN ONE PLACE. A refused encoding may
+# reach `opIllegal` in the decoder or be refused by an executor arm instead, so
+# "which layer refuses this encoding" is a fact about how the core is built,
+# and a per-case expectation for it would be a transcription of the
+# implementation rather than a requirement the part imposes. This suite asserts
+# the requirement, which is that the encoding does not execute, and the machine
 # runs below are where it does that.
 #
 # The converse is a requirement and is asserted. A legal encoding must reach

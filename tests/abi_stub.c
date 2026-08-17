@@ -1,12 +1,11 @@
 /* abi_stub.c - one definition, with an empty body and external linkage, of
  * every function `include/mcf5307.h` declares.
  *
- * Cases 3 and 4 of `t0_abi_header` compile AND link, and linking is what makes
- * a renamed declaration a link error rather than nothing at all.
- * `-fsyntax-only` never links, so the two header compiles alone cannot catch a
- * rename. The real implementation cannot supply the definitions either: it
- * depends on this contract, so a check that waited for it could never pass.
- * This stub breaks that circle.
+ * WHY IT EXISTS. Cases 3 and 4 of `t0_abi_header` COMPILE AND LINK, and
+ * linking is what makes a RENAMED declaration a link error rather than
+ * nothing at all. `-fsyntax-only` never links, so the two header compiles
+ * alone cannot catch a rename. This stub supplies the definitions the real
+ * implementation does not yet carry.
  *
  * `cmake/Nim.cmake` step 4a, part three compiles this file, reads the symbols
  * the object defines with `nm`, and compares that set against the published
@@ -26,24 +25,16 @@
  * here would resolve nothing there, so the gate refuses that and says nothing
  * about a `static` name the contract never declared.
  *
- * A link error needs a reference as well as a definition. `t0_abi_header.c`
- * and `t0_abi_header.cpp` take their addresses from a fixed list of their
- * own, and neither one names `mcf5307_set_reg`, `mcf5307_get_reg`,
- * `mcf5307_halted` or `mcf5307_faulted`. A rename of those four is therefore
- * caught by nothing in `t0_abi_header`, whatever this file defines. That gap
- * belongs to those two files.
- *
- * `tests/abi_smoke.cpp` does take the address of every published name,
- * through `tests/abi_smoke_symbols.inc`, and step 4a holds that list against
- * the contract in both directions.
+ * `tests/abi_smoke.cpp` does take the address of EVERY published name, through
+ * `tests/abi_smoke_symbols.inc`, and step 4a holds that list against the
+ * contract in both directions. That gate is what keeps the word `every` true,
+ * and it is why no number is written beside it.
  */
 
 #include <stddef.h>
 #include <stdint.h>
 
 #include "mcf5307.h"
-
-/* ---------------------------------------------------------------- CPU core */
 
 void mcf5307_runtime_init(void)
 {
@@ -137,8 +128,6 @@ void mcf5307_state_load(mcf5307_ctx* ctx, const void* src)
     (void)ctx;
     (void)src;
 }
-
-/* ------------------------------------------------ ISP1181 USB device model */
 
 isp1181_ctx* isp1181_create(void* user, isp1181_irq_fn irq, isp1181_tx_fn tx)
 {

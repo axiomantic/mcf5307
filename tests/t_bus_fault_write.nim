@@ -1,29 +1,21 @@
-## `t_bus_fault_write` - the imprecise stacked program counter of an operand
+## `t_bus_fault_write` - the IMPRECISE stacked program counter of an operand
 ## write fault.
 ##
-## The citations below are to Motorola, "MCF5307 ColdFire Integrated
-## Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998. Each
-## names its section, table and folio page, and each was read as a rendered page
-## image rather than from any transcription.
-##
-## This suite asserts that the fault was taken and that the write instruction's
-## register write-back completed. It does not assert the stacked program
+## WHAT THIS SUITE ASSERTS, AND THE OMISSION IS THE POINT RATHER THAN A GAP.
+## It asserts that the fault was TAKEN and that the write instruction's
+## register write-back COMPLETED. It does NOT assert the stacked program
 ## counter, and no expected value in this file carries one.
 ##
-## User's Manual section 3.5.1, folio 3-15, verbatim, on an access error taken
-## for an operand write: "Because the actual write cycle may be decoupled from
-## the processor's issuing of the operation, the signaling of an access error
-## appears to be decoupled from the instruction that generated the write.
-## Accordingly, the PC contained in the exception stack frame merely represents
-## the location in the program when the access error was signaled. All
+## The write cycle may be decoupled from the processor's issuing of the
+## operation, so the PC in the exception stack frame merely represents the
+## location in the program when the access error was signaled, and all
 ## programming model updates associated with the write instruction are
-## completed."
+## completed.
 ##
-## So a pinned program counter would be a defect in this file and not a
-## measurement. Table 3-1, folio 3-13, gives vector 2 a stacked program counter
-## of "Fault", which its own footnote defines as "the PC of the instruction
-## that caused the exception" - and folio 3-15 withdraws exactly that for the
-## write direction. A case that held the frame's second longword to any literal
+## SO A PINNED PROGRAM COUNTER WOULD BE A DEFECT IN THIS FILE AND NOT A
+## MEASUREMENT. The general rule stacks the PC of the instruction that caused
+## the exception, and the write direction withdraws exactly that. A case that
+## held the frame's second longword to any literal
 ## would go red against a core that reported at a different point in the write
 ## pipeline, which is behaviour the manual permits; the reader would then be
 ## told a correct core is broken.
@@ -78,12 +70,10 @@ template check(ok: bool; label: string; got: string; want: string) =
 # The board. One flat byte array, big-endian, which refuses exactly one
 # longword and reports `MCF5307_BUS_FAULT` for it.
 #
-# The refused row is the one that is real silicon. User's Manual section 3.5.1,
-# folio 3-14, verbatim: "For the MCF5307 processor, access errors are only
-# reported in conjunction with an attempted store to a write-protected memory
-# space. Thus, access errors associated with instruction fetch or operand read
-# accesses are not possible." A store to write-protected space is therefore the
-# only access this suite can drive that a real MCF5307 would also fault on.
+# THE REFUSED ROW IS THE ONE THAT IS REAL SILICON. On this part an access error
+# is reported only for an attempted store to write-protected space, so such a
+# store is the only access this suite can drive that a real MCF5307 would also
+# fault on.
 #
 # An access past the array is counted and not only refused. The count separates
 # a run that stacked its frame on the board from one that did not, without
@@ -96,9 +86,9 @@ const
   accessHandler = 0x600'u32
   protectedWord = 0x0C00'u32 ## the one longword this board refuses to store
   openWord = 0x0900'u32      ## a longword the same board stores
-  frameBase = 0x7F8'u32      ## Table 3-2: 0x800 - 8, with FORMAT 4
+  frameBase = 0x7F8'u32      ## 0x800 - 8, with FORMAT 4
   startSp = 0x800'u32
-  vecAccess = 2'u8           ## Table 3-1, folio 3-13: access error, at $008
+  vecAccess = 2'u8           ## the access error, at $008
   srReset = 0x2700'u32
   opMovePost = 0x20C0'u16    ## `move.l %d0,(%a0)+`, m68k-elf-as -mcpu=5307
   opMovePre = 0x2100'u16     ## `move.l %d0,-(%a0)`, the same assembler
@@ -205,14 +195,13 @@ proc runWrite(opcode: uint16; at: uint32; a0Init: uint32;
 # program counter in the second longword, which is the one this suite reads
 # outside its asserted tuple.
 #
-# The live status register is 0x2708 and the frame's copy is 0x2700, and the
-# difference is the assertion rather than a tolerance. `takeException` copies
-# the status register before it changes it - section 3.3, folio 3-11 - so the
-# frame carries 0x2700. The write instruction then sets N from its source,
-# which is negative here, and that update lands after the faulting access.
-# That is folio 3-15's "All programming model updates associated with the write
-# instruction are completed", observed on the one register the manual's
-# sentence reaches without an addressing mode.
+# THE LIVE STATUS REGISTER IS 0x2708 AND THE FRAME'S COPY IS 0x2700, AND THE
+# DIFFERENCE IS THE ASSERTION RATHER THAN A TOLERANCE. `takeException` copies
+# the status register before it changes it, so the frame carries 0x2700. The
+# write instruction then sets N from its source, which is negative here, and
+# that update lands AFTER the faulting access. That is the rule that every
+# programming model update associated with the write instruction completes,
+# observed on the one register it reaches without an addressing mode.
 #
 # The address register is the second half of the same sentence. `(%a0)+`
 # updates A0, and the updated value survives the fault rather than being rolled

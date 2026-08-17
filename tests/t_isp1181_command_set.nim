@@ -45,7 +45,7 @@ template check(ok: bool; label: string; got: string; want: string) =
   checkImpl(site, ok, label, got, want)
 
 # ---------------------------------------------------------------------------
-# The window, from design section 9.2's table.
+# The window.
 
 const
   dataPort = 0x13000000'u32
@@ -431,10 +431,9 @@ check(strayRead == wantStrayRead,
 # ---------------------------------------------------------------------------
 # Block 6. The five FIFOs.
 #
-# The geometry table is the case that pins the EP3 correction. The design
-# document's "double" for endpoint 3 is wrong: the endpoint table marks
-# double-buffering where it exists and leaves EP3 unmarked. A model with one
-# buffer too many accepts a
+# THE GEOMETRY TABLE IS THE CASE THAT PINS THE EP3 CORRECTION. The authority
+# marks double-buffering where it exists and leaves EP3 unmarked, so the design
+# document's "double" for endpoint 3 is wrong. A model with one buffer too many accepts a
 # second packet the hardware would have NAKed, so the row below is a behaviour
 # and not a size.
 

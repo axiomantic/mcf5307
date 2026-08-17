@@ -1,13 +1,5 @@
 ## `t_isp1181` - the ISP1181 model driven by synthetic transactions.
 ##
-## The subject is what a command byte leaves behind. Whether a byte is accepted
-## is settled elsewhere; what is settled here is what an accepted command does
-## to the transfer already in flight, what a refused one does to it, and what
-## the data port carries afterwards. Those are the sites where a plausible wrong
-## answer is cheapest to produce: a latch that survives a re-issued command, a
-## refusal that half-cancels a transfer, and a data port that answers zero
-## without saying why all look like ordinary behaviour from the firmware's side.
-##
 ## Every opcode and every log line below is a hand-written literal. A suite that
 ## asked the model which opcodes it implements, or that built an expected log
 ## line by calling the code that writes it, would pass against any table and any
@@ -290,11 +282,9 @@ check(boundary == wantBoundary,
 # buffer is ordinary flow control and an oversized packet is a fault in
 # whatever produced it, and a reader separates them by the packet's size and
 # the buffer's occupancy rather than by two different sentences. The full-buffer
-# refusal is driven on endpoint 3, which holds one packet: the design document
-# reads double there and the endpoint table, which marks double-buffering where
-# it exists, leaves that endpoint unmarked. A buffer too many would
-# accept the second packet, so the refusal is the assertion and the count is
-# not.
+# refusal is driven on endpoint 3, which holds ONE packet. A buffer too many
+# would accept the second packet, so the refusal is the assertion and the count
+# is not.
 type Refusals = tuple[full: seq[string], oversize: seq[string]]
 
 proc refusalLines(): Refusals =
@@ -463,9 +453,8 @@ check(deliveries == wantDeliveries,
 # ---------------------------------------------------------------------------
 # Block 4. The SOFTCT bit.
 
-# SOFTCT is bit 0 of the mode byte and nothing else. The mode register puts
-# SOFTCT at `0x01`, with six other bits
-# beside it in the same byte. The rows that matter are the ones where the bit
+# SOFTCT IS BIT 0 OF THE MODE BYTE AND NOTHING ELSE. The rows that matter are
+# the ones where the bit
 # and the byte disagree: `0xFE` is every other bit set with SOFTCT clear, and
 # `0x80` is a single unrelated bit. A model reading the byte's truth rather
 # than the bit's answers both of those wrongly and answers `0x00` and `0x01`

@@ -1,27 +1,9 @@
 ## `t_control` - control flow and comparison.
 ##
-## The MCF5307 User's Manual is the document every table and page cited below
-## refers to: Motorola, "MCF5307 ColdFire Integrated Microprocessor User's
-## Manual", order number MCF5307UM/AD, (c) 1998. It is not in this repository
-## and may not be copied into it, which is why every citation below names its
-## table, page and row instead of quoting.
-##
-## Why this file exists beside `mcf5307_conformance_control`. That corpus is
-## positive cases: encodings this part has, run against an expected state. A
-## positive corpus cannot see a wrongly-claimed encoding, because a stolen
-## encoding produces a passing execution of a different instruction. Two
-## shapes have shipped that way - a decoder arm claiming another opcode's
-## encoding, and an operand the mask admitted and the executor refused - and
-## neither reached a corpus case.
-##
-## An example this group carries: `decode.nim`'s ADDQ and SUBQ arms once
-## matched on `word and 0xF100` alone and claimed every `0101 cccc 11 <ea>`
-## word - 1024 words, of which 128 are `Scc Dn`, three are TRAPF and none are
-## DBcc - as an ADDQ or a SUBQ whose size field was the illegal `11`. Every
-## one of them trapped, because `alu.nim` traps a size of zero, and a trap is
-## what an unimplemented opcode looks like. The repair is the
-## `sizeField(word) != 0` guard those two arms now carry, and
-## `scc_is_not_an_addq` below is what holds it.
+## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_control`. That corpus is
+## POSITIVE cases: encodings this part has, run against an expected state. A
+## positive corpus CANNOT SEE a wrongly-claimed encoding, because a stolen
+## encoding produces a PASSING EXECUTION OF A DIFFERENT INSTRUCTION.
 ##
 ## EVERY CASE ASSERTS A COMPLETE TUPLE, never one field, exactly as `t_alu`,
 ## `t_move` and `t_logic` do.
@@ -220,10 +202,8 @@ template checkMask(got: bool; want: bool; label: string) =
   static: declaredSites.add(site)
   checkMaskImpl(site, got, want, label)
 # The dirty condition codes an instruction of this group must carry through
-# untouched. NOP, BRA, BSR, Bcc, JMP, JSR and Scc write no flag at all -
-# MCF5307 User's Manual Table 3-7, "Instruction Set Summary", pages 3-23 and
-# 3-25, gives each of them an OPERATION column that names no condition code -
-# so every one of them is entered with all five set and asserted unchanged.
+# untouched. NOP, BRA, BSR, Bcc, JMP, JSR and Scc write no flag at all, so
+# every one of them is entered with all five set and asserted unchanged.
 const allDirty = srBase or ccrN or ccrZ or ccrV or ccrC or ccrX
 
 # The seeded register file every trap case starts from.
@@ -235,8 +215,7 @@ const trapA: array[8, uint32] = [dirtyA, 0, 0, 0, 0, 0, 0, 0]
 #
 # Bit k of each vector is the condition's answer when the condition-code bits
 # hold the value k - C at bit 0, V at bit 1, Z at bit 2, N at bit 3, which is
-# the layout section 3.2.1.5 of the MCF5307 User's Manual prints on page 3-8
-# and the layout `machine.nim`'s `ccrC` .. `ccrX` name.
+# the layout `machine.nim`'s `ccrC` .. `ccrX` name.
 #
 # These are literals and not a second copy of the implementation's expression.
 # A test that re-derived `(not C) and (not Z)` beside the core's own
@@ -246,12 +225,10 @@ const trapA: array[8, uint32] = [dirtyA, 0, 0, 0, 0, 0, 0, 0]
 # - exactly those with C clear and Z clear - and a reader can check that by
 # hand.
 #
-# What the manual settles and what it does not. It gives the
-# condition-code bits (section 3.2.1.5, page 3-8) and it names the wildcard
-# `cc` as "Logical Condition (example: NE for not equal)" in Table 3-6, whose
-# `cc` row is on page 3-21 where the table begins - and it prints no table of
-# the sixteen conditions and their tests anywhere. The four-bit encoding of
-# each is measured:
+# WHAT THE MANUAL ON THIS MACHINE DOES AND DOES NOT SETTLE. It gives the
+# condition-code bits and it names the wildcard `cc`, and it prints NO table of
+# the sixteen conditions and their tests anywhere. The four-bit ENCODING of
+# each is measured rather than assumed:
 # every mnemonic below was assembled by `m68k-elf-as -mcpu=5307`, which put
 # `bhi` at 0x62, `bls` at 0x63, `bcc` at 0x64, `bcs` at 0x65, `bne` at 0x66,
 # `beq` at 0x67, `bvc` at 0x68, `bvs` at 0x69, `bpl` at 0x6a, `bmi` at 0x6b,
@@ -325,9 +302,8 @@ block:
 # ---------------------------------------------------------------------------
 # Block 2. The sixteen conditions, through `Scc`.
 #
-# `0101 cccc 11 000 rrr` writes ones or zeros into the LOW BYTE of Dn - Table
-# 3-7, page 3-25, gives `Scc Dx` an OPERAND SIZE of 8 - so the register is
-# seeded with `DIRTY_D` and the answer is read off its low byte.
+# `0101 cccc 11 000 rrr` writes ones or zeros into the LOW BYTE of Dn, so the
+# register is seeded with `DIRTY_D` and the answer is read off its low byte.
 #
 # BOTH TABLES ARE RUN THROUGH THE SAME SIXTEEN VECTORS ON PURPOSE. `Bcc` and
 # `Scc` must read ONE condition evaluator.
@@ -397,8 +373,8 @@ block:
 block:
   # `4ac0 | <ea>` is TAS and not a `TST` whose size field is 11. Measured:
   # `4ad0` decodes as `tas %a0@` on `m68k-elf-objdump -m m68k:68020` and as
-  # `.short 0x4ad0` on `-m m68k:5307`. Manual section 3.9, page 3-21, lists the
-  # removed instructions and Table 3-12 has no `tas` row at all. If `TST` were
+  # `.short 0x4ad0` on `-m m68k:5307`, and no timing table carries a `tas` row
+  # at all. If `TST` were
   # decoded on `word and 0xFF00 == 0x4a00` without a size guard, this word
   # would become a `TST` of size zero.
   expectDecode(0x4AD0'u16, opIllegal, "tas (%a0) (4ad0) is not a TST")
@@ -434,9 +410,7 @@ block:
   # Three words inside `0101 cccc 11 <ea>` are TRAPF and not Scc, and TRAPF is
   # not implemented. Measured with the pinned assembler under `-mcpu=5307`:
   # `trapf` assembles to `51fc`, `trapf.w #1` to `51fa 0001` and `trapf.l #1`
-  # to `51fb 0000 0001`. Table 3-7, page 3-25, carries the row
-  # `TRAPF | none/#<data> | none,16,32 | PC+2->PC; PC+4->PC; PC+6->PC`, and
-  # Table 3-14, page 3-29, gives `trapf`, `trapf.w` and `trapf.l` a row each.
+  # to `51fb 0000 0001`.
   #
   # It is exactly three words and not a condition family. The same assembler
   # rejects `trapt`, `trapeq`, `trapne` and `traphi` under `-mcpu=5307` -
@@ -584,8 +558,8 @@ block:
     dirtyD, dirtyA, stackBase, allDirty,
     "jsr (%a0)+ (4e98) traps: postincrement is not a control operand")
 
-  # TST TAKES EVERY MODE - Table 3-12, page 3-27, has no dash in any of its
-  # three rows - EXCEPT that a BYTE operand may not be an address register.
+  # TST TAKES EVERY MODE - no `tst` row carries a dash - EXCEPT that a BYTE
+  # operand may not be an address register.
   # `m68k-elf-as -mcpu=5307` accepts `tst.w %a0` and `tst.l %a0` and REJECTS
   # `tst.b %a0`. That is a rule about the SIZE and not about the mask.
   expectTrap(runIns([0x4A08'u16], d = trapD, a = trapA, sr = allDirty),
@@ -641,16 +615,14 @@ block:
 # ---------------------------------------------------------------------------
 # Block 7. The `RTE` format field.
 #
-# MCF5307 User's Manual section 3.5.7, "RTE and Format Error Exceptions", page
-# 3-16: "any attempted execution of an RTE where the format is not equal to
-# {4,5,6,7} generates a format error". The four legal values are exactly the
-# four rows of Table 3-2 on page 3-14.
+# Any attempted execution of an RTE whose format is not in {4,5,6,7} generates
+# a format error, and those four values are exactly the rows of the format
+# field encoding.
 #
 # THIS CORE TRAPS RATHER THAN TAKING THE FORMAT-ERROR VECTOR, AND THAT IS
 # UNCERTAINTY 4 IN `control.nim`'s HEADER. Vector 14 is a real exception on
-# silicon and the exception model is CPU-14's; a trap is this core's one
-# observable for "refused", the same channel every illegal size and operand
-# uses.
+# silicon; a trap is this core's one observable for "refused", the same channel
+# every illegal size and operand uses.
 
 block:
   let frame = @[(stackBase, 0x30802703'u32), (stackBase + 4'u32, 0x00000400'u32)]
@@ -714,9 +686,9 @@ block:
 # Block 9. The masks themselves.
 #
 # `eaJumpTarget` is
-# CONTROL ADDRESSING INCLUDING `(xxx).W`: Table 3-5, page 3-21, marks the
-# absolute short row CONTROL, and page 3-26 says the timing tables' `xxx.wl`
-# column "refers to both forms of absolute addressing".
+# CONTROL ADDRESSING INCLUDING `(xxx).W`: the absolute short row is marked
+# CONTROL, and the timing tables' `xxx.wl` column refers to both forms of
+# absolute addressing.
 #
 # `(xxx).W` separates this class from MOVEM's. `m68k-elf-as -mcpu=5307`
 # accepts `lea 0x1234.w,%a0`, `pea 0x1234.w`,
@@ -758,8 +730,8 @@ block:
 
 block:
   # TST and CMP read, so both admit the PC-relative pair and the immediate,
-  # and both admit an address register. Table 3-12's three `tst` rows and
-  # Table 3-13's `cmp.l <ea>,Rx` row carry a time in every column.
+  # and both admit an address register: the `tst` rows and the
+  # `cmp.l <ea>,Rx` row carry a time in every column.
   for (field, name) in [(0x00'u16, "%d0"), (0x08'u16, "%a0"),
                         (0x10'u16, "(%a0)"), (0x18'u16, "(%a0)+"),
                         (0x20'u16, "-(%a0)"), (0x28'u16, "(d16,%a0)"),
