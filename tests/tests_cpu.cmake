@@ -3531,6 +3531,13 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/abi_smoke_implemented.h"
     "${MCF5307_ABI_SMOKE_HEADER_TEXT}")
 
 add_executable(abi_smoke ${CMAKE_CURRENT_LIST_DIR}/abi_smoke.cpp)
+# `include/` AND THE BUILD DIRECTORY ARE THE WHOLE INCLUDE PATH, and leaving the
+# nimcache and the Nim library directory off it is the point. The consumer this
+# test stands in for - `gearmulator`'s `g2Lib` - has neither on its own include
+# path. Either one added here would let `include/mcf5307.h` acquire a dependency
+# on a generated header or on `nimbase.h` and still compile under this test,
+# which is the regression the test exists to catch. The build directory is on the
+# path because `abi_smoke_implemented.h` is GENERATED into it by this file.
 target_include_directories(abi_smoke PRIVATE
     "${PROJECT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_BINARY_DIR}"
