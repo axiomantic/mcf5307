@@ -38,7 +38,7 @@
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code.
 
-import mcf5307/lines
+import ./lines
 import mcf5307/cpu
 import mcf5307/decode
 import mcf5307/decode_types
