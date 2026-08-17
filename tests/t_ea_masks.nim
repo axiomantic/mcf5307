@@ -1658,7 +1658,7 @@ block:
 # ran, so one block deleted and another of the same size added in a single
 # change passes.
 
-const caseTotalMustMatchTranscripts = 447
+const caseTotalMustMatchTranscripts = 451
   ## The total the summary line prints. Its value is written down once in this
   ## repository - here - and the sites that need the denominator name the
   ## constant instead of copying it. The case below is what refuses to let it
