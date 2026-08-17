@@ -3187,7 +3187,40 @@ add_test(NAME t_no_alloc
 # A STALE BUILD TREE REPORTS HERE. Side B globs the generated drivers, so a
 # driver left behind by a deleted suite is an extra name and is red. The repair
 # is a clean configure and never a relaxation of this check.
-file(GLOB MCF5307_SUITE_SOURCES "${CMAKE_CURRENT_LIST_DIR}/t_*.nim")
+# THIS BLOCK READS THE SUITE FILES AT CONFIGURE TIME, SO THE CONFIGURE HAS TO
+# RE-RUN WHEN THEY MOVE. Until 2026-08-17 it did not, and the check above was
+# the one thing a suite edit could not reach: a configure hard-fails on an
+# unregistered suite, and the trigger for that failure is the `import
+# ./case_sites` line this loop reads - so the ONE mechanism that catches an
+# unregistered suite was exactly the mechanism a suite edit failed to re-run.
+# MEASURED 2026-08-17 against `CMakeFiles/Makefile.cmake`: CMake recorded 30
+# source-tree configure dependencies and `t_*.nim` matched none of them, so
+# adding a suite and building reported success while this comparison spoke
+# about the previous configure's set of files.
+#
+# IT TAKES BOTH LINES, AND THE SECOND IS NOT REDUNDANT. They answer two
+# different edits and neither answers the other:
+#
+#   `CONFIGURE_DEPENDS` re-globs at build time and re-runs the configure when
+#   the SET OF MATCHED FILES changes - a suite added, deleted or renamed.
+#   MEASURED: with this word alone, adding an unregistered `t_*.nim` turned an
+#   ordinary `cmake --build` red.
+#
+#   The directory property registers each matched file INDIVIDUALLY, which is
+#   what answers an edit INSIDE a file that already matched. Side A's
+#   membership turns on one line of text, so a suite can join or leave it with
+#   the glob's result set unchanged. MEASURED, with `CONFIGURE_DEPENDS` alone
+#   and no property: appending `import ./case_sites` to an existing suite that
+#   did not carry it left `cmake --build` at exit 0, while a forced configure
+#   on the same tree failed. THE GLOB WORD DOES NOT WATCH CONTENT.
+#
+# This is the pairing `cmake/Nim.cmake` already applies to `src/*.nim` for the
+# same reason, and the shape is the general one: a value read at configure time
+# is stale unless the file it was read from is a configure dependency.
+file(GLOB MCF5307_SUITE_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_LIST_DIR}/t_*.nim")
+set_property(DIRECTORY "${PROJECT_SOURCE_DIR}"
+    APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${MCF5307_SUITE_SOURCES})
 set(MCF5307_SUITES_WITH_RUNTIME_HALF "")
 foreach(mcf5307_suite_source IN LISTS MCF5307_SUITE_SOURCES)
     file(READ "${mcf5307_suite_source}" mcf5307_suite_text)
