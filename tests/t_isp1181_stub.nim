@@ -3,13 +3,8 @@
 ## The whole specification these cases assert: the stub accepts every write,
 ## returns a benign value on every read, and never raises IRQ3.
 ##
-## The CS3 window is base `0x13000000`, 64 KiB, with the data port at the base
-## and the command port at `0x13000010`.
-##
-## The stub answers at every address and decodes nothing. The board owns the CS3
-## decode and returns `MCF5307_BUS_OK` for the whole window, so an address is an
-## argument this model does not judge, and the cases below hold it to that at
-## addresses inside the window and outside it alike.
+## THE STUB ANSWERS AT EVERY ADDRESS AND DECODES NOTHING. The board owns the
+## CS3 decode, so an address is an argument this model does not judge.
 ##
 ## Every expected value below is a hand-written literal and never a second call
 ## of the procedure under test.
@@ -47,7 +42,7 @@ template check(ok: bool; label: string; got: string; want: string) =
   checkImpl(site, ok, label, got, want)
 
 # ---------------------------------------------------------------------------
-# The window, from design section 9.2's table.
+# The window.
 
 const
   cs3Base = 0x13000000'u32
@@ -56,9 +51,8 @@ const
   commandPort = 0x13000010'u32
   benignRead = 0x00'u8
 
-# The host side. THE TWO COUNTERS AND THE TWO TRANSCRIPTS ARE THE ASSERTION
-# that the stub never calls back: a count alone cannot say what a call carried,
-# and a stub that raised IRQ3 once would otherwise be reported as a number.
+# The host side. EACH COUNTER CARRIES A TRANSCRIPT BESIDE IT, because a count
+# alone cannot say what a call carried.
 
 var irqCalls = 0
 var irqFirst = ""
@@ -80,9 +74,6 @@ var hostToken = 0xC0FFEE
 
 # ---------------------------------------------------------------------------
 # BLOCK 1. The handle.
-#
-# A constructor that returns nothing is the shape of a link stub and not of a
-# device model, so the handle is asserted before anything is driven through it.
 
 let ctx = isp1181_create(addr hostToken, recordIrq, recordTx)
 
@@ -99,10 +90,8 @@ isp1181_destroy(second)
 # ---------------------------------------------------------------------------
 # BLOCK 2. Every read returns the benign value.
 #
-# The sweep reports the first address that disagreed and the number of reads it
-# performed, and both are asserted. The address is what separates a wrong value
-# from no value; the count is what separates a clean sweep from a loop that did
-# not run.
+# THE SWEEP CARRIES THE FIRST ADDRESS THAT DISAGREED AND THE NUMBER OF READS IT
+# PERFORMED.
 
 type Sweep = tuple[firstBad: string, reads: int]
 
@@ -143,10 +132,7 @@ check(outsideSweep == wantOutside,
 # ---------------------------------------------------------------------------
 # BLOCK 3. Every write is accepted and none of them becomes readable state.
 #
-# The read-back is the case and not the write. A stub that stored what it was
-# given and replayed it would accept every write and would present a working
-# register file to the firmware. Each value is written and the same address is
-# read immediately afterwards.
+# Each value is written and the same address is read immediately afterwards.
 
 proc sweepPort(handle: ISP1181Ctx; port: uint32): Sweep =
   result = (firstBad: "", reads: 0)
@@ -170,9 +156,6 @@ check(dataSweep == wantPort,
       "write: every value through the data port leaves the port benign",
       $dataSweep, $wantPort)
 
-# The whole window is written and the whole window is re-read, so a stub that
-# stored per address rather than per port is separated from one that stores
-# nothing.
 for offset in 0 ..< windowBytes:
   isp1181_write(ctx, cs3Base + uint32(offset), 0xFF'u8)
 
@@ -184,10 +167,8 @@ check(afterWrites == wantWindow,
 # ---------------------------------------------------------------------------
 # BLOCK 4. Host traffic is accepted and produces nothing.
 #
-# The endpoint numbers: interrupt IN `0x81`, bulk IN
-# `0x82`, bulk OUT `0x03` - together with the low endpoint numbers and one
-# beyond the range the full model implements. A zero length and a nil buffer
-# are driven because a caller with nothing to deliver has both.
+# A zero length and a nil buffer are driven because a caller with nothing to
+# deliver has both.
 
 const endpoints: array[7, int] = [0, 1, 2, 3, 15, 0x81, 0x82]
 const lengths: array[3, int] = [0, 1, 64]
@@ -214,12 +195,6 @@ check(rxOutcome == wantRx,
 
 # ---------------------------------------------------------------------------
 # BLOCK 5. The stub never calls the host back.
-#
-# "Never raises IRQ3" is asserted after every access above has been driven
-# rather than after a single one: a stub that raised the line on one command
-# byte would pass a narrower drive. The transmit callback is held to the same
-# rule, because a stub that invented a packet would be answering plausibly on a
-# channel it has no licence to use.
 
 type Callback = tuple[calls: int, first: string]
 
@@ -263,16 +238,6 @@ check(nilOutcome == wantNil,
 
 isp1181_destroy(ctx)
 
-# ---------------------------------------------------------------------------
-# Block 7. The context's field set.
-#
-# The field set is asserted as a whole and never field by field. One of the
-# requirements is a negative - no SOFTCT timer field - and a negative is only
-# checkable against a closed set. A per-field assertion passes with a timer
-# field sitting beside the two that were asked for.
-#
-# SOFTCT is a bit and the bit lives in the full model's mode byte. Nothing on
-# this context advances it and nothing here is a timer.
 
 type BackendShape = tuple[names: string, count: int]
 
@@ -298,9 +263,7 @@ let selector = isp1181_create(addr hostToken, recordIrq, recordTx)
 type SelectorWalk = tuple[atCreate: string, atSet: string, atSetBack: string]
 
 proc walkSelector(handle: ISP1181Ctx): SelectorWalk =
-  # The walk moves the selector and moves it back. A setter that ignored its
-  # argument and a setter that latched on the first call are different defects,
-  # and only the return leg separates them.
+  # THE WALK MOVES THE SELECTOR AND MOVES IT BACK.
   let atCreate = $backend(handle)
   setBackend(handle, FullModel)
   let atSet = $backend(handle)
@@ -336,15 +299,9 @@ check(ctxFields == wantCtxFields,
 # module's constant. A test that imported the constant would move with it under
 # mutation and would assert that the code agrees with itself.
 #
-# The width is the USB specification's frame-number field and not a measured
-# device fact. No ISP1181 datasheet exists on this machine.
-#
-# The counter's no-op value is zero, which is why a first-mismatch assertion is
-# not enough on its own. A counter that never advanced reads 0, and so does one
-# that completed a full cycle. The cycle case therefore asserts the value at
-# every tick against the tick index, the highest value seen, and the number of
-# ticks taken - so a counter that stood still, one that stopped early and one
-# that ran past its width are three different reds.
+# THE COUNTER'S NO-OP VALUE IS ZERO, WHICH IS WHY A FIRST-MISMATCH ASSERTION IS
+# NOT ENOUGH ON ITS OWN. A counter that never advanced reads 0, and so does one
+# that completed a full cycle.
 
 const frameModulus = 2048       ## Hand-written. Not the module's constant.
 
@@ -377,9 +334,6 @@ check(cycle == wantCycle,
         "exactly one per tick and ends where it began",
       $cycle, $wantCycle)
 
-# The wrap on its own, because the cycle case above passes its own start and
-# end value through the same wrap and a reader should not have to take the
-# discriminating step on trust.
 let wrapping = isp1181_create(addr hostToken, recordIrq, recordTx)
 advanceFrames(wrapping, 2047)
 
@@ -441,16 +395,9 @@ check(bulkOutcome == wantBulk,
 # ---------------------------------------------------------------------------
 # Block 9. The four entry points branch on the selector and reach the backend.
 #
-# Each case drives the same bytes through both backends and asserts the pair.
-# The pair is the assertion and a single side is not. A branch that was written
-# and never taken answers with the stub on both sides; a branch that lost the
-# stub answers with the model on both. Only the pair separates either from a
-# selector that works - which is the same reason an empty function body links
-# and satisfies a symbol check.
-#
-# The command bytes: `0xBA` writes the hardware configuration, `0xBB` reads it
-# back, `0x20` configures endpoint 0 and `0xD2` peeks the buffer that endpoint's
-# deliveries land in. `0x2300` is the firmware value.
+# THE COMMAND BYTES: `0xBA` writes the hardware configuration, `0xBB` reads it
+# back, `0x20` configures endpoint 0 and `0xD2` peeks the buffer that
+# endpoint's deliveries land in.
 
 const
   hwConfigWrite = 0xBA'u8
@@ -490,10 +437,8 @@ proc peekEndpoint0(handle: ISP1181Ctx): uint8 =
 proc driveRx(select: ISP1181Backend): string =
   let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
   setBackend(handle, select)
-  # A caller with nothing to deliver must not occupy a buffer, and endpoint 0
-  # OUT is single-buffered. An empty delivery that took the slot would make the
-  # real packet below a NAK, and the peek would then answer absent - so this
-  # line is what separates "nothing was delivered" from "an empty packet was".
+  # A CALLER WITH NOTHING TO DELIVER MUST NOT OCCUPY A BUFFER, and endpoint 0
+  # OUT is SINGLE-buffered.
   isp1181_rx(handle, cint(0), nil, csize_t(0))
   var packet = packetBytes
   isp1181_rx(handle, cint(0), addr packet[0], csize_t(packet.len))
@@ -508,10 +453,8 @@ check(rxPair == wantRxPair,
         "says",
       $rxPair, $wantRxPair)
 
-# Destroy releases the selected backend, and the read after it is the only
-# thing that can tell a release from a branch that did nothing. A destroyed
-# handle answers benignly rather than aborting, which is the posture a nil
-# handle already requires.
+# DESTROY RELEASES THE SELECTED BACKEND. A destroyed handle answers benignly
+# rather than aborting, as a nil handle does.
 type DestroyWalk = tuple[before: string, after: string]
 
 proc driveDestroy(select: ISP1181Backend): DestroyWalk =
@@ -536,9 +479,7 @@ check(destroyPair == wantDestroyPair,
         "nothing to release",
       $destroyPair, $wantDestroyPair)
 
-# The host is still silent after the full model has been driven. Block 5
-# asserted this over the stub alone, and the selector adds a path that block
-# could not reach.
+# THE HOST IS STILL SILENT AFTER THE FULL MODEL HAS BEEN DRIVEN.
 type Callbacks = tuple[irq: Callback, tx: Callback]
 
 let callbacksAfter: Callbacks = (irq: (calls: irqCalls, first: irqFirst),
@@ -551,9 +492,6 @@ check(callbacksAfter == wantCallbacksAfter,
 
 # ---------------------------------------------------------------------------
 # BLOCK 10. The Nim-side accessors answer a nil handle.
-#
-# The five C entry points already do, and these accessors are reachable from the
-# same plugin host through the state entry points.
 
 type NilAccess = tuple[atStart: string, frame: uint16, afterAdvance: uint16,
                        afterSet: string]

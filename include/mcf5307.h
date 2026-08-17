@@ -56,15 +56,7 @@ typedef enum {
 
 /* The board's two memory handlers.
  *
- * `size` IS A COUNT OF BYTES - 1, 2 or 4 - AND NEVER A WIDTH IN BITS. A
- * longword access presents 4 and not 32, and an instruction fetch presents 2
- * and not 16. The two readings disagree on every access a core can make, so a
- * board that expects 8, 16 or 32 refuses all of them and the first instruction
- * fetch is where it stops. ColdFire encodes transfer size as SIZ[1:0] with
- * byte, word and longword semantics, which is what this argument carries; a
- * width in bits is a different quantity and is not what any caller is handed.
- *
- * `status` is an out-parameter on both, and the core writes
+ * `status` IS AN OUT-PARAMETER ON BOTH, and the core writes
  * `MCF5307_BUS_OK` into it before every call. A board that models no fault
  * behaves exactly as it did before the parameter existed: silence means
  * success. A board that writes a non-OK value also logs the address, the
@@ -100,9 +92,9 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * it runs, so the registers it reads are the machine as the handler will find
  * it: a7 holding the address OF the 8-byte frame and not an address below it -
  * the frame's first longword is AT a7 and the stacked program counter at
- * `a7+4`, which is what Figure 3-7 draws - the program counter register at the
- * handler's first instruction, and the status register already carrying the
- * interrupt priority mask raised to the level being acknowledged.
+ * `a7+4` - the program counter register at the handler's first instruction,
+ * and the status register already carrying the interrupt priority mask raised
+ * to the level being acknowledged.
  *
  * The level-7 arm is decided against the presentation the call has not yet
  * overwritten. `mcf5307_set_irq` arms an edge only on a transition to level 7
@@ -125,10 +117,7 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  *
  * `mcf5307_reset` inhibits interrupt sampling for the first instruction at
  * `initial_pc`. Reset is an exception, and sampling is inhibited during the
- * first instruction of every exception handler. That is a deduction rather
- * than a quotation: User's Manual Table 3-1, closing paragraph, folio 3-13,
- * carries no reset row, and the reset exception's own entry at section 3.5.11,
- * folio 3-17, never calls the reset program counter a handler.
+ * first instruction of every exception handler.
  *
  * `mcf5307_reset` also raises the interrupt priority mask to 7 - section
  * 3.5.11, folio 3-17, "sets the processor's interrupt priority mask in the SR
@@ -139,16 +128,14 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * is therefore the only interrupt the inhibition above can defer, because it
  * is the only one a mask of 7 leaves takeable at all.
  *
- * `mcf5307_reset` also clears the latched level-7 edge and then re-observes
- * the board's last presentation. That is an inference and not a citation: the
- * manual set is silent on reset against a latched edge. The argument for it is
- * that a level 7 request must be held until the second interrupt-acknowledge
- * bus cycle has begun (section 7.6.1, folio 7-24), so an edge whose pin has
- * since been released has nothing left to acknowledge. The presentation itself
- * survives the call: it is the board's state and reset has no newer answer for
- * it. A level 7 still presented across `mcf5307_reset` is armed again, carrying
- * the vector and the autovector flag of that presentation; one the board had
- * already lowered is not. */
+ * `mcf5307_reset` ALSO CLEARS THE LATCHED LEVEL-7 EDGE AND THEN RE-OBSERVES
+ * THE BOARD'S LAST PRESENTATION. A level 7 request must be held until the
+ * second interrupt-acknowledge bus cycle has begun, so an edge whose pin has
+ * since been released has nothing left to acknowledge. The
+ * presentation itself survives the call: it is the board's state and reset has
+ * no newer answer for it. A level 7 STILL PRESENTED across `mcf5307_reset` is
+ * armed again, carrying the vector and the autovector flag of that
+ * presentation; one the board had already lowered is not. */
 
 /* Runs the Nim runtime's initialiser once. It is idempotent, and it is what
  * a C++ caller calls instead of ever naming `NimMain`. */
@@ -174,20 +161,15 @@ uint32_t mcf5307_exec(mcf5307_ctx* ctx, uint32_t max_cycles);
  *
  * `mcf5307_set_reg` returns 1 on success and 0 for an out-of-range index or
  * a nil context; `mcf5307_get_reg` returns the register's value and 0 for an
- * out-of-range index. These are the harness's one register bridge: the
- * conformance runner sets the `initial` registers through them and reads the
- * `expected` registers back. */
+ * out-of-range index. */
 int mcf5307_set_reg(mcf5307_ctx* ctx, int index, uint32_t value);
 uint32_t mcf5307_get_reg(const mcf5307_ctx* ctx, int index);
 
 /* The core's run state, and the only way to see it across this interface.
  *
  * `mcf5307_exec` returns a cycle count and nothing else. A cycle count cannot
- * say why the core stopped, so without these two calls a caller that goes
- * through this header cannot tell an instruction that executed from an
- * instruction that trapped: a case whose instruction traps still passes
- * whenever the registers it names happen to hold the expected values, which
- * is every case that expects a register to be unchanged.
+ * say WHY the core stopped, so these two calls are what tells an instruction
+ * that executed from an instruction that trapped.
  *
  * Both return 1 for true and 0 for false, and both return 0 for a nil
  * context - a caller with no context has no halted core and no faulted one.

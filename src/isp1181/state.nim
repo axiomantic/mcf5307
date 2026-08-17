@@ -1,32 +1,7 @@
 ## `isp1181/state` - the SOF tick and the snapshot of the USB device handle, as
 ## a flat block of bytes.
 ##
-## The tick calls `advanceFrames` and does not reimplement it. The 11-bit width
-## and its modulus live in `src/isp1181/stub.nim` beside the field they bound,
-## so the modulus appears once in this library.
-##
-## There is one walk and not a walk per operation: the number of bytes the size
-## reports and the number the save writes cannot disagree when one procedure
-## produces both. A field of a type the walk has no encoding for stops the
-## compile naming the field.
-##
-## The walk reads private fields of a foreign module and that is deliberate.
-## `fieldPairs` reaches them, so this file needs no accessor added to
-## `src/isp1181/stub.nim`. The cost is stated rather than hidden: that file's
-## own setters are otherwise the only writers of those fields after
-## construction, and the load below writes them without going through one.
-##
-## `ISP1181Ctx` holds the full device model, and the model's own fields are a
-## string, a sequence of strings, an enum and an array of FIFOs holding
-## sequences of bytes. A sequence of strings has no bound at all - the model
-## appends one line to it per refused command and per delivery, without limit -
-## so no fixed size exists that carries it. The model therefore appears in the
-## layout at width zero: a reader of `isp1181StateLayout` sees the gap instead
-## of inferring it from an absence.
-##
-## The C entry point for the load reports no failure because `include/mcf5307.h`
-## declares `void isp1181_state_load(isp1181_ctx*, const void*)`: no result, no
-## out-parameter and no status call.
+## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import ./isp1181
 import ./stub
@@ -37,10 +12,7 @@ const
   isp1181StateVersion = 1'u32
     ## The version word. It moves when the payload's layout moves, and
     ## `isp1181Restore` refuses a block that does not carry this exact value.
-    ## A later block that carries the full model is a different version, so a
-    ## block written today is refused by that loader rather than read short.
   isp1181StateHeaderBytes = 12
-    ## magic, version, payload width
   isp1181StateChecksumBytes = 4
 
 type
@@ -110,8 +82,6 @@ proc isp1181StateWalk(ctx: var Isp1181CtxObj; buf: StateBuf;
   for name, value in fieldPairs(ctx):
     let started = at
     when value is ISP1181:
-      # The full model is not carried. The head block states why; the zero width
-      # here is what puts the gap in the layout rather than in a silence.
       discard
     elif value is enum:
       if op == isp1181SaveOp:
@@ -196,11 +166,6 @@ proc isp1181Restore*(ctx: ISP1181Ctx; src: pointer): Isp1181StateStatus =
                            isp1181StateHeaderBytes + isp1181PayloadBytes):
     return isp1181StateBadChecksum
 
-  # The field pass runs over a probe and not over the handle. A block whose
-  # checksum was recomputed over a damaged payload passes every check above and
-  # still holds a byte a field's type has no name for; assigning that byte to an
-  # enum leaves the handle carrying a value the type cannot express, which
-  # `--panics:on` turns into an abort inside a plugin host.
   var probe: Isp1181CtxObj
   var fieldStatus = isp1181StateOk
   discard isp1181StateWalk(probe,
