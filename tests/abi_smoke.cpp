@@ -34,6 +34,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 #include "mcf5307.h"
 
@@ -45,14 +46,6 @@ namespace {
  *
  * Every entry has the EXACT function-pointer type the header declares, so
  * the address-of expression is well typed and the compiler does not warn.
- *
- * The pointers are stored in a `volatile` array of `void const*`. The
- * `volatile` qualifier is what keeps the compiler honest: without it, the
- * compiler can prove the array is read only through `abi_addr_all[0]`,
- * elide the rest, and then elide the address-of expressions that fed
- * them. With `volatile`
- * the compiler must materialise every store, and the linker must resolve
- * every symbol.
  *
  * THE LIST IS NOT IN THIS FILE AND NO COUNT IS EITHER.
  *
@@ -71,20 +64,49 @@ namespace {
 
 #undef MCF5307_ABI_FN
 
-/* The same list again, as a single `volatile` array of `void const*`, so the
- * linker cannot drop any of them under `-ffunction-sections --gc-sections`
- * and still satisfy the reference.
+/* The same list again, as one array that `main` READS IN FULL AT RUN TIME.
  *
  * THE ARRAY BOUND IS DEDUCED AND IS NEVER WRITTEN. A written bound is a
- * second statement of the list's length. */
+ * second statement of the list's length.
+ *
+ * WHERE THE `volatile` SITS IS THE WHOLE MECHANISM, and putting it one
+ * position to the left silently disarms this test. `void const* const
+ * volatile` qualifies THE POINTER OBJECT: reading it is an observable side
+ * effect the compiler is not allowed to skip, so the array must exist in
+ * memory, so its initialiser's relocations must exist, so the linker must
+ * resolve every name they carry. `volatile void const* const` - one token
+ * earlier - qualifies THE POINTEE instead and leaves the array an ordinary
+ * constant that the compiler folds into the comparison and never emits at
+ * all. The `static_assert` below is what keeps the two apart, because
+ * nothing else does: both spellings compile, both look deliberate, and only
+ * one of them anchors anything.
+ *
+ * WHY THE READ IS IN `main` AND NOT AN ATTRIBUTE. `__attribute__((used))`
+ * and `retain` would also hold the symbols against a dead-stripping linker.
+ * They are rejected here for the reason this test was disarmed in the first
+ * place: NOTHING IN THE BUILD CAN CHECK THEM. An attribute a toolchain does
+ * not honour is not an error, it is silence - and silence here is a test
+ * that keeps passing while it anchors nothing, which is the exact failure
+ * this file is being repaired from. A volatile read is ordinary language
+ * semantics rather than a request the toolchain may decline, its one
+ * failure mode is the qualifier's position, and the `static_assert` above
+ * fails the build over that. Prefer the mechanism whose breakage is
+ * loud. */
 #define MCF5307_ABI_FN(name)                                                   \
     reinterpret_cast<void const*>(abi_addr_##name),
 
-volatile void const* const abi_addr_all[] = {
+void const* const volatile abi_addr_all[] = {
 #include "abi_smoke_symbols.inc"
 };
 
 #undef MCF5307_ABI_FN
+
+static_assert(
+    std::is_volatile<std::remove_extent<decltype(abi_addr_all)>::type>::value,
+    "abi_addr_all's ELEMENTS must be volatile-qualified. If this fires, the "
+    "qualifier has migrated onto the pointee and the array is a plain "
+    "constant again: the compiler may fold the reads in main, emit no array, "
+    "and let the linker drop every symbol this test exists to require.");
 
 } /* namespace */
 
@@ -97,11 +119,21 @@ int main() {
     mcf5307_runtime_init();
     mcf5307_runtime_init();
 
-    /* The link assertion already passed above: any renamed or dropped
-     * declaration produced an unresolved symbol and the linker refused
-     * the executable. The volatile read of `abi_addr_all[0]` is what
-     * keeps the compiler honest: the array is `volatile` so the read
-     * must occur, and the address is non-null so the expression is
-     * always false. */
-    return abi_addr_all[0] == nullptr ? 1 : 0;
+    /* THIS LOOP IS THE ANCHOR AND NOT A CHECK. The comparison cannot fail -
+     * every element is the address of a function - and the return value is
+     * not what this loop is for. It is here so that every element is READ,
+     * because a volatile read is what the compiler must keep and what the
+     * linker must therefore resolve. The failure this file exists to
+     * produce happens EARLIER THAN ANY OF THIS: a name the library no
+     * longer defines is an unresolved symbol and there is no executable to
+     * run.
+     *
+     * The range-`for` is what makes `every` true without writing a count. */
+    for (void const* const address : abi_addr_all) {
+        if (address == nullptr) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
