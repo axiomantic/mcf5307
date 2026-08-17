@@ -4,10 +4,8 @@
  * WHY IT EXISTS. Cases 3 and 4 of `t0_abi_header` COMPILE AND LINK, and
  * linking is what makes a RENAMED declaration a link error rather than
  * nothing at all. `-fsyntax-only` never links, so the two header compiles
- * alone cannot catch a rename. The real implementation cannot supply the
- * definitions either: it is written by a later task that depends on this
- * contract, so a check that waited for it could never pass at this task's
- * completion. This stub breaks that circle.
+ * alone cannot catch a rename. This stub supplies the definitions the real
+ * implementation does not yet carry.
  *
  * `cmake/Nim.cmake` step 4a, part three COMPILES this file, reads the
  * symbols the object defines with `nm`, and compares that set against the
@@ -30,19 +28,6 @@
  * here would resolve nothing there, so the gate refuses that and says nothing
  * about a `static` name the contract never declared.
  *
- * WHAT THIS FILE CANNOT DO ON ITS OWN. A link error needs a reference as well
- * as a definition. `t0_abi_header.c` and `t0_abi_header.cpp` take their
- * addresses from a fixed list of their own, and neither one names
- * `mcf5307_set_reg`, `mcf5307_get_reg`, `mcf5307_halted` or
- * `mcf5307_faulted`. A rename of those four is therefore still caught by
- * nothing in `t0_abi_header`, whatever this file defines. That gap belongs to
- * those two files and is not this one's to close.
- *
- * THE NAMES ARE WRITTEN HERE AND THE SIZE OF THAT LIST IS NOT. A name is
- * falsifiable against the two files that hold it - `grep -c mcf5307_halted
- * tests/t0_abi_header.c` answers this paragraph, and no reader has to trust
- * this one.
- *
  * `tests/abi_smoke.cpp` does take the address of EVERY published name, through
  * `tests/abi_smoke_symbols.inc`, and step 4a holds that list against the
  * contract in both directions. That gate is what keeps the word `every` true,
@@ -53,8 +38,6 @@
 #include <stdint.h>
 
 #include "mcf5307.h"
-
-/* ---------------------------------------------------------------- CPU core */
 
 void mcf5307_runtime_init(void)
 {
@@ -91,7 +74,7 @@ uint32_t mcf5307_exec(mcf5307_ctx* ctx, uint32_t max_cycles)
     return 0u;
 }
 
-/* The register bridge of CPU-7. `mcf5307_set_reg` returns 0, which the
+/* The register bridge. `mcf5307_set_reg` returns 0, which the
  * contract reads as "the write did not happen", and `mcf5307_get_reg` returns
  * 0. Both are the fixed benign value of a stub and neither is a register. */
 int mcf5307_set_reg(mcf5307_ctx* ctx, int index, uint32_t value)
@@ -109,7 +92,7 @@ uint32_t mcf5307_get_reg(const mcf5307_ctx* ctx, int index)
     return 0u;
 }
 
-/* The run state of CPU-5. Both return 0, which the contract reads as "not
+/* The run state. Both return 0, which the contract reads as "not
  * halted" and "not faulted" - the answer it also gives for a nil context. */
 int mcf5307_halted(const mcf5307_ctx* ctx)
 {
@@ -148,8 +131,6 @@ void mcf5307_state_load(mcf5307_ctx* ctx, const void* src)
     (void)ctx;
     (void)src;
 }
-
-/* ------------------------------------------------ ISP1181 USB device model */
 
 isp1181_ctx* isp1181_create(void* user, isp1181_irq_fn irq, isp1181_tx_fn tx)
 {

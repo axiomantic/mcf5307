@@ -1,11 +1,4 @@
-## `t_isp1181` - the ISP1181 model driven by synthetic transactions. Task
-## CPU-23. Design sections 9.2 and 18.2.
-##
-## WHAT CPU-23's `Check:` ASKS OF THIS SUITE, in its own words: synthetic
-## transactions drive "the command state machine, the five FIFOs, the interrupt
-## register and the SOFTCT bit", and a negative case sends "a command the model
-## does not implement" and asserts "a log line and a benign value, never a
-## silent invention".
+## `t_isp1181` - the ISP1181 model driven by synthetic transactions.
 ##
 ## THE COMMAND STATE MACHINE IS WHAT A COMMAND BYTE LEAVES BEHIND, and that is
 ## the subject this suite takes. Whether a byte is accepted is settled
@@ -65,7 +58,7 @@ template check(ok: bool; label: string; got: string; want: string) =
   checkImpl(site, ok, label, got, want)
 
 # ---------------------------------------------------------------------------
-# The window, from design section 9.2's table.
+# The window.
 
 const
   dataPort = 0x13000000'u32
@@ -185,8 +178,8 @@ check(noOperand == wantNoOperand,
       "state machine: a command taking no operand carries nothing on the data port",
       $noOperand, $wantNoOperand)
 
-# THE PORT SPLIT IS ONE ADDRESS BIT AND NOT AN ADDRESS. Design section 9.2:
-# the chip's A0 is wired to CPU A4, so bit 4 selects command from data and
+# THE PORT SPLIT IS ONE ADDRESS BIT AND NOT AN ADDRESS. The chip's A0 is wired
+# to CPU A4, so bit 4 selects command from data and
 # every coarser bit belongs to the board's CS3 decode. A model that compared
 # whole addresses would answer the two the firmware happens to use and would
 # refuse every other access in the window with no way to see it here.
@@ -302,11 +295,9 @@ check(boundary == wantBoundary,
 # buffer is ordinary flow control and an oversized packet is a fault in
 # whatever produced it, and a reader separates them by the packet's size and
 # the buffer's occupancy rather than by two different sentences. The full-buffer
-# refusal is driven on endpoint 3, which holds ONE packet: the design document
-# reads double there and `AGENTS.md` section 3.8, which marks double-buffering
-# where it exists, leaves that endpoint unmarked. A buffer too many would
-# accept the second packet, so the refusal is the assertion and the count is
-# not.
+# refusal is driven on endpoint 3, which holds ONE packet. A buffer too many
+# would accept the second packet, so the refusal is the assertion and the count
+# is not.
 type Refusals = tuple[full: seq[string], oversize: seq[string]]
 
 proc refusalLines(): Refusals =
@@ -475,9 +466,8 @@ check(deliveries == wantDeliveries,
 # ---------------------------------------------------------------------------
 # BLOCK 4. THE SOFTCT BIT.
 
-# SOFTCT IS BIT 0 OF THE MODE BYTE AND NOTHING ELSE. `AGENTS.md` section 3.8
-# gives the mode register's bits and puts SOFTCT at `0x01`, with six other bits
-# beside it in the same byte. The rows that matter are the ones where the bit
+# SOFTCT IS BIT 0 OF THE MODE BYTE AND NOTHING ELSE. The rows that matter are
+# the ones where the bit
 # and the byte disagree: `0xFE` is every other bit set with SOFTCT clear, and
 # `0x80` is a single unrelated bit. A model reading the byte's truth rather
 # than the bit's answers both of those wrongly and answers `0x00` and `0x01`

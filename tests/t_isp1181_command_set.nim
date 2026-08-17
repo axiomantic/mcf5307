@@ -1,20 +1,13 @@
-## `t_isp1181_command_set` - the command set of the full ISP1181 model. Task
-## CPU-22 owns this file. Design section 9.2.
+## `t_isp1181_command_set` - the command set of the full ISP1181 model.
 ##
-## WHAT CPU-22's `Check:` ASKS OF THIS SUITE, in its own words: it drives
-## "every command in the implemented list" and asserts each is accepted, then
-## drives "every command in the not-implemented list" and asserts each returns
-## the benign value and writes one log line - "never a silent invention".
-##
-## THE OPCODE LISTS BELOW ARE HAND-WRITTEN LITERALS TAKEN FROM THE PLAN AND THE
-## DESIGN DOCUMENT, and never a second call of the table under test. A suite
+## THE OPCODE LISTS BELOW ARE HAND-WRITTEN LITERALS, and never a second call of
+## the table under test. A suite
 ## that asked `commands.nim` which opcodes it implements and then asserted that
 ## it implements them would pass against any table at all.
 ##
 ## THE THIRD CLASS IS NOT AN INVENTION OF THIS SUITE, IT IS A GAP IN THE
-## AUTHORITY. Design section 9.2 names six commands - buffer write, buffer
-## read, stall, status, validate and clear - and gives an opcode for NONE of
-## them. No ISP1181 datasheet and no ISP1362 driver header exists on this
+## AUTHORITY. The authority names buffer write, buffer read, stall, status,
+## validate and clear, and gives an opcode for NONE of them. No ISP1181 datasheet and no ISP1362 driver header exists on this
 ## machine. So the model carries no opcode for those six, and every opcode the
 ## authority does not number answers benignly and says so. `commands.nim`
 ## states the gap where it lives.
@@ -54,7 +47,7 @@ template check(ok: bool; label: string; got: string; want: string) =
   checkImpl(site, ok, label, got, want)
 
 # ---------------------------------------------------------------------------
-# The window, from design section 9.2's table.
+# The window.
 
 const
   dataPort = 0x13000000'u32
@@ -194,7 +187,7 @@ check(refused == wantRefused,
 #
 # THE SET IS DERIVED AS THE COMPLEMENT of the two hand-written lists, so it
 # needs no third list to maintain and it cannot disagree with them. It is the
-# class that carries the six commands design section 9.2 names without an
+# class that carries the commands the authority names without an
 # opcode, and its log line says a different thing from block 2's on purpose: a
 # reader who hits it has found a gap in the SPECIFICATION and not a decision.
 
@@ -246,7 +239,7 @@ check(@unnumberedCommands == wantUnnumbered,
 # BLOCK 4. ACCEPTED HAS TO MEAN SOMETHING, so the paired commands are driven
 # through the data port and read back.
 #
-# THE BYTE ORDER IS DESIGN SECTION 9.2's TABLE: "Multi-byte registers are least
+# THE BYTE ORDER IS THE AUTHORITY'S: multi-byte registers are least
 # significant byte first." Every expected sequence below is written out in that
 # order by hand.
 #
@@ -314,7 +307,7 @@ check(enable == wantEnable,
       $enable, $wantEnable)
 
 # THE INTERRUPT REGISTER READS ZERO ON A FRESH MODEL, and that is asserted
-# rather than assumed: design section 9.1 makes the zero the benign answer, so
+# rather than assumed: the zero is the benign answer, so
 # a register that came up holding anything else would change what a boot reads.
 let freshInterrupt = fresh().readVia(0xC0'u8, 4)
 let wantFreshInterrupt = @[0x00'u8, 0x00'u8, 0x00'u8, 0x00'u8]
@@ -352,8 +345,8 @@ check(reset == wantReset,
 # `0xF4` ACKNOWLEDGE SETUP IS ACCEPTED AND CHANGES NOTHING, and the case exists
 # because the authority gives the command an opcode and NO effect. A model that
 # invented one would go red here, which is the direction this suite wants: an
-# effect that appears without a source is the silent invention CPU-22's own
-# check line refuses.
+# effect that appears without a source is the silent invention this suite
+# refuses.
 type AfterAck = tuple[interrupt: seq[uint8], mode: seq[uint8], logged: int]
 
 proc afterAck(): AfterAck =
@@ -440,12 +433,11 @@ check(strayRead == wantStrayRead,
       $strayRead, $wantStrayRead)
 
 # ---------------------------------------------------------------------------
-# BLOCK 6. THE FIVE FIFOs.
+# BLOCK 6. THE FIFOs.
 #
-# THE GEOMETRY TABLE IS THE CASE THAT PINS THE EP3 CORRECTION. CPU-22's block
-# states that the design document's "double" for endpoint 3 is wrong and that
-# `AGENTS.md` section 3.8 is authoritative: it marks double-buffering where it
-# exists and leaves EP3 unmarked. A model with one buffer too many accepts a
+# THE GEOMETRY TABLE IS THE CASE THAT PINS THE EP3 CORRECTION. The authority
+# marks double-buffering where it exists and leaves EP3 unmarked, so the design
+# document's "double" for endpoint 3 is wrong. A model with one buffer too many accepts a
 # second packet the hardware would have NAKed, so the row below is a behaviour
 # and not a size.
 
@@ -578,7 +570,7 @@ check(fifoReset == wantFifoReset,
 # NO SOURCE ON THIS MACHINE ASSIGNS AN INTERRUPT-REGISTER BIT TO AN EVENT, so
 # the model assigns none and says so once per delivery. THAT SILENCE IS THE
 # THING THE CASE PINS: a model whose interrupt simply never fired would be
-# indistinguishable from CPU-21's stub, and this suite has to be able to tell
+# indistinguishable from a stub, and this suite has to be able to tell
 # them apart.
 
 type Delivery = tuple[accepted: bool, pending: int, interrupt: seq[uint8],
@@ -603,7 +595,7 @@ check(delivered == wantDelivered,
 
 # THE DERIVATION ITSELF IS TESTED WITH A MASK THIS SUITE CHOOSES, so that the
 # level-triggered rule is exercised without any claim about which event owns
-# which bit. Design section 9.2: the line is level-triggered, and the callback
+# which bit. The line is level-triggered, and the callback
 # carries the LOGICAL state, so the board's inversion is not this model's.
 
 var irqTrace: seq[int]

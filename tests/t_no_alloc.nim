@@ -1,6 +1,5 @@
 ## `t_no_alloc` - the core allocates only inside `mcf5307_create`, and
-## `mcf5307_exec` allocates nothing however long it runs. Task CPU-19.
-## Design section 5.6.
+## `mcf5307_exec` allocates nothing however long it runs.
 ##
 ## WHY THE PROPERTY IS WORTH A SUITE. The delivery form is an audio plugin, so
 ## `mcf5307_exec` may be entered from a real-time thread, where one call into
@@ -238,7 +237,6 @@ check((taken: taken(beforeRegisters, afterRegisters), readBack: readBack),
       (taken: noneTaken, readBack: seedD0),
       "mcf5307_set_reg and mcf5307_get_reg allocate nothing")
 
-# THE PROPERTY THE TASK EXISTS FOR.
 check(taken(beforeExec, afterExec), noneTaken,
       "mcf5307_exec allocates nothing over ten million instructions")
 

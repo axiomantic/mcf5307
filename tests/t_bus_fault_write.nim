@@ -1,33 +1,21 @@
 ## `t_bus_fault_write` - the IMPRECISE stacked program counter of an operand
-## write fault. Task CPU-16 owns this file. Design section 5.2.1.
-##
-## THE DOCUMENTS THIS FILE CITES ARE OUTSIDE THIS REPOSITORY and each is named
-## in full, so that a citation can be checked without knowing this project.
-##
-##   THE MCF5307 USER'S MANUAL: Motorola, "MCF5307 ColdFire Integrated
-##   Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998. Every
-##   citation below names its section, table and folio page, and each was read
-##   as a rendered PAGE IMAGE rather than from any transcription.
+## write fault.
 ##
 ## WHAT THIS SUITE ASSERTS, AND THE OMISSION IS THE POINT RATHER THAN A GAP.
 ## It asserts that the fault was TAKEN and that the write instruction's
 ## register write-back COMPLETED. It does NOT assert the stacked program
 ## counter, and no expected value in this file carries one.
 ##
-## User's Manual section 3.5.1, folio 3-15, verbatim, on an access error taken
-## for an operand write: "Because the actual write cycle may be decoupled from
-## the processor's issuing of the operation, the signaling of an access error
-## appears to be decoupled from the instruction that generated the write.
-## Accordingly, the PC contained in the exception stack frame merely represents
-## the location in the program when the access error was signaled. All
+## The write cycle may be decoupled from the processor's issuing of the
+## operation, so the PC in the exception stack frame merely represents the
+## location in the program when the access error was signaled, and all
 ## programming model updates associated with the write instruction are
-## completed."
+## completed.
 ##
 ## SO A PINNED PROGRAM COUNTER WOULD BE A DEFECT IN THIS FILE AND NOT A
-## MEASUREMENT. Table 3-1, folio 3-13, gives vector 2 a stacked program counter
-## of "Fault", which its own footnote defines as "the PC of the instruction
-## that caused the exception" - and folio 3-15 withdraws exactly that for the
-## write direction. A case that held the frame's second longword to any literal
+## MEASUREMENT. The general rule stacks the PC of the instruction that caused
+## the exception, and the write direction withdraws exactly that. A case that
+## held the frame's second longword to any literal
 ## would go red against a core that reported at a different point in the write
 ## pipeline, which is behaviour the manual permits; the reader would then be
 ## told a correct core is broken.
@@ -39,14 +27,13 @@
 ## returns that program counter OUTSIDE the asserted tuple, so a later edit
 ## cannot fold it back in without deleting a field.
 ##
-## EVERY EXPECTED VALUE BELOW IS A HAND-DERIVED LITERAL, written beside the bit
-## string or the manual row it came from, and NOT a second call of the
-## procedure under test. Every opcode is the output of `m68k-elf-as -mcpu=5307`
-## on the mnemonic printed beside it.
+## EVERY EXPECTED VALUE BELOW IS A HAND-DERIVED LITERAL and NOT a second call
+## of the procedure under test. Every opcode is the output of
+## `m68k-elf-as -mcpu=5307` on the mnemonic printed beside it.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. The fault
 ## status encodings and the reporting rules are facts about Motorola silicon,
-## from the User's Manual named above.
+## from the MCF5307 User's Manual.
 
 import std/strutils
 
@@ -86,12 +73,10 @@ template check(ok: bool; label: string; got: string; want: string) =
 # THE BOARD. One flat byte array, big-endian, which REFUSES exactly one
 # longword and reports `MCF5307_BUS_FAULT` for it.
 #
-# THE REFUSED ROW IS THE ONE THAT IS REAL SILICON. User's Manual section 3.5.1,
-# folio 3-14, verbatim: "For the MCF5307 processor, access errors are only
-# reported in conjunction with an attempted store to a write-protected memory
-# space. Thus, access errors associated with instruction fetch or operand read
-# accesses are not possible." A store to write-protected space is therefore the
-# only access this suite can drive that a real MCF5307 would also fault on.
+# THE REFUSED ROW IS THE ONE THAT IS REAL SILICON. On this part an access error
+# is reported only for an attempted store to write-protected space, so such a
+# store is the only access this suite can drive that a real MCF5307 would also
+# fault on.
 #
 # AN ACCESS PAST THE ARRAY IS COUNTED AND NOT ONLY REFUSED. The count separates
 # a run that stacked its frame on the board from one that did not, without
@@ -104,9 +89,9 @@ const
   accessHandler = 0x600'u32
   protectedWord = 0x0C00'u32 ## the one longword this board refuses to store
   openWord = 0x0900'u32      ## a longword the same board stores
-  frameBase = 0x7F8'u32      ## Table 3-2: 0x800 - 8, with FORMAT 4
+  frameBase = 0x7F8'u32      ## 0x800 - 8, with FORMAT 4
   startSp = 0x800'u32
-  vecAccess = 2'u8           ## Table 3-1, folio 3-13: access error, at $008
+  vecAccess = 2'u8           ## the access error, at $008
   srReset = 0x2700'u32
   opMovePost = 0x20C0'u16    ## `move.l %d0,(%a0)+`, m68k-elf-as -mcpu=5307
   opMovePre = 0x2100'u16     ## `move.l %d0,-(%a0)`, the same assembler
@@ -205,22 +190,21 @@ proc runWrite(opcode: uint16; at: uint32; a0Init: uint32;
 #
 # THE FRAME'S FIRST LONGWORD IS HAND-DERIVED FROM THE BIT POSITIONS AND NOT
 # FROM A SECOND CALL OF THE ENCODER. A7 is 0x800 with its low two bits 00, so
-# Table 3-2, folio 3-14, gives FORMAT 4 and a frame at 0x800 - 8. The vector is
-# 2. `FS` is `1001`, Table 3-3's "Attempted write to write-protected space",
-# and its two halves land in two non-adjacent fields of Figure 3-7:
+# the FORMAT is 4 and the frame sits at 0x800 - 8. The vector is 2. `FS` is
+# `1001`, "attempted write to write-protected space", and its two halves land
+# in two non-adjacent fields:
 #   0100 | 10 | 00000010 | 01 | 0010011100000000 -> 0x48092700
-# THIS LONGWORD CARRIES NO PROGRAM COUNTER. Figure 3-7, folio 3-13, puts the
-# program counter in the SECOND longword, which is the one this suite reads
-# outside its asserted tuple.
+# THIS LONGWORD CARRIES NO PROGRAM COUNTER. The program counter is in the
+# SECOND longword, which is the one this suite reads outside its asserted
+# tuple.
 #
 # THE LIVE STATUS REGISTER IS 0x2708 AND THE FRAME'S COPY IS 0x2700, AND THE
 # DIFFERENCE IS THE ASSERTION RATHER THAN A TOLERANCE. `takeException` copies
-# the status register before it changes it - section 3.3, folio 3-11 - so the
-# frame carries 0x2700. The write instruction then sets N from its source,
-# which is negative here, and that update lands AFTER the faulting access.
-# That is folio 3-15's "All programming model updates associated with the write
-# instruction are completed", observed on the one register the manual's
-# sentence reaches without an addressing mode.
+# the status register before it changes it, so the frame carries 0x2700. The
+# write instruction then sets N from its source, which is negative here, and
+# that update lands AFTER the faulting access. That is the rule that every
+# programming model update associated with the write instruction completes,
+# observed on the one register it reaches without an addressing mode.
 #
 # THE ADDRESS REGISTER IS THE SECOND HALF OF THE SAME SENTENCE. `(%a0)+`
 # updates A0, and the updated value survives the fault rather than being rolled
@@ -256,11 +240,11 @@ check(postAlt.outcome == wantFaultedPost,
 # NEITHER VALUE IS PINNED.
 #
 # THIS IS THE ONE CASE THAT READS THE FRAME'S SECOND LONGWORD, AND IT COMPARES
-# THE TWO RUNS WITH EACH OTHER RATHER THAN EITHER WITH A LITERAL. Folio 3-15
-# fixes the stacked value only as "the location in the program when the access
-# error was signaled", so an implementation may report at more than one point
-# in its write pipeline and every such choice is correct. What the manual does
-# NOT permit is a value unrelated to where the program was: two runs of one
+# THE TWO RUNS WITH EACH OTHER RATHER THAN EITHER WITH A LITERAL. The stacked
+# value is fixed only as the location in the program when the access error was
+# signaled, so an implementation may report at more than one point in its write
+# pipeline and every such choice is correct. What is NOT permitted is a value
+# unrelated to where the program was: two runs of one
 # instruction placed 0x40 apart must not stack the same location.
 #
 # WITHOUT THIS CASE THE OMISSION ABOVE WOULD BE INDISTINGUISHABLE FROM AN

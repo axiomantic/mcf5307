@@ -1,5 +1,5 @@
 # `case_sites.cmake` - the driver half of the check that a VANISHED CASE fails
-# its suite. Task CPU-28. Every generated `t_*` driver in
+# its suite. Every generated `t_*` driver in
 # `tests/tests_cpu.cmake` includes this file and calls BOTH of its functions
 # exactly once:
 # `mcf5307_check_case_sites`, whose rules are stated below, and
@@ -211,8 +211,7 @@ endfunction()
 
 # ---------------------------------------------------------------------------
 # THE CASE TOTAL. The rules above catch a case that stops RUNNING. They do not
-# catch a TABLE THAT GETS SHORTER, and the comment at the head of
-# `tests/case_sites.nim` says so: a site inside a loop is ONE site however many
+# catch a TABLE THAT GETS SHORTER: a site inside a loop is ONE site however many
 # rows the loop carries.
 #
 # A TABLE SHORTENED TO FEWER ROWS TAKES ITS ASSERTIONS WITH IT while every rule
@@ -229,8 +228,8 @@ endfunction()
 # pass.
 #
 # A TRANSCRIPT IN `src/` IS NOT A DERIVATION - it is written down too - but it
-# is written down in PRODUCTION SOURCE, by another task, for another reason, and
-# a figure with two keepers cannot be moved by editing one of them.
+# is written down in PRODUCTION SOURCE, for another reason, and a figure with
+# two keepers cannot be moved by editing one of them.
 # `tests/tests_cpu.cmake` holds a transcript it finds against the generated
 # driver's figure at configure time and stops the configure when the two
 # disagree.
@@ -262,10 +261,8 @@ endfunction()
 # next run.
 #
 # WHAT IT DOES NOT REACH. It pins the COUNT and not WHICH cases ran, so one
-# block deleted and another of the same size added in a single change passes -
-# the same limit `t_ea_masks.nim` states for its own constant. And it says
-# nothing about whether a case ASSERTS anything: see `tests/case_sites.nim`,
-# under the heading `THE ONE THING NONE OF IT REACHES`.
+# block deleted and another of the same size added in a single change passes.
+# And it says nothing about whether a case ASSERTS anything.
 function(mcf5307_check_case_total suite run_output expected)
     string(REGEX MATCH "${suite}: ([0-9]+) cases passed" matched "${run_output}")
     if(matched STREQUAL "")

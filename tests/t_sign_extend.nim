@@ -1,19 +1,5 @@
 ## `t_sign_extend` - the sign-extension helpers of `mcf5307/machine`.
 ##
-## `s16` and `s8` turn a displacement or an
-## immediate value from the instruction stream into the signed 32-bit value
-## the address arithmetic adds. The boundary values of each helper are
-## asserted with their exact results:
-##
-##   s16  0x0000 -> 0        the low end of the positive half
-##        0x7FFF -> 32767    the largest positive value
-##        0x8000 -> -32768   THE FIRST NEGATIVE VALUE
-##        0xFFFF -> -1       the last negative value
-##
-##   s8   0x00 -> 0, 0x7F -> 127, 0x80 -> -128, 0xFF -> -1, and the same
-##        again for the two values above with a high byte that `s8` must
-##        ignore.
-##
 ## WHY THE NEGATIVE HALF IS THE POINT. Sign extension REINTERPRETS the bits of
 ## an unsigned value as a two's-complement signed value of the same width. A
 ## checked narrowing conversion (`int16(x)`, `int8(x)`) does something
@@ -66,18 +52,10 @@ template check(got: int32; want: int32; label: string) =
   const site = instantiationInfo(-1).line
   static: declaredSites.add(site)
   checkImpl(site, got, want, label)
-# ---------------------------------------------------------------------------
-# `s16` - the 16-bit displacement of (d16,An), (d16,PC), LINK and the
-# absolute-short address, and the .W source of MOVEA.
-
 check(s16(0x0000'u16),      0'i32, "s16(0x0000)")
 check(s16(0x7FFF'u16),  32767'i32, "s16(0x7FFF)")
 check(s16(0x8000'u16), -32768'i32, "s16(0x8000)")
 check(s16(0xFFFF'u16),     -1'i32, "s16(0xFFFF)")
-
-# ---------------------------------------------------------------------------
-# `s8` - the 8-bit displacement of an indexed extension word and the immediate
-# value of MOVEQ. It takes a whole word and uses the low byte alone.
 
 check(s8(0x0000'u16),    0'i32, "s8(0x00)")
 check(s8(0x007F'u16),  127'i32, "s8(0x7F)")

@@ -1,38 +1,5 @@
 ## `t_negative` - the negative corpus. Encodings the core must REFUSE, and the
-## legal neighbours it must still execute. Task CPU-13. Design sections 6.1,
-## 18.2, 18.7.
-##
-## WHAT THIS SUITE ASSERTS, AND WHY EACH GROUP EXISTS.
-##
-##   THE REFUSED ENCODINGS. The task's own row names them: `DBRA`, `EXG`,
-##   `ROL`, a memory shift, `MOVEM -(An)`, byte arithmetic, word arithmetic
-##   apart from `MULS.W`, `MULU.W`, `DIVS.W` and `DIVU.W`, and `Bcc` with an
-##   8-bit displacement of `0xFF`. Each is placed at the reset program counter
-##   and run through the shipped path, and the WHOLE machine state is compared
-##   rather than the fault bit alone.
-##
-##   THE LEGAL NEIGHBOURS, AND WHY A NEGATIVE CORPUS IS WORTHLESS WITHOUT
-##   THEM. "This encoding is refused" is satisfied by a core that refuses
-##   EVERYTHING, so a corpus of refusals alone passes against a decoder that
-##   is broadly broken, and passes in exactly the way it passes when the core
-##   is right. Every refused encoding here therefore names a NEIGHBOUR: a
-##   legal encoding one field away from it, which the core must still execute.
-##   A decoder that over-refuses reddens on the neighbour in the same run that
-##   it stays green on the refusal.
-##
-##   THE FOUR 16-BIT MULTIPLY AND DIVIDE FORMS are neighbours of exactly this
-##   kind and the task's row names them for it: they are carved out of the
-##   same "word arithmetic must trap" clause that puts `ADD.W` in the trap
-##   set, so they are the sharpest available control on that clause. The row
-##   states the standard they enforce - a negative case that asserts a trap
-##   for a LEGAL instruction pins a defect - and `MULS.W`, `MULU.W`, `DIVS.W`
-##   and `DIVU.W` are where that standard bites.
-##
-##   THE PAIRING AND THE ORACLE ARE THEMSELVES ASSERTED, not left to
-##   convention. A refusal added without a neighbour, and a case whose
-##   recorded assembler evidence contradicts its own expected outcome, are
-##   both adjudicated below. Without those two the corpus could drift back
-##   into a list of refusals whose only oracle is what somebody believed.
+## legal neighbours it must still execute.
 ##
 ## WHERE THE EXPECTED VALUES COME FROM, AND WHY THEY ARE NOT TRANSCRIBED. Each
 ## encoding in `conformance/corpus/negative_00.json` was EMITTED by
@@ -42,19 +9,6 @@
 ## and every neighbour is accepted for `-mcpu=5307`. The partition is the
 ## assembler's and not this project's, which is what keeps the corpus from
 ## being a transcription of a belief about the part.
-##
-## WHAT THIS SUITE DOES NOT ASSERT, STATED SO ITS SILENCE IS NOT READ AS
-## COVERAGE. A neighbour is adjudicated on WHETHER IT WAS REFUSED and never on
-## what it computed. The arithmetic and the condition codes of these
-## instructions belong to `t_alu`, `t_logic`, `t_move` and the positive
-## corpora, and repeating them here would be a second home for a fact with an
-## owner.
-##
-## HOW THE GROUND IS DIVIDED WITH `t_lines`. That suite owns the line-A and
-## line-F opcode SPACES, exhaustively, and CPU-12's own registration block
-## states the split: those two lines are space this core declines to claim,
-## and this suite is the removed 68000 INSTRUCTIONS, which live in lines the
-## core does claim and decode. No encoding here is in line A or line F.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code.
 
@@ -213,8 +167,6 @@ type Outcome = object
   pc: uint32
 
 proc runCase(c: Case): Outcome =
-  ## Place one encoding at the reset program counter, seed the registers, and
-  ## run one `mcf5307_exec`.
   for i in 0 ..< memSize:
     board.bytes[i] = 0'u8
   for index, word in c.words:
@@ -244,17 +196,12 @@ proc runCase(c: Case): Outcome =
 # The decoder's answer, asked of the LEGAL encodings only. The asymmetry is
 # deliberate and it is the one place this suite declines to make a claim.
 #
-# REFUSAL IN THIS CORE IS NOT DECIDED IN ONE PLACE, WHICH IS MEASURED AND NOT
-# ASSUMED. Of the eight refused encodings here, `decodeWord` returns
-# `opIllegal` for ONE. The other seven reach an operation and are refused by
-# an executor arm instead - `cpu.nim` documents that contract for each group,
-# naming an illegal size, an illegal effective address and the 32-bit branch
-# displacement - and two of them are refused under an ALIAS, the encoding
-# being read as a legal opcode at a size this part does not have. So "which
-# layer refuses this encoding" is a fact about how the core is built, and a
-# per-case expectation for it would be a transcription of the implementation
-# rather than a requirement the part imposes. This suite asserts the
-# requirement, which is that the encoding does not execute, and the machine
+# REFUSAL IN THIS CORE IS NOT DECIDED IN ONE PLACE. A refused encoding may
+# reach `opIllegal` in the decoder or be refused by an executor arm instead, so
+# "which layer refuses this encoding" is a fact about how the core is built,
+# and a per-case expectation for it would be a transcription of the
+# implementation rather than a requirement the part imposes. This suite asserts
+# the requirement, which is that the encoding does not execute, and the machine
 # runs below are where it does that.
 #
 # THE CONVERSE IS A REQUIREMENT AND IS ASSERTED. A legal encoding must reach
@@ -341,9 +288,9 @@ check((unpaired: unpaired, dangling: dangling, paired: paired),
 # ---------------------------------------------------------------------------
 # The oracle, held against the outcome each case claims.
 #
-# THIS IS THE CHECK THAT REFUSES TO PIN A DEFECT. The task's row states the
-# standard: a negative case that asserts a trap for a legal instruction is not
-# a weak case, it is a case that pins a defect. The assembler's verdict is
+# THIS IS THE CHECK THAT REFUSES TO PIN A DEFECT. A negative case that asserts
+# a trap for a legal instruction is not a weak case, it is a case that pins a
+# defect. The assembler's verdict is
 # recorded per case, so the corpus can be held to that standard mechanically -
 # an encoding `-mcpu=5307` ACCEPTS may not be labelled a refusal, and an
 # encoding it REJECTS may not be labelled a neighbour. Relabelling `MULS.W` as

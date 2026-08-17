@@ -1,40 +1,5 @@
 ## `t_lines` - the line-A and line-F opcode spaces of `mcf5307/lines`, and the
-## core's refusal to execute either of them. Task CPU-12. Design section 6.1.
-##
-## WHAT THIS SUITE ASSERTS, AND WHY EACH GROUP EXISTS.
-##
-##   THE TWO SPACES. `mcf5307/lines` is the one place that says which words
-##   belong to the two unimplemented-line spaces. Each space is asserted at its
-##   first word, at its last word, and at the word immediately outside each
-##   end - line 9 and line B around line-A, line E around line-F. A mask
-##   written one bit too wide claims a neighbouring line, and the neighbours
-##   are lines other tasks own and execute.
-##
-##   THE FOUR NAMED ENCODINGS. The task's own row names MAC, EMAC and `MOV3Q`
-##   as instructions this core must not decode, and calls line-F cache and
-##   debug. Each of the encodings below is built from the bit diagram its
-##   folio prints, and is asserted BOTH to be in the space this module claims
-##   AND to reach no operation in the decoder. The two are separate claims:
-##   one is about this module's classification and one is about the decoder's
-##   answer, and neither implies the other.
-##
-##   THE SWEEP. Every word of the two spaces is decoded. The case asserts the
-##   SIZE of the swept set beside the absence of an escape, because neither
-##   field alone identifies the set: a predicate that claims nothing has no
-##   escape, and a predicate that claims the right number of the wrong words
-##   has the right size.
-##
-##   THE CORE PATH. A line-A word and a line-F word are each placed at the
-##   reset program counter and run through `mcf5307_reset`, `mcf5307_set_reg`
-##   and `mcf5307_exec`, which is the path a board takes. The whole machine
-##   state is compared rather than the fault bit alone, because an instruction
-##   that executed leaves its mark in the register file, the stack pointer and
-##   the status register and not in that bit.
-##
-## WHERE THE EXPECTED VALUES COME FROM. The encodings are read from the
-## ColdFire Family Programmer's Reference Manual, Rev. 3, as page images, at
-## the folios named beside each one. The markdown transcription under
-## `MCF5307UM-md/` is not a source for any value here.
+## core's refusal to execute either of them.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code.
 
@@ -75,8 +40,8 @@ template check(got: untyped; want: untyped; label: string) =
 # The two spaces, at each end and one word outside each end.
 #
 # THE NEIGHBOURS ARE NOT DECORATION. Line 9 is the SUB family, line B is CMP
-# and EOR, and line E is the shifts; all three are decoded and executed by
-# other tasks in this group. A predicate that reached one of them would take a
+# and EOR, and line E is the shifts; all three are decoded and executed by the
+# core. A predicate that reached one of them would take a
 # working instruction away from the core, and the boundary words are the ones
 # a mask written `0xE000` rather than `0xF000` classifies differently.
 
@@ -91,24 +56,6 @@ check(isLineF(0xEFFF'u16), false, "0xEFFF is line E and not line-F")
 
 check(isLineF(0xA000'u16), false, "line-A is not line-F")
 check(isLineA(0xF000'u16), false, "line-F is not line-A")
-
-# ---------------------------------------------------------------------------
-# The named encodings. Each word is built from the `Instruction Format` bit
-# diagram on the folio named beside it, and from nothing else.
-#
-#   MAC     CFPRM folio 5-2.  `1010 <Rx 11-9> 0 0 <Rx msb> 0 0 <Ry 3-0>`.
-#           With Rx D0 and Ry D1 that is 0xA001.
-#   MOV3Q   CFPRM folio 4-46. `1010 <data 11-9> 101 <ea 5-0>`. With data 001
-#           and a destination of D0 that is 0xA340. The folio's own heading
-#           reads `First appeared in ISA_B`, and this part is ISA_A.
-#   CPUSHL  CFPRM folio 8-2.  `1111 0100 <cache 7-6> 101 <Ax 2-0>`. With the
-#           data cache and A0 that is 0xF468.
-#   WDEBUG  CFPRM folio 8-18. `1111 1011 11 <ea 5-0>`. With a source of (A0)
-#           that is 0xFBD0.
-#
-# EMAC IS NAMED BY THE TASK ROW AND HAS NO ENCODING CASE, AND THE REASON IS
-# THE PART RATHER THAN THIS SUITE. The MCF5307 User's Manual carries no EMAC
-# anywhere, so there is no encoding of this part's for a case to be built from.
 
 check(isLineA(0xA001'u16), true, "MAC is a line-A word")
 check(decodeWord(0xA001'u16).op, opIllegal, "MAC reaches no operation")
@@ -129,9 +76,6 @@ check(decodeWord(0xFBD0'u16).op, opIllegal, "WDEBUG reaches no operation")
 # THE SIZE IS ASSERTED BESIDE THE ESCAPE AND THAT PAIRING IS THE POINT. The
 # absence of an escape is satisfied by a predicate that claims nothing, and the
 # size is satisfied by a predicate that claims as many of the wrong words.
-# The size is two lines of 4096 words, which is what the two `Unimplemented
-# line-a opcode` and `Unimplemented line-f opcode` rows of MCF5307 User's
-# Manual Table 3-1, folio 3-13, and CFPRM Table 11-1, folio 11-2, are rows for.
 
 var sweptWords = 0
 var firstEscape = -1
@@ -210,8 +154,6 @@ type Outcome = object
   pc: uint32
 
 proc runWord(word: uint16): Outcome =
-  ## Place one opcode word at the reset program counter, seed the registers,
-  ## and run one `mcf5307_exec`.
   for i in 0 ..< memSize:
     board.bytes[i] = 0'u8
   boardWrite(board, execBase, 2, uint32(word))

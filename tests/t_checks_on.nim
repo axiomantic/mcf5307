@@ -1,5 +1,4 @@
-## `t_checks_on` - the run-time checks stay compiled in. Task CPU-20 creates
-## this file. Design sections 5.6 and 17 row 7.26.
+## `t_checks_on` - the run-time checks stay compiled in.
 ##
 ## `-d:release` ALONE KEEPS THE BOUND CHECK COMPILED IN. `--checks:off`
 ## removes it, and the same program then reads outside the array, returns a

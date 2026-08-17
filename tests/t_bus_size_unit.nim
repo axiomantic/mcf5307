@@ -43,8 +43,7 @@
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. The MOVE
 ## encodings below are facts about Motorola silicon, from the ColdFire Family
-## Programmer's Reference Manual and the MCF5307 User's Manual (AGENTS.md
-## section 11).
+## Programmer's Reference Manual and the MCF5307 User's Manual.
 
 import std/algorithm
 import std/strutils

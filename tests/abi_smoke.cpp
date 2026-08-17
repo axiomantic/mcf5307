@@ -1,4 +1,4 @@
-/* tests/abi_smoke.cpp - the application binary interface smoke test (CPU-3).
+/* tests/abi_smoke.cpp - the application binary interface smoke test.
  *
  * ONE TEST, AND EACH ASSERTION CAN FAIL.
  *
@@ -20,10 +20,6 @@
  *     a re-entrant call that does nothing is the whole point of the
  *     function. C++ never names `NimMain`; the C names are the whole
  *     contract.
- *
- * Asserting no core behaviour is
- * what makes this test right at this task's completion and still right
- * after every later task that supersedes the implementation.
  *
  * The address-taking is the only way to make a rename a fail. The C++
  * translation unit reads no field of any function pointer, and the linker

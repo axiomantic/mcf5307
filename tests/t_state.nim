@@ -1,5 +1,4 @@
-## `t_state` - the snapshot block of `mcf5307/state`. Task CPU-18. Design
-## section 5.3.
+## `t_state` - the snapshot block of `mcf5307/state`.
 ##
 ##   1. THE EXPECTED FIELD LIST IS WRITTEN BY HAND AND `stateLayout` DERIVES
 ##      THE OTHER SIDE FROM `MCF5307Ctx`. Holding a hand-written list against a
@@ -7,10 +6,6 @@
 ##      somebody takes, alongside the version word that moves with it.
 ##
 ##   2. THE COMPARISON IS PER FIELD AND THE DESTINATION IS PRE-LOADED.
-##
-## THE DOCUMENT THIS FILE CITES IS OUTSIDE THIS REPOSITORY. DESIGN SECTION 5.3
-## is "State save and load" of the NMG2 emulator DESIGN DOCUMENT
-## (`2026-08-04-nmg2-emulator-design.md`).
 ##
 ## MIT licensed. Nothing here is a fact about Motorola silicon.
 
@@ -442,8 +437,6 @@ check(bytesA == bytesB,
 
 # ---------------------------------------------------------------------------
 # BLOCK 6. The core itself: run, save, run on, load, run the same on again.
-#
-# THIS IS THE SCENARIO DESIGN SECTION 5.3 NAMES.
 #
 # THE INTERRUPT PRESENTATION IS MASKED AND IS THERE ON PURPOSE. Reset leaves
 # the status register at 0x2700, whose interrupt priority mask is 7, so a

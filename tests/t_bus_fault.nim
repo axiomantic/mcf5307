@@ -1,24 +1,11 @@
-## `t_bus_fault` - the bus-fault channel of `mcf5307/bus`. Task CPU-15 owns
-## this file. Design sections 5.2.1, 5.6 and 17 row 7.24.
+## `t_bus_fault` - the bus-fault channel of `mcf5307/bus`.
 ##
-## THE DOCUMENTS THIS FILE CITES ARE OUTSIDE THIS REPOSITORY and each is named
-## in full, so that a citation can be checked without knowing this project.
-##
-##   THE MCF5307 USER'S MANUAL: Motorola, "MCF5307 ColdFire Integrated
-##   Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998. Every
-##   citation below names its section, table and folio page.
-##
-##   DESIGN SECTION 5.2.1 is "Bus faults and the error channel" of the NMG2
-##   emulator DESIGN DOCUMENT (`2026-08-04-nmg2-emulator-design.md`), and its
-##   mapping table is the specification `mcf5307/bus` implements.
-##
-## EVERY EXPECTED VALUE BELOW IS A HAND-DERIVED LITERAL, written beside the bit
-## string or the manual row it came from, and NOT a second call of the
-## procedure under test.
+## EVERY EXPECTED VALUE BELOW IS A HAND-DERIVED LITERAL and NOT a second call
+## of the procedure under test.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. The fault
-## status encodings are facts about Motorola silicon, from the User's Manual
-## named above.
+## status encodings are facts about Motorola silicon, from the MCF5307 User's
+## Manual.
 
 import std/strutils
 
@@ -70,16 +57,13 @@ template checkEq(got: uint32; want: uint32; label: string) =
 # ---------------------------------------------------------------------------
 # BLOCK 1. The mapping from a bus status to a fault status code.
 #
-# User's Manual section 3.4, Table 3-3, "Fault Status Encodings", folio 3-14
-# (PDF page 71), read as a page image 2026-08-14, gives the whole defined set
-# for this part: `0000` not an access or address error, `0100` error on
-# instruction fetch, `1000` error on operand write, `1001` attempted write to
-# write-protected space, `1100` error on operand read. Every other value of the
-# four bits is Reserved.
+# The defined fault status encodings for this part are `0000` not an access or
+# address error, `0100` error on instruction fetch, `1000` error on operand
+# write, `1001` attempted write to write-protected space, and `1100` error on
+# operand read. Every other value of the four bits is Reserved.
 #
-# DESIGN SECTION 5.2.1's MAPPING TABLE assigns three of those five codes to the
-# three non-OK bus statuses, and each expected value below is the code that
-# table's own row prints.
+# THE MAPPING TABLE assigns codes to the non-OK bus statuses, and each expected
+# value below is the code that table's own row prints.
 
 checkEq(faultStatusFor(Mcf5307BusStatus.busFault, operandWrite),
         0b1001'u32,
@@ -103,9 +87,8 @@ checkEq(faultStatusFor(Mcf5307BusStatus.busSizeIllegal, operandWrite),
         "mapping: an illegal width on a write is 1000")
 
 # `busOk` IS NOT A ROW OF THE MAPPING TABLE and it is mapped anyway, so that
-# the procedure is total over the enumeration. Table 3-3's own `0000` is the
-# code for "not an access or address error", which is what a completed access
-# is.
+# the procedure is total over the enumeration. `0000` is the code for "not an
+# access or address error", which is what a completed access is.
 checkEq(faultStatusFor(Mcf5307BusStatus.busOk, operandRead),
         0b0000'u32,
         "mapping: a completed read is 0000")
@@ -116,8 +99,8 @@ checkEq(faultStatusFor(Mcf5307BusStatus.busOk, operandWrite),
 # ---------------------------------------------------------------------------
 # BLOCK 2. The class column of the same table, asserted rather than described.
 #
-# Design section 5.2.1 gives each row a class, and only one of the three is
-# silicon behaviour. The class is a value this module answers for, so that a
+# The mapping table gives each row a class, and not every class is silicon
+# behaviour. The class is a value this module answers for, so that a
 # reader who mistakes an extension for hardware behaviour is contradicted by a
 # case rather than by a comment.
 
@@ -144,15 +127,14 @@ check(isEmulatorExtension(Mcf5307BusStatus.busOk) == false,
 #
 # AN ACCESS OUTSIDE THE ARRAY RETURNS ZERO AND REPORTS NOTHING. The silent pair
 # has no channel to report one on, and a pair that indexed the array anyway
-# would end the process under `--panics:on` - which design section 5.6 and this
-# task's own rule forbid, because an abort inside a plugin destroys the host's
-# session.
+# would end the process under `--panics:on`, which is forbidden because an
+# abort inside a plugin destroys the host's session.
 
 const
   memSize = 0x1000
   execBase = 0x400'u32      ## above the whole 1024-byte vector table
   trapHandler = 0x500'u32
-  frameBase = 0x7F8'u32     ## Table 3-2: 0x800 - 8, with FORMAT 4
+  frameBase = 0x7F8'u32     ## 0x800 - 8, with FORMAT 4
   srReset = 0x2700'u32
   opTrap0 = 0x4E40'u16      ## `trap #0`, m68k-elf-as -mcpu=5307
   opRteWord = 0x4E73'u16    ## `rte`, the same assembler
@@ -208,9 +190,9 @@ proc freshBoard() =
 # ---------------------------------------------------------------------------
 # BLOCK 3. Silence means success, through the published entry points.
 #
-# Design section 5.2.1 rule 1: the core writes `MCF5307_BUS_OK` into `*status`
-# before every call, "so a board that never writes it therefore behaves exactly
-# as it did before the parameter existed". THE TWO PAIRS OF CALLBACKS DIFFER IN
+# The core writes `MCF5307_BUS_OK` into `*status` before every call, so a board
+# that never writes it behaves exactly as it did before the parameter existed.
+# THE TWO PAIRS OF CALLBACKS DIFFER IN
 # NOTHING ELSE, and each run is held against the same hand-stated outcome
 # rather than against the other run: two runs compared only with each other
 # would agree just as well if the core had stopped executing altogether.
@@ -251,10 +233,9 @@ proc runTrap(rd: Mcf5307ReadFn; wr: Mcf5307WriteFn): Outcome =
   mcf5307_destroy(ctx)
 
 # THE EXPECTED OUTCOME IS HAND-DERIVED. A7 is 0x800 with its low two bits 00,
-# so Table 3-2, folio 3-14, gives FORMAT 4 and a frame at 0x800 - 8. `trap #0`
-# is one word, and Table 3-1 gives vectors 32 to 47 a stacked program counter
-# of "Next", so the stacked value is `execBase + 2`. `FS` is 0000: Table 3-3
-# defines the field for access and address errors only.
+# so the FORMAT is 4 and the frame sits at 0x800 - 8. `trap #0` is one word and
+# a trap stacks the next instruction, so the stacked value is `execBase + 2`.
+# `FS` is 0000: the field is defined for access and address errors only.
 #   0100 | 00 | 00100000 | 00 | 0010011100000000 -> 0x40802700
 const wantTrap: Outcome = (sp: frameBase, pc: trapHandler, sr: srReset,
                            halted: false, fault: false,
@@ -274,9 +255,8 @@ check(explicit == wantTrap,
 # BLOCK 4. The core originates no bus status of its own.
 #
 # `MCF5307_BUS_UNMAPPED` and `MCF5307_BUS_SIZE_ILLEGAL` have no producer on
-# this part - User's Manual section 3.5.1, folio 3-14, holds that access errors
-# are reported only for a store to write-protected space - so the only thing
-# that can raise one is a board's own decode.
+# this part - an access error is reported only for a store to write-protected
+# space - so the only thing that can raise one is a board's own decode.
 #
 # THE SWEEP IS THE ASSERTION: every access below is answered by a pair
 # of callbacks that report nothing at all, across the whole address range and
@@ -316,16 +296,14 @@ mcf5307_destroy(sweepCtx)
 # NON-ZERO `FS` through the core.
 #
 # THIS IS THE FIRST CASE IN THIS REPOSITORY THAT CAN SEPARATE A SPLIT `FS`
-# ENCODER FROM A CONTIGUOUS ONE. User's Manual Table 3-3, folio 3-14, defines
-# five codes - `0000`, `0100`, `1000`, `1001`, `1100` - and `1001` is the only
-# one whose low half is not zero, so it is the only value that lands in BOTH
+# ENCODER FROM A CONTIGUOUS ONE. Of the defined codes `1001` is the only one
+# whose low half is not zero, so it is the only value that lands in BOTH
 # halves of the split field. Every other core-path frame this tree stacks
 # carries `FS` `0000`, where "encodes the field as zero" and "has no field"
 # produce the same longword.
 #
-# THE ROW IS THE ONE THAT IS REAL SILICON. User's Manual section 3.5.1, folio
-# 3-14, verbatim: access errors are "only reported in conjunction with an
-# attempted store to a write-protected memory space". The board below refuses
+# THE ROW IS THE ONE THAT IS REAL SILICON. Access errors are reported only for
+# an attempted store to write-protected space. The board below refuses
 # exactly one longword and reports `MCF5307_BUS_FAULT` for it.
 #
 # THE THIRD BOARD REPORTS A NON-OK STATUS, which is what separates it from the
@@ -335,10 +313,10 @@ mcf5307_destroy(sweepCtx)
 const
   protectedWord = 0x0C00'u32  ## the one longword this board refuses to store
   accessHandler = 0x600'u32
-  vecAccess = 2'u8            ## Table 3-1, folio 3-13: access error, at $008
+  vecAccess = 2'u8            ## the access error, at $008
   opMoveProtected = 0x21C0'u16  ## `move.l %d0,0xC00`, m68k-elf-as -mcpu=5307
   extProtected = 0x0C00'u16     ## its `(xxx).W` extension word
-  doubleSp = 0x1008'u32       ## Table 3-2: a frame base of 0x1000, off the board
+  doubleSp = 0x1008'u32       ## a frame base of 0x1000, off the board
   doubleFrameBase = 0x1000'u32
 
 # AN ACCESS PAST THE ARRAY IS COUNTED AND NOT ONLY REFUSED. The count is what
@@ -394,18 +372,18 @@ proc runProtectedStore(startSp: uint32; readFrameAt: uint32): FaultOutcome =
   mcf5307_destroy(ctx)
 
 # THE EXPECTED FRAME IS HAND-DERIVED FROM THE BIT POSITIONS AND NOT FROM A
-# SECOND CALL OF THE ENCODER. A7 is 0x800 with its low two bits 00, so Table
-# 3-2, folio 3-14, gives FORMAT 4 and a frame at 0x800 - 8. The vector is 2.
-# `FS` is `1001`, design section 5.2.1's row for a write to write-protected
-# space, and its two halves land in two non-adjacent fields:
+# SECOND CALL OF THE ENCODER. A7 is 0x800 with its low two bits 00, so the
+# FORMAT is 4 and the frame sits at 0x800 - 8. The vector is 2. `FS` is `1001`,
+# the code for a write to write-protected space, and its two halves land in two
+# non-adjacent fields:
 #   0100 | 10 | 00000010 | 01 | 0010011100000000 -> 0x48092700
 # The stacked program counter is `ctx.pc`, which the opcode word and the one
 # `(xxx).W` extension word have advanced to execBase + 4.
 #
 # THE LIVE STATUS REGISTER IS 0x2704 AND THE FRAME'S COPY IS 0x2700, AND THE
-# DIFFERENCE IS REQUIRED RATHER THAN TOLERATED. User's Manual section 3.5.1,
-# folio 3-14, verbatim, of an access error on an operand write: "All programming
-# model updates associated with the write instruction are completed." `MOVE`
+# DIFFERENCE IS REQUIRED RATHER THAN TOLERATED. On an access error taken for an
+# operand write, all programming model updates associated with the write
+# instruction are completed. `MOVE`
 # sets Z from its source AFTER the store, and the source here is zero, so Z is
 # set once the faulting instruction finishes. The frame carries the copy
 # `takeException` took BEFORE that, which is why the two differ by exactly Z.
@@ -423,9 +401,9 @@ check(protectedStore == wantProtected,
 # BLOCK 6. A fault DURING the stacking is a double fault: the core halts and
 # does not recurse.
 #
-# Design section 5.2.1 rule 5: "A fault inside the exception-entry stacking
-# itself is a double fault. The core halts, sets its own fault field, and
-# returns from `mcf5307_exec` with the cycles it spent. It does not recurse."
+# A fault inside the exception-entry stacking itself is a double fault: the
+# core halts, sets its own fault field, and returns from `mcf5307_exec` with
+# the cycles it spent. It does not recurse.
 #
 # A7 IS 0x1008, SO THE FRAME BASE IS 0x1000 AND IS OFF THE BOARD. The same
 # write-protected store faults, the access fault is taken, and the first
@@ -452,17 +430,16 @@ check(doubleFault == wantDoubleFault,
 # BLOCK 7. AN OPERAND READ FAULT STILL HALTS AND TAKES NO VECTOR. THIS CASE
 # PINS A BOUNDARY AND DOES NOT ENDORSE IT.
 #
-# Design section 5.2.1 and this task's own `Check:` line both ask that a read of
-# unmapped space TAKE AN ACCESS FAULT, and this core does not do that yet. The
-# blocker is design section 5.2.1 rule 4 - a fault is taken "before it commits
-# any register or memory side effect of the faulting instruction" - together
-# with the fact that `ctx.halted` is the only signal that unwinds a
-# part-completed instruction. An access fault must not halt, so a read that took
-# a vector would return into an executor that finished the instruction with a
-# zero operand. MEASURED, with the vector taken: `d1` came back 0 over its
-# sentinel, and the frame itself was correct - `0x4C082700`, `FS` `1100`.
+# A read of unmapped space is asked to TAKE AN ACCESS FAULT, and this core does
+# not do that yet. The blocker is the rule that a fault is taken before it
+# commits any register or memory side effect of the faulting instruction,
+# together with the fact that `ctx.halted` is the only signal that unwinds a
+# part-completed instruction. An access fault must not halt, so a read that
+# took a vector would return into an executor that finished the instruction
+# with a zero operand: `d1` comes back 0 over its sentinel while the frame
+# itself is correct.
 #
-# THE FIX IS NOT WRITABLE FROM THE FILES THIS TASK DECLARES. It needs a
+# THE FIX IS NOT WRITABLE FROM THE FILES THIS SUITE COVERS. It needs a
 # pending-fault field on `MCF5307Ctx` in `src/mcf5307/decode_types.nim`, or a
 # check after the executor returns in `src/mcf5307/cpu.nim`'s `step`.
 #
