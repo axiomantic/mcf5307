@@ -1,27 +1,4 @@
-## `t_isp1181_state` - the SOF tick and the ISP1181 state block. Task CPU-24
-## owns this file. Design sections 9.4 and 5.2.
-##
-## THE TICK'S SPECIFICATION IS CPU-24's `Check:` LINE AS AMENDED 2026-08-17.
-## `isp1181_tick(ctx, sof_frames)` advances the USB frame counter by
-## `sof_frames` Start-of-Frame frames of 1 ms each, wrapping at 2048 because the
-## counter is 11 bits wide; a call with `sof_frames` of 5 advances the counter
-## exactly as five calls with 1 do; a counter at 2047 advanced by 1 reads 0; and
-## the model never reads a wall clock.
-##
-## NOTHING HERE ADVANCES A SOFTCT TIMER. SOFTCT is a BIT of the full model's
-## mode byte and plan item W3-139 carries the ruling. No case below drives one
-## and no case below asserts one exists.
-##
-## THE STATE BLOCK FOLLOWS THE CPU-18 SHAPE: a fixed size, no pointer, a magic
-## word, a version word, the payload width, the payload and a checksum, with
-## every check preceding the decode so that a refusal leaves the handle with the
-## state it had.
-##
-## EVERY EXPECTED VALUE BELOW IS A HAND-WRITTEN LITERAL and never a second call
-## of the procedure under test. The one computed expectation is the checksum,
-## and it is computed by THIS FILE's OWN FNV-1a written out below rather than by
-## the module's - an independent implementation of a published algorithm, which
-## is not the module agreeing with itself.
+## `t_isp1181_state` - the SOF tick and the ISP1181 state block.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code.
 
@@ -84,12 +61,7 @@ const frameModulus = 2048
 #
 # THE COUNTER'S NO-OP VALUE IS ZERO, WHICH IS WHY A FIRST-MISMATCH ASSERTION IS
 # NOT ENOUGH ON ITS OWN. A tick that never advanced reads 0, and so does one
-# that completed a full cycle. The cycle case therefore asserts the value at
-# EVERY tick against the tick index, the highest value seen, and the NUMBER OF
-# TICKS TAKEN - so a tick that stood still, one whose loop stopped early and one
-# that ran past its width are three different reds. An assertion on the first
-# mismatch alone passes vacuously over an empty range; the count is what closes
-# that.
+# that completed a full cycle.
 
 type FrameWalk = tuple[start: uint16, firstMismatch: string, ticks: int,
                        maxSeen: uint16, final: uint16]
@@ -120,9 +92,6 @@ check(cycle == wantCycle,
         "tick and ends where it began",
       $cycle, $wantCycle)
 
-# THE WRAP ON ITS OWN, because the cycle case passes its own start and end value
-# through the same wrap and a reader should not have to take the discriminating
-# step on trust.
 type Wrap = tuple[before: uint16, after: uint16]
 
 let wrapCtx = fresh()
@@ -181,11 +150,6 @@ check(bulkOutcome == wantBulk,
       "tick: one call of N frames equals N calls of one, at and across the wrap",
       $bulkOutcome, $wantBulk)
 
-# THE MODEL NEVER READS A WALL CLOCK, ASSERTED AGAINST MEASURED ELAPSED TIME AND
-# NOT AGAINST A SLEEP. The loop spins until the clock has visibly moved and
-# ticks zero frames throughout; the elapsed figure is asserted to be non-zero,
-# because a case that spun for no measurable time would pass over a model that
-# does read the clock.
 type WallClock = tuple[moved: bool, spun: bool, counter: uint16]
 
 proc driveWallClock(): WallClock =
@@ -207,9 +171,6 @@ check(wallClockSeen == wantWallClock,
         "counter where the frames left it",
       $wallClockSeen, $wantWallClock)
 
-# A NIL HANDLE IS ANSWERED AND IS NOT AN ABORT. Design section 5.6 refuses an
-# abort inside a plugin, because it destroys a session that has nothing to do
-# with this model.
 type NilTick = tuple[counter: uint16, irq: int, tx: int]
 
 let nilHandle: ISP1181Ctx = nil
@@ -223,22 +184,10 @@ check(nilTick == wantNilTick,
 
 # ---------------------------------------------------------------------------
 # BLOCK 2. The block's size and its layout.
-#
-# THE SIZE IS ASSERTED AGAINST A HAND-WRITTEN TOTAL AND THE LAYOUT AGAINST A
-# HAND-WRITTEN LIST. Either alone is weak: a size that agreed with a payload
-# whose fields had moved would pass the first, and a layout that summed to a
-# different total would pass the second.
-#
-# `model` CARRIES ZERO BYTES AND THAT IS THE DECLARED, VISIBLE EXCLUSION. The
-# full model's own fields are a string, a sequence of strings, an enum and an
-# array of FIFOs holding sequences of bytes, and a sequence of strings has no
-# bound at all - so no fixed-size block can carry it and this one does not
-# pretend to. The entry is present at width zero rather than absent, so a reader
-# of the layout sees the gap instead of inferring it from a silence.
 
-const headerBytes = 12          ## magic, version, payload width
+const headerBytes = 12
 const checksumBytes = 4
-const payloadBytes = 3          ## backend 1, frame number 2, model 0
+const payloadBytes = 3
 
 let sizeSeen = int(isp1181_state_size())
 const wantSize = headerBytes + payloadBytes + checksumBytes
@@ -254,10 +203,6 @@ check(layoutSeen == wantLayout,
 
 # ---------------------------------------------------------------------------
 # BLOCK 3. The bytes the save writes.
-#
-# THE WHOLE BLOCK IS COMPARED AND NOT A FIELD OF IT. A save that wrote nothing
-# and a load that read nothing round-trip perfectly against each other, so the
-# round trip below is not evidence on its own; only the bytes are.
 
 proc blockHex(buf: openArray[uint8]): string =
   var parts: seq[string]
@@ -277,9 +222,8 @@ proc saveOf(handle: ISP1181Ctx): seq[uint8] =
   result = newSeq[uint8](wantSize)
   isp1181_state_save(handle, addr result[0])
 
-# `0x49 0x53 0x50 0x31` is `ISP1`, the block's own magic, and it is written out
-# byte by byte rather than as a word so that a byte-order defect in the header
-# is a red here and not only in the payload.
+# `0x49 0x53 0x50 0x31` is `ISP1`, the block's own magic, written out byte by
+# byte rather than as a word.
 const magicBytes = @[0x49'u8, 0x53'u8, 0x50'u8, 0x31'u8]
 
 let bytesCtx = fresh()
@@ -306,11 +250,6 @@ check(blockHex(savedBlock) == blockHex(wantBlock),
 # ---------------------------------------------------------------------------
 # BLOCK 4. The round trip goes through the byte buffer and into a DIFFERENT
 # handle.
-#
-# A ROUND TRIP THAT COMPARED A HANDLE AGAINST ITSELF WOULD PROVE NOTHING. The
-# destination below is a second handle carrying a DIFFERENT backend and a
-# DIFFERENT counter before the load, so a load that did nothing leaves those
-# values in place and is red.
 
 type Restored = tuple[backend: string, counter: uint16, status: string]
 
@@ -356,8 +295,8 @@ proc runTrips(): TripOutcome =
   var firstBad = ""
   var rows = 0
   for row in tripRows:
-    # THE DESTINATION IS ALWAYS THE OTHER BACKEND AND A COUNTER THAT IS NOT THE
-    # SOURCE'S, so no row can pass by the destination happening to agree.
+    # THE DESTINATION IS ALWAYS THE OTHER BACKEND AND A COUNTER THAT IS NOT
+    # THE SOURCE'S.
     let dest = if row.src == Stub: FullModel else: Stub
     let seen = roundTrip(row.src, row.frames, dest, 999'u32)
     inc rows
@@ -375,14 +314,6 @@ check(tripsOutcome == wantTrips,
 
 # ---------------------------------------------------------------------------
 # BLOCK 5. A perturbed block is refused BY NAME and changes nothing.
-#
-# EVERY BYTE OF THE BLOCK IS MUTATED, ONE AT A TIME, AND THE SWEEP ASSERTS ITS
-# OWN ITERATION COUNT. A sweep that stopped after the header would otherwise
-# report the same clean result as one that covered the payload and the checksum.
-#
-# THE HANDLE IS INSPECTED AFTER EVERY REFUSAL. A load that validated correctly
-# and then decoded anyway refuses by name and mutates the handle, and only the
-# post-state separates it from one that refuses without touching anything.
 
 type Perturbation = tuple[tried: int, accepted: int, touched: int,
                           statuses: string]
@@ -427,11 +358,9 @@ check(perturbation == wantPerturbation,
         "name and leaves the handle exactly as it was",
       $perturbation, $wantPerturbation)
 
-# THE C ENTRY POINT DROPS THE NAME AND MUST STILL REFUSE. `include/mcf5307.h`
-# gives `isp1181_state_load` no result and no out-parameter, so what a C caller
-# is left with is the state it already had - which is the strongest report a
-# `void` signature admits, and it is only true if the refusal precedes the
-# decode.
+# THE C ENTRY POINT DROPS THE NAME AND MUST STILL REFUSE. A `void` signature
+# leaves a C caller with the state it already had, which is only true if the
+# refusal precedes the decode.
 type CRefusal = tuple[backend: string, counter: uint16]
 
 proc driveCRefusal(): CRefusal =
@@ -482,11 +411,6 @@ check(wrongVersion == wantWrongVersion,
         "is refused by version",
       wrongVersion, wantWrongVersion)
 
-# A PAYLOAD BYTE THAT NAMES NO ENUMERATOR IS REFUSED BEFORE THE DECODE. The
-# checksum is repaired, so this case reaches the field validation and nothing
-# else can turn it back. A model that wrote the byte into the selector anyway
-# would hold a value the enum has no name for, which `--panics:on` turns into an
-# abort inside a plugin host - the one outcome design section 5.6 refuses.
 proc driveBadBackend(): tuple[status: string, backend: string] =
   let source = fresh()
   isp1181_tick(source, 9'u32)

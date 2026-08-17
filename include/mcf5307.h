@@ -62,14 +62,6 @@ typedef enum {
 
 /* The board's two memory handlers.
  *
- * `size` IS A COUNT OF BYTES - 1, 2 or 4 - AND NEVER A WIDTH IN BITS. A
- * longword access presents 4 and not 32, and an instruction fetch presents 2
- * and not 16. The two readings disagree on every access a core can make, so a
- * board that expects 8, 16 or 32 refuses all of them and the first instruction
- * fetch is where it stops. ColdFire encodes transfer size as SIZ[1:0] with
- * byte, word and longword semantics, which is what this argument carries; a
- * width in bits is a different quantity and is not what any caller is handed.
- *
  * `status` IS AN OUT-PARAMETER ON BOTH, and the core writes
  * `MCF5307_BUS_OK` into it before every call. A board that models no fault
  * behaves exactly as it did before the parameter existed: silence means
@@ -106,9 +98,9 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * it runs, so the registers it reads are the machine as the handler will find
  * it: a7 holding the ADDRESS OF the 8-byte frame and not an address below it -
  * the frame's first longword is AT a7 and the stacked program counter at
- * `a7+4`, which is what Figure 3-7 draws - the program counter register at the
- * handler's first instruction, and the status register already carrying the
- * interrupt priority mask raised to the level being acknowledged.
+ * `a7+4` - the program counter register at the handler's first instruction,
+ * and the status register already carrying the interrupt priority mask raised
+ * to the level being acknowledged.
  *
  * THE LEVEL-7 ARM IS DECIDED AGAINST THE PRESENTATION THE CALL HAS NOT YET
  * OVERWRITTEN. `mcf5307_set_irq` arms an edge only on a transition to level 7
@@ -131,19 +123,9 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  *
  * `mcf5307_reset` INHIBITS INTERRUPT SAMPLING FOR THE FIRST INSTRUCTION AT
  * `initial_pc`. Reset is an exception, and sampling is inhibited during the
- * first instruction of every exception handler - and this one is a DEDUCTION
- * FROM QUOTED PREMISES rather than a quotation of the conclusion. Both
- * premises are printed exactly as cited: User's Manual Table 3-1, closing
- * paragraph, folio 3-13, and the reset exception's own entry at section
- * 3.5.11, folio 3-17. Neither states the conclusion - Table 3-1 carries no
- * reset row, and section 3.5.11 never calls the reset program counter a
- * handler - so the step between them is this header's: the instruction at
- * `initial_pc` is the first instruction of an exception handler, and the
- * sentence about all exception handlers therefore governs it.
+ * first instruction of every exception handler.
  *
- * `mcf5307_reset` ALSO RAISES THE INTERRUPT PRIORITY MASK TO 7, and THAT one
- * is a citation: section 3.5.11, folio 3-17, "sets the processor's interrupt
- * priority mask in the SR to the highest level (level 7)". A board that
+ * `mcf5307_reset` ALSO RAISES THE INTERRUPT PRIORITY MASK TO 7. A board that
  * presents a LEVEL 1 TO 6 interrupt immediately after `mcf5307_reset` does not
  * get it taken at the reset program counter, nor at the boundary after that
  * instruction, nor at any boundary at all: the mask inhibits every level at or
@@ -155,11 +137,9 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * the boundary after that instruction.
  *
  * `mcf5307_reset` ALSO CLEARS THE LATCHED LEVEL-7 EDGE AND THEN RE-OBSERVES
- * THE BOARD'S LAST PRESENTATION - and this one is an INFERENCE and not a
- * citation, because the manual set is silent on reset against a latched edge.
- * The argument for it is that a level 7 request must be held until the second
- * interrupt-acknowledge bus cycle has begun (section 7.6.1, folio 7-24), so an
- * edge whose pin has since been released has nothing left to acknowledge. The
+ * THE BOARD'S LAST PRESENTATION. A level 7 request must be held until the
+ * second interrupt-acknowledge bus cycle has begun, so an edge whose pin has
+ * since been released has nothing left to acknowledge. The
  * presentation itself survives the call: it is the board's state and reset has
  * no newer answer for it. A level 7 STILL PRESENTED across `mcf5307_reset` is
  * armed again, carrying the vector and the autovector flag of that
@@ -189,25 +169,15 @@ uint32_t mcf5307_exec(mcf5307_ctx* ctx, uint32_t max_cycles);
  *
  * `mcf5307_set_reg` returns 1 on success and 0 for an out-of-range index or
  * a nil context; `mcf5307_get_reg` returns the register's value and 0 for an
- * out-of-range index. These are the harness's one register bridge: the
- * conformance runner (CPU-5) sets the `initial` registers through them and
- * reads the `expected` registers back. The core's instruction groups
- * (CPU-7..10) own the register file this accessor exposes. */
+ * out-of-range index. */
 int mcf5307_set_reg(mcf5307_ctx* ctx, int index, uint32_t value);
 uint32_t mcf5307_get_reg(const mcf5307_ctx* ctx, int index);
 
 /* THE CORE'S RUN STATE, AND THE ONLY WAY TO SEE IT ACROSS THIS INTERFACE.
  *
  * `mcf5307_exec` returns a cycle count and nothing else. A cycle count cannot
- * say WHY the core stopped, so before these two calls existed a caller that
- * went through this header could not tell an instruction that executed from
- * an instruction that trapped. The conformance runner (conformance/runner.cpp)
- * measured exactly that gap: a case whose instruction traps still passed
- * whenever the registers it named happened to hold the expected values, which
- * is every case that expects a register to be UNCHANGED. The Nim-side tests
- * (`tests/t_alu.nim`, `tests/t_move.nim`) assert the same thing through
- * `ctx.fault` because they reach the context directly; a C++ caller cannot,
- * and these two calls are that missing channel.
+ * say WHY the core stopped, so these two calls are what tells an instruction
+ * that executed from an instruction that trapped.
  *
  * Both return 1 for true and 0 for false, and both return 0 for a nil
  * context - a caller with no context has no halted core and no faulted one.
@@ -220,7 +190,7 @@ uint32_t mcf5307_get_reg(const mcf5307_ctx* ctx, int index);
  * error on an operand or instruction access, an illegal instruction word, an
  * illegal effective address for the opcode, an illegal operand size, or a
  * divide by zero. THE TWO ARE NOT THE SAME FLAG. A core can be halted without
- * a fault - a valid opcode whose semantics a later task owns halts and does
+ * a fault - a valid opcode with no implemented semantics halts and does
  * not fault - so a caller that wants "did this instruction trap" must ask
  * `mcf5307_faulted`, and a caller that wants "may I run more" must ask
  * `mcf5307_halted`. A faulted core is always also halted.
