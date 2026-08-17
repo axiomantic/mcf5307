@@ -3558,11 +3558,14 @@ add_test(NAME t_claims
 # `mcf5307_runtime_init()` twice and asserts both calls return. C++ never
 # names `NimMain`; it calls `mcf5307_runtime_init()`, which is idempotent.
 add_executable(abi_smoke ${CMAKE_CURRENT_LIST_DIR}/abi_smoke.cpp)
-target_include_directories(abi_smoke PRIVATE
-    "${PROJECT_SOURCE_DIR}/include"
-    "${NIMCACHE_DIR}"
-    "${NIM_INCLUDE_DIR}"
-)
+# `include/` IS THE WHOLE INCLUDE PATH, and leaving the nimcache and the Nim
+# library directory off it is the point. The consumer this test stands in for -
+# `gearmulator`'s `g2Lib` - has neither on its own include path. Either one
+# added here would let `include/mcf5307.h` acquire a dependency on a generated
+# header or on `nimbase.h` and still compile under this test, which is the
+# regression the test exists to catch. `abi_smoke_symbols.inc` needs no `-I`:
+# a quoted include resolves beside `abi_smoke.cpp`.
+target_include_directories(abi_smoke PRIVATE "${PROJECT_SOURCE_DIR}/include")
 target_link_libraries(abi_smoke PRIVATE mcf5307)
 target_compile_features(abi_smoke PRIVATE cxx_std_17)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
