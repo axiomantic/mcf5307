@@ -26,9 +26,9 @@ proc isEmpty*(f: Fifo): bool = f.packets.len == 0
 proc isFull*(f: Fifo): bool = f.packets.len >= f.bufferCount
 
 proc accept*(f: var Fifo; data: openArray[uint8]): bool =
-  ## `false` is the NAK. The two refusals are kept separate in the caller's
-  ## log, because a full buffer is ordinary flow control and an oversized
-  ## packet is a fault in whoever produced it.
+  ## `false` is the NAK. The refusals are kept apart in the caller's log,
+  ## because a full buffer is ordinary flow control and an oversized packet is
+  ## a fault in whoever produced it.
   if f.isFull or data.len > f.capacityBytes:
     return false
   var packet = newSeq[uint8](data.len)

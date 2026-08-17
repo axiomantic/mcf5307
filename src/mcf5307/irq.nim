@@ -6,17 +6,11 @@
 ## overwrites them whole, which is what makes the call idempotent without a
 ## comparison against a previous value.
 ##
-## The one piece of history the core does keep is the level-7 edge, and the
-## manual is why. MCF5307 User's Manual section 7.6, folio 7-23, NOTE:
-## "Interrupt levels 1 through 6 are level-sensitive only. Interrupt level 7 is
-## both level sensitive and edge triggered as described in 7.6.1 Level 7
-## Interrupts." Section 7.6.1, folio 7-24: a level 7 interrupt "is a
-## nonmaskable interrupt; therefore, a 7 in the interrupt mask does not disable
-## a level 7 interrupt", and it is "edge triggered by a transition from a lower
-## priority request to the level 7 request, as opposed to interrupt levels 1
-## through 6, which are level sensitive. Therefore, if IRQ7 remains asserted,
-## the MCF5307 device will only recognize one level 7 interrupt because only
-## one transition from a lower level request to a level 7 request occurred."
+## THE ONE PIECE OF HISTORY THE CORE DOES KEEP IS THE LEVEL-7 EDGE. Interrupt
+## levels 1 through 6 are level-sensitive only. Level 7 is nonmaskable, so a 7
+## in the interrupt mask does not disable it, and it is edge triggered by a
+## transition from a lower priority request to the level 7 request - so a held
+## IRQ7 is recognized once, because only one such transition occurred.
 ##
 ## This module implements the edge half of level 7 and not the level half,
 ## which is a deliberate divergence from the manual. The rule here is
@@ -41,9 +35,7 @@ import mcf5307/decode_types
 import mcf5307/exception
 import mcf5307/machine
 
-# User's Manual section 3.2.2.1, folio 3-10, prints the whole 16-bit status
-# register over its bit numbers: T at 15, S at 13, M at 12 and I[2:0] at bits
-# 10 to 8. `machine.nim` names T, S and M with the rest of the register; the
+# `machine.nim` names T, S and M with the rest of the status register; the
 # interrupt priority mask is here because its SHIFT is only meaningful to the
 # comparison `pendingInterrupt` makes, and that comparison is this module's.
 const
@@ -96,28 +88,26 @@ proc resetInterruptEdge*(ctx: MCF5307Ctx) =
   ## What a RESET does to the level-7 edge latch: clear it, then re-observe the
   ## pin.
   ##
-  ## This is an inference, not a citation: the manuals are silent. Section
-  ## 3.5.11, folio 3-17, enumerates the reset exception's effects and names no
-  ## pending-interrupt state among them; sections 7.6 and 7.6.1, folios 7-23
-  ## and 7-24, give level 7 its trigger type and never mention reset. Two
-  ## arguments pull in opposite directions, which is why it does two things and
-  ## not one:
+  ## THIS IS AN INFERENCE AND NOT A CITATION, AND THE SOURCES ARE SILENT RATHER
+  ## THAN BRIEF. The reset exception's effects name no pending-interrupt state,
+  ## and level 7's trigger type is given without any mention of reset. Two
+  ## arguments stand in for the quotation this procedure does not have, and they
+  ## pull in opposite directions, which is why it does two things and not one:
   ##
   ##   The clear. RSTI resets every register in the SIM and every peripheral
   ##   (folio 8-10) and the entire device including the PLL (folio 7-40). There
   ##   is no silicon that does all of that and preserves a one-bit edge-history
   ##   flop inside the core's own recognition logic.
   ##
-  ##   The re-observation, without which the clear alone drops an interrupt real
-  ##   hardware takes. Section 7.6.1, folio 7-24: "The level 7 request on IRQ7
-  ##   must be held until the second interrupt-acknowledge bus cycle has begun
-  ##   to ensure that the interrupt is recognized." A latched edge whose pin has
-  ##   since been released has nothing left for an acknowledge cycle to
-  ##   acknowledge, and keeping it models a state the hardware cannot reach. A
-  ##   pin still asserted across the reset is the other case entirely: the
-  ##   detector's history is back at "last seen level 0", so its next
-  ##   observation is a transition from a lower request to the level 7 request
-  ##   and the core re-arms itself.
+  ##   THE RE-OBSERVATION, WITHOUT WHICH THE CLEAR ALONE DROPS AN INTERRUPT REAL
+  ##   HARDWARE TAKES. The level 7 request on IRQ7 must be held until the second
+  ##   interrupt-acknowledge bus cycle has begun for the interrupt to be
+  ##   recognized. A latched edge whose pin has since been released therefore
+  ##   has nothing left for an acknowledge cycle to acknowledge, and keeping it
+  ##   models a state the hardware cannot reach. A pin STILL ASSERTED across the
+  ##   reset is the other case entirely: the detector's history is back at "last
+  ##   seen level 0", so its next observation is a transition from a lower
+  ##   request to the level 7 request and the core RE-ARMS ITSELF.
   ##
   ## Putting the stored history back to 0 and re-presenting the board's own last
   ## presentation is exactly what a detector reset to level 0 does at its next
@@ -171,14 +161,11 @@ proc pendingInterrupt*(ctx: MCF5307Ctx): tuple[take: bool, level: int,
   ## level 7 with no armed latch is not an interrupt at all - that is the
   ## state a held level 7 is in after the core has taken it.
   ##
-  ## Levels 1 to 6 are tested against the presentation and nothing else.
-  ## Section 3.2.2.1, folio 3-10: "Interrupt requests are inhibited for all
-  ## priority levels less than or equal to the current priority", so the test
-  ## is strictly greater than. Section 7.6, folio 7-23, states it from the
-  ## other side: "When an interrupt request has a priority higher than the
-  ## value in the mask, the ColdFire core makes the request a pending
-  ## interrupt." A `>=` here would take a level the hardware inhibits, and a
-  ## mask of 7 would then stop nothing.
+  ## LEVELS 1 TO 6 ARE TESTED AGAINST THE PRESENTATION AND NOTHING ELSE.
+  ## Interrupt requests are inhibited for all priority levels less than or equal
+  ## to the current priority, so the test is STRICTLY GREATER THAN. A `>=` here
+  ## would take a level the hardware inhibits, and a mask of 7 would then stop
+  ## nothing.
   if ctx.irq7Armed:
     return (true, 7, vectorFor(7, ctx.irq7Vector, ctx.irq7Autovector))
   let level = int(ctx.irqLevel)
@@ -201,23 +188,20 @@ proc takeInterrupt*(ctx: MCF5307Ctx): bool =
   if pending.level == 7:
     ctx.irq7Armed = false
 
-  # The stacked program counter is the next instruction: Table 3-1, folio
-  # 3-13, gives vectors 25-31 a stacked program counter of "Next", and its
-  # footnote defines Next as "the PC of the next instruction that follows the
-  # instruction that caused the fault". This runs at an instruction boundary,
-  # where `ctx.pc` is exactly that.
+  # The stacked program counter is the NEXT instruction: the interrupt vectors
+  # stack "the PC of the next instruction that follows the instruction that
+  # caused the fault". This runs at an instruction boundary, where `ctx.pc` is
+  # exactly that.
   takeException(ctx, pending.vector, ctx.pc)
   if ctx.halted:
     return true
 
-  # Section 3.3, folio 3-11: "The occurrence of an interrupt exception also
-  # forces the M-bit to be cleared and the interrupt priority mask to be set
-  # to the level of the current interrupt request." `takeException` has
-  # already set S and cleared T and has already stacked the copy of the
-  # status register taken before any of it, so this write cannot reach the
-  # frame. Section 7.6.1's second sequence depends on this mask write for
-  # level 7 as much as for any other level: "the interrupt mask will be set
-  # back to level 7".
+  # An interrupt exception forces the M-bit to be cleared and the interrupt
+  # priority mask to be set to the level of the current interrupt request.
+  # `takeException` has already set S and cleared T and has already stacked the
+  # COPY of the status register taken before any of it, so this write cannot
+  # reach the frame. Level 7 depends on this mask write as much as any other
+  # level does.
   ctx.sr = (ctx.sr and not srMaster and not srIpmMask) or
            (uint32(pending.level) shl srIpmShift)
 

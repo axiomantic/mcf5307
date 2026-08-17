@@ -9,21 +9,19 @@
 ## sibling executor. An executor that reaches into another executor for a
 ## helper rebuilds the decoder-under-executor cycle one layer down.
 ##
-## Every operation in this group is 32-bit on this part, which the MCF5307
-## User's Manual Table 3-7 states for each of them, and `m68k-elf-as
-## -mcpu=5307` confirms by rejecting `and.b %d0,%d1`, `not.w %d0`,
-## `andi.b #5,%d1` and `lsl.w #1,%d0`. The one exception is the bit
-## operations, whose operand is 32 bits when it is a data register and 8 bits
-## otherwise - the "8,32" of that same table. Every byte and word form of
-## everything else traps here.
+## THE SIZE IS LONG AND THE EXCEPTIONS ARE NAMED. Every operation in this group
+## is 32-bit on this part, and `m68k-elf-as -mcpu=5307` confirms by rejecting
+## `and.b %d0,%d1`, `not.w %d0`, `andi.b #5,%d1` and `lsl.w #1,%d0`. The one
+## exception is the bit operations, whose operand is 32 bits WHEN IT IS A DATA
+## REGISTER and 8 bits otherwise - the documented "8,32". Every byte and word
+## form of everything else TRAPS here.
 ##
-## Every shift is register-only and a memory shift traps. MCF5307 User's
-## Manual Table 3-13, page 3-28: the `asl.l`, `asr.l`, `lsl.l` and `lsr.l`
-## rows all read `<ea>,Dx` and carry a time under `Rn` and under `#xxx` alone
-## - `1(0/0)` in each - with a dash under `(An)`, `(An)+`, `-(An)`,
-## `(d16,An)`, `(d8,An,Xi*SF)` and `xxx.wl`. A shift on this part reaches a
-## data register and an immediate count and no memory operand at all, and the
-## `{Dn}` mask in `decode_types` refuses that operand.
+## EVERY SHIFT IS REGISTER-ONLY AND A MEMORY SHIFT TRAPS. The `asl.l`, `asr.l`,
+## `lsl.l` and `lsr.l` timing rows all read `<ea>,Dx` and carry a time under
+## `Rn` and under `#xxx` ALONE - `1(0/0)` in each - with A DASH under `(An)`,
+## `(An)+`, `-(An)`, `(d16,An)`, `(d8,An,Xi*SF)` and `xxx.wl`. A shift on this
+## part reaches a data register and an immediate COUNT and no memory operand at
+## all, and the `{Dn}` mask in `decode_types` refuses that operand.
 ##
 ## The witness is `e2d0`: `1110 001 0 11 010 000`, a memory shift whose
 ## operand is `(%a0)`, which decodes as `lsrw %a0@` on
@@ -32,9 +30,8 @@
 ## its low six bits are mode 000 - a data register - which is not a memory
 ## operand on the 68000 either, so its refusal is not ColdFire's doing.
 ##
-## The rotates are gone too: manual section 3.9 lists "logical rotate" among
-## the removed instructions, and `decode.nim` never produces an operation for
-## them.
+## THE ROTATES ARE GONE TOO: "logical rotate" is among the removed
+## instructions, and `decode.nim` never produces an operation for them.
 ##
 ## The condition codes, and where each rule comes from.
 ##
@@ -68,8 +65,8 @@
 ##
 ## A SHIFT COUNT OF ZERO IS REACHABLE THROUGH THE REGISTER FORM ALONE, because
 ## the immediate form spends its zero slot on the value eight. It shifts
-## nothing. ONE OF THE FIVE FLAGS HAS A REASON AND FOUR ARE A CHOICE, and the
-## code and this paragraph say the same thing about which is which:
+## nothing. ONE FLAG HAS A REASON AND THE REST ARE A CHOICE, and the code and
+## this paragraph say the same thing about which is which:
 ##
 ##   2. The status word of a shift by zero.
 ##
@@ -80,20 +77,14 @@
 ##   left to infer it.
 ##
 ## CYCLES. See the block above the constants in `cpu.nim`; uncertainty 2 below
-## is this group's entry. Every instruction here has a timing row - all of them
-## in Table 3-13 (folios 3-28 and 3-29) except NOT, which is in Table 3-12
-## (3-27) - and none of the returns here was derived from one. Eight of those
-## rows carry `1(0/0)` in every cell they carry at all - `not.l Dx`, the three
-## `#imm,Dx` immediate rows, and the four shifts, which are timed under `Rn`
-## and `#xxx` and dashed everywhere else - against the 4 and 6 returned.
+## is this group's entry. Every instruction here has a timing row, and none of
+## the returns here was derived from one. Many of those rows carry `1(0/0)` in
+## every cell they carry at all - `not.l Dx`, the `#imm,Dx` immediate rows, and
+## the shifts, which are timed under `Rn` and `#xxx` and dashed everywhere else
+## - against the 4 and 6 returned.
 ##
-## WHAT THIS MODULE DOES NOT KNOW. Five things, and the rule for every one of
-## them is the same: the implementation picks a behaviour.
-##
-## The ColdFire Family Programmer's Reference Manual is on disk at
-## `~/Development/datasheets/CFPRM.pdf` (Rev. 3), and its per-instruction pages
-## give the flag rules directly. Entries 3, 4 and 5 below are per-instruction
-## questions of exactly the kind the CFPRM answers.
+## WHAT THIS MODULE DOES NOT KNOW, and the rule for every entry is the same:
+## THE IMPLEMENTATION PICKS A BEHAVIOUR.
 ##
 ##   3. Whether a dynamic BTST may read an immediate operand. User's Manual
 ##      Table 3-13, page 3-28, dashes the `#xxx` column of the `btst Dy,<ea>`
@@ -115,11 +106,10 @@
 ##      This is the one entry on this list that a future reader may have to
 ##      REVERSE rather than merely fill in.
 ##
-##   4. The bit number's modulus. `execBitOp` reduces the number modulo the
-##      operand width - 32 for a data register, 8 for memory. Table 3-7 gives
-##      the two widths ("8,32") and states no modulus anywhere, and no other
-##      passage does either. Figure 3-8 on page 3-18 is the closest thing and
-##      it does not carry the weight: its `BIT` row reads "BIT (0 <= MODULO
+##   4. THE BIT NUMBER'S MODULUS. `execBitOp` reduces the number modulo the
+##      operand width - 32 for a data register, 8 for memory. The reference
+##      gives the WIDTHS ("8,32") and states no modulus anywhere. The closest
+##      thing does not carry the weight: its `BIT` row reads "BIT (0 <= MODULO
 ##      (OFFSET) < 31, OFFSET OF 0 = MSB)", which numbers from the MSB where
 ##      every bit operation here numbers from the LSB, stops at 31 rather than
 ##      including it, and uses the word OFFSET, which belongs to the bit-field
@@ -239,15 +229,14 @@ proc execImmediate(ctx: MCF5307Ctx; d: Decoded): uint32 =
   6'u32
 
 proc execNot(ctx: MCF5307Ctx; d: Decoded): uint32 =
-  ## NOT.L Dn. The memory forms of the 68000 are gone, and the manual is what
-  ## says so. MCF5307 User's Manual Table 3-12, "One Operand Instruction
-  ## Execution Times", page 3-27: the `not.l` row carries `Dx` in the `<EA>`
-  ## column, `1(0/0)` under `Rn`, and a dash under every one of `(An)`,
-  ## `(An)+`, `-(An)`, `(d16,An)`, `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`. The
-  ## `clr.l` row above it and the `tst.l` row below it carry times in those
-  ## same columns, so the dashes are this row's and not the table's.
-  ## `m68k-elf-as -mcpu=5307` agrees: it rejects `not.l (%a0)`. So the operand
-  ## mask is `{Dn}` and every other addressing mode traps.
+  ## NOT.L Dn. THE MEMORY FORMS OF THE 68000 ARE GONE, AND THE REFERENCE IS
+  ## WHAT SAYS SO. The `not.l` timing row carries `Dx` in the `<EA>` column,
+  ## `1(0/0)` under `Rn`, and A DASH under every one of `(An)`, `(An)+`,
+  ## `-(An)`, `(d16,An)`, `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`. The `clr.l` and
+  ## `tst.l` rows of the same table carry times in those same columns, so the
+  ## dashes are this row's and not the table's. `m68k-elf-as -mcpu=5307`
+  ## agrees: it rejects `not.l (%a0)`. So the
+  ## operand mask is `{Dn}` and every other addressing mode traps.
   ##
   ## Do not cite objdump here. `m68k-elf-objdump -m m68k:5307` decodes `4690`
   ## as `notl %d0` - measured - which is a laxity of that disassembler and not
@@ -268,19 +257,19 @@ proc execNot(ctx: MCF5307Ctx; d: Decoded): uint32 =
 proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## One bit operation, in either of its two forms.
   ##
-  ## THE OPERAND WIDTH DECIDES THE WIDTH OF THE ACCESS, AND THE MANUAL GIVES
-  ## THE TWO WIDTHS. A data register operand is 32 bits and every memory
-  ## operand is 8 bits AND THE ACCESS IS ONE BYTE - the "8,32" of Table 3-7's
-  ## OPERAND SIZE column, which carries that pair for all four bit operations
-  ## and for no other instruction in this group. A core that read or wrote a
+  ## THE OPERAND WIDTH DECIDES THE WIDTH OF THE ACCESS, AND THE REFERENCE
+  ## GIVES BOTH WIDTHS. A data register operand is 32 bits and every memory
+  ## operand is 8 bits AND THE ACCESS IS ONE BYTE - the documented "8,32",
+  ## which is carried by the bit operations and by no other instruction in this
+  ## group. A core that read or wrote a
   ## longword in memory here would answer a different question and would also
   ## disturb the three bytes beside the operand.
   ##
   ## The modulus below is a choice and not a citation. Taking the bit number
   ## modulo the operand width - 32 for a register, 8 for memory - is what this
-  ## core does with a number that does not fit, and NO PASSAGE IN THE USER'S
-  ## MANUAL STATES IT. It is uncertainty 4 in this module's header, which
-  ## says why Figure 3-8's `MODULO (OFFSET)` annotation does not settle it.
+  ## core does with a number that does not fit, and NO PASSAGE OF THE
+  ## REFERENCE STATES IT. It is uncertainty 4 in this module's header, which
+  ## says why the `MODULO (OFFSET)` annotation does not settle it.
   ##
   ## THE STATIC FORM IS NARROWER THAN THE DYNAMIC ONE. `eaBitStatic` is its
   ## mask and the measurement behind it is beside that constant; the dynamic
@@ -311,7 +300,7 @@ proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
   #
   # The immediate is not one of them. `eaBitDynamic` excludes it, so the mask
   # check above refuses `btst %d1,#5` before either evaluator is reached. See
-  # that constant in `decode_types.nim` for the manual rows behind it, and
+  # that constant in `decode_types.nim` for the rows behind it, and
   # uncertainty 3 in this module's header for what would overturn it.
   #
   # The fix belongs here and not in `eaResolve`. Widening that procedure would
@@ -379,11 +368,10 @@ proc execShift(ctx: MCF5307Ctx; d: Decoded): uint32 =
     if toLeft:
       carry = (before and 0x80000000'u32) != 0'u32
       value = before shl 1
-      # No overflow is computed for ASL. CFPRM folio 4-12 gives V a flat
-      # "Always cleared" and adds "Note that CCR[V] is always cleared by ASL
-      # and ASR, unlike on the 68K family processors"; folio 4-11 says "The
-      # overflow bit is always zero". The clearing at the foot of this proc is
-      # the whole rule.
+      # NO OVERFLOW IS COMPUTED FOR ASL. V is given a flat "Always cleared",
+      # with the note that CCR[V] is always cleared by ASL and ASR, unlike on
+      # the 68K family processors, and the prose adds "The overflow bit is
+      # always zero". The clearing at the foot of this proc is the whole rule.
     else:
       carry = (before and 1'u32) != 0'u32
       value = before shr 1

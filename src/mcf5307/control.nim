@@ -15,13 +15,12 @@
 ##
 ## The sizes.
 ##
-##   CMP, CMPA, CMPI are 32-bit and there is no other size. MCF5307 User's
-##   Manual Table 3-7, "Instruction Set Summary", page 3-23, gives all three an
-##   operand size column of `32` alone. `m68k-elf-as -mcpu=5307` rejects
-##   `cmp.b`, `cmp.w`, `cmpa.w`, `cmpi.b` and `cmpi.w`, and
-##   `m68k-elf-objdump -m m68k:5307` decodes `b2c0` - which is `cmpaw %d0,%a1`
-##   under `-m m68k:68020` - as `.short 0xb2c0`. Every byte and word form
-##   traps here.
+##   CMP, CMPA, CMPI are 32-BIT AND THERE IS NO OTHER SIZE. The instruction set
+##   summary gives all three an OPERAND SIZE of `32` alone.
+##   `m68k-elf-as -mcpu=5307` rejects `cmp.b`, `cmp.w`, `cmpa.w`, `cmpi.b` and
+##   `cmpi.w`, and `m68k-elf-objdump -m m68k:5307` decodes `b2c0` - which is
+##   `cmpaw %d0,%a1` under `-m m68k:68020` - as `.short 0xb2c0`. Every byte and
+##   word form TRAPS here.
 ##
 ##   Scc is a byte. Table 3-7, page 3-25, gives `Scc Dx` an operand size of 8
 ##   and the operation "If Condition True, Then 1's -> Destination; Else 0's ->
@@ -85,8 +84,8 @@
 ##       nothing.
 ##
 ##   TRAP
-##       Section 3.3, page 3-11: the processor copies SR, then sets the S-bit
-##       and clears the T-bit. `machine.nim`'s `takeException` carries it.
+##       The processor copies SR, then sets the S-bit and clears the T-bit.
+##       `machine.nim`'s `takeException` carries it.
 ##
 ## Cycles. Nothing checks any of them, and the numbers are not a transcription
 ## of the tables.
@@ -139,22 +138,20 @@
 ##   table on the same subject can follow the notes. A citation to a table read
 ##   on one page is not complete until the next page has been read.
 ##
-## What this module does not know. The implementation picks a behaviour and
-## this list says so. The document that would settle numbers 1, 2 and 4 is the
-## ColdFire Family Programmer's Reference Manual, whose per-instruction pages
-## give the flag rules and the condition tests directly.
+## WHAT THIS MODULE DOES NOT KNOW, and the rule for every entry is the one
+## `logic.nim` established: THE IMPLEMENTATION PICKS A BEHAVIOUR AND THIS LIST
+## SAYS SO.
 ##
-##   1. The boolean test of each of the sixteen conditions. The four-bit
-##      encoding is measured and is not in doubt: `m68k-elf-as -mcpu=5307` put
-##      `bhi` at 0x62, `bls` at 0x63, `bcc` at 0x64, `bcs` at 0x65, `bne` at
-##      0x66, `beq` at 0x67, `bvc` at 0x68, `bvs` at 0x69, `bpl` at 0x6a,
-##      `bmi` at 0x6b, `bge` at 0x6c, `blt` at 0x6d, `bgt` at 0x6e and `ble`
-##      at 0x6f, and `st` at 0x50c0 and `sf` at 0x51c0. The tests themselves
-##      are the M68000 family definition and no document on this machine
-##      states them. The User's Manual gives the condition-code bits in
-##      section 3.2.1.5 (pages 3-8 and 3-9) and names the wildcard `cc` as
-##      "Logical Condition (example: NE for not equal)" in Table 3-6 (page
-##      3-21), and it prints no table of the sixteen tests anywhere.
+##   1. THE BOOLEAN TEST OF EACH CONDITION. The four-bit ENCODING is measured
+##      and is not in doubt: `m68k-elf-as -mcpu=5307` put `bhi` at 0x62, `bls`
+##      at 0x63, `bcc` at 0x64, `bcs` at 0x65, `bne` at 0x66, `beq` at 0x67,
+##      `bvc` at 0x68, `bvs` at 0x69, `bpl` at 0x6a, `bmi` at 0x6b, `bge` at
+##      0x6c, `blt` at 0x6d, `bgt` at 0x6e and `ble` at 0x6f, and `st` at
+##      0x50c0 and `sf` at 0x51c0. THE TESTS THEMSELVES ARE THE M68000 FAMILY
+##      DEFINITION AND NO DOCUMENT ON THIS MACHINE STATES THEM. The available
+##      sources give the condition-code BITS and name the wildcard `cc` as
+##      "Logical Condition (example: NE for not equal)", and print no table of
+##      the tests anywhere.
 ##
 ##   2. WHETHER A COMPARISON WRITES X. This module leaves X alone, which is
 ##      the M68000 Family rule for CMP, CMPA and CMPI. CUTTING THE OTHER WAY,
@@ -469,18 +466,15 @@ proc execRte(ctx: MCF5307Ctx): uint32 =
 proc execTrap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## `TRAP #<vector>`, the four-bit field in the low bits of the opcode.
   ##
-  ## The vector number is 32 plus the field. MCF5307 User's Manual Table 3-1,
-  ## "Exception Vector Assignments", page 3-13: vector numbers 32 to 47, at
-  ## vector offsets $080 to $0BC, are the "Trap # 0-15 instructions".
+  ## THE VECTOR NUMBER IS 32 PLUS THE FIELD. Vector numbers 32 to 47, at vector
+  ## offsets $080 to $0BC, are the "Trap # 0-15 instructions".
   ##
-  ## The stacked program counter is the *next* instruction and not this one.
-  ## The same table's stacked-program-counter column reads "Next" for those
-  ## sixteen vectors, and its footnote defines Next as "the PC of the next
-  ## instruction that follows the instruction that caused the fault". `ctx.pc`
-  ## is already that address: `step` advanced it past the opcode word and TRAP
-  ## has no extension words. The rows that read "Fault" instead - the access
-  ## error, the address error, the illegal instruction - are not this
-  ## module's.
+  ## THE STACKED PROGRAM COUNTER IS THE *NEXT* INSTRUCTION AND NOT THIS ONE.
+  ## Those vectors stack "the PC of the next instruction that follows the
+  ## instruction that caused the fault". `ctx.pc` is already that address:
+  ## `step` advanced it past the opcode word and TRAP has no extension words.
+  ## The vectors that stack the FAULT address instead - the access error, the
+  ## address error, the illegal instruction - are not this module's.
   takeException(ctx, 32'u8 + (d.destReg and 0xF'u8), ctx.pc)
   if ctx.halted:
     return 0'u32

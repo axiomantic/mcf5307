@@ -216,22 +216,12 @@ proc stackingWrite(ctx: MCF5307Ctx; address: uint32; size: uint8;
 # `decode_types.nim` holds, or a check after the executor returns, which
 # `cpu.nim`'s `step` holds.
 #
-# The write path needs no unwind, which is why it is wired and the read is not.
-# The one exception to that unwind rule is the operand write, and User's Manual
-# section 3.5.1, folio 3-14, is why: "All programming model updates associated
-# with the write instruction are completed." An executor that carries on after
-# a write fault is doing what the manual requires. That the only access error
-# this part raises is a store to write-protected space puts the real case on
-# this side too.
-#
-# It does need the vector to be taken after the instruction rather than inside
-# it, which is the same sentence read to its end. An instruction whose
-# remaining updates are required to complete cannot have section 3.3's four
-# exception-processing steps run in the middle of it: those steps assign A7 and
-# the program counter, and the updates that must still complete would then be
-# computed from, or would overwrite, the handler's state. `writeMem` therefore
-# records the fault on the context and `cpu.nim`'s `step` takes it at the
-# instruction boundary.
+# THE WRITE PATH NEEDS NO UNWIND, WHICH IS WHY IT IS WIRED AND THE READ IS NOT.
+# The rule's one named exception is the operand write, and the reason is that
+# "all programming model updates associated with the write instruction are
+# completed". An executor that carries on after a write fault is doing what the
+# reference requires. That the only access error this part
+# raises is a store to write-protected space puts the real case on this side too.
 
 proc readMem*(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
   stackingRead(ctx, address, size)
@@ -361,11 +351,10 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
     of ea7AbsW:
       result = uint32(s16(fetchExt(ctx)))
     of ea7AbsL:
-      # The first extension word is the high half of the address. MCF5307
-      # User's Manual section 3.7.2, "Organization of Integer Data Formats in
-      # Memory", page 3-19: "The address N of a longword data item corresponds
-      # to the address of the high order word. The lower order word is located
-      # at address N + 2." The extension pair is a longword in the instruction
+      # THE FIRST EXTENSION WORD IS THE HIGH HALF OF THE ADDRESS. "The address
+      # N of a longword data item corresponds to the address of the high order
+      # word. The lower order word is located at address N + 2." The extension
+      # pair is a longword in the instruction
       # stream, so the word at the lower address is the high half.
       # `m68k-elf-as -mcpu=5307` agrees: `btst %d1,0x00030004` assembles to
       # `0339 0003 0004`.
@@ -524,10 +513,8 @@ proc eaRefWrite*(ctx: MCF5307Ctx; r: EaRef; size: uint8; value: uint32) =
 # vector table object, no fault-status computation and no double-fault
 # handling.
 
-# User's Manual section 3.2.2.1, folio 3-10, prints the whole 16-bit status
-# register over its bit numbers: T at 15, S at 13, M at 12 and I[2:0] at bits
-# 10 to 8. The three named here are the ones this module's own `takeException`
-# writes or preserves, and `srMaster` sits with them because a status-register
+# THE BITS NAMED HERE ARE THE ONES THIS MODULE'S OWN `takeException` WRITES OR
+# PRESERVES, and `srMaster` sits with them because a status-register
 # bit position is a fact about the register and not about the exception that
 # happens to clear it.
 const
@@ -538,12 +525,11 @@ const
 proc exceptionFrameBase*(sp: uint32): uint32 =
   ## Where the two-longword frame goes, and it is not simply `sp - 8`.
   ##
-  ## MCF5307 User's Manual section 3.3, page 3-11: "the exception stack frame
-  ## is created at a 0-modulo-4 address on the top of the current system
-  ## stack". Table 3-2, "Format Field Encoding", page 3-14, gives the four
-  ## cases: an A7 whose low two bits are 00, 01, 10 or 11 leaves the handler
-  ## with A7-8, A7-9, A7-10 or A7-11, and each of those four results is
-  ## 0-modulo-4. That is this expression.
+  ## "The exception stack frame is created at a 0-modulo-4 address on the top
+  ## of the current system stack". The format field encoding gives the cases: an
+  ## A7 whose low two bits are 00, 01, 10 or 11 leaves the handler with A7-8,
+  ## A7-9, A7-10 or A7-11, and each of those results is 0-modulo-4. That is
+  ## this expression.
   (sp - 8'u32) and not 3'u32
 
 proc exceptionFormat*(sp: uint32): uint32 =
@@ -557,27 +543,17 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## Stack a two-longword exception frame, then load the program counter from
   ## the vector table.
   ##
-  ## The copy of the status register is a parameter rather than a read of
-  ## `ctx.sr`. Section 3.3's copy is taken as exception processing begins, and
-  ## for every exception whose processing begins where it is detected the two
-  ## are the same word. The deferred access error of a faulted store is the one
-  ## exception this core detects at one point and processes at another, and
-  ## section 3.5.1 requires the faulting instruction's remaining
-  ## programming-model updates to run in between; the word it passes is the one
-  ## the store saw.
+  ## THE STATUS REGISTER IS COPIED BEFORE IT IS CHANGED: "the processor makes
+  ## an internal copy of the SR and then enters supervisor mode by setting the
+  ## S-bit and disabling trace mode by clearing the T-bit". The COPY is what
+  ## reaches the frame; the modified word is what the handler runs under. The
+  ## M-bit and the interrupt priority mask are changed only by an INTERRUPT
+  ## exception, so nothing here touches them.
   ##
-  ## The status register is copied before it is changed. Section 3.3, page
-  ## 3-11: "the processor makes an internal copy of the SR and then enters
-  ## supervisor mode by setting the S-bit and disabling trace mode by clearing
-  ## the T-bit". The copy is what reaches the frame; the modified word is what
-  ## the handler runs under. The M-bit and the interrupt priority mask are
-  ## changed only by an interrupt exception, so nothing here touches them.
-  ##
-  ## The frame is two longword writes and not six bytewise pushes. Figure 3-7,
-  ## page 3-13, draws it as two longwords - the format/vector word above the
-  ## status register, then the program counter - and Table 3-14, page 3-29,
-  ## gives `trap #imm` a cost of `18(1/2)`: one read, the vector, and two
-  ## writes. Table 3-7's `TRAP` row on page 3-25 spells the same thing as
+  ## THE FRAME IS TWO LONGWORD WRITES AND NOT SIX BYTEWISE PUSHES. It is drawn
+  ## as two longwords - the format/vector word above the status register, then
+  ## the program counter - and `trap #imm` costs `18(1/2)`: ONE read, the
+  ## vector, and TWO writes. The instruction summary spells the same thing as
   ## `SP-4;PC`, `SP-2;SR`, `SP-2;Format`, which agrees whenever A7 was already
   ## longword aligned and does not show the self-alignment at all.
   ##
@@ -587,12 +563,10 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## by `4 x vector_number`. This core has no VBR: the context holds no such
   ## field, and `MOVEC` - the only way to write one - is not implemented.
   ##
-  ## The reset value is zero and the manual prints it. Table B-2, "Summary
-  ## Chart of MCF5307 Internal CPU Memory Map", Appendix page B-5, gives
-  ## `CPU @ $801` the name VBR, a width of 32, a reset value of `$00000000`
-  ## and an access of `W`. So this expression is correct for a machine that
-  ## has not written VBR and wrong for one that has, and the one line that
-  ## changes when VBR arrives is the `readMem` below.
+  ## THE RESET VALUE IS ZERO AND THE REFERENCE PRINTS IT: VBR has a width of
+  ## 32, a RESET VALUE of `$00000000` and an ACCESS of `W`. So this expression
+  ## is correct for a machine that has not written VBR and wrong for one that
+  ## has, and the one line that would change is the `readMem` below.
   ##
   ## A fault inside this procedure is a double fault. Each access is checked
   ## and the procedure returns early, leaving the context halted with `fault`;

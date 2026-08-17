@@ -1,13 +1,10 @@
-## `alu` - the integer-arithmetic instruction group of the ColdFire ISA_A
-## core.
+## `alu` - the integer-arithmetic instruction group of the ColdFire ISA_A core.
 ##
 ## This module executes ADD, ADDA, ADDI, ADDQ, ADDX, SUB, SUBA, SUBI, SUBQ,
 ## SUBX, NEG, NEGX, CLR, EXT, EXTB, MULU, MULS, DIVU and DIVS in BOTH their
-## word and their long forms - eight instructions, not four - and the two
-## REMx.L forms, AND NOTHING ELSE. The register file, the board accesses and
-## the effective-address evaluation are `mcf5307/machine`'s. The word forms are
-## `execMulWord` and `execDivWord`, and they are what makes the MUL and DIV
-## rows of Table 3-13 eight rather than four.
+## word and their long forms, and the REMx.L forms, AND NOTHING ELSE. The
+## register file, the board accesses and the effective-address evaluation are
+## `mcf5307/machine`'s. The word forms are `execMulWord` and `execDivWord`.
 ##
 ## This module is a sibling of `move.nim` and of `decode.nim`. It imports
 ## neither, and neither imports it. An executor that reaches into another
@@ -29,16 +26,13 @@
 ## silicon; until the vector table exists it halts the context with `fault`,
 ## which is the same channel every other illegal operand uses.
 ##
-## Cycles. The block above the constants in `cpu.nim` says why nothing checks
-## any of them. Every instruction in this group has a timing row - ADD and SUB
-## with their I, Q and X forms and the eight MUL and DIV rows in Table 3-13
-## (folios 3-28 and 3-29), NEG, NEGX, CLR, EXT and EXTB in Table 3-12 (3-27) -
-## with four exceptions. The opcode column is not alphabetical, so a gap
-## between neighbours proves nothing: `msac.w` and `msac.l` print before
-## `moveq` on folio 3-28, and `divs.w`/`divu.w` before `divs.l`/`divu.l`. On a
-## full enumeration of both pages, no row names `adda.l`, `suba.l`, `rems.l` or
-## `remu.l`. Those four numbers have no source at all rather than a flattened
-## one. `control.nim` records the same absence for CMPA.
+## CYCLES. The block above the constants in `cpu.nim` says why nothing checks
+## any of them. `adda.l`, `suba.l`, `rems.l` and `remu.l` have no timing row at
+## all, and that was established by FULL ENUMERATION of the timing pages rather
+## than by looking at neighbours: THE OPCODE COLUMN IS NOT ALPHABETICAL, so a
+## gap between neighbours proves nothing. Those opcodes have no timing source
+## rather than a flattened one. `control.nim` records the same absence for
+## CMPA, established the same way.
 ##
 ## The REMx forms do not inherit the divide row. This module models them as
 ## behaviour of their own inside `execDiv` - an unequal register pair writes
@@ -304,11 +298,10 @@ const
 proc execMulWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## MULU.W and MULS.W: `16 x 16 -> 32`, one instruction word, no extension.
   ##
-  ## CFPRM folios 4-55 (MULS) and 4-57 (MULU), word form: "the multiplier and
-  ## multiplicand are both word operands, and the result is a longword
-  ## operand. A register operand is the low-order word; the upper word of the
-  ## register is ignored. All 32 bits of the product are saved in the
-  ## destination data register."
+  ## In the word form the multiplier and multiplicand are both word operands
+  ## and the result is a longword operand. A REGISTER OPERAND IS THE LOW-ORDER
+  ## WORD; THE UPPER WORD OF THE REGISTER IS IGNORED. ALL 32 BITS OF THE
+  ## PRODUCT ARE SAVED in the destination data register.
   let src = eaRead(ctx, d.ea, 2)
   if ctx.halted: return 0'u32
   let dst = regD(ctx, d.destReg)
@@ -330,11 +323,10 @@ proc execMulWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
     else:
       uint32(srcW) * uint32(dstW)
   setRegD(ctx, d.destReg, res)
-  # V and C are cleared and N and Z come from all 32 bits, which is the same
-  # rule the long form uses and for the same reason: folios 4-55 and 4-57
-  # print one condition-code table each, above the word instruction format,
-  # and neither continuation page (4-56, 4-58) carries a second. The word
-  # table therefore governs both sizes.
+  # V AND C ARE CLEARED AND N AND Z COME FROM ALL 32 BITS, which is the same
+  # rule the long form uses and for the same reason: there is ONE
+  # condition-code table for both sizes, printed above the WORD instruction
+  # format, so it governs both.
   setNzClearVc(ctx, res, 4)
   # MCF5307 User's Manual Table 3-13, folio 3-28, `muls.w`/`mulu.w <ea>,Dx`:
   # `3(0/0)` under `Rn` and under `#xxx`. The equality is not a model. The rest
@@ -358,12 +350,11 @@ proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
   let src = eaRead(ctx, d.ea, 4)
   if ctx.halted: return 0'u32
   let dst = regD(ctx, dl)
-  # V is always cleared, and that is the CFPRM's own word rather than an
-  # inference. Folio 4-55 for MULS and folio 4-57 for MULU each give V "Always
-  # cleared" in the condition-code table and each add the sentence "Note that
-  # CCR[V] is always cleared by MULS/MULU, unlike the 68K family processors".
-  # Neither folio's longword page (4-56, 4-58) carries a condition-code table
-  # of its own, so the word-form table governs this 32-bit form too. C is
+  # V IS ALWAYS CLEARED, AND THAT IS THE REFERENCE'S OWN WORD RATHER THAN AN
+  # INFERENCE. MULS and MULU each give V "Always cleared" in the condition-code
+  # table, and each add that CCR[V] is always cleared by MULS/MULU, unlike the
+  # 68K family processors. The longword form carries no condition-code table of
+  # its own, so the word-form table governs this 32-bit form too. C is
   # "Always cleared" on both, N comes from bit 31 of the 32 bits written - for
   # MULU that is bit 31 of the unsigned product, so it is not always zero - and
   # Z from those same 32 bits. `setNzClearVc` is exactly that rule. Setting V
@@ -384,20 +375,18 @@ proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
   10'u32
 
 const divWordCycles = 20'u32
-  ## MCF5307 User's Manual Table 3-13, folio 3-28, `divs.w`/`divu.w <ea>,Dx`:
-  ## `20(0/0)` under `Rn` and under `#xxx`. The equality is not a model - the
-  ## rest of the row is `23(1/0)` for the four memory modes, `24(1/0)` for
-  ## `(d8,An,Xi*SF)` and `23(1/0)` for `xxx.wl` - and nothing checks it.
+  ## `divs.w`/`divu.w <ea>,Dx` reads `20(0/0)` under `Rn` AND under `#xxx`. THE
+  ## EQUALITY IS NOT A MODEL - the rest of the row is `23(1/0)` for the memory
+  ## modes, `24(1/0)` for `(d8,An,Xi*SF)` and `23(1/0)` for `xxx.wl`.
 
 proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## DIVU.W and DIVS.W: a 32-bit dividend in Dx over a 16-bit source, with
   ## both halves of the answer packed into Dx.
   ##
-  ## CFPRM folios 4-31 (DIVS) and 4-33 (DIVU): "For a word-sized operation,
-  ## the destination operand is a longword and the source is a word; the
-  ## 16-bit quotient is in the lower word and the 16-bit remainder is in the
-  ## upper word of the destination. Note that the sign of the remainder is the
-  ## same as the sign of the dividend."
+  ## For a word-sized operation the destination operand is a longword and the
+  ## source is a word; THE 16-BIT QUOTIENT IS IN THE LOWER WORD AND THE 16-BIT
+  ## REMAINDER IS IN THE UPPER WORD of the destination. THE SIGN OF THE
+  ## REMAINDER IS THE SAME AS THE SIGN OF THE DIVIDEND.
   let src = eaRead(ctx, d.ea, 2)
   if ctx.halted: return 0'u32
   # The divisor is the low word and the mask is load-bearing. `eaRead` hands
@@ -405,11 +394,9 @@ proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # `0x00010000` would divide by 65536 instead of trapping on a zero divisor.
   let divisor = uint16(src and 0xFFFF'u32)
   if divisor == 0'u16:
-    # A divide by zero is exception vector 5 at vector offset 0x014, of class
-    # Fault - CFPRM Table 11-1, "Exception Vector Assignments", folio 11-2,
-    # whose footnote adds "if the divide unit is not present (5202, 5204,
-    # 5206), vector 5 is reserved". Folios 4-31 and 4-33 add that no registers
-    # are affected and that the stack frame points at the offending opcode.
+    # A DIVIDE BY ZERO IS EXCEPTION VECTOR 5 AT VECTOR OFFSET 0x014, of class
+    # Fault. NO REGISTERS ARE AFFECTED and the stack frame points at the
+    # offending opcode.
     #
     # There is no exception model yet, so this halts with `fault` - the channel
     # the long form already uses and the one every illegal operand in this
@@ -444,8 +431,8 @@ proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
     # at run time, and Table 3-13 times the instruction without saying what it
     # computes. What would settle it is a run on silicon or on a hardware
     # model - `divs.w` with a dividend of -65536 and a divisor of 2, reading V
-    # afterwards - or an erratum or a later revision of the folio that states
-    # the boundary. Until then this is a READING and not a measurement.
+    # afterwards - or a later revision that states the boundary. Until then
+    # this is a READING and not a measurement.
     if q < -32768'i64 or q > 32767'i64:
       overflowed = true
     else:
@@ -498,14 +485,13 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
     return trap(ctx)
   let dividend = regD(ctx, dq)
   if signed and dividend == 0x80000000'u32 and src == 0xFFFFFFFF'u32:
-    # The one signed division overflow. The most negative value has no
-    # positive counterpart, so the quotient does not exist. The operands are
-    # unchanged and the status word is fully determined: V set, C cleared, and
-    # N and Z cleared. CFPRM folios 4-31 and 4-33 (DIVS, DIVU) and 4-70 and
-    # 4-71 (REMS, REMU) all read "N Cleared if overflow is detected;
-    # otherwise ..." and "Z Cleared if overflow is detected; otherwise ...",
-    # with "V Set if an overflow occurs" and "C Always cleared". X is "Not
-    # affected" and is the one bit that survives.
+    # THE ONE SIGNED DIVISION OVERFLOW. The most negative value has no
+    # positive counterpart, so the quotient does not exist. THE OPERANDS ARE
+    # UNCHANGED and the status word is fully determined: V set, C cleared, AND
+    # N AND Z CLEARED. DIVS, DIVU, REMS and REMU all read "N Cleared if
+    # overflow is detected; otherwise ..." and "Z Cleared if overflow is
+    # detected; otherwise ...", with "V Set if an overflow occurs" and "C
+    # Always cleared". X is "Not affected" and is the one bit that survives.
     ctx.sr = (ctx.sr and not (ccrC or ccrN or ccrZ)) or ccrV
     return 10'u32
   var quotient: uint32
