@@ -243,6 +243,21 @@ stripper reports `tests/tests_cpu.cmake` as changed. A proof over that file
 needs a stripper that recurses into bracket arguments. Plant the negative
 controls inside a bracket argument, not only outside one.
 
+**A Python docstring is a string expression, not a comment.** A comment-only
+proof therefore reports a docstring edit as a change. A sweep may still edit a
+docstring that carries a forbidden claim, but only with three extra proofs.
+Show a token-level diff where no non-comment, non-string token differs, and name
+every string token that does. Show that `__doc__` has no consumer, because a
+program that prints its own docstring changes behaviour when the docstring
+changes. Show that any generated output is byte-identical. Without all three,
+leave the docstring alone.
+
+**Calibrate the docstring case too.** Anchor a positive control on a real
+comment token chosen by the language's own tokenizer, not by a text search. A
+search finds markdown headings inside docstrings and reports a broken control as
+a broken stripper. Exclude the shebang: a tokenizer calls `#!` a comment, and
+removing it changes how the file runs.
+
 **The test suite must pass after the sweep, at the established count.**
 
 **Without that proof the earlier rule stands.** Repair a comment when you change

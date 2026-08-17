@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The ColdFire ISA_A conformance corpus generator.
 
-Task CPU-4. Its Check: line has two halves; this script is the Linux half.
+Its Check: line has two halves; this script is the Linux half.
 
   Linux x86-64 : `python3 conformance/generate.py --out conformance/corpus`
                  must regenerate the committed corpus byte-identical.
@@ -13,7 +13,7 @@ assembler and writes a deterministic JSON corpus. Both the script and the
 generated corpus are committed, so no cross toolchain is needed at test time
 on any platform.
 
-## Determinism (plan work item M-9)
+## Determinism
 
 "Byte-identical regeneration" is only meaningful if the writer is
 deterministic. Every decision that could vary the output is fixed here:
@@ -32,8 +32,7 @@ pinned version is byte-identical; the CI job installs exactly that version.
 ## The corpus schema
 
 One file per group, `conformance/corpus/<group>_00.json`, where `<group>` is
-one of the four groups CPU-7 to CPU-10 name: `move`, `alu`, `logic`,
-`control`.
+one of the named groups: `move`, `alu`, `logic`, `control`.
 
 Each file is an object with:
 
@@ -59,7 +58,7 @@ Each case is an object with:
                           "regs"  object  register name -> expected value
                           "mem"   array   expected writes to memory
 
-A register name is "d0".."d7", "a0".."a7", "sr" or "pc". The runner (CPU-5)
+A register name is "d0".."d7", "a0".."a7", "sr" or "pc". The runner
 sets the `initial` registers, executes the case's encoding, and asserts each
 `expected` register equals its value. Registers the `expected` object does
 not name are not asserted: a case that affects only one register does not
@@ -70,12 +69,11 @@ have to state every other one.
 
 `sr` IS A REGISTER LIKE ANY OTHER, in `initial` and in `expected` both. The
 runner sets it through the same bridge as `d0` and asserts it by the same
-equality. This was true of the runner from CPU-5 and NO CASE USED IT: measured
-on the committed corpus before this change, not one case in any of the four
-files named `sr` in its expected state, so every condition-code rule in every
+equality. The runner always supported this and NO CASE USED IT: no case in any
+file named `sr` in its expected state, so every condition-code rule in every
 group was invisible to conformance. Dropping ADD's carry-out, dropping its
 signed overflow, dropping SUB's and NEG's borrow, and making the multiply
-never report V each left `mcf5307_conformance_alu` at 9 of 9.
+never report V each left the ALU conformance group entirely green.
 
 THE VALUE IS THE WHOLE 16-BIT STATUS REGISTER AND NOT A CONDITION-CODE MASK.
 `0x2700` is the reset value: supervisor set, interrupt mask 7, every condition
@@ -98,8 +96,7 @@ WHERE THE MANUAL LEAVES A FLAG UNDEFINED, NO `sr` IS ASSERTED. The equality is
 over the whole word, so a case cannot assert four flags and decline the fifth.
 A case whose rule is not defined for every bit carries no `sr` at all rather
 than pin an accident of this implementation. `docs/toolchain.md` is not the
-authority here; the ColdFire Family Programmer's Reference Manual is
-(AGENTS.md section 11).
+authority here; the ColdFire Family Programmer's Reference Manual is.
 
 EVERY CASE IS JUDGED ON THE CORE'S RUN STATE BEFORE ANY VALUE IS COMPARED.
 `conformance/runner.cpp` asserts `mcf5307_faulted`, then `mcf5307_halted`,
@@ -117,7 +114,7 @@ other case whose instruction must not touch the condition codes.
 
 "mem" is a list of `{"addr": int, "size": int, "value": int}` writes. The
 seed corpus carries only register cases, so every "mem" array in it is empty;
-the field exists so the memory-based cases CPU-7 to CPU-10 add have a place.
+the field exists so memory-based cases have a place.
 A caller that writes no memory follows the same rule as the registers: omit
 it.
 
@@ -161,7 +158,7 @@ GROUPS = ("move", "alu", "logic", "control")
 # part comes out of reset with: supervisor set, interrupt mask 7, every
 # condition code clear.
 #
-# These are facts about Motorola silicon (AGENTS.md section 11), and they are
+# These are facts about Motorola silicon, and they are
 # the same five bit positions `src/mcf5307/machine.nim` names and the same
 # `srBase` `tests/t_alu.nim` and `tests/t_move.nim` name.
 
@@ -199,7 +196,7 @@ DIRTY_A = 0x0BADC0DE   # the address-register destination seed
 
 # ---------------------------------------------------------------------------
 # The memory seeds, and the address the memory cases point an address register
-# at. CPU-9 added these: the bit operations are the first group whose memory
+# at. The bit operations are the first group whose memory
 # operand is a BYTE while the register operand is a LONGWORD, so a core that
 # read or wrote four bytes where the part reads one is a defect this corpus
 # has to be able to see.
@@ -253,8 +250,7 @@ EA_DECOY_WINDOW = (0x0B, 0xAD, 0xC0, 0xDE, 0x1F, 0x2E, 0x3D, 0x4C)
 
 # THE ABSOLUTE-LONG ADDRESS, AND THE ADDRESS ITS TWO HALVES SWAPPED.
 #
-# `(xxx).L` carries its address in TWO extension words. MCF5307 User's Manual
-# section 3.7.2, "Organization of Integer Data Formats in Memory", page 3-19:
+# `(xxx).L` carries its address in TWO extension words. The reference:
 # "The address N of a longword data item corresponds to the address of the high
 # order word. The lower order word is located at address N + 2." The FIRST
 # extension word is therefore the HIGH half. `m68k-elf-as -mcpu=5307` agrees:
@@ -290,7 +286,7 @@ EXEC_BASE = 0x10000
 # its displacement word at `EXEC_BASE + 2`, so the operand is at
 # `EXEC_BASE + 2 + PC_DISP`.
 #
-# THE MANUAL DOES NOT STATE THIS - it gives `(d16,PC)` a row in Table 3-5 and
+# THE REFERENCE DOES NOT STATE THIS - it gives `(d16,PC)` a row and
 # no effective-address equation anywhere - so the authority is the pinned
 # assembler. Measured: `btst %d1,(target,%pc)` with the opcode at 0 assembles
 # to `033a 0004` and the linker places `target` at 6, and
@@ -320,10 +316,10 @@ PC_OPERAND = EXEC_BASE + 2 + PC_DISP
 # therefore land 65536 bytes apart, both inside the runner's 1 MiB board, and
 # each case seeds `EA_WINDOW` at one and `EA_DECOY_WINDOW` at the other.
 #
-# THE MANUAL DOES NOT PRINT THE EXTENSION WORD'S LAYOUT - there is no
+# THE REFERENCE DOES NOT PRINT THE EXTENSION WORD'S LAYOUT - there is no
 # brief-format figure anywhere in it - so the assembler is the authority for
-# the bit position. What the manual DOES say is section 3.5.2, "Address Error
-# Exception", page 3-15: "Any attempted use of a word-sized index register
+# the bit position. What it DOES say is: "Any attempted use of a word-sized
+# index register
 # (Xi.w) ... generates an address error". `m68k-elf-as -mcpu=5307` agrees and
 # REJECTS `btst %d1,(4,%pc,%d2.w)`, so on this part the select is always LONG
 # and a core reading bit 8 is wrong for every legal encoding.
@@ -350,7 +346,7 @@ def lw(addr, value):
 
 
 # ---------------------------------------------------------------------------
-# CPU-10's own seeds: the stack, the branch targets and the vector table.
+# The control group's seeds: the stack, the branch targets and the vector table.
 #
 # THE STACK MUST BE INSIDE THE RUNNER'S BOARD AND THE DEFAULT IS NOT.
 # `conformance/runner.cpp` resets A7 to 0x400000 and its board is 1 MiB, so a
@@ -360,8 +356,8 @@ def lw(addr, value):
 #
 # `CTRL_STACK` is longword-aligned so that the TRAP cases which vary A7's low
 # two bits can do so by ADDING to it, and every one of them still writes its
-# frame at the same 0-modulo-4 address. Table 3-2 of the MCF5307 User's Manual
-# (page 3-14) is the rule those cases assert; see the TRAP block below.
+# frame at the same 0-modulo-4 address. The format field encoding is the rule
+# those cases assert; see the TRAP block below.
 CTRL_STACK = 0x3000
 
 # THE GUARD LONGWORD AT THE INCOMING A7. A push writes BELOW the pointer, so
@@ -377,12 +373,10 @@ CTRL_GUARD_AT = CTRL_STACK              # at the incoming A7
 CTRL_TARGET = 0x00054320
 CTRL_TARGET_2 = 0x00098760
 
-# THE EXCEPTION VECTOR TABLE. MCF5307 User's Manual Table 3-1, "Exception
-# Vector Assignments", page 3-13: `TRAP #0-15` are vector numbers 32 to 47 at
+# THE EXCEPTION VECTOR TABLE. `TRAP #0-15` are vector numbers 32 to 47 at
 # vector offsets $080 to $0BC, and the vector offset is 4 x vector_number. The
-# table is based at the vector base register, whose reset value is zero
-# (Table 3-1's own offsets, and the VBR reset value $00000000 in the memory
-# map), and the core has no VBR register yet - CPU-11 adds MOVEC. So the
+# table is based at the vector base register, whose reset value is zero, and
+# the core has no VBR register. So the
 # vector longword of `trap #n` is at 4 * (32 + n) and these two cases seed
 # exactly that.
 TRAP_VECTOR_0 = 4 * 32                  # $080
@@ -392,13 +386,12 @@ TRAP_VECTOR_15 = 4 * 47                 # $0BC
 def frame_fv(fmt, vector, sr):
     """The first longword of an exception stack frame.
 
-    MCF5307 User's Manual Figure 3-7, "Exception Stack Frame Form", page 3-13:
-    the first longword holds the 16-bit format/vector word and the 16-bit
+    The first longword holds the 16-bit format/vector word and the 16-bit
     status register, with FORMAT in bits 31..28, FS[3:2] in 27..26,
     VECTOR[7:0] in 25..18, FS[1:0] in 17..16 and the status register in 15..0.
 
-    FS IS ZERO HERE AND THE MANUAL SAYS WHY. Table 3-3, "Fault Status
-    Encodings", page 3-14: `0000` is "Not an access or address error", and the
+    FS IS ZERO HERE AND THE REFERENCE SAYS WHY. `0000` is "Not an access or
+    address error", and the
     field "is defined for access and address errors only and written as zeros
     for all other types of exceptions". A TRAP is neither.
     """
@@ -452,8 +445,7 @@ BCC_CONDITIONS = [
 
 # THE TWO DISPLACEMENT FORMS, AND THE FOUR PROGRAM COUNTERS THEY PRODUCE.
 #
-# `Bcc <label>` has an operand size of "8,16" and no other - MCF5307 User's
-# Manual Table 3-7, "Instruction Set Summary", page 3-23 - so a branch is
+# `Bcc <label>` has an operand size of "8,16" and no other, so a branch is
 # either two words or one. The four outcomes are four different program
 # counters and each one is asserted:
 #
@@ -555,9 +547,9 @@ def assemble_to_words(instruction):
 #      so that "the instruction cleared this flag" is separable from "the
 #      instruction never wrote this flag".
 #
-# The seed corpus is deliberately modest. CPU-7 to CPU-10 own their group's
-# `*_*.json` files and add the full instruction set there; this table is the
-# generator's living source for the cases it emits. Editing a case is done
+# The seed corpus is deliberately modest. Each group's `*_*.json` file carries
+# its own cases; this table is the generator's living source for the cases it
+# emits. Editing a case is done
 # here, never in the committed JSON.
 
 CASES = {
@@ -1003,7 +995,7 @@ CASES = {
             # V STAYS CLEAR WHEN THE 32 BITS WRITTEN ARE NOT THE WHOLE PRODUCT.
             # 0x10000 squared is 0x1_0000_0000, whose low 32 bits are zero, so
             # on this part the case really is indistinguishable from a multiply
-            # by zero. CFPRM folio 4-57 gives V "Always cleared" and adds "Note
+            # by zero. The reference gives V "Always cleared" and adds "Note
             # that CCR[V] is always cleared by MULU, unlike the 68K family
             # processors". The initial SR_DIRTY carries V SET, so a core that
             # never writes V fails on the status word.
@@ -1018,7 +1010,7 @@ CASES = {
         {
             # N COMES FROM BIT 31 OF THE UNSIGNED PRODUCT, so MULU's N is not
             # always zero. 2 * 0x50000000 is 0xA0000000: no part of the product
-            # is lost and bit 31 is set. CFPRM folio 4-57: "N Set if result is
+            # is lost and bit 31 is set. The reference: "N Set if result is
             # negative; cleared otherwise". SR_DIRTY carries Z set, so a core
             # that leaves Z alone fails this too.
             "name": "mulu_l_sets_n_from_bit31",
@@ -1035,17 +1027,17 @@ CASES = {
         # THE CORPUS CARRIED NO WORD-FORM CASE OF ANY KIND before these, for
         # the same reason the core had no word form: `decodeLogicLine` called
         # opmodes 011 and 111 of lines 1000 and 1100 illegal. They are real
-        # instructions - `m68k-elf-as -mcpu=5307` assembles all four, CFPRM
-        # folios 4-31, 4-33, 4-55 and 4-57 each print a "(Word)" instruction
-        # format, and MCF5307 User's Manual Table 3-13 p.3-28 times all four.
+        # instructions - `m68k-elf-as -mcpu=5307` assembles them, the
+        # reference prints a "(Word)" instruction format for each, and the
+        # timing table times them.
         #
-        # EVERY EXPECTED VALUE BELOW IS DERIVED FROM THE FOLIOS AND NOT FROM
+        # EVERY EXPECTED VALUE BELOW IS DERIVED FROM THE REFERENCE AND NOT FROM
         # THIS PROJECT'S CORE. This generator takes only the ENCODING from the
         # assembler; the register and status words are hand-written here, so
         # a case that merely echoed the implementation would ratify it.
         {
-            # THE UPPER WORD OF EITHER OPERAND IS IGNORED ON INPUT. CFPRM
-            # folio 4-57: "A register operand is the low-order word; the upper
+            # THE UPPER WORD OF EITHER OPERAND IS IGNORED ON INPUT. The
+            # reference: "A register operand is the low-order word; the upper
             # word of the register is ignored." Both registers carry a
             # distinctive upper half, so a core multiplying the full 32 bits
             # writes neither 12 nor anything close to it.
@@ -1087,7 +1079,7 @@ CASES = {
                                   "sr": SR_BASE | CCR_X}},
         },
         {
-            # ALL 32 BITS OF THE PRODUCT ARE SAVED - folio 4-57's own
+            # ALL 32 BITS OF THE PRODUCT ARE SAVED - the reference's own
             # sentence - so a 16x16 product keeps its whole width. A core that
             # wrote only the low word gives 0x0000FFFD.
             "name": "muls_w_sign_extends_both_word_operands",
@@ -1110,7 +1102,7 @@ CASES = {
             "expected": {"regs": {"d1": 0x0002FFFD, "sr": SR_BASE | CCR_X}},
         },
         {
-            # ONE LONGWORD HOLDING TWO HALVES. CFPRM folios 4-31 and 4-33:
+            # ONE LONGWORD HOLDING TWO HALVES. The reference:
             # "the 16-bit quotient is in the lower word and the 16-bit
             # remainder is in the upper word of the destination".
             "name": "divu_w_packs_remainder_high_and_quotient_low",
@@ -1162,7 +1154,7 @@ CASES = {
         },
         {
             # THIS CASE IS AN INFERENCE AND NOT A MEASUREMENT, AND IT IS THE
-            # ONLY ONE IN THE DIVIDE PATH. The folios say an overflow occurs
+            # ONLY ONE IN THE DIVIDE PATH. The reference says an overflow occurs
             # if the quotient is "larger than a 16-bit (.W) signed integer"
             # and do not define "larger" at the asymmetric end of the range.
             # -32768 IS a 16-bit signed integer, so under the reading taken by
@@ -1185,9 +1177,8 @@ CASES = {
         },
         {
             # THE WORD FORM'S OPERAND CLASS IS WIDER THAN THE LONG FORM'S. An
-            # immediate source is dashed on every "(Longword)" table (folios
-            # 4-32, 4-34, 4-56, 4-58) and carried on every "(Word)" table
-            # (folios 4-32, 4-34, 4-55, 4-57),
+            # immediate source is dashed on every "(Longword)" table and
+            # carried on every "(Word)" table,
             # and `m68k-elf-as -mcpu=5307` agrees: it assembles
             # `mulu.w #5,%d1` and rejects `mulu.l #5,%d1`.
             "name": "mulu_w_takes_an_immediate_source",
@@ -1205,7 +1196,7 @@ CASES = {
         # half of these instructions that a plausible wrong implementation gets
         # wrong while still writing the right register.
         {
-            # AN OVERFLOW CLEARS N AND Z. CFPRM folios 4-31 and 4-33: "N
+            # AN OVERFLOW CLEARS N AND Z. The reference: "N
             # Cleared if overflow is detected", "Z Cleared if overflow is
             # detected", with "V Set if an overflow occurs", "C Always cleared"
             # and X "Not affected". The most negative value over -1 has no
@@ -1223,7 +1214,7 @@ CASES = {
         },
         {
             # Z COMES FROM THE QUOTIENT AND NOT FROM THE REMAINDER WRITTEN.
-            # CFPRM folio 4-71: "Z ... set if the quotient is zero, cleared if
+            # The reference: "Z ... set if the quotient is zero, cleared if
             # nonzero", while the operation line is "Destination/Source ->
             # Remainder". 20 / 5 is a quotient of 4 with a remainder of ZERO,
             # so the two rules disagree on Z and agree on the register: d2
@@ -1237,7 +1228,7 @@ CASES = {
                                   "sr": SR_BASE | CCR_X}},
         },
         {
-            # N COMES FROM THE QUOTIENT TOO. CFPRM folio 4-70: "N ... set if
+            # N COMES FROM THE QUOTIENT TOO. The reference: "N ... set if
             # the quotient is negative". 17 / -5 is a quotient of -3 with a
             # remainder of +2 - the remainder takes the sign of the DIVIDEND -
             # so the quotient rule sets N and the remainder rule clears it.
@@ -1341,13 +1332,10 @@ CASES = {
     ],
 
     # THE CONDITION-CODE RULES OF THIS GROUP, AND WHERE EACH ONE COMES FROM.
-    # CPU-9 owns these cases; the gap the previous revision described - "no
-    # `sr` expectation anywhere, because no executor exists to measure one
-    # against" - is closed here.
     #
     #   AND, ANDI, OR, ORI, EOR, EORI, NOT
     #       N and Z from the 32-bit result, V and C CLEARED, X UNTOUCHED. The
-    #       MCF5307 User's Manual section 3.2.1.5 defines V as set "if an
+    #       The reference defines V as set "if an
     #       arithmetic overflow occurs", C as set on "a carryout of the operand
     #       MSB ... for an addition, or ... a borrow ... in a subtraction", and
     #       X as "set to the value of the C-bit for arithmetic operations;
@@ -1357,7 +1345,7 @@ CASES = {
     #       already carries for MOVE.
     #
     #   BTST, BSET, BCLR, BCHG
-    #       Z ALONE. The manual's Table 3-7 gives the operation as
+    #       Z ALONE. The reference gives the operation as
     #       `~(<Bit Number> of Destination) -> Z` and names no other bit, so N,
     #       V, C and X are untouched. Every bit case below therefore starts
     #       from a status word in which Z has the WRONG value and asserts the
@@ -1367,13 +1355,13 @@ CASES = {
     #       writes Z at all.
     #
     #   LSL, LSR, ASL, ASR
-    #       X AND C BOTH TAKE THE LAST BIT SHIFTED OUT, which Table 3-7 states
+    #       X AND C BOTH TAKE THE LAST BIT SHIFTED OUT, which the reference states
     #       directly for all four: `X/C <- (Dy << Dx) <- 0` for the two left
     #       shifts and `MSB -> (Dy >> Dx) -> X/C`, `0 -> (Dy >> Dx) -> X/C` for
     #       the two right ones. N and Z come from the result. V IS CLEARED BY
     #       ALL FOUR, ASL INCLUDED.
     #
-    # ASL'S V IS SETTLED, AND THE CFPRM SETTLES IT. An earlier revision of this
+    # ASL'S V IS SETTLED, AND THE REFERENCE SETTLES IT. An earlier revision of this
     # comment said the ColdFire Family Programmer's Reference Manual "is not on
     # this machine" and built a two-readings hedge on that absence - whether V
     # follows "the MSB changed at any time during the shift" or "the MSB of the
@@ -1381,7 +1369,7 @@ CASES = {
     # count where they disagree. THE RECORD WAS FALSE: the manual is on disk,
     # and it describes NEITHER reading. Folio 4-12 gives V a flat "Always
     # cleared" and adds "Note that CCR[V] is always cleared by ASL and ASR,
-    # unlike on the 68K family processors"; folio 4-11 says "The overflow bit is
+    # unlike on the 68K family processors"; the prose says "The overflow bit is
     # always zero". ColdFire computes no ASL overflow at all, so there is no
     # dichotomy to hedge and no count that separates anything. The shift count
     # of a V case is now free to be whatever the case needs.
@@ -1585,8 +1573,8 @@ CASES = {
         # ----------------------------------------------------------- BTST
         #
         # A BIT OPERATION ON A DATA REGISTER IS 32 BITS WIDE AND ONE ON MEMORY
-        # IS 8. That is the OPERAND SIZE column of MCF5307 User's Manual
-        # Table 3-7, which reads "8,32" for BTST, BSET, BCLR and BCHG and for
+        # IS 8. That is the OPERAND SIZE column of the reference,
+        # which reads "8,32" for BTST, BSET, BCLR and BCHG and for
         # no other instruction in this group. The two cases that pin it are
         # `btst_l_bit_number_above_a_byte` and
         # `btst_b_memory_operand_is_one_byte`. Each one picks a bit number
@@ -1595,9 +1583,9 @@ CASES = {
         #
         # NEITHER CASE USES A BIT NUMBER ITS OPERAND CANNOT HOLD, AND THAT IS
         # DELIBERATE. `logic.nim` reduces an out-of-range bit number modulo
-        # the operand width, and NO PASSAGE OF THE USER'S MANUAL STATES ANY
+        # the operand width, and NO PASSAGE OF THE REFERENCE STATES ANY
         # MODULUS - see uncertainty 4 in that module's header, which also says
-        # why Figure 3-8's `MODULO (OFFSET)` annotation does not settle it.
+        # why the `MODULO (OFFSET)` annotation does not settle it.
         # An earlier revision of this corpus held `btst #41,%d0` and
         # `btst #9,(%a0)` and asserted the modulo-32 and modulo-8 answers as
         # facts about the part. They are this core's choice, the corpus must
@@ -1852,9 +1840,9 @@ CASES = {
         # ------------------------------------------------------------ ASL
         #
         # ASL NEVER SETS V ON THIS PART, AND THESE CASES ARE WHAT PINS THAT.
-        # CFPRM folio 4-12 gives V a flat "Always cleared" and adds "Note that
+        # The reference gives V a flat "Always cleared" and adds "Note that
         # CCR[V] is always cleared by ASL and ASR, unlike on the 68K family
-        # processors"; folio 4-11 says "The overflow bit is always zero".
+        # processors"; the prose says "The overflow bit is always zero".
         #
         # EACH CASE BELOW CHANGES THE SIGN AND STILL EXPECTS V CLEAR, so a core
         # carrying the 68K rule - V set when the sign changed - fails both, and
@@ -2049,28 +2037,28 @@ CASES = {
         },
     ],
 
-    # ------------------------------------------------------------------ CPU-10
+    # ---------------------------------------------------------------------
     # THE CONDITION-CODE RULES OF THIS GROUP, AND WHERE EACH COMES FROM.
     #
     #   NOP, BRA, BSR, Bcc, JMP, JSR, Scc
-    #       NO CONDITION CODE AT ALL. MCF5307 User's Manual Table 3-7,
-    #       "Instruction Set Summary", pages 3-23 and 3-25, gives each of these
+    #       NO CONDITION CODE AT ALL. The instruction set summary gives each
+    #       of these
     #       an OPERATION column that names the program counter, the stack
     #       pointer or the destination and NO flag. Every one of these cases
     #       therefore expects its incoming status word back byte for byte.
     #
     #   TST
-    #       "Set Integer Condition Codes" (Table 3-7, page 3-25) at the operand
+    #       "Set Integer Condition Codes" at the operand
     #       size. N and Z from the operand, V and C cleared, X UNTOUCHED -
-    #       section 3.2.1.5, page 3-8, defines V as an ARITHMETIC overflow, C as
+    #       the reference defines V as an ARITHMETIC overflow, C as
     #       a carry out of an addition or a borrow in a subtraction, and TST
     #       performs neither. That is `setNzClearVc`, the rule MOVE already has.
     #
     #   CMP, CMPA, CMPI
-    #       "Destination - Source" (Table 3-7, page 3-23) with the result
+    #       "Destination - Source" with the result
     #       DISCARDED. N, Z, V and C come from that subtraction and X IS NOT
     #       WRITTEN. The X rule is uncertainty 2 in `control.nim`'s header: the
-    #       same section 3.2.1.5 says X takes C's value "for arithmetic
+    #       same passage says X takes C's value "for arithmetic
     #       operations", which read literally would have a comparison write it.
     #       These cases assert X unchanged, so a reader who reverses that
     #       reading must change them.
@@ -2082,7 +2070,7 @@ CASES = {
     #       left it alone".
     #
     #   TRAP
-    #       Section 3.3, "Exception Processing Overview", page 3-11: "the
+    #       The reference: "the
     #       processor makes an internal copy of the SR and then enters
     #       supervisor mode by setting the S-bit and disabling trace mode by
     #       clearing the T-bit". The COPY is what reaches the stack frame and
@@ -2153,7 +2141,7 @@ CASES = {
 
         # -------------------------------------------------------------- BSR
         # THE RETURN ADDRESS IS THE ADDRESS AFTER THE WHOLE INSTRUCTION, AND
-        # THE TWO FORMS ARE DIFFERENT LENGTHS. Table 3-7, page 3-23, gives BSR
+        # THE TWO FORMS ARE DIFFERENT LENGTHS. The reference gives BSR
         # as "SP - 4 -> SP; PC -> (SP); PC + dn -> PC". The byte form pushes
         # opcode + 2 and the word form pushes opcode + 4; a core that pushed
         # the branch BASE - which is opcode + 2 for both - passes the byte case
@@ -2196,14 +2184,14 @@ CASES = {
 
         # -------------------------------------------------------------- Scc
         # THE DESTINATION IS ONE BYTE OF A DATA REGISTER AND NOTHING WIDER.
-        # Table 3-7, page 3-25, gives `Scc Dx` an OPERAND SIZE of 8 and the
+        # The reference gives `Scc Dx` an OPERAND SIZE of 8 and the
         # operation "If Condition True, Then 1's -> Destination; Else 0's ->
         # Destination". `DIRTY_D` is 0x12345678 and every byte of it differs,
         # so a core that wrote the whole register lands on 0xFFFFFFFF or 0 and
         # a core that wrote the wrong byte lane lands somewhere else again.
         #
-        # THE OPERAND IS A DATA REGISTER AND NOTHING ELSE. Table 3-12, "One
-        # Operand Instruction Execution Times", page 3-27: the `scc Dx` row
+        # THE OPERAND IS A DATA REGISTER AND NOTHING ELSE. In the timing
+        # table the `scc Dx` row
         # carries `1(0/0)` under `Rn` and A DASH under `(An)`, `(An)+`, `-(An)`,
         # `(d16,An)`, `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`. The `clr.b` rows
         # above it and the `tst.b` rows below it carry times in those columns,
@@ -2272,10 +2260,10 @@ CASES = {
         },
 
         # -------------------------------------------------------------- TST
-        # ALL THREE SIZES EXIST HERE AND THE MANUAL PRINTS ALL THREE. Table
-        # 3-12, page 3-27, carries a `tst.b`, a `tst.w` AND a `tst.l` row, each
+        # ALL THREE SIZES EXIST HERE AND THE REFERENCE PRINTS ALL THREE. The
+        # timing table carries a `tst.b`, a `tst.w` AND a `tst.l` row, each
         # timed under every one of `Rn`, `(An)`, `(An)+`, `-(An)`, `(d16,An)`,
-        # `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx` - no dash anywhere in the three
+        # `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx` - no dash anywhere in those
         # rows. TST is the ONE instruction in this group that keeps the byte and
         # word forms the rest of the core traps, and `m68k-elf-as -mcpu=5307`
         # agrees: it accepts `tst.b %d0`, `tst.w %d0` and `tst.l #5`.
@@ -2415,7 +2403,7 @@ CASES = {
         # `cmp.l %d0,%d1` IS `d1 - d0`, AND THE ORDER IS MEASURED. The word is
         # `b280` = `1011 001 010 000 000`: bits 11..9 are the DESTINATION data
         # register (d1) and the low six bits are the SOURCE effective address
-        # (d0). Table 3-7, page 3-23, gives the operation as "Destination -
+        # (d0). The reference gives the operation as "Destination -
         # Source". A core that subtracted the other way round gets the sign and
         # the carry of `cmp_l_source_greater` backwards.
         {
@@ -2468,8 +2456,8 @@ CASES = {
         },
         {
             # AN ADDRESS REGISTER IS A LEGAL CMP SOURCE. `b288` is what
-            # `m68k-elf-as -mcpu=5307` emits for `cmp.l %a0,%d1`, and Table 3-13
-            # (page 3-28) times the `cmp.l <ea>,Rx` row under `Rn`.
+            # `m68k-elf-as -mcpu=5307` emits for `cmp.l %a0,%d1`, and the
+            # timing table times the `cmp.l <ea>,Rx` row under `Rn`.
             "name": "cmp_l_address_register_source",
             "mnemonic": "cmp.l",
             "instruction": "cmp.l %a0,%d1",
@@ -2500,7 +2488,7 @@ CASES = {
         },
 
         # ------------------------------------------------------------- CMPA
-        # CMPA IS 32-BIT AND THERE IS NO OTHER SIZE. Table 3-7, page 3-23,
+        # CMPA IS 32-BIT AND THERE IS NO OTHER SIZE. The reference
         # gives `CMPA <ea>y,Ax` an OPERAND SIZE column of `32` and nothing else,
         # and `m68k-elf-as -mcpu=5307` rejects `cmpa.w %d0,%a1`. The word form's
         # encoding - line 1011 opmode 011 - is a trap case in
@@ -2541,7 +2529,7 @@ CASES = {
         },
 
         # ------------------------------------------------------------- CMPI
-        # THE DESTINATION IS A DATA REGISTER AND NOTHING ELSE. Table 3-13, page
+        # THE DESTINATION IS A DATA REGISTER AND NOTHING ELSE. The timing table
         # 3-28: the `cmpi.l #imm,Dx` row carries `1(0/0)` under `Rn` and A DASH
         # under every memory column and under `#xxx`. `m68k-elf-as -mcpu=5307`
         # agrees and rejects `cmpi.l #5,(%a0)` and `cmpi.l #5,%a0`.
@@ -2565,16 +2553,16 @@ CASES = {
 
         # -------------------------------------------------------------- JMP
         # THE OPERAND CLASS IS CONTROL ADDRESSING, AND THE MANUAL GIVES IT TWICE.
-        # Table 3-15, "General Branch Instruction Execution Times", page 3-30:
+        # The branch timing table:
         # the `jmp <ea>` row carries a time under `(An)`, under
         # `(d16,An)/(d16,PC)`, under `(d8,An,Xi*SF)/(d8,PC,Xi*SF)` and under
         # `xxx.wl`, and A DASH under `Rn`, `(An)+`, `-(An)` and `#xxx`. Table
-        # 3-5, page 3-21, marks exactly those modes CONTROL. `m68k-elf-as
+        # marks exactly those modes CONTROL. `m68k-elf-as
         # -mcpu=5307` agrees on both halves: it rejects `jmp %d0`, `jmp %a0`,
         # `jmp (%a0)+`, `jmp -(%a0)` and `jmp #4`, and it accepts the rest.
         #
-        # `(xxx).W` IS IN THE CLASS. Table 3-5 marks the absolute SHORT row
-        # CONTROL, and page 3-26 states that the tables' `xxx.wl` column "refers
+        # `(xxx).W` IS IN THE CLASS. The category table marks the absolute
+        # SHORT row CONTROL, and the tables' `xxx.wl` column "refers
         # to both forms of absolute addressing, xxx.w and xxx.l".
         #
         # JMP AND JSR CARRY A MASK OF THEIR OWN, AND THE REASON IS NOT
@@ -2587,7 +2575,7 @@ CASES = {
         #
         # BOTH READ `ea.nim`'s `eaControl7`, which holds the full control
         # mode-7 class with `(xxx).W` in it. MOVEM reads neither and carries
-        # `{eaAnInd, eaAnDisp}`, because folios 4-50 and 4-51 dash every row
+        # `{eaAnInd, eaAnDisp}`, because the reference dashes every row
         # but `(An)` and `(d16,An)`.
         {
             "name": "jmp_indirect",
@@ -2649,7 +2637,7 @@ CASES = {
         },
 
         # -------------------------------------------------------------- JSR
-        # "SP - 4 -> SP; PC -> (SP); <ea> -> PC" - Table 3-7, page 3-24. THE
+        # "SP - 4 -> SP; PC -> (SP); <ea> -> PC". THE
         # PUSHED PROGRAM COUNTER IS THE ADDRESS AFTER THE WHOLE INSTRUCTION,
         # EXTENSION WORDS INCLUDED, which is why the absolute-long case is here
         # beside the register-indirect one: they are three words and one word
@@ -2692,7 +2680,7 @@ CASES = {
         },
 
         # -------------------------------------------------------------- RTS
-        # "(SP) -> PC; SP + 4 -> SP" - Table 3-7, page 3-25. RTS WRITES NO
+        # "(SP) -> PC; SP + 4 -> SP". RTS WRITES NO
         # MEMORY, and the longword it read is asserted still there.
         {
             "name": "rts_pops_the_return_address",
@@ -2715,16 +2703,16 @@ CASES = {
     ] + [
 
         # -------------------------------------------------------------- RTE
-        # "(SP+2) -> SR; (SP+4) -> PC; SP + 8 -> PC" - Table 3-7, page 3-25,
+        # "(SP+2) -> SR; (SP+4) -> PC; SP + 8 -> PC" in the summary,
         # AND THAT LAST ARROW IS A MISPRINT IN THE MANUAL: the program counter
         # has just been loaded from (SP+4), and the row would otherwise
         # overwrite it with an address on the stack. The stack-pointer rule is
-        # given properly in section 3.5.7, "RTE and Format Error Exceptions",
-        # page 3-16: the processor "adjusts the stack pointer by adding the
+        # given properly in the prose: the processor "adjusts the stack
+        # pointer by adding the
         # format value to the auto-incremented address after the fetch of the
         # first longword", which is SP + 4 + FORMAT.
         #
-        # THAT IS THE INVERSE OF TABLE 3-2, page 3-14, and the four cases below
+        # THAT IS THE INVERSE OF THE FORMAT FIELD ENCODING, and the cases below
         # are that table's four rows read backwards: a frame whose format is
         # 4, 5, 6 or 7 restores an A7 of SP + 8, SP + 9, SP + 10 or SP + 11.
         # A core that added a fixed 8 passes the first case and fails the other
@@ -2757,24 +2745,24 @@ CASES = {
         # ------------------------------------------------------------- TRAP
         # THE WHOLE EXCEPTION SEQUENCE, AND EVERY PART OF IT IS IN THE MANUAL.
         #
-        #   THE VECTOR. Table 3-1, page 3-13: `TRAP #0-15` are vector numbers
+        #   THE VECTOR. `TRAP #0-15` are vector numbers
         #   32 to 47, the vector offset is 4 x vector_number, and the stacked
         #   program counter is "Next" - the address of the instruction after the
         #   TRAP, not the address of the TRAP itself.
         #
-        #   THE FRAME. Figure 3-7, page 3-13: the first longword is the 16-bit
+        #   THE FRAME. The first longword is the 16-bit
         #   format/vector word above the 16-bit status register, and the second
-        #   is the program counter. Table 3-3, page 3-14, writes the fault
+        #   is the program counter. The reference writes the fault
         #   status field as zeros for everything that is not an access or
         #   address error.
         #
-        #   THE SELF-ALIGNMENT. Table 3-2, page 3-14: the frame is written at a
+        #   THE SELF-ALIGNMENT. The frame is written at a
         #   0-modulo-4 address and the FORMAT field records how far the stack
         #   pointer had to move to get there - A7-8 and format 0100 when A7's
         #   low two bits were 00, through A7-11 and format 0111 when they were
         #   11. The four cases below are that table's four rows.
         #
-        #   THE STATUS REGISTER. Section 3.3, page 3-11: the processor copies
+        #   THE STATUS REGISTER. The processor copies
         #   SR, sets the S-bit and clears the T-bit. The COPY is what is
         #   stacked. `trap_0_clears_trace_and_sets_supervisor` starts from
         #   0x871f - trace SET, supervisor CLEAR - so the frame holds 0x871f

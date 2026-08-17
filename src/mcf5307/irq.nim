@@ -1,48 +1,37 @@
 ## `irq` - the interrupt input, the mask against the status register, and the
-## interrupt exception. Task CPU-17. Design section 5.2.2.
+## interrupt exception.
 ##
-## WHAT THIS MODULE OWNS AND WHAT IT REFUSES TO OWN. Design section 5.2.2 puts
-## the pending bit of each source and the arbitration among them on the BOARD,
-## and puts the mask against the status register and the exception frame in the
-## CORE. This module is the core half and it holds NO pending set: the three
-## `irqLevel*` fields of the context are the board's last presentation and
-## nothing more. `mcf5307_set_irq` overwrites them whole, which is what makes
-## the call idempotent without a comparison against a previous value.
+## WHAT THIS MODULE OWNS AND WHAT IT REFUSES TO OWN. The pending bit of each
+## source and the arbitration among them belong to the BOARD; the mask against
+## the status register and the exception frame belong to the CORE. This module
+## is the core half and it holds NO pending set: the `irqLevel*` fields of the
+## context are the board's last presentation and nothing more.
+## `mcf5307_set_irq` overwrites them whole, which is what makes the call
+## idempotent without a comparison against a previous value.
 ##
-## THE ONE PIECE OF HISTORY THE CORE DOES KEEP IS THE LEVEL-7 EDGE, and the
-## manual is why. MCF5307 User's Manual section 7.6, folio 7-23, NOTE, read as
-## a page image 2026-08-12: "Interrupt levels 1 through 6 are level-sensitive
-## only. Interrupt level 7 is both level sensitive and edge triggered as
-## described in 7.6.1 Level 7 Interrupts." Section 7.6.1, folio 7-24: a level 7
-## interrupt "is a nonmaskable interrupt; therefore, a 7 in the interrupt mask
-## does not disable a level 7 interrupt", and it is "edge triggered by a
-## transition from a lower priority request to the level 7 request, as opposed
-## to interrupt levels 1 through 6, which are level sensitive. Therefore, if
-## IRQ7 remains asserted, the MCF5307 device will only recognize one level 7
-## interrupt because only one transition from a lower level request to a level
-## 7 request occurred."
+## THE ONE PIECE OF HISTORY THE CORE DOES KEEP IS THE LEVEL-7 EDGE. Interrupt
+## levels 1 through 6 are level-sensitive only. Level 7 is nonmaskable, so a 7
+## in the interrupt mask does not disable it, and it is edge triggered by a
+## transition from a lower priority request to the level 7 request - so a held
+## IRQ7 is recognized once, because only one such transition occurred.
 ##
 ## THIS MODULE IMPLEMENTS THE EDGE HALF OF LEVEL 7 AND NOT THE LEVEL HALF, AND
-## THAT IS A DIVERGENCE FROM THE MANUAL THAT DESIGN SECTION 5.2.2 CHOSE. The
-## design's rule 2 is edge-only: an edge arms one interrupt, a held level arms
-## no second one, and the core clears the latch when it takes the interrupt.
-## Section 7.6.1's second numbered sequence describes a case that rule cannot
-## produce - a handler that LOWERS the interrupt mask sees a second level 7
-## interrupt "even though no transition has occurred on the interrupt control
-## pins". The G2 programs no level-7 source (design section 5.2.2), so nothing
-## in this project can reach the difference. It is RECORDED HERE AND NOT
-## RESOLVED, because resolving it would be this task choosing where the design
-## is silent.
+## THAT IS A DELIBERATE DIVERGENCE. The rule is edge-only: an edge arms one
+## interrupt, a held level arms no second one, and the core clears the latch
+## when it takes the interrupt. That rule cannot produce the case where a
+## handler which LOWERS the interrupt mask sees a second level 7 interrupt
+## "even though no transition has occurred on the interrupt control pins". The
+## G2 programs no level-7 source, so nothing in this project can reach the
+## difference. It is RECORDED HERE AND NOT RESOLVED, because resolving it would
+## be choosing where the design is silent.
 ##
-## THE ORDER INSIDE `takeInterrupt` IS THE MANUAL'S FOUR STEPS, AND THE
-## ACKNOWLEDGE IS THE ONE PLACE IT IS NOT. Section 3.3, folio 3-11, puts the
-## interrupt-acknowledge cycle SECOND, before the frame is stacked, because
-## that is where the hardware gets the vector number from. This interface
-## already has the vector: design section 5.2.2 records that divergence in full
-## - the board PUSHES its whole state on every change instead of the core
-## PULLING a vector at the moment of the interrupt - and it fixes the
-## acknowledge at "after the 8-byte frame is on the stack and before the first
-## handler instruction is fetched". That is the order below.
+## THE ACKNOWLEDGE IS THE ONE PLACE THE ORDER INSIDE `takeInterrupt` DIVERGES.
+## Hardware runs the interrupt-acknowledge cycle before the frame is stacked,
+## because that is where it gets the vector number from. This interface already
+## has the vector - the board PUSHES its whole state on every change instead of
+## the core PULLING a vector at the moment of the interrupt - so the
+## acknowledge is fixed at "after the 8-byte frame is on the stack and before
+## the first handler instruction is fetched". That is the order below.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. The mask
 ## rule, the status-register bit positions, the trigger types and the
@@ -53,9 +42,7 @@ import mcf5307/decode_types
 import mcf5307/exception
 import mcf5307/machine
 
-# User's Manual section 3.2.2.1, folio 3-10, prints the whole 16-bit status
-# register over its bit numbers: T at 15, S at 13, M at 12 and I[2:0] at bits
-# 10 to 8. `machine.nim` names T, S and M with the rest of the register; the
+# `machine.nim` names T, S and M with the rest of the status register; the
 # interrupt priority mask is here because its SHIFT is only meaningful to the
 # comparison `pendingInterrupt` makes, and that comparison is this module's.
 const
@@ -67,10 +54,10 @@ proc srIpm*(sr: uint32): uint32 =
   (sr and srIpmMask) shr srIpmShift
 
 proc vectorFor(level: int; vector: uint8; autovector: bool): uint8 =
-  ## The vector a presentation names. Section 5.2.2: "`autovector` non-zero
-  ## makes the core use the autovector for `level` and ignore `vector`."
+  ## The vector a presentation names. An `autovector` argument that is non-zero
+  ## makes the core use the autovector for `level` and ignore `vector`.
   ##
-  ## `autovectorFor` IS CPU-14'S AND IT IS NOT RE-DERIVED HERE. It is typed
+  ## `autovectorFor` IS NOT RE-DERIVED HERE. It is typed
   ## `range[1 .. 7]`, and every caller below has already established that the
   ## level is in that range, so the conversion cannot fail.
   if autovector: autovectorFor(level) else: vector
@@ -81,25 +68,25 @@ proc mcf5307_set_irq*(ctx: MCF5307Ctx; level: cint; vector: uint8;
   ## Present the board's CURRENT highest-priority pending interrupt.
   ##
   ## IT IS A WHOLE-STATE WRITE AND THEREFORE IDEMPOTENT BY CONSTRUCTION. Two
-  ## calls with the same arguments leave the same six fields holding the same
+  ## calls with the same arguments leave the same fields holding the same
   ## values, and the level-7 arm below is conditional on a CHANGE of level, so
   ## the second of two identical calls arms nothing. A model that accumulated
   ## instead of overwriting would need a comparison here to stay idempotent,
-  ## and design section 5.2.2 rejects it for a different and stronger reason:
-  ## it would make the core hold a second copy of the board's pending state.
+  ## and the design rejects it for a different and stronger reason: it would
+  ## make the core hold a second copy of the board's pending state.
   ##
   ## A LEVEL OUTSIDE 0 TO 7 IS STORED AND NEVER TAKEN, and that is a property
-  ## of the comparisons below rather than a rule this module states. Design
-  ## section 5.2.2 defines the argument over 0 to 7 alone and says nothing
-  ## about any other value, so nothing here invents a meaning for one; what
+  ## of the comparisons below rather than a rule this module states. The
+  ## argument is defined over 0 to 7 alone and nothing is said about any other
+  ## value, so nothing here invents a meaning for one; what
   ## the code guarantees is only that no such value can reach `autovectorFor`,
   ## whose parameter is a checked range.
   if ctx.isNil:
     return
   # THE ARM IS TESTED BEFORE THE PRESENTATION IS OVERWRITTEN, because the test
-  # IS the transition: section 7.6.1's "a transition from a lower priority
-  # request to the level 7 request". The old level is the only thing that can
-  # answer it and the next line destroys it.
+  # IS the transition from a lower priority request to the level 7 request. The
+  # old level is the only thing that can answer it and the next line destroys
+  # it.
   if level == 7 and ctx.irqLevel != 7:
     ctx.irq7Armed = true
     ctx.irq7Vector = vector
@@ -114,30 +101,26 @@ proc resetInterruptEdge*(ctx: MCF5307Ctx) =
   ## makes the caller set a fact about the tree rather than a precondition this
   ## procedure depends on.
   ##
-  ## THIS IS AN INFERENCE AND NOT A CITATION, AND THE MANUALS ARE SILENT RATHER
-  ## THAN BRIEF. Section 3.5.11, folio 3-17 (PDF page 74), enumerates the reset
-  ## exception's effects and names no pending-interrupt state among them;
-  ## sections 7.6 and 7.6.1, folios 7-23 and 7-24 (PDF pages 138 and 139), give
-  ## level 7 its trigger type and never mention reset at all. Two arguments
-  ## stand in for the quotation this procedure does not have, and they pull in
-  ## opposite directions, which is why it does two things and not one:
+  ## THIS IS AN INFERENCE AND NOT A CITATION, AND THE SOURCES ARE SILENT RATHER
+  ## THAN BRIEF. The reset exception's effects name no pending-interrupt state,
+  ## and level 7's trigger type is given without any mention of reset. Two
+  ## arguments stand in for the quotation this procedure does not have, and they
+  ## pull in opposite directions, which is why it does two things and not one:
   ##
-  ##   THE CLEAR. RSTI resets every register in the SIM and every peripheral
-  ##   (folio 8-10, PDF page 167) and the entire device including the PLL (folio
-  ##   7-40, PDF page 155). There is no silicon that does all of that and
-  ##   preserves a one-bit edge-history flop inside the core's own recognition
-  ##   logic.
+  ##   THE CLEAR. RSTI resets every register in the SIM, every peripheral and
+  ##   the entire device including the PLL. There is no silicon that does all of
+  ##   that and preserves a one-bit edge-history flop inside the core's own
+  ##   recognition logic.
   ##
   ##   THE RE-OBSERVATION, WITHOUT WHICH THE CLEAR ALONE DROPS AN INTERRUPT REAL
-  ##   HARDWARE TAKES. Section 7.6.1, folio 7-24 (PDF page 139): "The level 7
-  ##   request on IRQ7 must be held until the second interrupt-acknowledge bus
-  ##   cycle has begun to ensure that the interrupt is recognized." A latched
-  ##   edge whose pin has since been released therefore has nothing left for an
-  ##   acknowledge cycle to acknowledge, and keeping it models a state the
-  ##   hardware cannot reach. A pin STILL ASSERTED across the reset is the other
-  ##   case entirely: the detector's history is back at "last seen level 0", so
-  ##   its next observation is a transition from a lower request to the level 7
-  ##   request and the core RE-ARMS ITSELF.
+  ##   HARDWARE TAKES. The level 7 request on IRQ7 must be held until the second
+  ##   interrupt-acknowledge bus cycle has begun for the interrupt to be
+  ##   recognized. A latched edge whose pin has since been released therefore
+  ##   has nothing left for an acknowledge cycle to acknowledge, and keeping it
+  ##   models a state the hardware cannot reach. A pin STILL ASSERTED across the
+  ##   reset is the other case entirely: the detector's history is back at "last
+  ##   seen level 0", so its next observation is a transition from a lower
+  ##   request to the level 7 request and the core RE-ARMS ITSELF.
   ##
   ## IT IS THE ORDINARY EDGE PATH THAT RE-ARMS AND NOT A SECOND COPY OF IT.
   ## Putting the stored history back to 0 and re-presenting the board's own last
@@ -146,9 +129,9 @@ proc resetInterruptEdge*(ctx: MCF5307Ctx) =
   ## that ever writes them.
   ##
   ## THE BOARD'S PRESENTATION IS NOT INVENTED OR DISCARDED HERE. `mcf5307_set_irq`
-  ## is called with the values already in the context, so the six fields end
-  ## holding what the board last said; what the two lines below change is the
-  ## core's own edge history and its latch.
+  ## is called with the values already in the context, so the fields end holding
+  ## what the board last said; what the two lines below change is the core's own
+  ## edge history and its latch.
   ##
   ## THE RE-ARM TAKES ITS VECTOR FROM `ctx.irqVector` AND NOT FROM
   ## `ctx.irq7Vector`, AND THAT IS A DECISION RATHER THAN AN OVERSIGHT. The two
@@ -167,9 +150,9 @@ proc resetInterruptEdge*(ctx: MCF5307Ctx) =
   ## models. The vector a level-7 acknowledge carries is the board's to state
   ## and the core has no older copy of it worth preferring.
   ##
-  ## LEVELS 1 TO 6 NEED NOTHING HERE. Section 7.6, folio 7-23, NOTE: they are
-  ## "level-sensitive only", so `pendingInterrupt` reads the live presentation
-  ## at every sample and there is no history for a reset to put back.
+  ## LEVELS 1 TO 6 NEED NOTHING HERE. They are level-sensitive only, so
+  ## `pendingInterrupt` reads the live presentation at every sample and there is
+  ## no history for a reset to put back.
   ##
   ## THE TWO HALVES ARE SEPARATELY LOAD-BEARING AND THE REGISTRY MEASURES EACH.
   ## `tests/t_claims.cmake` applies them one at a time to a copy of `src/`: a
@@ -215,19 +198,16 @@ proc pendingInterrupt*(ctx: MCF5307Ctx): tuple[take: bool, level: int,
   ## The interrupt the core would take at this instruction boundary.
   ##
   ## LEVEL 7 IS TESTED FIRST AND IT IS TESTED AGAINST THE LATCH, NOT AGAINST
-  ## THE PRESENTED LEVEL. Section 7.6.1: it is nonmaskable, so no comparison
-  ## against the mask guards it, and it is edge triggered, so a presented
-  ## level 7 with no armed latch is not an interrupt at all - that is the
-  ## state a held level 7 is in after the core has taken it.
+  ## THE PRESENTED LEVEL. It is nonmaskable, so no comparison against the mask
+  ## guards it, and it is edge triggered, so a presented level 7 with no armed
+  ## latch is not an interrupt at all - that is the state a held level 7 is in
+  ## after the core has taken it.
   ##
   ## LEVELS 1 TO 6 ARE TESTED AGAINST THE PRESENTATION AND NOTHING ELSE.
-  ## Section 3.2.2.1, folio 3-10: "Interrupt requests are inhibited for all
-  ## priority levels less than or equal to the current priority", so the test
-  ## is STRICTLY GREATER THAN. Section 7.6, folio 7-23, states it from the
-  ## other side: "When an interrupt request has a priority higher than the
-  ## value in the mask, the ColdFire core makes the request a pending
-  ## interrupt." A `>=` here would take a level the hardware inhibits, and a
-  ## mask of 7 would then stop nothing.
+  ## Interrupt requests are inhibited for all priority levels less than or equal
+  ## to the current priority, so the test is STRICTLY GREATER THAN. A `>=` here
+  ## would take a level the hardware inhibits, and a mask of 7 would then stop
+  ## nothing.
   if ctx.irq7Armed:
     return (true, 7, vectorFor(7, ctx.irq7Vector, ctx.irq7Autovector))
   let level = int(ctx.irqLevel)
@@ -242,39 +222,36 @@ proc takeInterrupt*(ctx: MCF5307Ctx): bool =
   if not pending.take:
     return false
 
-  # THE LATCH IS CLEARED HERE AND NOT IN THE ACKNOWLEDGE CALLBACK. Design
-  # section 5.2.2's acknowledge table: for level 7 the board does "nothing on
-  # the board side ... so a board that also cleared something would be
-  # clearing a second copy of one state". It is cleared BEFORE the frame is
-  # stacked so that a fault inside the stacking - CPU-15's double fault - does
-  # not leave an interrupt armed that the machine has already begun to take.
+  # THE LATCH IS CLEARED HERE AND NOT IN THE ACKNOWLEDGE CALLBACK. For level 7
+  # the board does nothing on its own side, so a board that also cleared
+  # something would be clearing a second copy of one state. It is cleared
+  # BEFORE the frame is stacked so that a fault inside the stacking - the
+  # double fault - does not leave an interrupt armed that the machine has
+  # already begun to take.
   if pending.level == 7:
     ctx.irq7Armed = false
 
-  # The stacked program counter is the NEXT instruction: Table 3-1, folio
-  # 3-13, gives vectors 25-31 a STACKED PROGRAM COUNTER of "Next", and its
-  # footnote defines Next as "the PC of the next instruction that follows the
-  # instruction that caused the fault". This runs at an instruction boundary,
-  # where `ctx.pc` is exactly that.
+  # The stacked program counter is the NEXT instruction: the interrupt vectors
+  # stack "the PC of the next instruction that follows the instruction that
+  # caused the fault". This runs at an instruction boundary, where `ctx.pc` is
+  # exactly that.
   takeException(ctx, pending.vector, ctx.pc)
   if ctx.halted:
     return true
 
-  # Section 3.3, folio 3-11: "The occurrence of an interrupt exception also
-  # forces the M-bit to be cleared and the interrupt priority mask to be set
-  # to the level of the current interrupt request." `takeException` has
-  # already set S and cleared T and has already stacked the COPY of the
-  # status register taken before any of it, so this write cannot reach the
-  # frame. Section 7.6.1's second sequence depends on this mask write for
-  # level 7 as much as for any other level: "the interrupt mask will be set
-  # back to level 7".
+  # An interrupt exception forces the M-bit to be cleared and the interrupt
+  # priority mask to be set to the level of the current interrupt request.
+  # `takeException` has already set S and cleared T and has already stacked the
+  # COPY of the status register taken before any of it, so this write cannot
+  # reach the frame. Level 7 depends on this mask write as much as any other
+  # level does.
   ctx.sr = (ctx.sr and not srMaster and not srIpmMask) or
            (uint32(pending.level) shl srIpmShift)
 
-  # Design section 5.2.2: the core calls the acknowledge "after the 8-byte
-  # frame is on the stack and before it fetches the first handler
-  # instruction". The board does nothing here for a level source and nothing
-  # here for level 7; an edge source on the board's own side clears itself.
+  # The core calls the acknowledge after the 8-byte frame is on the stack and
+  # before it fetches the first handler instruction. The board does nothing
+  # here for a level source and nothing here for level 7; an edge source on the
+  # board's own side clears itself.
   if not ctx.iackFn.isNil:
     ctx.iackFn(ctx.user, cint(pending.level), pending.vector)
   true

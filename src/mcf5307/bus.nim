@@ -1,6 +1,5 @@
 ## `bus` - the bus-fault channel: the one mapping from a board's bus status to
-## the fault status code the exception frame carries. Task CPU-15. Design
-## sections 5.2.1, 5.6 and 17 row 7.24.
+## the fault status code the exception frame carries.
 ##
 ## A leaf: every procedure is a function of a status value and a direction, so
 ## nothing here needs an edge to an executor.
@@ -18,25 +17,18 @@ import mcf5307/exception
 
 type
   BusAccess* = enum
-    ## The direction of the access that faulted. User's Manual Table 3-3,
-    ## section 3.4, folio 3-14, distinguishes an operand read from an operand
-    ## write and gives each its own code.
+    ## The direction of the access that faulted. An operand read and an operand
+    ## write each carry their own code.
     operandRead
     operandWrite
 
-# ONLY `busFault` HAS A HARDWARE PRODUCER ON THIS PART, and the other two rows
+# ONLY `busFault` HAS A HARDWARE PRODUCER ON THIS PART, and the remaining rows
 # are this emulator's own extension rather than an encoding of silicon
-# behaviour. User's Manual section 3.5.1, folio 3-14, verbatim: for the MCF5307
-# "access errors are only reported in conjunction with an attempted store to a
-# write-protected memory space. Thus, access errors associated with instruction
-# fetch or operand read accesses are not possible." The one documented producer
-# is the RAMBAR write-protect bit, section 6.3.1, folio 6-3: "else Signal a
-# write-protect access error".
+# behaviour. The one documented producer is the RAMBAR write-protect bit.
 #
-# THE EXTENSION ROWS BORROW THE HARDWARE CODES RATHER THAN INVENTING ONE.
-# Table 3-3 reserves every value outside its five, so a code of this module's
-# own choosing would be a reserved value in a field a firmware handler decodes.
-# Design section 5.2.1 takes the borrowing decision and gives the two rows.
+# THE EXTENSION ROWS BORROW THE HARDWARE CODES RATHER THAN INVENTING ONE. Every
+# value outside the documented set is reserved, so a code of this module's own
+# choosing would be a reserved value in a field a firmware handler decodes.
 
 proc isEmulatorExtension*(status: Mcf5307BusStatus): bool =
   ## Whether a status is one this part cannot raise.
@@ -47,13 +39,12 @@ proc isEmulatorExtension*(status: Mcf5307BusStatus): bool =
     status == Mcf5307BusStatus.busSizeIllegal
 
 proc faultStatusFor*(status: Mcf5307BusStatus; access: BusAccess): uint32 =
-  ## The `FS` code design section 5.2.1's mapping table gives for a status and
-  ## a direction.
+  ## The `FS` code for a status and a direction.
   ##
   ## TOTAL OVER THE ENUMERATION, and `busOk` is mapped rather than rejected: a
   ## partial mapping would need a caller to prove it had excluded `busOk`
-  ## first, and Table 3-3's `0000` already means "not an access or address
-  ## error", which is what a completed access is.
+  ## first, and the `0000` code already means "not an access or address error",
+  ## which is what a completed access is.
   ##
   ## `busFault` TAKES THE SAME CODE IN BOTH DIRECTIONS. Its row names a store
   ## to write-protected space, which is the only access that raises it on

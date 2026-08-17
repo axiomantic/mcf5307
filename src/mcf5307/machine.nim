@@ -1,5 +1,4 @@
 ## `machine` - the machine substrate every instruction group executes against.
-## Task CPU-8 creates this file. Design section 6.1.
 ##
 ## THIS MODULE HAS ONE JOB: given a context, read and write the machine's
 ## state. The register file, the condition-code bits, the board accesses, the
@@ -8,13 +7,12 @@
 ## instruction-group modules (`move.nim`, `alu.nim`, and later `logic.nim` and
 ## `control.nim`), and none of that is here.
 ##
-## WHY IT EXISTS. CPU-8 adds a second executor that needs the same register
-## file, the same board accesses and the same effective-address evaluation.
-## `alu.nim` importing `move.nim` for them would put an executor under another
-## executor, which is the SAME SHAPE as the decoder-under-executor cycle. The
-## helpers are pure functions over the shared types, so
-## `~/Desktop/avoiding-cycles.md` puts them beside those types, not beside one
-## caller.
+## WHY IT EXISTS. Every executor needs the same register file, the same board
+## accesses and the same effective-address evaluation. `alu.nim` importing
+## `move.nim` for them would put an executor under another executor, which is
+## the SAME SHAPE as the decoder-under-executor cycle. The helpers are pure
+## functions over the shared types, so they live beside those types and not
+## beside one caller.
 ##
 ## THE LAYERING. This module sits at the `decode_types` level. It reads the
 ## shared types and it names no executor and no decoder:
@@ -40,8 +38,8 @@
 ## MIT licensed and clean-room with respect to GPL and LGPL code. Register
 ## numbering, the condition-code bit positions and addressing-mode behaviour
 ## are facts about Motorola silicon; they are taken from the ColdFire Family
-## Programmer's Reference Manual and the MCF5307 User's Manual (AGENTS.md
-## section 11) and from this project's own measurements.
+## Programmer's Reference Manual and the MCF5307 User's Manual and from this
+## project's own measurements.
 
 import mcf5307/bus
 import mcf5307/decode_types
@@ -147,9 +145,9 @@ proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
 # (`include/mcf5307.h`) forbids no argument, so a context whose board callbacks
 # are all nil is a context a caller may build, and `step` in `cpu.nim` opens by
 # faulting on a nil `readFn` rather than calling it - the core's own statement
-# that such a context is a state it survives. Design section 11.4, CPU-15, is
-# the requirement behind that statement: "Nothing aborts the process. An abort
-# inside a plugin destroys the host's session."
+# that such a context is a state it survives. The requirement behind that
+# statement is that nothing aborts the process: an abort inside a plugin
+# destroys the host's session.
 #
 # THE GUARD IS HERE AND NOT ONLY AT THE HEAD OF `step` BECAUSE THIS IS WHERE THE
 # CALL HAPPENS. `step`'s guard answers for the paths that run THROUGH `step`;
@@ -167,15 +165,15 @@ proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
 # this module and the executor modules, and each of those runs only from
 # `step`, whose first statement faults on a nil `readFn`.
 
-# THE `FS` ARGUMENT IS DEFAULTED, AND THE DEFAULT IS THE MANUAL'S ANSWER RATHER
-# THAN THIS MODULE'S CONVENIENCE. User's Manual section 3.4, folio 3-14, of the
-# fault status field: "This field is defined for access and address errors only
-# and written as zeros for all other types of exceptions." The two callers
-# outside this module - `control.nim`'s `TRAP` and `irq.nim`'s interrupt - are
-# both "other types", so `0000` is what the manual writes for each of them, and
-# a required parameter would make each of them state a value the manual already
-# fixes. `frameFirstLongword` keeps its own `fs` parameter undefaulted, so the
-# layout is still closed by the compiler one layer down.
+# THE `FS` ARGUMENT IS DEFAULTED, AND THE DEFAULT IS THE REFERENCE'S ANSWER
+# RATHER THAN THIS MODULE'S CONVENIENCE. The fault status field "is defined for
+# access and address errors only and written as zeros for all other types of
+# exceptions". The callers outside this module - `control.nim`'s `TRAP` and
+# `irq.nim`'s interrupt - are both "other types", so `0000` is the documented
+# value for each of them, and a required parameter would make each of them
+# state a value that is already fixed. `frameFirstLongword` keeps its own `fs`
+# parameter undefaulted, so the layout is still closed by the compiler one
+# layer down.
 proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
                     fs: uint32 = fsNotAnAccessError)
 
@@ -201,8 +199,8 @@ proc boardWrite(ctx: MCF5307Ctx; address: uint32; size: uint8; value: uint32;
 
 # THE TWO LAYERS DIFFER IN WHAT A NON-OK STATUS MEANS AND IN NOTHING ELSE. On
 # an executor's path it is an ACCESS FAULT and takes a vector; inside an
-# exception ENTRY the same status is a DOUBLE FAULT and halts. Design section
-# 5.2.1 rule 5 requires the second and requires that it not recurse.
+# exception ENTRY the same status is a DOUBLE FAULT and halts. The design
+# requires the second and requires that it not recurse.
 #
 # THE BOUND ON THE RECURSION IS THE CALL GRAPH AND NOT A FLAG ON THE CONTEXT.
 # `takeException` reaches the board only through `stackingRead` and
@@ -225,14 +223,14 @@ proc stackingWrite(ctx: MCF5307Ctx; address: uint32; size: uint8;
     ctx.halted = true
 
 # THE READ PATH HALTS AND DOES NOT TAKE A VECTOR, AND AN UNWIND BLOCKS IT
-# RATHER THAN A PREFERENCE. Design section 5.2.1 rule 4 requires that a fault be
-# taken "before it commits any register or memory side effect of the faulting
-# instruction", and `ctx.halted` is the ONLY signal that unwinds a
-# part-completed instruction: every executor checks it after each step. An
-# access fault must NOT halt - the handler has to run - so a read that took a
-# vector here would return to an executor that carried on with a zero operand
-# and committed it. MEASURED: `move.l 0x1000,%d1` against a board that reports
-# `busUnmapped` left `d1` zeroed over its previous value.
+# RATHER THAN A PREFERENCE. The design requires that a fault be taken "before
+# it commits any register or memory side effect of the faulting instruction",
+# and `ctx.halted` is the ONLY signal that unwinds a part-completed
+# instruction: every executor checks it after each step. An access fault must
+# NOT halt - the handler has to run - so a read that took a vector here would
+# return to an executor that carried on with a zero operand and committed it.
+# `move.l 0x1000,%d1` against a board that reports `busUnmapped` leaves `d1`
+# zeroed over its previous value.
 #
 # TAKING IT AT THE INSTRUCTION BOUNDARY IS THE FIX AND IT IS NOT WRITABLE FROM
 # THIS MODULE: it needs either a pending-fault field on `MCF5307Ctx`, which
@@ -241,10 +239,10 @@ proc stackingWrite(ctx: MCF5307Ctx; address: uint32; size: uint8;
 # so that wiring the read path is a deliberate change and not a silent one.
 #
 # THE WRITE PATH NEEDS NO UNWIND, WHICH IS WHY IT IS WIRED AND THE READ IS NOT.
-# Rule 4's one named exception is the operand write, and User's Manual section
-# 3.5.1, folio 3-14, is why: "All programming model updates associated with the
-# write instruction are completed." An executor that carries on after a write
-# fault is doing what the manual requires. That the only access error this part
+# The rule's one named exception is the operand write, and the reason is that
+# "all programming model updates associated with the write instruction are
+# completed". An executor that carries on after a write fault is doing what the
+# reference requires. That the only access error this part
 # raises is a store to write-protected space puts the real case on this side too.
 
 proc readMem*(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
@@ -300,18 +298,18 @@ proc indexOperand*(ctx: MCF5307Ctx; ext: uint16): uint32 =
   ## THE WORD/LONG SELECT IS BIT 11. Bit 8 is the brief-format marker and is
   ## zero in every word the assembler emits.
   ##
-  ## THE MANUAL DOES NOT PRINT THE EXTENSION WORD'S LAYOUT. There is no
-  ## brief-format figure anywhere in the MCF5307 User's Manual, so the pinned
+  ## THE REFERENCE DOES NOT PRINT THE EXTENSION WORD'S LAYOUT. There is no
+  ## brief-format figure anywhere in it, so the pinned
   ## assembler is the authority for the bit position: `btst %d1,(4,%pc,%d2)`
   ## assembles to `033b 2804`, whose `2804` has bit 11 SET and bit 8 CLEAR, and
   ## `m68k-elf-objdump -m m68k:5307` prints `%pc@(0x6,%d2:l)` - `:l`, a LONG
   ## index. Scaling corroborates the neighbouring fields: `(4,%pc,%d2*4)` is
   ## `2c04`, which moves bits 10..9 alone.
   ##
-  ## WHAT THE MANUAL DOES SAY IS THAT THE WORD FORM DOES NOT EXIST HERE.
-  ## Section 3.5.2, "Address Error Exception", page 3-15: "Any attempted use of
-  ## a word-sized index register (Xi.w) or a scale factor of 8 on an indexed
-  ## effective addressing mode generates an address error". `m68k-elf-as
+  ## WHAT THE REFERENCE DOES SAY IS THAT THE WORD FORM DOES NOT EXIST HERE:
+  ## "Any attempted use of a word-sized index register (Xi.w) or a scale factor
+  ## of 8 on an indexed effective addressing mode generates an address error".
+  ## `m68k-elf-as
   ## -mcpu=5307` agrees and REJECTS `btst %d1,(4,%pc,%d2.w)`, so bit 11 is set
   ## in every encoding this core can legally be given and the narrowing branch
   ## below is unreachable from assembled code.
@@ -332,12 +330,12 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
   ## The effective address of a memory-addressing mode. Register and
   ## immediate modes have no address; a caller that asks for one gets 0.
   ##
-  ## WHAT THIS PROCEDURE DOES NOT KNOW. Two things, and the rule for both is
-  ## the one `logic.nim`'s header uses: THE IMPLEMENTATION PICKS A BEHAVIOUR.
+  ## WHAT THIS PROCEDURE DOES NOT KNOW, and the rule for each is the one
+  ## `logic.nim`'s header uses: THE IMPLEMENTATION PICKS A BEHAVIOUR.
   ##
-  ##   1. THE ADDRESS ERROR OF AN ILLEGAL INDEX. MCF5307 User's Manual section
-  ##      3.5.2, page 3-15, says a word-sized index register or a scale factor
-  ##      of 8 "generates an address error". `indexOperand` raises no such
+  ##   1. THE ADDRESS ERROR OF AN ILLEGAL INDEX. A word-sized index register or
+  ##      a scale factor of 8 "generates an address error". `indexOperand`
+  ##      raises no such
   ##      error: it narrows the word index and it applies the scale of 8.
   ##      `m68k-elf-as -mcpu=5307` REFUSES to assemble `(4,%pc,%d2.w)` and
   ##      `(4,%pc,%d2*8)`, so a hand-written word would be asserting a trap
@@ -366,11 +364,10 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
     of ea7AbsW:
       result = uint32(s16(fetchExt(ctx)))
     of ea7AbsL:
-      # THE FIRST EXTENSION WORD IS THE HIGH HALF OF THE ADDRESS. MCF5307
-      # User's Manual section 3.7.2, "Organization of Integer Data Formats in
-      # Memory", page 3-19: "The address N of a longword data item corresponds
-      # to the address of the high order word. The lower order word is located
-      # at address N + 2." The extension pair is a longword in the instruction
+      # THE FIRST EXTENSION WORD IS THE HIGH HALF OF THE ADDRESS. "The address
+      # N of a longword data item corresponds to the address of the high order
+      # word. The lower order word is located at address N + 2." The extension
+      # pair is a longword in the instruction
       # stream, so the word at the lower address is the high half.
       # `m68k-elf-as -mcpu=5307` agrees: `btst %d1,0x00030004` assembles to
       # `0339 0003 0004`.
@@ -383,11 +380,11 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
       # indexed PC mode below takes its base the same way and for the same
       # reason.
       #
-      # THE MANUAL DOES NOT SETTLE THIS. The MCF5307 User's Manual names
-      # `(d16,PC)` and `(d8,PC,Xi)` in Table 3-5 (page 3-21) and prints no
-      # effective-address equation for any mode, so the authority here is the
-      # pinned assembler. Measured: `btst %d1,(target,%pc)` with the opcode at
-      # 0 assembles to `033a 0004` and `target` is placed at 6, and
+      # THE REFERENCE DOES NOT SETTLE THIS. It names `(d16,PC)` and
+      # `(d8,PC,Xi)` and prints no effective-address equation for any mode, so
+      # the authority here is the pinned assembler: `btst %d1,(target,%pc)`
+      # with the opcode at 0 assembles to `033a 0004` and `target` is placed
+      # at 6, and
       # `m68k-elf-objdump -m m68k:5307` prints `btst %d1,%pc@(6 <target>)`.
       # Base + 4 = 6, so the base is 2 - the address of the displacement word
       # and not the address after it.
@@ -519,26 +516,22 @@ proc eaRefWrite*(ctx: MCF5307Ctx; r: EaRef; size: uint8; value: uint32) =
   of erNone: discard
 
 # ---------------------------------------------------------------------------
-# THE EXCEPTION STACK FRAME. CPU-10 adds it, because `TRAP` is in its group and
-# a TRAP that did not take its vector would be a NOP with extra steps.
+# THE EXCEPTION STACK FRAME. `TRAP` needs it, because a TRAP that did not take
+# its vector would be a NOP with extra steps.
 #
-# IT IS HERE AND NOT IN `control.nim` FOR THE REASON THIS MODULE EXISTS. Four
-# later tasks need the same frame - CPU-14 owns the exception model itself,
-# CPU-15 the bus-fault channel, CPU-17 interrupts, and `control.nim`'s own
-# format-error path - and `exception.nim` will be a SIBLING of `control.nim`,
-# so it could not reach a copy that lived there without putting one executor
-# under another. That is the decoder-under-executor inversion one layer down;
-# `~/Desktop/avoiding-cycles.md` is the rule.
+# IT IS HERE AND NOT IN `control.nim` FOR THE REASON THIS MODULE EXISTS. The
+# exception model, the bus-fault channel, interrupts and `control.nim`'s own
+# format-error path all need the same frame, and `exception.nim` is a SIBLING
+# of `control.nim`, so it could not reach a copy that lived there without
+# putting one executor under another. That is the decoder-under-executor
+# inversion one layer down.
 #
 # IT IS THE MINIMUM `TRAP` NEEDS AND NOT THE EXCEPTION MODEL. There is no
 # vector table object, no fault-status computation and no double-fault
-# handling; CPU-14 and CPU-15 own those and this procedure is what they will
-# extend.
+# handling; this procedure is what those extend.
 
-# User's Manual section 3.2.2.1, folio 3-10, prints the whole 16-bit status
-# register over its bit numbers: T at 15, S at 13, M at 12 and I[2:0] at bits
-# 10 to 8. THE THREE NAMED HERE ARE THE ONES THIS MODULE'S OWN `takeException`
-# WRITES OR PRESERVES, and `srMaster` sits with them because a status-register
+# THE BITS NAMED HERE ARE THE ONES THIS MODULE'S OWN `takeException` WRITES OR
+# PRESERVES, and `srMaster` sits with them because a status-register
 # bit position is a fact about the register and not about the exception that
 # happens to clear it.
 const
@@ -549,18 +542,17 @@ const
 proc exceptionFrameBase*(sp: uint32): uint32 =
   ## Where the two-longword frame goes, and it is NOT simply `sp - 8`.
   ##
-  ## MCF5307 User's Manual section 3.3, page 3-11: "the exception stack frame
-  ## is created at a 0-modulo-4 address on the top of the current system
-  ## stack". Table 3-2, "Format Field Encoding", page 3-14, gives the four
-  ## cases: an A7 whose low two bits are 00, 01, 10 or 11 leaves the handler
-  ## with A7-8, A7-9, A7-10 or A7-11, and each of those four results is
-  ## 0-modulo-4. That is this expression.
+  ## "The exception stack frame is created at a 0-modulo-4 address on the top
+  ## of the current system stack". The format field encoding gives the cases: an
+  ## A7 whose low two bits are 00, 01, 10 or 11 leaves the handler with A7-8,
+  ## A7-9, A7-10 or A7-11, and each of those results is 0-modulo-4. That is
+  ## this expression.
   (sp - 8'u32) and not 3'u32
 
 proc exceptionFormat*(sp: uint32): uint32 =
   ## The FORMAT field of the frame the stack pointer `sp` produces: 4, 5, 6 or
-  ## 7, the four rows of Table 3-2 in order. It RECORDS the misalignment the
-  ## frame base removed, so that `RTE` can put it back.
+  ## 7, the rows of the format field encoding in order. It RECORDS the
+  ## misalignment the frame base removed, so that `RTE` can put it back.
   4'u32 + (sp and 3'u32)
 
 proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
@@ -568,41 +560,36 @@ proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## Stack a two-longword exception frame, then load the program counter from
   ## the vector table.
   ##
-  ## THE STATUS REGISTER IS COPIED BEFORE IT IS CHANGED. Section 3.3, page
-  ## 3-11: "the processor makes an internal copy of the SR and then enters
-  ## supervisor mode by setting the S-bit and disabling trace mode by clearing
-  ## the T-bit". The COPY is what reaches the frame; the modified word is what
-  ## the handler runs under. The M-bit and the interrupt priority mask are
-  ## changed only by an INTERRUPT exception, which is CPU-17's, so nothing
-  ## here touches them.
+  ## THE STATUS REGISTER IS COPIED BEFORE IT IS CHANGED: "the processor makes
+  ## an internal copy of the SR and then enters supervisor mode by setting the
+  ## S-bit and disabling trace mode by clearing the T-bit". The COPY is what
+  ## reaches the frame; the modified word is what the handler runs under. The
+  ## M-bit and the interrupt priority mask are changed only by an INTERRUPT
+  ## exception, so nothing here touches them.
   ##
-  ## THE FRAME IS TWO LONGWORD WRITES AND NOT SIX BYTEWISE PUSHES. Figure 3-7,
-  ## page 3-13, draws it as two longwords - the format/vector word above the
-  ## status register, then the program counter - and Table 3-14, page 3-29,
-  ## gives `trap #imm` a cost of `18(1/2)`: ONE read, the vector, and TWO
-  ## writes. Table 3-7's `TRAP` row on page 3-25 spells the same thing as
+  ## THE FRAME IS TWO LONGWORD WRITES AND NOT SIX BYTEWISE PUSHES. It is drawn
+  ## as two longwords - the format/vector word above the status register, then
+  ## the program counter - and `trap #imm` costs `18(1/2)`: ONE read, the
+  ## vector, and TWO writes. The instruction summary spells the same thing as
   ## `SP-4;PC`, `SP-2;SR`, `SP-2;Format`, which agrees whenever A7 was already
   ## longword aligned and does not show the self-alignment at all.
   ##
   ## THE VECTOR TABLE IS BASED AT ZERO, AND THAT IS A LIMITATION AND NOT A
-  ## CHOICE. Section 3.3, page 3-12: the handler address is "obtained by
-  ## fetching a value from the table located at the address defined in the
-  ## vector base register", indexed by `4 x vector_number`. THIS CORE HAS NO
-  ## VBR: the context holds no such field, and CPU-11 is the task that adds
-  ## `MOVEC` and therefore the only way to write one.
+  ## CHOICE. The handler address is "obtained by fetching a value from the
+  ## table located at the address defined in the vector base register", indexed
+  ## by `4 x vector_number`. THIS CORE HAS NO VBR: the context holds no such
+  ## field, and `MOVEC` is the only way to write one.
   ##
-  ## THE RESET VALUE IS ZERO AND THE MANUAL PRINTS IT. Table B-2, "Summary
-  ## Chart of MCF5307 Internal CPU Memory Map", Appendix page B-5, gives
-  ## `CPU @ $801` the name VBR, a width of 32, a RESET VALUE of `$00000000`
-  ## and an ACCESS of `W`. So this expression is correct for a machine that
-  ## has not written VBR and wrong for one that has, and the one line that
-  ## changes when CPU-11 lands is the `readMem` below.
+  ## THE RESET VALUE IS ZERO AND THE REFERENCE PRINTS IT: VBR has a width of
+  ## 32, a RESET VALUE of `$00000000` and an ACCESS of `W`. So this expression
+  ## is correct for a machine that has not written VBR and wrong for one that
+  ## has, and the one line that would change is the `readMem` below.
   ##
-  ## A FAULT INSIDE THIS PROCEDURE IS A DOUBLE FAULT AND CPU-15 OWNS IT. Each
-  ## access is checked and the procedure returns early, leaving the context
-  ## halted with `fault`; it does not recurse, which is design section 5.2.1's
-  ## requirement. The status register has already been modified at that point,
-  ## which is a state a double-fault handler will have to define.
+  ## A FAULT INSIDE THIS PROCEDURE IS A DOUBLE FAULT. Each access is checked
+  ## and the procedure returns early, leaving the context halted with `fault`;
+  ## it does not recurse, which is the design's requirement. The status
+  ## register has already been modified at that point, which is a state a
+  ## double-fault handler will have to define.
   let stackedSr = ctx.sr and 0xFFFF'u32
   ctx.sr = (ctx.sr or srSupervisor) and not srTrace
   let format = exceptionFormat(ctx.sp)
@@ -620,18 +607,17 @@ proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
     return
   ctx.pc = handler
   # THE HANDLER'S FIRST INSTRUCTION HAS NOT RUN, AND THAT IS A FACT ABOUT THE
-  # MACHINE THAT OUTLIVES THIS CALL. MCF5307 User's Manual Table 3-1, closing
-  # paragraph, folio 3-13: "ColdFire processors inhibit sampling for interrupts
-  # during the first instruction of all exception handlers." `mcf5307_exec`
-  # reads this field at its sample and clears it; `decode_types.nim` states why
-  # it is a field of the context.
+  # MACHINE THAT OUTLIVES THIS CALL. "ColdFire processors inhibit sampling for
+  # interrupts during the first instruction of all exception handlers."
+  # `mcf5307_exec` reads this field at its sample and clears it;
+  # `decode_types.nim` states why it is a field of the context.
   #
   # IT IS WRITTEN HERE, AFTER THE PROGRAM COUNTER, AND THAT POSITION IS THE
   # WHOLE OF THE RULE'S REACH. Every exception this core takes ends on this
   # line, so no exception path can acquire the rule and none can be forgotten
   # by it. A flag set by `execTrap` instead would be a rule about TRAP.
   #
-  # RE-MEASURED 2026-08-13 AGAINST THIS TREE - the one where `mcf5307_reset`
+  # RE-MEASURED AGAINST THIS TREE - the one where `mcf5307_reset`
   # SETS `atHandlerEntry` for the reset exception's own first instruction and
   # GUARDS a nil context, and where `t_irq` carries 37 cases: moving this line
   # out of here and into `execTrap` leaves every one of those cases GREEN,
@@ -640,8 +626,8 @@ proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   # NOT A COUNTEREXAMPLE: it does
   # not run through this procedure at all, it writes the field itself, and
   # `cpu.nim` says why. The funnel is a reason and not a measurement until a
-  # SECOND path into this procedure from inside `step` exists; CPU-15's
-  # bus-fault exception is that path.
+  # SECOND path into this procedure from inside `step` exists; the bus-fault
+  # exception is that path.
   #
   # A TAKE THAT FAULTED DOES NOT SET IT, because each early return above is
   # ahead of this line and a machine that never reached a handler is not at
@@ -650,8 +636,8 @@ proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
 
 # ---------------------------------------------------------------------------
 # The register access the conformance harness needs. The C ABI in
-# `include/mcf5307.h` (CPU-0) declares these; the runner's register bridge
-# (CPU-5) is the only caller today. `index` 0..7 is d0..d7, 8..14 is a0..a6,
+# `include/mcf5307.h` declares these; the runner's register bridge is the only
+# caller today. `index` 0..7 is d0..d7, 8..14 is a0..a6,
 # 15 is a7 (the single stack pointer), 16 is the status register, and 17 is
 # the program counter (read-only through this call).
 #
@@ -672,13 +658,13 @@ proc mcf5307_get_reg*(ctx: MCF5307Ctx; index: cint): uint32
   regFileGet(ctx, int(index))
 
 # ---------------------------------------------------------------------------
-# The run state the conformance harness needs. `include/mcf5307.h` (CPU-0)
-# declares these two beside the register accessors, and for the same reason:
-# the harness goes through the C ABI and the ABI published no way to see them.
+# The run state the conformance harness needs. `include/mcf5307.h` declares
+# these two beside the register accessors, and for the same reason: the harness
+# goes through the C ABI and the ABI published no way to see them.
 #
 # THEY ARE TWO CALLS AND NOT ONE, BECAUSE `halted` AND `fault` ARE TWO BITS.
-# `cpu.nim`'s `step` sets `halted` alone for a valid opcode whose semantics a
-# later task owns, and it sets BOTH for a bus error, an illegal instruction
+# `cpu.nim`'s `step` sets `halted` alone for a valid opcode whose semantics are
+# not yet written, and it sets BOTH for a bus error, an illegal instruction
 # word, an illegal effective address, an illegal size or a divide by zero.
 # Folding them into one call would make "this instruction trapped" and "this
 # instruction is not written yet" the same answer, and the conformance runner

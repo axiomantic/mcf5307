@@ -1,8 +1,8 @@
-# CMake drives Nim. Task CPU-1 creates this file.
+# CMake drives Nim.
 #
 # The repository ships Nim source plus build integration, and never a prebuilt
-# `.a`. Design section 20.1 gives the integration steps. This file runs them in
-# that order, at configure time, and reports each one by number.
+# `.a`. This file runs the integration steps in order, at configure time, and
+# reports each one by number.
 #
 #   1  Read `.nim-version`, run `nim --version`, fail the configure step on a
 #      mismatch and print both versions.
@@ -17,8 +17,8 @@
 # unit list to declare their targets, and a CMake target's source list is fixed
 # when the target is declared.
 #
-# `.nim-version` is read here and owned by CPU-25. The root `CMakeLists.txt` is
-# owned by CPU-26 and carries one `include()` of this file.
+# `.nim-version` is read here and never written here. The root
+# `CMakeLists.txt` carries one `include()` of this file.
 #
 # MIT licensed and clean-room with respect to GPL and LGPL code.
 
@@ -71,9 +71,9 @@ endfunction()
 # ---------------------------------------------------------------------------
 # Step 1. The version pin.
 #
-# Design section 5.7 rule 2. Both known audio-Nim precedents broke at a major
-# version. The pin is therefore exact, and a mismatch fails the configure step
-# instead of raising a warning.
+# Both known audio-Nim precedents broke at a major version. The pin is
+# therefore exact, and a mismatch fails the configure step instead of raising a
+# warning.
 
 find_program(MCF5307_NIM_EXECUTABLE nim REQUIRED
     DOC "The Nim compiler that builds the mcf5307 core")
@@ -147,7 +147,7 @@ message(STATUS
 # `-d:release` alone the run-time checks stay compiled in. Removing them turns
 # a defect that ends the process into a defect that returns a wrong value and
 # exits 0. A wrong answer with exit status 0 inside a CPU core is the one
-# outcome this design refuses. Design sections 5.6 and 20.1.
+# outcome this design refuses.
 
 set(MCF5307_NIMCACHE "${PROJECT_BINARY_DIR}/nimcache")
 set(MCF5307_NIM_HEADER "mcf5307_nim.h")
@@ -158,8 +158,7 @@ set(MCF5307_NIM_HEADER "mcf5307_nim.h")
 # different set proves nothing about the library the set governs.
 set(MCF5307_NIM_FLAGS --mm:arc --panics:on -d:release)
 
-# The Nim entry modules of this project. Design section 5.5 keeps the
-# one-project convention. A second Nim library appends its name here and writes
+# The Nim entry modules of this project. The one-project convention keeps one. A second Nim library appends its name here and writes
 # its own command below, with its own `--nimMainPrefix:` value. Step 2a reads
 # this list.
 set(MCF5307_NIM_ENTRIES mcf5307)
@@ -171,7 +170,7 @@ set(MCF5307_NIM_ENTRIES mcf5307)
 set(MCF5307_NIM_SOURCE_mcf5307 "${PROJECT_SOURCE_DIR}/src/mcf5307.nim")
 # `--path:src` puts the package root on the Nim search path so that the
 # entry module's `import mcf5307/<sub>` resolves to `src/mcf5307/<sub>.nim`.
-# The submodules of the core (CPU-6 and later) live under `src/mcf5307/`, and
+# The submodules of the core live under `src/mcf5307/`, and
 # without the path an entry module at `src/mcf5307.nim` cannot import them.
 set(MCF5307_NIM_PATH "${PROJECT_SOURCE_DIR}/src")
 set(MCF5307_NIM_COMMAND_mcf5307
@@ -186,7 +185,7 @@ set(MCF5307_NIM_COMMAND_mcf5307
     "${MCF5307_NIM_SOURCE_mcf5307}")
 
 # ---------------------------------------------------------------------------
-# Step 2a. The prefix check. Task CPU-2 adds this block.
+# Step 2a. The prefix check.
 #
 # `--nimMainPrefix:` renames the Nim runtime entry point of one Nim project.
 # Two Nim projects in one binary that keep the default names collide on
@@ -299,20 +298,18 @@ set(MCF5307_NIM_BUILT_PREFIX "${MCF5307_NIM_PREFIX_${MCF5307_NIM_BUILT_ENTRY}}")
 mcf5307_render_command(MCF5307_NIM_COMMAND_TEXT ${MCF5307_NIM_COMMAND})
 message(STATUS "mcf5307: nim invocation: ${MCF5307_NIM_COMMAND_TEXT}")
 
-# The contract header. It is CPU-0's file, it is read here and it is never
-# written here. The name is set at this point because the line below has to
+# The contract header. It is read here and it is never written here. The name is set at this point because the line below has to
 # name it, and step 4a reads the same variable.
 set(MCF5307_ABI_CONTRACT_FILE "${PROJECT_SOURCE_DIR}/include/mcf5307.h")
 
-# The smoke test's symbol list. It is CPU-3's file, it is read here and it is
-# never written here. Step 4a compares it against the published set of the
+# The smoke test's symbol list. It is read here and it is never written here. Step 4a compares it against the published set of the
 # contract header above. It is named at this point for the same reason the
 # contract header is: the dependency list below has to carry it.
 set(MCF5307_ABI_SMOKE_LIST_FILE
     "${PROJECT_SOURCE_DIR}/tests/abi_smoke_symbols.inc")
 
-# The link-partner stub of `t0_abi_header` cases 3 and 4. It is CPU-0's file,
-# it is COMPILED here and it is never written here. Step 4a, part three reads
+# The link-partner stub of `t0_abi_header`. It is COMPILED here and it is
+# never written here. Step 4a, part three reads
 # the symbols its object defines and compares them against the same published
 # set. It is named at this point for the reason the two files above are: the
 # dependency list below has to carry it.
@@ -560,7 +557,7 @@ set_target_properties(mcf5307_nim_objs PROPERTIES
 # platform's own mechanism.
 #
 # The dependency is kept and is not required. A host that holds the thread
-# functions in a separate library needs the flag once a later cpu task creates
+# functions in a separate library needs the flag once something later creates
 # a thread. A host without a thread library configures today, because nothing
 # in the current object set calls into one.
 set(THREADS_PREFER_PTHREAD_FLAG ON)
@@ -581,7 +578,7 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # hidden symbol, and `dynlib` added to the set gives a visible one.
 #
 # `nm` over the static archive reports a hidden symbol exactly as it reports a
-# visible one, and the smoke test of CPU-3 links statically. The shared object
+# visible one, and the smoke test links statically. The shared object
 # is the first artifact that tells the two apart, so this step builds one.
 #
 # HOW THE GATE MEASURES IT. It asks two tools, and it parses no C of its own.
@@ -598,7 +595,7 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # The verdict is a comparison of sets. A published name that the shared object
 # defines and does not export is a fault. A published name that the shared
 # object does not define at all is NOT a fault, and the report keeps the two
-# apart. A later cpu task writes those definitions.
+# apart. Those definitions are written later.
 #
 # THE GATE KNOWS NOTHING ABOUT `N_LIB_EXPORT`, `N_LIB_EXPORT_VAR` OR
 # `N_LIB_PRIVATE`. Those macros are one Nim release's way to write a visibility
@@ -606,7 +603,7 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # the result and never the macro. A Nim release that renames the macros changes
 # nothing here.
 #
-# `include/mcf5307.h` belongs to CPU-0. It is read here and never written here.
+# `include/mcf5307.h` is read here and never written here.
 
 # ---------------------------------------------------------------------------
 # The escape hatch, and why it is loud.
@@ -638,39 +635,21 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # is the test's second way to red - the one that covers a tree whose switch
 # reads ON while the branch did not run.
 #
-# WHAT THE GATE COSTS, MEASURED. This file stated its price nowhere, and a
-# reader reaching for the switch above is usually paying configure time for
-# something else. An adjective would not help that reader, so here is a number.
+# WHAT THE GATE COSTS. A reader reaching for the switch above is usually paying
+# configure time for something else, so the shape of the cost is recorded here.
 #
-#   2810 ms   the whole configure run, from an empty build tree
-#   1570 ms   step 4a, from this switch to the end of the stub verdict
-#    198 ms   controls E through I together - the compiles and `nm` runs
-#             that exist only to make the gate's own fatal branches fire
-#    149 ms   control H alone, the largest single control
+# Step 4a is about HALF of this project's configure time, and the controls that
+# exist only to make the gate's own fatal branches fire are roughly an eighth
+# of step 4a. Those shares held across runs on a quiet machine and on a busy
+# one; the absolute milliseconds did not, which is why they are not written
+# down. The rest of step 4a is not broken out, because the line ranges that
+# would do it interleave each control with the production read it calibrates -
+# one control's range carries the `nm` of the shared object, another's carries
+# a second AST parse - and a number that cannot be attributed to one or the
+# other is not a number worth writing down.
 #
-# Median of fourteen runs, measured 2026-08-10 on eeks-MBP.lan (Apple M4 Pro,
-# macOS 26.5.1, Apple clang 21.0.0, CMake 4.3.4, `-DCMAKE_BUILD_TYPE=Debug`),
-# read from `cmake --profiling-output=... --profiling-format=google-trace` as
-# the span between the first and last profiled command in each line range of
-# this file.
-#
-# THOSE MILLISECONDS WERE MEASURED ON A BUSY MACHINE, at load average 5.6, and
-# they are reported rather than tidied. An earlier set on the same tree with the
-# machine quiet read 2089, 1160, 151 and 113 ms for those same four lines -
-# about 25% lower across the board. WHAT DID NOT MOVE IS THE RATIOS:
-# step 4a was 56% of the configure run in both sets, and controls E through I
-# were 13% of step 4a in both. So the shares below are the durable part of this
-# record and the absolute figures are the perishable part.
-#
-# WHAT A READER SHOULD TAKE FROM THOSE NUMBERS. Step 4a is about HALF of this
-# project's configure time, and CONTROLS E THROUGH I ARE AN EIGHTH OF STEP 4A.
-# The rest of step 4a is not broken out here, because the line ranges that would
-# do it interleave each control with the production read it calibrates - control
-# D's range carries the `nm` of the shared object, control B's carries a second
-# AST parse - and a number that cannot be attributed to one or the other is not
-# a number worth writing down. So turning the gate off to buy back configure
-# time buys between one and two seconds per configure, in exchange for a build
-# whose published symbols nobody measured.
+# So turning the gate off to buy back configure time buys a second or two per
+# configure, in exchange for a build whose published symbols nobody measured.
 #
 # THE NUMBERS MOVE WITH THE HOST AND THE TOOLCHAIN AND THE METHOD DOES NOT. The
 # command above is written out so a reader who needs a current figure takes one
@@ -1363,8 +1342,8 @@ set(MCF5307_ABI_LINKER_PROVIDED
 #   NOT IMPLEMENTED    published and NOT defined.           Reported, not a
 #                                                           fault.
 #
-# THE THIRD CATEGORY IS A SEPARATE LINE AND A SEPARATE WORD. `a later cpu task
-# writes this` and `the reader could not see it` must never share a line. The
+# THE THIRD CATEGORY IS A SEPARATE LINE AND A SEPARATE WORD. `this is not
+# written yet` and `the reader could not see it` must never share a line. The
 # `defined` set is what separates them.
 
 set(MCF5307_ABI_VISIBLE "")
@@ -1404,9 +1383,9 @@ endif()
 # The other direction. An exported name the contract does not declare.
 #
 # A consumer cannot call a symbol it cannot declare. This check is also a
-# CONSTRAINT ON THIS PROJECT, and `src/mcf5307.nim` records it: CPU-1 cannot
-# add an exported status symbol of its own, because the contract belongs to
-# CPU-0 and this step refuses an export the contract does not carry.
+# CONSTRAINT ON THIS PROJECT, and `src/mcf5307.nim` records it: no exported
+# status symbol can be added here, because this step refuses an export the
+# contract does not carry.
 set(MCF5307_ABI_UNDECLARED "")
 foreach(name IN LISTS MCF5307_ABI_EXPORTED)
     if(name IN_LIST MCF5307_ABI_PUBLISHED
@@ -1446,8 +1425,8 @@ message(STATUS
     "IMPLEMENTED. No compilation unit defines them, and a later cpu task "
     "writes them: ${MCF5307_ABI_UNIMPLEMENTED}")
 
-# The scaffolding report. Design section 5.4 rule 2 asks C++ never to call the
-# runtime entry point directly. `include/mcf5307.h` does not declare it, and
+# The scaffolding report. C++ is asked never to call the runtime entry point
+# directly. `include/mcf5307.h` does not declare it, and
 # that is the whole barrier. This line prints what the shared object actually
 # exports, so the fact sits in the configure log rather than nowhere. A
 # mechanism would be a linker export list, and that belongs to the build that
@@ -1691,7 +1670,7 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part t
 # with `-Wall -Wextra -pedantic -Werror`, and that is where a warning in it is
 # a failure.
 #
-# `tests/abi_stub.c` belongs to CPU-0. It is read here and never written here.
+# `tests/abi_stub.c` is read here and never written here.
 
 if(NOT EXISTS "${MCF5307_ABI_STUB_FILE}")
     message(FATAL_ERROR

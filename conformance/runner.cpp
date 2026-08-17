@@ -1,4 +1,4 @@
-// conformance/runner.cpp - the CPU-5 ColdFire conformance corpus runner.
+// conformance/runner.cpp - the ColdFire conformance corpus runner.
 //
 // Check: `ctest --test-dir build --no-tests=error -R ^mcf5307_conformance_all$`
 // runs every committed case and reports `0 tests failed`. The runner prints
@@ -6,43 +6,42 @@
 // failure.
 //
 // The runner registers one CTest test per group, and the group is selected by
-// the registered test NAME, never by a forwarded argument (CPU-5's own note
-// gives the measured reason: CTest does not forward arguments after `--`, so
-// each registration carries `--group <name>` in its COMMAND). Design section
-// 18.2, design section 20.1, plan section 11.2.
+// the registered test NAME, never by a forwarded argument: CTest does not
+// forward arguments after `--`, so each registration carries `--group <name>`
+// in its COMMAND.
 //
 // WHAT THE RUNNER IS. One executable, built from this one translation unit,
 // linked against the `mcf5307` static library through the C ABI
 // (`include/mcf5307.h`). It reads the committed corpus, replays each case
 // against the core, and compares the resulting register state with the
-// expected state. The five registered tests select the group:
+// expected state. The registered tests select the group:
 //
 //   `mcf5307_conformance_move`     runner --group move
 //   `mcf5307_conformance_alu`      runner --group alu
 //   `mcf5307_conformance_logic`    runner --group logic
 //   `mcf5307_conformance_control`  runner --group control
-//   `mcf5307_conformance_all`      runner            (all four groups)
+//   `mcf5307_conformance_all`      runner            (every group)
 //
-// WHAT A CASE HAS TO SATISFY. Three things, and the first one is newer than
-// the other two: the core must not be halted or faulted after the case's one
-// instruction, every register the case's `expected` state names must match,
+// WHAT A CASE HAS TO SATISFY: the core must not be halted or faulted after
+// the case's one instruction, every register the case's `expected` state names
+// must match,
 // and every memory word it names must match. THE RUN-STATE CHECK COMES FIRST
 // BECAUSE A TRAP LEAVES THE OPERANDS ALONE - a case that traps and expects a
-// register to be unchanged satisfies the value comparison exactly, and passed
-// this runner until `mcf5307_halted`/`mcf5307_faulted` were added to
-// `include/mcf5307.h`. See the note above the three checks in `runCase`.
+// register to be unchanged satisfies the value comparison exactly, which is
+// why `mcf5307_halted`/`mcf5307_faulted` are read first. See the note above
+// the checks in `runCase`.
 //
-// THE ONE REGISTER BRIDGE. The corpus contract (conformance/generate.py,
-// CPU-4) requires the runner to set the `initial` registers and read back the
-// `expected` registers. CPU-7 added the register file to the core and the two
-// accessors `mcf5307_set_reg`/`mcf5307_get_reg` to the contract
+// THE ONE REGISTER BRIDGE. The corpus contract (conformance/generate.py)
+// requires the runner to set the `initial` registers and read back the
+// `expected` registers. The core's register file is reached through
+// `mcf5307_set_reg`/`mcf5307_get_reg` in the contract
 // (`include/mcf5307.h`), and the two bodies below are that wiring. THIS
 // SECTION IS THE RUNNER'S SINGLE INTEGRATION POINT FOR REGISTER ACCESS: it
 // isolates the one thing the harness needs that the contract's lifecycle
 // calls do not promise, so that a later change to the access touches exactly
 // this section and nothing else.
 //
-// Clean-room note (AGENTS.md section 4.2): none of this is copied from any
+// Clean-room note: none of this is copied from any
 // GPL or LGPL implementation. The JSON parse is a small hand-written
 // recursive-descent parser for the fixed, machine-generated surface the
 // project's own generator emits (see the docstring of
@@ -72,8 +71,8 @@ namespace {
 //   state  = { "regs":{name:int}, "mem":[ { "addr":int, "size":int,
 //              "value":int } ] }
 //
-// The same recursive-descent parser that `conformance/parse_check.cpp`
-// (CPU-4) uses, so the two agree on what the generator writes.
+// The same recursive-descent parser that `conformance/parse_check.cpp` uses,
+// so the two agree on what the generator writes.
 
 struct Value;
 using ValuePtr = std::unique_ptr<Value>;
@@ -443,8 +442,8 @@ Group loadGroup(const std::string& path, const std::string& expectedGroup) {
 //
 // The encoding of each case is placed at the case's program counter, and the
 // case's `initial` and `expected` `mem` writes go through the same array, so
-// a memory case CPU-7..10 adds has a place without a second mechanism. A read
-// of an address no case wrote answers zero and MCF5307_BUS_OK.
+// a memory case has a place without a second mechanism. A read of an address
+// no case wrote answers zero and MCF5307_BUS_OK.
 
 struct MemBoard {
   std::vector<uint8_t> bytes;
@@ -486,11 +485,10 @@ extern "C" void boardIack(void* user, int level, uint8_t vector) {
 // THE REGISTER BRIDGE.
 //
 // See the file top comment. This is the runner's single integration point for
-// setting the `initial` registers and reading the `expected` registers. CPU-7
-// added the register file to the core and `mcf5307_set_reg`/`mcf5307_get_reg`
-// to the contract, and the two bodies below are that wiring; the paragraph
-// that stood here described the state BEFORE that and contradicted the file's
-// own top comment.
+// setting the `initial` registers and reading the `expected` registers. The
+// core's register file is reached through
+// `mcf5307_set_reg`/`mcf5307_get_reg` in the contract, and the two bodies
+// below are that wiring.
 //
 // `sr` IS INDEX 16 AND IT GOES THROUGH THIS BRIDGE IN BOTH DIRECTIONS. That
 // is the whole mechanism by which a case asserts a condition code: a case
@@ -568,11 +566,11 @@ struct CaseRun {
 // lasts and the core has not halted. With the generous budget this runner used
 // before, the loop walked off the end of the case's encoding into the board's
 // zero fill, `0x0000` decoded as an illegal instruction, and the core ended
-// EVERY case halted and faulted. Measured, `moveq #42,%d0` with a budget of
-// 4096 returns 6 cycles and leaves `mcf5307_faulted` at 1 - the fault belongs
-// to the zero word after the case, not to the case. Asserting the run state
-// after such a run would fail all 41 committed cases, including the 33 that
-// are correct, and report nothing true about any of them.
+// EVERY case halted and faulted: `moveq #42,%d0` with a budget of 4096
+// returns 6 cycles and leaves `mcf5307_faulted` at 1 - the fault belongs to
+// the zero word after the case, not to the case. Asserting the run state after
+// such a run would fail every committed case, correct ones included, and
+// report nothing true about any of them.
 //
 // A BUDGET OF ONE EXECUTES EXACTLY ONE INSTRUCTION. `mcf5307_exec` tests the
 // budget before it steps, so it always starts the first instruction; it
@@ -647,10 +645,9 @@ CaseRun runCase(const Case& cs) {
   // by the registers and memory the case named, so a case whose instruction
   // TRAPPED still passed whenever those named values happened to match -
   // which is every case that expects a register to be UNCHANGED, because a
-  // trap leaves the operands exactly as it found them. Measured on this
-  // runner before the assertion existed: `divu.l %d1,%d0` with `d1` zero
-  // divides by zero, the core halts with `fault`, `d0` and `d1` are
-  // untouched, and the case reported `1 cases, 0 failed`.
+  // trap leaves the operands exactly as it found them. Without this assertion
+  // `divu.l %d1,%d0` with `d1` zero divides by zero, the core halts with
+  // `fault`, `d0` and `d1` are untouched, and the case is reported clean.
   //
   // `tests/t_alu.nim` and `tests/t_move.nim` assert the same property
   // through `ctx.fault`, because they are Nim and reach the context

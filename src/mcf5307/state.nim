@@ -1,5 +1,4 @@
-## `state` - the snapshot of the core, as a flat block of bytes. Task CPU-18.
-## Design section 5.3.
+## `state` - the snapshot of the core, as a flat block of bytes.
 ##
 ## THE BLOCK HOLDS NO POINTER, AND THAT IS A PROPERTY OF THE WALK BELOW RATHER
 ## THAN OF A LIST KEPT BY HAND. `MCF5307Ctx` carries the board's cookie and the
@@ -30,7 +29,7 @@
 ## and the C wrapper can only refuse the block; what it refuses, it refuses
 ## WITHOUT TOUCHING THE CONTEXT, so a caller who ignores the missing channel
 ## keeps the state it had rather than a half-loaded one. Adding a channel means
-## adding a declaration to the contract header, which belongs to another task.
+## adding a declaration to the contract header.
 ##
 ## MIT licensed. Nothing here is a fact about Motorola silicon.
 
@@ -212,6 +211,5 @@ proc mcf5307_state_load*(ctx: MCF5307Ctx; src: pointer)
   ## `include/mcf5307.h` gives this entry point no result, no out-parameter and
   ## no status call to carry it out to C. What a C caller is left with is the
   ## state it already had, which is the strongest report a `void` signature
-  ## admits. Carrying the name out to C means growing the contract header, and
-  ## that header belongs to another task.
+  ## admits. Carrying the name out to C means growing the contract header.
   discard stateLoad(ctx, src)

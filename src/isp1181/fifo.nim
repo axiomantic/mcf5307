@@ -1,13 +1,11 @@
-## The ISP1181's endpoint buffers. Task CPU-22. Design section 9.2,
-## `AGENTS.md` section 3.8.
+## The ISP1181's endpoint buffers.
 ##
 ## A BUFFER COUNT IS A BEHAVIOUR AND NOT A SIZE, which is why it is a field
-## here rather than a comment. A single-buffered endpoint holds ONE packet and
+## here rather than a comment. A single-buffered endpoint holds one packet and
 ## refuses the next until the first is taken; a double-buffered one holds two.
-## CPU-22's block states the consequence of getting it wrong in the generous
-## direction: a model with one buffer too many accepts a second packet the
-## hardware would have NAKed, and the firmware then sees a transfer the device
-## never made.
+## Getting it wrong in the generous direction accepts a packet the hardware
+## would have NAKed, and the firmware then sees a transfer the device never
+## made.
 ##
 ## A PACKET IS ACCEPTED WHOLE OR REFUSED WHOLE. Truncating an oversized packet
 ## to the buffer's size would hand the firmware a short packet with nothing to
@@ -31,9 +29,9 @@ proc isEmpty*(f: Fifo): bool = f.packets.len == 0
 proc isFull*(f: Fifo): bool = f.packets.len >= f.bufferCount
 
 proc accept*(f: var Fifo; data: openArray[uint8]): bool =
-  ## `false` is the NAK. The two refusals are kept separate in the caller's
-  ## log, because a full buffer is ordinary flow control and an oversized
-  ## packet is a fault in whoever produced it.
+  ## `false` is the NAK. The refusals are kept apart in the caller's log,
+  ## because a full buffer is ordinary flow control and an oversized packet is
+  ## a fault in whoever produced it.
   if f.isFull or data.len > f.capacityBytes:
     return false
   var packet = newSeq[uint8](data.len)

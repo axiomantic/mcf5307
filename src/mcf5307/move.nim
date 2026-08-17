@@ -1,5 +1,4 @@
 ## `move` - the data-movement instruction group of the ColdFire ISA_A core.
-## Task CPU-7 creates this file. Design section 6.1.
 ##
 ## This module executes MOVE, MOVEA, MOVEQ, MOVEM, LEA, PEA, LINK and UNLK,
 ## AND NOTHING ELSE.
@@ -10,7 +9,7 @@
 ## `alu.nim` importing `move.nim` for them would have put one executor under
 ## another. What is left here is the data-movement SEMANTICS alone.
 ##
-## The decoder (`mcf5307/decode`, CPU-6) recognizes the instruction words and
+## The decoder (`mcf5307/decode`) recognizes the instruction words and
 ## supplies the effective address in bits 5..0 of the word; this module
 ## executes them. THIS MODULE AND THE DECODER ARE SIBLINGS. Both read the
 ## shared types from `mcf5307/decode_types`, and neither imports the other.
@@ -23,21 +22,18 @@
 ## words, so the mask is fetched before the EA's own words.
 ##
 ## CYCLES. The block above the constants in `cpu.nim` says why nothing checks
-## any of them. Every instruction in this group HAS a timing row - MOVE and
-## MOVEA in Tables 3-9 and 3-10 (folios 3-26 and 3-27), MOVEQ and LEA in Table
-## 3-13 (3-28), SWAP in Table 3-12 (3-27), and PEA, LINK, UNLK and MOVEM in
-## Table 3-14 (3-29) - and NONE OF THE RETURNS HERE WAS DERIVED FROM ONE. Some
-## of those rows carry a SINGLE cell that the return contradicts outright, so
-## no effective-address flattening explains them: `moveq #imm,Dx` is 1(0/0)
-## against the 4 returned, `swap Dx` is 1(0/0) against 4, `link.w Ay,#imm` is
-## 2(0/1) against 8, and `unlk Ax` is 3(1/0) against 6. `movem.l` is `2+n`
-## against the `8+2n` here.
+## any of them. Every instruction in this group HAS a timing row, and NONE OF
+## THE RETURNS HERE WAS DERIVED FROM ONE. Some of those rows carry a SINGLE
+## cell that the return contradicts outright, so no effective-address
+## flattening explains them: `moveq #imm,Dx` is 1(0/0) against the 4 returned,
+## `swap Dx` is 1(0/0) against 4, `link.w Ay,#imm` is 2(0/1) against 8, and
+## `unlk Ax` is 3(1/0) against 6. `movem.l` is `2+n` against the `8+2n` here.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
 ## semantics, register numbering and addressing-mode behaviour are facts
 ## about Motorola silicon; they are taken from the ColdFire Family
-## Programmer's Reference Manual and the MCF5307 User's Manual (AGENTS.md
-## section 11) and from this project's own measurements.
+## Programmer's Reference Manual and the MCF5307 User's Manual and from this
+## project's own measurements.
 
 import std/bitops
 import mcf5307/decode_types
@@ -98,16 +94,14 @@ proc execPea(ctx: MCF5307Ctx; d: Decoded): uint32 =
   result = 6'u32
 
 proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
-  ## SWAP Dn: the upper and lower 16-bit halves of a data register exchange.
-  ## Table 3-7, page 3-25: `MSW of Dn <-> LSW of Dn`.
+  ## SWAP Dn: the upper and lower 16-bit halves of a data register exchange -
+  ## `MSW of Dn <-> LSW of Dn`.
   ##
-  ## THE CONDITION CODES COME FROM SECTION 3.2.1.5, PAGE 3-9. There is no
-  ## PER-INSTRUCTION rule to find: Table 3-7's OPERATION column carries no
-  ## condition-code clause for SWAP and Table 3-12 gives timing alone, and
-  ## those two rows are the only places the manual names SWAP at all. But the
-  ## GENERIC rule settles it. Section 3.2.1.5 opens at the foot of page 3-8
-  ## with the CCR bit-field figure and DOES NOT END THERE; page 3-9 carries
-  ## the per-bit definitions and fixes all five - N "Set if the most
+  ## THE CONDITION CODES COME FROM THE GENERIC CCR RULE. There is no
+  ## PER-INSTRUCTION rule to find: the OPERATION column carries no
+  ## condition-code clause for SWAP and the timing table gives timing alone,
+  ## and those rows are the only places SWAP is named at all. But the GENERIC
+  ## rule settles it. The per-bit definitions fix every one - N "Set if the most
   ## significant bit of the result is set; otherwise cleared", Z "Set if the
   ## result equals zero; otherwise cleared", V "Set if an arithmetic overflow
   ## occurs implying that the result cannot be represented in the operand
@@ -120,43 +114,43 @@ proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## result. That is `setNzClearVc` at size 4, which MOVE, MOVEQ, EXT, EXTB
   ## and the 32-bit multiply share.
   ##
-  ## THIS IS THE ARGUMENT `logic.nim` ALREADY RUNS, not a new one. CPU-9
-  ## derives AND, OR, EOR and NOT from these same clauses - "a logical
-  ## operation is none of those things" - and guards X on a shift by zero
-  ## from the same "otherwise not affected". One derivation used twice.
+  ## THIS IS THE ARGUMENT `logic.nim` ALREADY RUNS, not a new one. It derives
+  ## AND, OR, EOR and NOT from these same clauses - "a logical operation is
+  ## none of those things" - and guards X on a shift by zero from the same
+  ## "otherwise not affected". One derivation used twice.
   ##
-  ## SECTION 3.9 IS NOT AN ORACLE. Two independent reasons it cannot be:
+  ## THE REMOVED-INSTRUCTION LIST IS NOT AN ORACLE, for two independent
+  ## reasons:
   ##
-  ##   Its removed list is not reliable. Page 3-21 names "integer division"
-  ##   among the removed instructions, while Table 3-7 on page 3-23 carries
-  ##   both a DIVS row and a DIVU row and Table 3-13 on page 3-28 times
-  ##   `divs.w`, `divu.w`, `divs.l` and `divu.l`. A list that contradicts two
-  ##   tables cannot settle a question on its own.
+  ##   It is not reliable. It names "integer division" among the removed
+  ##   instructions, while the instruction summary carries both a DIVS row and
+  ##   a DIVU row and the timing table times `divs.w`, `divu.w`, `divs.l` and
+  ##   `divu.l`. A list that contradicts the tables cannot settle a question on
+  ##   its own.
   ##
   ##   "A reduced version of the 68000 instruction set" is a claim about SET
-  ##   MEMBERSHIP, not about per-instruction semantics. Table 3-7 gives ADD,
-  ##   SUB, AND, OR, EOR and CMP an OPERAND SIZE of 32 ALONE where the 68000
-  ##   has `.b`, `.w` and `.l`. Retained instructions on this part are NOT
-  ##   semantically identical to their 68000 originals, so "retained,
-  ##   therefore 68000 semantics" does not follow in general - and it is not
-  ##   what pins these flags. Section 3.2.1.5 is.
+  ##   MEMBERSHIP, not about per-instruction semantics. ADD, SUB, AND, OR, EOR
+  ##   and CMP are given an OPERAND SIZE of 32 ALONE where the 68000 has `.b`,
+  ##   `.w` and `.l`. Retained instructions on this part are NOT semantically
+  ##   identical to their 68000 originals, so "retained, therefore 68000
+  ##   semantics" does not follow in general - and it is not what pins these
+  ##   flags. The generic CCR rule is.
   ##
-  ## WHAT REMAINS UNPINNED IS THE WIDTH, AND IT IS REAL. Section 3.2.1.5 says
-  ## "the result" and never says how wide that result is, and Table 3-7's
-  ## OPERAND SIZE column for SWAP says 16. A reader who reads "the result" as
-  ## the 16-bit half takes N from bit 15 and Z from the low half. This core
-  ## reads it as the whole 32-bit register, because the register is what the
-  ## instruction writes - THE SIZE ARGUMENT IS 4 AND NOT 2 FOR EXACTLY THAT
-  ## REASON. The CFPRM would close the width question outright; it is
-  ## unobtainable (AGENTS.md section 11).
+  ## WHAT REMAINS UNPINNED IS THE WIDTH, AND IT IS REAL. The generic rule says
+  ## "the result" and never says how wide that result is, and SWAP's OPERAND
+  ## SIZE says 16. A reader who reads "the result" as the 16-bit half takes N
+  ## from bit 15 and Z from the low half. This core reads it as the whole
+  ## 32-bit register, because the register is what the instruction writes -
+  ## THE SIZE ARGUMENT IS 4 AND NOT 2 FOR EXACTLY THAT REASON. A
+  ## per-instruction reference would close the width question outright; it is
+  ## unobtainable.
   ##
-  ## THE CPU-9 PRECEDENT IS DISCIPLINE, NOT LICENCE. CPU-9 met the same CFPRM
-  ## wall on `ASL`'s overflow reading and on the status word of a shift by
-  ## zero (section 24.6 row W3-28), derived from section 3.2.1.5 everything it
-  ## could, and then DECLINED to pin the residue. Citing CPU-9 as permission
-  ## to infer inverts that. These flags are pinned because 3.2.1.5 DERIVES
-  ## them; the width, which 3.2.1.5 does not derive, is called out above
-  ## rather than asserted.
+  ## THE PRECEDENT IS DISCIPLINE, NOT LICENCE. `logic.nim` met the same wall on
+  ## `ASL`'s overflow reading and on the status word of a shift by zero,
+  ## derived from the generic rule everything it could, and then DECLINED to
+  ## pin the residue. Citing that as permission to infer inverts it. These
+  ## flags are pinned because the generic rule DERIVES them; the width, which
+  ## it does not derive, is called out above rather than asserted.
   let v = regD(ctx, d.destReg)
   let swapped = (v shr 16'u32) or (v shl 16'u32)
   setRegD(ctx, d.destReg, swapped)

@@ -1,13 +1,9 @@
 ## The Nim entry module of the `mcf5307` project.
 ##
 ## This module is the only Nim entry module. The build passes
-## `--nimMainPrefix:mcf5307_` for it. Design section 5.5 keeps the one-project
-## rule as a convention. A second Nim library passes its own prefix and exports
-## its own `<component>_runtime_init`, and nothing else changes.
-##
-## Task CPU-1 creates this file and gives it the runtime entry point alone. The
-## core and the ISP1181 model are the work of the later cpu tasks. Those tasks
-## add their exported procedures to this project.
+## `--nimMainPrefix:mcf5307_` for it. The one-project rule is a convention: a
+## second Nim library passes its own prefix and exports its own
+## `<component>_runtime_init`, and nothing else changes.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code.
 
@@ -60,9 +56,8 @@ import isp1181/stub
 # Nim macro, so this comment is enforceable rather than advisory, and a Nim
 # release that renames `N_LIB_EXPORT` changes nothing about it.
 #
-# `include/mcf5307.h` and design section 5.4 both describe the set as
-# `{.exportc, cdecl.}`, without `dynlib`. Those two are the property of other
-# tasks. This file is the one the compiler reads.
+# `include/mcf5307.h` describes the set as `{.exportc, cdecl.}`, without
+# `dynlib`. This file is the one the compiler reads.
 {.pragma: mcf5307Abi, cdecl, dynlib.}
 
 # ---------------------------------------------------------------------------
@@ -83,10 +78,8 @@ proc mcf5307_NimMain() {.importc: "mcf5307_NimMain", cdecl.}
 #
 #   Its resolution is one second, and the deadline is `time() + 5`. The start
 #   is truncated to a whole second and the comparison is truncated again, so
-#   the true wait is anything between four and five seconds. Measured over six
-#   runs of a harness in which one thread claims the latch and never releases
-#   it: 4.53, 4.99, 4.99, 4.99, 4.99 and 4.99 seconds. Not one run waited the
-#   five seconds the constant names.
+#   the true wait is anything between four and five seconds rather than the
+#   five the constant names.
 #
 #   `time` reads the SETTABLE wall clock. An operator, NTP or a container start
 #   can step it backwards at any moment. A backward step moves the deadline
@@ -146,7 +139,7 @@ else:
 # ---------------------------------------------------------------------------
 # The one-time latch.
 #
-# It holds four states in one atomic word. Measured on Nim 2.2.10, the C
+# It holds its state in one atomic word. Measured on Nim 2.2.10, the C
 # translation is a file-scope `_Atomic NI64` with no initializer. Its value is
 # therefore zero before any Nim code runs, and the generated module initializer
 # holds no write to it. The latch needs no initializing call of its own.
@@ -164,19 +157,9 @@ const
 
 # How long a caller waits for another thread to finish the initializer.
 #
-# THE BOUND IS A TRADE AND THE MARGIN IS MEASURED. `mcf5307_runtime_init` was
-# timed with `clock_gettime(CLOCK_MONOTONIC)` around the call, one measurement
-# per process because the latch is one-time, over 20 processes on this host
-# (macOS 26.5.1, arm64, Nim 2.2.10, clang -O2):
-#
-#   8000 5000 5000 5000 6000 6000 3000 6000 6000 7000
-#   5000 7000 4000 6000 7000 5000 5000 6000 5000 5000    nanoseconds
-#
-#   minimum 3.0 us, maximum 8.0 us, mean 5.6 us over 20 runs.
-#
-# The bound is therefore about 625000 times the slowest run measured. A
-# runtime initializer that needs five seconds is already broken. A wait with no
-# bound cannot report a stall at all, and that outcome is worse.
+# THE BOUND IS A TRADE, AND IT SITS FAR ABOVE ANY INITIALIZER RUN OBSERVED ON
+# THIS HOST. A runtime initializer that needs five seconds is already broken. A
+# wait with no bound cannot report a stall at all, and that outcome is worse.
 #
 # The unit is milliseconds because the clock below reports milliseconds.
 const latchWaitMillis = 5000'i64
@@ -192,19 +175,19 @@ var latch: Atomic[int]
 # There is a third case and this flag cannot see it. Another thread may call
 # this procedure while the initializing thread waits for that same thread. The
 # flag is false on the caller, so the caller waits, and the two threads then
-# wait for each other. Measured: the unbounded loop held that deadlock at 98.8%
-# of a core, with no diagnostic and no end. The deadline below ends it.
+# wait for each other. An unbounded loop holds that deadlock spinning, with no
+# diagnostic and no end. The deadline below ends it.
 var initializing {.threadvar.}: bool
 
 proc mcf5307LatchStalled() {.noreturn.} =
   ## Reports an abandoned latch and ends the process.
   ##
   ## The runtime is not initialized here, so every later call into this library
-  ## would run without it. Design section 5.6 refuses a wrong answer with exit
-  ## status 0, and a plain return to the caller would produce one.
+  ## would run without it. A wrong answer with exit status 0 is refused, and a
+  ## plain return to the caller would produce one.
   ##
   ## ENDING THE PROCESS IS THE WRONG ANSWER AND IT IS THE ONLY ONE AVAILABLE.
-  ## THE REAL DEFECT IS IN THE CONTRACT, AND CPU-0 OWNS IT. A library has no
+  ## THE REAL DEFECT IS IN THE CONTRACT. A library has no
   ## business killing its host. A JUCE plugin that aborts takes the whole
   ## digital audio workstation with it, and the user loses unsaved work that
   ## has nothing to do with this core. The correct behaviour is to report the
@@ -215,14 +198,13 @@ proc mcf5307LatchStalled() {.noreturn.} =
   ## and no status call. There is no way for this procedure to say `I failed`
   ## and return. `c_abort` is what is left.
   ##
-  ## CPU-1 CANNOT REPAIR THIS FROM THIS FILE, AND THE REPAIR TO THE GATE IS
-  ## WHAT MAKES THAT MECHANICAL. `cmake/Nim.cmake` step 4a now fails the
-  ## configure step over ANY symbol the shared object exports that the contract
-  ## does not declare. Adding an `mcf5307_runtime_status` here would therefore
-  ## stop the configure step. The contract header belongs to CPU-0, and the
-  ## channel has to be added there first.
+  ## THIS FILE CANNOT REPAIR IT, AND THE GATE IS WHAT MAKES THAT MECHANICAL.
+  ## `cmake/Nim.cmake` step 4a fails the configure step over ANY symbol the
+  ## shared object exports that the contract does not declare. Adding an
+  ## `mcf5307_runtime_status` here would therefore stop the configure step. The
+  ## channel has to be added to the contract header first.
   ##
-  ## What CPU-0 would have to add is one of:
+  ## What the contract would have to add is one of:
   ##   `int mcf5307_runtime_init(void);`         a non-zero result on failure
   ##   `void mcf5307_runtime_init(int* status);` a status out-parameter
   ##   `int mcf5307_runtime_ready(void);`        a separate query
@@ -250,9 +232,9 @@ proc mcf5307LatchStalled() {.noreturn.} =
 proc mcf5307RuntimeInit() {.exportc: "mcf5307_runtime_init", mcf5307Abi.} =
   ## Runs the Nim runtime's initializer once.
   ##
-  ## C++ never names `mcf5307_NimMain`. It calls this procedure, which is what
-  ## design section 5.4 rule 2 requires. This procedure is the only caller of
-  ## the runtime entry point in the project.
+  ## C++ never names `mcf5307_NimMain`. It calls this procedure instead, and
+  ## this procedure is the only caller of the runtime entry point in the
+  ## project.
   ##
   ## The latch is claimed before the call and not after it. Two hazards decide
   ## that order.
