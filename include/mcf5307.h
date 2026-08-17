@@ -56,6 +56,14 @@ typedef enum {
 
 /* The board's two memory handlers.
  *
+ * `size` IS A COUNT OF BYTES - 1, 2 or 4 - AND NEVER A WIDTH IN BITS. A
+ * longword access presents 4 and not 32, and an instruction fetch presents 2
+ * and not 16. The two readings disagree on every access a core can make, so a
+ * board that expects 8, 16 or 32 refuses all of them and the first instruction
+ * fetch is where it stops. ColdFire encodes transfer size as SIZ[1:0] with
+ * byte, word and longword semantics, which is what this argument carries; a
+ * width in bits is a different quantity and is not what any caller is handed.
+ *
  * `status` is an out-parameter on both, and the core writes
  * `MCF5307_BUS_OK` into it before every call. A board that models no fault
  * behaves exactly as it did before the parameter existed: silence means
@@ -66,8 +74,10 @@ typedef enum {
  * On a read fault the returned value is ignored by the core. A board should
  * still return zero, so that a board defect does not depend on an
  * uninitialised value. */
+/* `size` is a count of bytes: 1, 2 or 4. */
 typedef uint32_t (*mcf5307_read_fn)(void* user, uint32_t addr, int size,
                                     mcf5307_bus_status* status);
+/* `size` is a count of bytes: 1, 2 or 4. */
 typedef void (*mcf5307_write_fn)(void* user, uint32_t addr, int size,
                                  uint32_t value, mcf5307_bus_status* status);
 
