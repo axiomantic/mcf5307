@@ -69,6 +69,19 @@ type
     # effective address with any member above, and `src/mcf5307/movec.nim` is
     # its executor.
     opMovec
+    # CPU-30 appends here, under the same rule CPU-8, CPU-9, CPU-10 and CPU-11
+    # followed: immediately before `opIllegal` and nowhere else. These four are
+    # the SYSTEM-CONTROL GROUP - the status-register and condition-code
+    # transfers - and they share an executor file with `MOVEC` because the
+    # privilege predicate has ONE home and two of these four read it.
+    #
+    # `opStop` IS NOT AMONG THEM, AND ITS ABSENCE IS A MEASUREMENT RATHER THAN
+    # AN OVERSIGHT. The part has STOP - CFPRM Table 3-16, ISA_A column - and
+    # ZERO `4E72` words occur at any 16-bit-aligned position in either image
+    # this core executes. The count is a property of THIS IMAGE and not of the
+    # part, so the plan names the triggers that reopen it rather than leaving
+    # the omission to be read as a fact about the silicon.
+    opMoveFromSr, opMoveFromCcr, opMoveToCcr, opMoveToSr
     opIllegal
 
   # A VALUE AND NOT A `ref`, WHICH IS THE OPPOSITE CHOICE FROM `MCF5307Ctx`

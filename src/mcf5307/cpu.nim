@@ -244,6 +244,22 @@ proc step(ctx: MCF5307Ctx): uint32 =
     # of its own - which is what `mcf5307/control.nim` already demonstrates
     # from the same position.
     result = fetchCycles + movecFamily(ctx, opWord, decoded)
+  of opMoveFromSr, opMoveFromCcr, opMoveToCcr, opMoveToSr:
+    # The system-control group (CPU-30): the SR and CCR transfers.
+    # `systemControlFamily` takes the vector-8 privilege violation in user
+    # state for the two SR transfers and takes NO privilege test at all for the
+    # two CCR transfers, which are user instructions on this part.
+    #
+    # THE EXECUTOR SHARES `movec.nim` WITH `MOVEC` AND THAT IS THE WHOLE POINT
+    # OF THE TASK. `movecPrivilegeViolation` is the one test of the S bit in
+    # this core; an executor in a module of its own would need a second copy of
+    # it, and a predicate computed in two places leaves every control that
+    # reads the other copy green when one is mutated.
+    #
+    # NO NEW IMPORT EDGE. `movec` is already imported above for `MOVEC`, so
+    # this group reaches the archive through the same chain and `src/mcf5307.nim`
+    # needs no edge of its own.
+    result = fetchCycles + systemControlFamily(ctx, opWord, decoded)
   of opExg, opTas, opNbcd:
     # The `Operation` enum names every opcode the later instruction-group
     # tasks decode. Their execution semantics arrive with those tasks. Until

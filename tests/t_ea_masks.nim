@@ -1913,7 +1913,7 @@ block:
 # mutation's blast radius and another file's total, neither of them this run's
 # to count.
 
-const caseTotalMustMatchTranscripts = 445
+const caseTotalMustMatchTranscripts = 449
   ## THE TOTAL THE SUMMARY LINE PRINTS. ITS VALUE IS WRITTEN DOWN ONCE IN THIS
   ## REPOSITORY - here - and the three sites that need the denominator name the
   ## constant instead of copying it: block (13) above, the `opMovem` arm of

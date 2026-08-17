@@ -175,3 +175,143 @@ proc movecFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
     ctx.halted = true
     return 0'u32
   movecExecuteCycles
+
+# ---------------------------------------------------------------------------
+# THE SYSTEM-CONTROL GROUP: the SR and CCR transfers. Task CPU-30.
+#
+# IT LIVES IN THIS FILE FOR ONE REASON AND THE REASON IS `movecPrivilegeViolation`
+# ABOVE. `MOVE to SR` and `MOVE from SR` are supervisor-only, so an executor in
+# any other module would need either a SECOND COPY of `(sr and srSupervisor) == 0`
+# or an export of the predicate to a file that could then drift from it. A
+# predicate computed in two places is the defect this project has already been
+# bitten by: mutating one copy leaves every control that reads the other GREEN,
+# so the mutation reads as "the check is untested" and not as "the check is
+# absent". There is one copy, one call site per privileged instruction, and
+# `tests/t_claims.cmake` can therefore require that mutating it turns BOTH the
+# `MOVEC` cases and the `t_system_control` cases red in ONE run.
+#
+# THE GROUP IS FOUR INSTRUCTIONS AND NOT FIVE. `STOP` is ISA_A and this part
+# has it, and it is excluded on a MEASUREMENT: zero `4E72` words occur at any
+# 16-bit-aligned position in either image this core executes. It is privileged,
+# so when a trigger brings it back it belongs HERE - splitting it into a module
+# of its own would re-open the privilege-predicate question this file exists to
+# close once.
+#
+# THE SIZE READING, WHICH THE MANUALS DISAGREE ON AND WHICH IS RECORDED HERE
+# BECAUSE SILENCE WOULD NOT BE. CFPRM folio 4-54 gives `MOVE to CCR` as
+# "Size = Byte" with the syntax `MOVE.B Dy,CCR`; CFPRM's own summary at folio
+# 3-9 and MCF5307 User's Manual Table 3-14 both give WORD; and the pinned
+# assembler - GNU Binutils 2.47.20260726, `-mcpu=5307` - accepts `move.w` and
+# REJECTS `move.b`. THIS CODE TAKES THE WORD READING, which is two of the three
+# manual statements and the toolchain. Nothing observable turns on it: both
+# readings agree on the encoding, both give the immediate form a 16-bit
+# extension word, and both write the same five bits, so no test in this tree
+# discriminates between them and none is written to pretend otherwise.
+#
+# WHAT HAPPENS TO A7 WHEN SOFTWARE CLEARS S: NOTHING, AND THAT IS A PROPERTY OF
+# ISA_A RATHER THAN A SIMPLIFICATION OF THIS CORE. `MOVE to SR` is the one
+# instruction here that can clear the S bit, so the question is this group's to
+# answer. THERE IS ONE A7 ON THIS PART AND NO USP: `MOVE to USP` and
+# `MOVE from USP` are ISA_B - CFPRM folios 8-10 and 8-12 - and CFPRM Table 1-6,
+# folio 1-11, makes OTHER_A7 conditional on ISA_A+, which this part is not. So
+# there is no second stack pointer to swap in and no shadow register to keep;
+# `cpu.nim`'s "THE ONE A7" block and `include/mcf5307.h` both state the same
+# rule, and `tests/t_system_control.nim` asserts it by clearing S from
+# supervisor state and requiring A7 to be where it was.
+
+const
+  ccrBits = ccrX or ccrN or ccrZ or ccrV or ccrC
+    ## The condition-code bits of the status register, bits 4 to 0. IT IS
+    ## COMPOSED FROM `machine.nim`'s OWN CONSTANTS and not written as `0x1F`,
+    ## for the reason `movecPrivilegeViolation` gives about the S bit: a bit
+    ## position restated as a literal here is one fact in two files, and a
+    ## later change to either leaves the other saying something the machine
+    ## does not do.
+    ##
+    ## THE CCR IS FIVE BITS ON THIS PART AND NOT EIGHT. User's Manual section
+    ## 3.2.2.1, folio 3-10, prints the low byte of the status register with X,
+    ## N, Z, V and C at bits 4 to 0 and NOTHING assigned to bits 7 to 5. The
+    ## "zero-extended" of `MOVE from CCR`'s description is therefore this mask
+    ## widened to a word, and a core that copied the whole low BYTE would
+    ## differ from this one only on bits no instruction of this part can set.
+
+  systemControlCycles = 1'u32
+    ## THIS NUMBER MAKES NO CLAIM ABOUT THE MANUAL'S TIMING TABLES, and the
+    ## block at the head of `cpu.nim` states the convention it is written
+    ## under: a return with no citation cites nothing. The User's Manual's
+    ## Table 3-14 was NOT read for these four instructions, because the only
+    ## copy of that manual on this machine is the markdown transcription under
+    ## `MCF5307UM-md/`, which this project does not accept as a source for any
+    ## number. What the value has to be is NON-ZERO: `mcf5307_exec` breaks its
+    ## loop on a cost of zero, so a zero here would stop the machine after an
+    ## instruction that executed correctly.
+
+proc systemControlFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
+  ## Execute one SR or CCR transfer. Returns the cycles the execution pipe
+  ## spent, 0 for an instruction that did not run.
+  ##
+  ## THE PRIVILEGE IS TESTED BEFORE THE SOURCE IS READ, and the order is the
+  ## one `movecFamily` above already takes, for the reason stated there: the
+  ## immediate form's `eaRead` can itself take an ACCESS ERROR, so reading
+  ## first would let an instruction the core is about to refuse for privilege
+  ## report the wrong exception instead. The stacked program counter is the
+  ## same either way, so an `RTE` from the handler re-executes the whole
+  ## instruction and re-reads the word this path did not.
+  ##
+  ## THE STACKED PROGRAM COUNTER IS THIS INSTRUCTION AND NOT THE NEXT ONE, for
+  ## the reason `movecFamily` states at its own `takeException` call: Table
+  ## 3-1's STACKED PROGRAM COUNTER column reads "Fault" for vector 8.
+  case d.op
+  of opMoveFromSr:
+    # CFPRM folio 8-9: "If Supervisor State Then SR -> Destination Else
+    # Privilege Violation Exception". THE CONDITION CODES ARE NOT AFFECTED -
+    # this instruction reads the status register and writes none of it.
+    if movecPrivilegeViolation(ctx.sr):
+      takeException(ctx, vecPrivilegeViolation, ctx.pc - insWordBytes)
+      return 0'u32
+    setRegD(ctx, d.destReg,
+            mergeSized(regD(ctx, d.destReg), ctx.sr and 0xFFFF'u32, 2'u8))
+    systemControlCycles
+  of opMoveFromCcr:
+    # CFPRM folio 4-53, chapter 4 - the USER instructions. NO PRIVILEGE TEST,
+    # and the absence is the point: a core that tested privilege here would be
+    # a 68000-shaped core, and `tests/t_system_control.nim` runs this case with
+    # S CLEAR for exactly that reason.
+    #
+    # THE WRITE IS A WORD, SO THE HIGH HALF OF `Dx` SURVIVES IT. `mergeSized`
+    # replaces the low two bytes and nothing else.
+    setRegD(ctx, d.destReg,
+            mergeSized(regD(ctx, d.destReg), ctx.sr and ccrBits, 2'u8))
+    systemControlCycles
+  of opMoveToCcr:
+    # CFPRM folio 4-54: X, N, Z, V and C take source bits 4 to 0. UNPRIVILEGED,
+    # and it writes FIVE BITS AND NOT SIXTEEN - the interrupt mask, the S bit
+    # and the T bit are all outside `ccrBits` and survive unchanged. A core
+    # that assigned the whole source would clear the mask and leave supervisor
+    # state, which is the difference this mask is carrying.
+    let src = eaRead(ctx, d.ea, 2'u8)
+    if ctx.halted:
+      return 0'u32
+    ctx.sr = (ctx.sr and not ccrBits) or (src and ccrBits)
+    systemControlCycles
+  of opMoveToSr:
+    # CFPRM folio 8-11: "If Supervisor State Then Source -> SR Else Privilege
+    # Violation Exception". THE WHOLE WORD IS WRITTEN, which is what separates
+    # this from `MOVE to CCR` above: `0x3001B41E movew #8192,%sr` sets S and
+    # drives the interrupt mask to ZERO, and a five-bit write would leave the
+    # mask at seven and the firmware waiting for an interrupt it had asked for.
+    if movecPrivilegeViolation(ctx.sr):
+      takeException(ctx, vecPrivilegeViolation, ctx.pc - insWordBytes)
+      return 0'u32
+    let src = eaRead(ctx, d.ea, 2'u8)
+    if ctx.halted:
+      return 0'u32
+    ctx.sr = src and 0xFFFF'u32
+    systemControlCycles
+  else:
+    # NO ARM OF `decodeWord` REACHES THIS BRANCH; it exists because a `case`
+    # over `Operation` must be exhaustive and because a dispatch that grew a
+    # fifth member without an arm here should be LOUD rather than silent.
+    ctx.fault = true
+    ctx.halted = true
+    0'u32

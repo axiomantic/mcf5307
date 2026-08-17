@@ -318,6 +318,51 @@ proc decodeWord*(word: uint16): Decoded =
     # EQUAL REGISTERS ARE THE DIVIDE and unequal ones are the remainder; the
     # executor makes that call for the same reason as the multiply above.
     return Decoded(op: opDivu, ea: decodeEa(word), size: 4'u8)
+  # THE SYSTEM-CONTROL GROUP (CPU-30): the four SR and CCR transfers. They are
+  # the SIZE-11 words of the four line-4 opcodes below - `0x4000` NEGX,
+  # `0x4200` CLR, `0x4400` NEG and `0x4600` NOT - each of which leaves 11
+  # unclaimed by its own `sizeField(word) != 0` guard.
+  #
+  # THEY ARE TESTED AHEAD OF THOSE FOUR ARMS RATHER THAN AFTER THEM, AND THAT
+  # IS NOT DECORATION. The guards above would let these words fall through
+  # today, so the order is currently redundant - but a guard REMOVED from any
+  # of those four arms would silently hand eight of these words to a CLR or a
+  # NEG whose size is wrong, which is the shape of the PEA-and-SWAP collision
+  # this file's `opExg`/`opSwap` note in `cpu.nim` already records. A narrow
+  # test placed ahead of a broad one cannot be defeated that way.
+  #
+  # EVERY MASK HERE IS `0xFFF8`, WHICH IS MODE 000 - A DATA REGISTER - AND
+  # NOTHING ELSE, plus a single word for the immediate form of each `to`
+  # transfer. The CFPRM per-instruction `Effective Address field` tables DASH
+  # every memory mode, `(xxx).W`, `(xxx).L` and both PC-relative forms, so
+  # `0x40C8` to `0x40FF` and their partners are NOT instructions on this part
+  # and fall through to `opIllegal`.
+  #
+  # THIS IS WHERE A 68000 REFERENCE GOES WRONG IN THREE DIRECTIONS. MOVE from
+  # SR is unprivileged there and privileged here; MOVE from CCR does not exist
+  # there at all - it is 68010 and later - and THIS FIRMWARE USES `42Cx`; and
+  # MOVE to CCR takes a general data `<ea>` there, so a 68000 mask would accept
+  # `move.w (%a0),%ccr` and execute an addressing mode the silicon rejects.
+  elif (word and 0xFFF8'u16) == 0x40C0'u16:
+    # MOVE from SR: `0100 0000 11 000 rrr`. CFPRM folio 8-9. PRIVILEGED, and
+    # `movec.nim` is where that is decided - this arm only names the opcode.
+    return Decoded(op: opMoveFromSr, size: 2'u8,
+                   destReg: uint8(word and 0x7'u16))
+  elif (word and 0xFFF8'u16) == 0x42C0'u16:
+    # MOVE from CCR: `0100 0010 11 000 rrr`. CFPRM folio 4-53, in chapter 4 -
+    # the USER instructions - with no supervisor test.
+    return Decoded(op: opMoveFromCcr, size: 2'u8,
+                   destReg: uint8(word and 0x7'u16))
+  elif (word and 0xFFF8'u16) == 0x44C0'u16 or word == 0x44FC'u16:
+    # MOVE to CCR: `Dy` or `#<data>` and NOTHING ELSE. CFPRM folio 4-54.
+    # `0x44FC` is mode 7 sub-variant 4, the immediate, whose extension word
+    # `movec.nim` reads through `eaRead` and this module does not fetch.
+    return Decoded(op: opMoveToCcr, ea: decodeEa(word), size: 2'u8)
+  elif (word and 0xFFF8'u16) == 0x46C0'u16 or word == 0x46FC'u16:
+    # MOVE to SR: `Dy` or `#<data>` and NOTHING ELSE, and PRIVILEGED. CFPRM
+    # folio 8-11. `0x46FC` is the word the firmware executes at `0x3001B41E`
+    # as `movew #8192,%sr`, twenty-six bytes before the banner call.
+    return Decoded(op: opMoveToSr, ea: decodeEa(word), size: 2'u8)
   elif (word and 0xFF00'u16) == 0x4200'u16 and sizeField(word) != 0'u8:
     # CLR.B/.W/.L <data-alterable-ea>. This part keeps all three sizes, which
     # `m68k-elf-as -mcpu=5307` confirms by accepting `clr.b` and `clr.w`.
