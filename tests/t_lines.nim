@@ -1,4 +1,4 @@
-## `t_lines` - the line-A and line-F opcode spaces of `mcf5307/lines`, and the
+## `t_lines` - the line-A and line-F opcode spaces of `tests/lines`, and the
 ## core's refusal to execute either of them.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code.
