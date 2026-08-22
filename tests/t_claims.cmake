@@ -58,7 +58,8 @@ set(MCF5307_CLAIM_IDS
     "reset_edge_call_suite_t_irq"
     "reset_edge_resample_suite_t_irq"
     "reset_edge_clear_suite_t_irq"
-    "write_fault_deferral_suite_t_bus_fault")
+    "write_fault_deferral_suite_t_bus_fault"
+    "one_iteration_suite_t_irq")
 
 # EVERY `CLAIM_TEXT` BELOW IS QUOTED FROM ITS `CLAIM_FILE` AND IS NOT A SUMMARY
 # OF IT. The driver looks the text up in the file before it measures anything,
@@ -390,6 +391,34 @@ set(CLAIM_reset_edge_clear_suite_t_irq_EDITS 1)
 set(CLAIM_reset_edge_clear_suite_t_irq_EDIT_1_FILE "mcf5307/irq.nim")
 set(CLAIM_reset_edge_clear_suite_t_irq_EDIT_1_FIND "  ctx.irq7Armed = default(typeof(ctx.irq7Armed))\n")
 set(CLAIM_reset_edge_clear_suite_t_irq_EDIT_1_REPLACE "")
+
+# --- the one-iteration loop shape -------------------------------------------
+# `src/mcf5307/cpu.nim` states, inside `mcf5307_exec`'s loop: that the sample
+# and the `step` are one iteration and that making the take `continue` instead
+# would sample again before the handler had executed anything.
+# `tests/t_irq.nim` block 15 carries the case the sentence stands on - a level 7
+# armed from INSIDE the acknowledge reaches the core between its take and the
+# handler's first instruction - and block 17 arms it from inside the frame
+# write. THE SENTENCE HAD NO TEST: adding the `continue` once reddened nothing,
+# because no committed fixture raised a second interrupt on that path.
+#
+# THE MUTATION IS SPEND-AFTER-TAKE AND IT IS NOT THE INHIBITION FLIP. Setting
+# `atHandlerEntry = false` after the take instead of at the clear spends the
+# inhibition EARLY: the sample of the NEXT iteration is admitted, so a second
+# pending interrupt lands on an unexecuted handler entry. The flip mutation of
+# `reset_inhibit_suite_t_irq` moves the SAME assignment in the opposite
+# direction and redded SIX cases; this one reds TWO, and they are different
+# wrong cores with different signatures - which is why each carries its own
+# entry rather than sharing one count.
+set(CLAIM_one_iteration_suite_t_irq_KIND "suite-red")
+set(CLAIM_one_iteration_suite_t_irq_SUITE "t_irq")
+set(CLAIM_one_iteration_suite_t_irq_EXPECT_RED 2)
+set(CLAIM_one_iteration_suite_t_irq_CLAIM_FILE "src/mcf5307/cpu.nim")
+set(CLAIM_one_iteration_suite_t_irq_CLAIM_TEXT "THE SAMPLE AND THE `step` BELOW ARE ONE ITERATION.")
+set(CLAIM_one_iteration_suite_t_irq_EDITS 1)
+set(CLAIM_one_iteration_suite_t_irq_EDIT_1_FILE "mcf5307/cpu.nim")
+set(CLAIM_one_iteration_suite_t_irq_EDIT_1_FIND "    if not ctx.atHandlerEntry:\n      if takeInterrupt(ctx):\n        if ctx.halted:\n          break\n    ctx.atHandlerEntry = false\n")
+set(CLAIM_one_iteration_suite_t_irq_EDIT_1_REPLACE "    if not ctx.atHandlerEntry:\n      if takeInterrupt(ctx):\n        if ctx.halted:\n          break\n        ctx.atHandlerEntry = false\n        continue\n    ctx.atHandlerEntry = false\n")
 
 # ---------------------------------------------------------------------------
 # THE DRIVER.
