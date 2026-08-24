@@ -124,6 +124,17 @@ type
     halted*: bool
     fault*: bool
 
+    # THE VECTOR BASE REGISTER. `machine.nim`'s `takeException` is its ONLY
+    # reader, and it reads it through `exception.nim`'s `vectorAddress`, which
+    # is where the rule about the unimplemented low bits lives. The field
+    # holds what was written to it and the mask is applied at the dispatch, so
+    # a reader of this field sees the value the machine was given.
+    #
+    # A FIELD NO DISPATCH CONSULTED WOULD BE INDISTINGUISHABLE FROM NO FIELD
+    # AT ALL, which is why the reader and not the field is what the exception
+    # suite adjudicates.
+    vbr*: uint32                ## the vector base register
+
     # The interrupt input. `mcf5307/irq` owns every rule about these fields;
     # they live here because the context type lives here and `irq.nim` is
     # above this module.

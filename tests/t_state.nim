@@ -54,7 +54,7 @@ template check(ok: bool; label: string; got: string; want: string) =
 const expectedLayout = @[
   ("pc", 4), ("sp", 4), ("sr", 4),
   ("dRegs", 32), ("aRegs", 28),
-  ("halted", 1), ("fault", 1),
+  ("halted", 1), ("fault", 1), ("vbr", 4),
   ("irqLevel", 4), ("irqVector", 1), ("irqAutovector", 1),
   ("irq7Armed", 1), ("irq7Vector", 1), ("irq7Autovector", 1),
   ("atHandlerEntry", 1)]
@@ -71,9 +71,9 @@ check(measuredLayout == expectedLayout,
       $measuredLayout, $expectedLayout)
 
 let measuredSize = int(mcf5307_state_size())
-check(measuredSize == 100,
+check(measuredSize == 104,
       "size: header, payload and checksum",
-      $measuredSize, "100")
+      $measuredSize, "104")
 
 # ---------------------------------------------------------------------------
 # BLOCK 2. The header words, and the buffer every save in this file writes into.
@@ -84,7 +84,7 @@ check(measuredSize == 100,
 # one case there rather than a result returned to each caller.
 
 const
-  blockBytes = 100
+  blockBytes = 104
   guardBytes = 8
   filler = 0xEE'u8
 
@@ -129,8 +129,8 @@ let headerProbe = savedBlock(freshContext())
 let headerWords = (magic: be32(headerProbe, 0),
                    version: be32(headerProbe, 4),
                    payload: be32(headerProbe, 8))
-let wantHeaderWords = (magic: 0x4D435335'u32, version: 1'u32,
-                       payload: 84'u32)
+let wantHeaderWords = (magic: 0x4D435335'u32, version: 2'u32,
+                       payload: 88'u32)
 
 check(headerWords == wantHeaderWords,
       "header: the magic, the version word and the payload width",
@@ -251,8 +251,8 @@ for name, wantValue, gotValue in fieldPairs(stamped[], restored[]):
 # a checksum it did not also compute with the same constants.
 
 const goldenStampedBlock = @[
-  0x4D'u8, 0x43'u8, 0x53'u8, 0x35'u8, 0x00'u8, 0x00'u8, 0x00'u8, 0x01'u8,
-  0x00'u8, 0x00'u8, 0x00'u8, 0x54'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x01'u8,
+  0x4D'u8, 0x43'u8, 0x53'u8, 0x35'u8, 0x00'u8, 0x00'u8, 0x00'u8, 0x02'u8,
+  0x00'u8, 0x00'u8, 0x00'u8, 0x58'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x01'u8,
   0xA5'u8, 0xA5'u8, 0x00'u8, 0x02'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x03'u8,
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x04'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x05'u8,
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x06'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x07'u8,
@@ -261,9 +261,9 @@ const goldenStampedBlock = @[
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x0C'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x0D'u8,
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x0E'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x0F'u8,
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x10'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x11'u8,
-  0xC3'u8, 0xC3'u8, 0x00'u8, 0x12'u8, 0x01'u8, 0x00'u8, 0x00'u8, 0x00'u8,
-  0x01'u8, 0x15'u8, 0x56'u8, 0x01'u8, 0x00'u8, 0x59'u8, 0x00'u8, 0x01'u8,
-  0x18'u8, 0x07'u8, 0xEA'u8, 0x85'u8]
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x12'u8, 0x01'u8, 0x00'u8, 0xA5'u8, 0xA5'u8,
+  0x00'u8, 0x15'u8, 0x00'u8, 0x00'u8, 0x01'u8, 0x16'u8, 0x57'u8, 0x00'u8,
+  0x01'u8, 0x5A'u8, 0x01'u8, 0x00'u8, 0xDC'u8, 0xB7'u8, 0xBF'u8, 0x80'u8]
 
 check(stampedBytes == goldenStampedBlock,
       "wire format: the salt-0 context saves these exact bytes",
@@ -314,7 +314,7 @@ let namedStatuses = (magic: statusAfterDamage(1),
                      version: statusAfterDamage(5),
                      width: statusAfterDamage(9),
                      payload: statusAfterDamage(20),
-                     checksum: statusAfterDamage(97))
+                     checksum: statusAfterDamage(101))
 let wantNamedStatuses = (magic: stateBadMagic,
                          version: stateBadVersion,
                          width: stateBadWidth,

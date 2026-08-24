@@ -51,7 +51,18 @@ import mcf5307/exception
 #
 # d0..d7 live in `ctx.dRegs`, a0..a6 in `ctx.aRegs`, and a7 is `ctx.sp`.
 # `regFileGet`/`regFileSet` are the single-index view the ABI accessors and
-# the MOVEM mask use: 0..7 = d0..d7, 8..15 = a0..a7, 16 = sr, 17 = pc.
+# the MOVEM mask use: 0..7 = d0..d7, 8..15 = a0..a7, 16 = sr, 17 = pc,
+# 18 = vbr.
+#
+# 18 IS A CONTROL REGISTER AND NOT PART OF THE REGISTER FILE, AND IT IS HERE
+# BECAUSE THIS INDEX SPACE IS THE ONLY CHANNEL A HOST HAS. `MOVEC` is the
+# machine's own way to write VBR and it reaches nothing outside a running
+# program; a host that must place the machine at a vector table the firmware
+# has not filled yet has no other door. The MOVEM mask never names an index
+# above 15, so widening this view does not widen that instruction.
+#
+# 17 STAYS READ-ONLY THROUGH `regFileSet` AND 18 DOES NOT. The program counter
+# is written by `mcf5307_reset`, which is the entry point that owns it.
 
 proc regD*(ctx: MCF5307Ctx; n: uint8): uint32 =
   ctx.dRegs[n and 7]
@@ -78,6 +89,8 @@ proc regFileGet*(ctx: MCF5307Ctx; index: int): uint32 =
     ctx.sr
   elif index == 17:
     ctx.pc
+  elif index == 18:
+    ctx.vbr
   else:
     0
 
@@ -93,6 +106,9 @@ proc regFileSet*(ctx: MCF5307Ctx; index: int; v: uint32): bool =
     true
   elif index == 16:
     ctx.sr = v and 0xFFFF'u32
+    true
+  elif index == 18:
+    ctx.vbr = v
     true
   else:
     false
@@ -574,16 +590,17 @@ proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## `SP-4;PC`, `SP-2;SR`, `SP-2;Format`, which agrees whenever A7 was already
   ## longword aligned and does not show the self-alignment at all.
   ##
-  ## THE VECTOR TABLE IS BASED AT ZERO, AND THAT IS A LIMITATION AND NOT A
-  ## CHOICE. The handler address is "obtained by fetching a value from the
-  ## table located at the address defined in the vector base register", indexed
-  ## by `4 x vector_number`. THIS CORE HAS NO VBR: the context holds no such
-  ## field, and `MOVEC` is the only way to write one.
+  ## THE VECTOR TABLE IS BASED AT `VBR`. The handler address is "obtained by
+  ## fetching a value from the table located at the address defined in the
+  ## vector base register", indexed by `4 x vector_number`, and
+  ## `exception.nim`'s `vectorAddress` is where that arithmetic and the
+  ## unimplemented low bits of VBR both live.
   ##
-  ## THE RESET VALUE IS ZERO AND THE REFERENCE PRINTS IT: VBR has a width of
-  ## 32, a RESET VALUE of `$00000000` and an ACCESS of `W`. So this expression
-  ## is correct for a machine that has not written VBR and wrong for one that
-  ## has, and the one line that would change is the `readMem` below.
+  ## THE READ BELOW IS THE ONLY READER OF `ctx.vbr`, AND THAT IS WHAT MAKES
+  ## THE FIELD MEAN ANYTHING. A core that stored the value and dispatched from
+  ## zero would answer every read-back correctly and take every exception to
+  ## the wrong handler, so `t_exception`'s block 7 adjudicates on the handler
+  ## address it lands on and never on the value it reads back.
   ##
   ## A FAULT INSIDE THIS PROCEDURE IS A DOUBLE FAULT. Each access is checked
   ## and the procedure returns early, leaving the context halted with `fault`;
@@ -602,7 +619,7 @@ proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   if ctx.halted:
     return
   ctx.sp = base
-  let handler = stackingRead(ctx, vectorAddress(0'u32, vector), 4)
+  let handler = stackingRead(ctx, vectorAddress(ctx.vbr, vector), 4)
   if ctx.halted:
     return
   ctx.pc = handler
@@ -645,7 +662,7 @@ proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
 
 proc mcf5307_set_reg*(ctx: MCF5307Ctx; index: cint; value: uint32): cint
     {.exportc: "mcf5307_set_reg", cdecl, dynlib.} =
-  if ctx.isNil or index < 0 or index > 16:
+  if ctx.isNil or index < 0 or index > 18:
     return cast[cint](0)
   if regFileSet(ctx, int(index), value):
     return cast[cint](1)
@@ -653,7 +670,7 @@ proc mcf5307_set_reg*(ctx: MCF5307Ctx; index: cint; value: uint32): cint
 
 proc mcf5307_get_reg*(ctx: MCF5307Ctx; index: cint): uint32
     {.exportc: "mcf5307_get_reg", cdecl, dynlib.} =
-  if ctx.isNil or index < 0 or index > 17:
+  if ctx.isNil or index < 0 or index > 18:
     return 0'u32
   regFileGet(ctx, int(index))
 

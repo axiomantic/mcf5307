@@ -10,9 +10,11 @@
 ## NOTHING HERE WRITES A CONTROL REGISTER, AND THAT IS A LIMITATION RATHER
 ## THAN AN OVERSIGHT. A control register this core kept would be context
 ## state, and the value the instruction carries is therefore discarded. The
-## one consequence a reader must not miss: `machine.nim`'s `takeException`
-## still bases the vector table at zero, so a `MOVEC` to VBR is accepted and
-## does not move it.
+## one consequence a reader must not miss: the context DOES carry a `vbr`
+## field and `machine.nim`'s `takeException` DOES base the vector table on it,
+## so a `MOVEC` to VBR is accepted, discarded, and leaves the machine
+## dispatching from whatever base it was already given. The instruction and
+## the register are wired at neither end by this file.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. The encoding,
 ## the register numbers and the privilege rule are facts about Motorola

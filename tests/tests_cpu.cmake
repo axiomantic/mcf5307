@@ -1975,7 +1975,7 @@ mcf5307_check_case_sites("t_exception" "@MCF5307_EXCEPTION_SOURCE@" "${exception
 # states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
 # what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
 # CASE COUNT.
-mcf5307_check_case_total("t_exception" "${exception_run_out}" 39)
+mcf5307_check_case_total("t_exception" "${exception_run_out}" 42)
 
 ]==])
 
@@ -2503,7 +2503,7 @@ mcf5307_check_case_sites("t_state" "@MCF5307_STATE_SOURCE@" "${state_run_out}"
 # to `MCF5307Ctx` moves this figure. That coupling is the point: a field that
 # enters the snapshot without anyone deciding it should is what this figure
 # refuses to let pass quietly.
-mcf5307_check_case_total("t_state" "${state_run_out}" 33)
+mcf5307_check_case_total("t_state" "${state_run_out}" 34)
 
 ]==])
 
