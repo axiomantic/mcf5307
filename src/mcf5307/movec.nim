@@ -7,14 +7,16 @@
 ## by value without a machine to run. `movecFamily` is the one procedure that
 ## needs a context.
 ##
-## NOTHING HERE WRITES A CONTROL REGISTER, AND THAT IS A LIMITATION RATHER
-## THAN AN OVERSIGHT. A control register this core kept would be context
-## state, and the value the instruction carries is therefore discarded. The
-## one consequence a reader must not miss: the context DOES carry a `vbr`
-## field and `machine.nim`'s `takeException` DOES base the vector table on it,
-## so a `MOVEC` to VBR is accepted, discarded, and leaves the machine
-## dispatching from whatever base it was already given. The instruction and
-## the register are wired at neither end by this file.
+## THE WRITE LANDS AND ONLY ONE OF THE DESTINATIONS MEANS ANYTHING YET, AND
+## THE DISTINCTION IS THE LIMITATION A READER MUST NOT MISS. Every implemented
+## control register is a field of the context and `movecFamily` stores into it,
+## so the value survives the instruction and the register file can read it
+## back. `VBR` is consumed: `machine.nim`'s `takeException` bases the vector
+## table on it. THE OTHERS ARE STORED AND UNCONSUMED - this core does not model
+## the cache, the access control regions, the on-chip SRAM or the peripheral
+## base, so writing `RAMBAR0` does not move the SRAM and writing `CACR` does
+## not change caching. A task that gives one of them a behaviour reads the
+## field this file writes.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. The encoding,
 ## the register numbers and the privilege rule are facts about Motorola
@@ -112,7 +114,12 @@ proc movecFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   let ext = fetchExt(ctx)
   if ctx.halted:
     return 0'u32
-  if controlRegisterFor(movecControlField(ext)) == crUnimplemented:
+  # THE MAP IS CONSULTED ONCE AND THE REFUSAL AND THE STORE BOTH READ THAT ONE
+  # ANSWER. Two calls would be two decodes of one instruction, and a later
+  # change to `controlRegisterFor` could then be refused by one and accepted by
+  # the other.
+  let destination = controlRegisterFor(movecControlField(ext))
+  if destination == crUnimplemented:
     # Undefined control register space produces undefined results. This core
     # HALTS rather than running on, and `fault` stays clear: the encoding is
     # valid and only its semantics are absent. A core that accepted the write
@@ -120,6 +127,26 @@ proc movecFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
     # report nothing.
     ctx.halted = true
     return 0'u32
+  # THE SOURCE IS THE REGISTER THE EXTENSION WORD NAMES, ACROSS BOTH FILES. The
+  # A/D bit selects the file and Ry selects within it, so an implementation
+  # that read a data register whatever the encoding said would move the wrong
+  # value for every `movec Ay,Rc` the firmware issues.
+  let source =
+    if movecSourceIsAddressRegister(ext): regA(ctx, movecSourceRegister(ext))
+    else: regD(ctx, movecSourceRegister(ext))
+  # THE VALUE IS STORED AS WRITTEN AND IS NOT MASKED HERE. VBR's unimplemented
+  # low bits are dropped by `exception.nim` AT THE DISPATCH, so a reader of the
+  # field sees what the machine was given rather than what one consumer of it
+  # makes of the value; the other registers have no consumer to mask for.
+  case destination
+  of crCacr: ctx.cacr = source
+  of crAcr0: ctx.acr0 = source
+  of crAcr1: ctx.acr1 = source
+  of crVbr: ctx.vbr = source
+  of crRambar0: ctx.rambar0 = source
+  of crRambar1: ctx.rambar1 = source
+  of crMbar: ctx.mbar = source
+  of crUnimplemented: discard
   movecExecuteCycles
 
 # ---------------------------------------------------------------------------

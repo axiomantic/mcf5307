@@ -38,7 +38,7 @@ import mcf5307/decode_types
 const
   stateMagic* = 0x4D435335'u32
     ## `MCS5` - the first longword of the block.
-  stateVersion* = 2'u32
+  stateVersion* = 3'u32
     ## The version word. It moves when the payload's layout moves, and
     ## `stateLoad` refuses a block that does not carry this exact value.
   stateHeaderBytes = 12
