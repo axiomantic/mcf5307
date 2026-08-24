@@ -173,13 +173,22 @@ checkEq(vectorAddress(0x000F_FFFF'u32, vecAccessError), 0x008'u32,
 # The board. One flat byte array, big-endian, as `t_control`'s and the
 # conformance runner's. A read outside it reports `busUnmapped`.
 #
-# IT RECORDS EVERY READ BELOW `vectorTableBytes`, which is the vector table and
-# nothing else: the code sits at `execBase`, above the whole 1024-byte table,
-# and the stack is higher still.
+# IT RECORDS EVERY READ INSIDE A VECTOR TABLE AND NOTHING ELSE: the code sits
+# at `execBase`, above the whole 1024-byte zero-based table, and the stack is
+# higher still. TWO TABLES CAN BE IN PLAY - the zero-based one and the one
+# `vbrTableBase` names - and a read of EITHER is recorded, so a core that read
+# the wrong table reports WHICH address it read rather than an empty list.
+#
+# THE MEMORY REACHES THE `VBR`-BASED TABLE AND STOPS THERE. `memSize` is
+# COMPOSED from `vbrTableBase` and `vectorTableBytes` rather than written as a
+# literal, so moving the base cannot leave the array one table short.
 
 const
-  memSize = 0x1000
-  execBase = 0x400'u32      ## above the whole 1024-byte vector table
+  vbrTableBase = 0x0010_0000'u32
+    ## 1 MByte, THE SMALLEST NON-ZERO BASE THIS PART CAN HOLD: VBR[19-0] are
+    ## not implemented, which block 4 above asserts value by value.
+  memSize = int(vbrTableBase) + int(vectorTableBytes)
+  execBase = 0x400'u32      ## above the whole 1024-byte zero-based table
   trapHandler = 0x500'u32
   accessHandler = 0x600'u32
   addressHandler = 0x700'u32
@@ -193,6 +202,10 @@ type TestBoard = object
 
 var board: TestBoard
 var vectorReads: seq[uint32]
+
+var tableBase: uint32 = 0'u32
+  ## The base the case under way put its OWN vector table at. It is the second
+  ## table the read log recognizes; the zero-based one is always recognized.
 
 proc boardWrite(b: var TestBoard; address: uint32; size: int; value: uint32) =
   for i in 0 ..< size:
@@ -210,7 +223,8 @@ proc bRead(user: pointer; address: uint32; size: cint;
     status[] = Mcf5307BusStatus.busUnmapped
     return 0'u32
   status[] = Mcf5307BusStatus.busOk
-  if address < vectorTableBytes:
+  if address < vectorTableBytes or
+     (address >= tableBase and address - tableBase < vectorTableBytes):
     vectorReads.add(address)
   boardReadValue(b[], address, int(size))
 
@@ -226,7 +240,8 @@ proc bWrite(user: pointer; address: uint32; size: cint; value: uint32;
 proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
   discard
 
-proc freshBoard() =
+proc freshBoard(base: uint32 = 0'u32) =
+  tableBase = base
   for i in 0 ..< memSize:
     board.bytes[i] = 0'u8
   vectorReads = @[]
@@ -345,6 +360,75 @@ check(addressErr == (sp: frameBase, pc: addressHandler, halted: false,
       "address error: vector 3, handler from $00C", $addressErr,
       "the $00C handler, VEC 3, one read of $00C")
 #   0100 | 00 | 00000011 | 00 | 0010011100000000 -> 0x400C2700
+
+# ---------------------------------------------------------------------------
+# BLOCK 7. THE DISPATCH READS `VBR`, AND NO READ-BACK CAN SHOW THAT.
+#
+# A core that STORES the value in a context field no dispatch consults fails
+# IDENTICALLY to one that discards it, and passes every read-back assertion.
+# So the read-back below is carried in the tuple as DESCRIPTION and the
+# handler address is what adjudicates: the ZERO-BASED slot for this vector
+# holds `accessHandler` and the `VBR`-BASED slot holds `vbrHandler`, and the
+# two are different addresses. A core basing the table at zero lands on
+# `accessHandler` and says so; the read log names the address it fetched from.
+#
+# THE VECTOR IS THE ACCESS ERROR BECAUSE `freshBoard` ALREADY WRITES ITS
+# ZERO-BASED SLOT. The decoy is therefore the same value block 6 asserts
+# against, and not a second constant that could drift away from it.
+
+const vbrHandler = 0x0010_0800'u32
+
+type TakenVbr = tuple[setOk: bool, readBack: uint32, sp: uint32, pc: uint32,
+                      halted: bool, framePc: uint32, reads: seq[uint32]]
+
+proc runTakeExceptionWithVbr(vbr: uint32; vector: uint8;
+                             stackedPc: uint32): TakenVbr =
+  freshBoard(vbrTableBase)
+  boardWrite(board, vectorAddress(vbrTableBase, vector), 4, vbrHandler)
+  let ctx = mcf5307_create(addr board, bRead, bWrite, bIack)
+  mcf5307_reset(ctx, 0x800'u32, execBase)
+  let setOk = mcf5307_set_reg(ctx, 18, vbr) != 0
+  takeException(ctx, vector, stackedPc)
+  result = (setOk: setOk,
+            readBack: mcf5307_get_reg(ctx, 18),
+            sp: ctx.sp,
+            pc: ctx.pc,
+            halted: ctx.halted,
+            framePc: mem32(frameBase + 4'u32),
+            reads: vectorReads)
+  mcf5307_destroy(ctx)
+
+let vbrBased = runTakeExceptionWithVbr(vbrTableBase, vecAccessError, 0x444'u32)
+check(vbrBased == (setOk: true, readBack: vbrTableBase, sp: frameBase,
+                   pc: vbrHandler, halted: false, framePc: 0x444'u32,
+                   reads: @[vbrTableBase + 0x008'u32]),
+      "VBR 0x00100000: the handler comes from 0x00100008 and not from $008",
+      $vbrBased,
+      "the 0x00100008 handler, one read of 0x00100008, the frame unchanged")
+
+# THE UNIMPLEMENTED LOW BITS ARE MASKED BY THE DISPATCH AND NOT ONLY BY
+# `vectorAddress`. Block 4 asserts the mask on the pure function; this asserts
+# that the procedure which takes the exception is the one applying it.
+let vbrMisaligned =
+  runTakeExceptionWithVbr(vbrTableBase or 0x4'u32, vecAccessError, 0x444'u32)
+check(vbrMisaligned == (setOk: true, readBack: vbrTableBase or 0x4'u32,
+                        sp: frameBase, pc: vbrHandler, halted: false,
+                        framePc: 0x444'u32,
+                        reads: @[vbrTableBase + 0x008'u32]),
+      "VBR 0x00100004: VBR[19-0] are not implemented at the dispatch",
+      $vbrMisaligned,
+      "the 0x00100008 handler, one read of 0x00100008")
+
+# A ZERO `VBR` STILL READS THE ZERO-BASED TABLE. Without this case a core that
+# hardcoded the dispatch at `vbrTableBase` instead of at zero would satisfy
+# both cases above, and block 6's cases run on a board whose second table does
+# not exist.
+let vbrZero = runTakeExceptionWithVbr(0'u32, vecAccessError, 0x444'u32)
+check(vbrZero == (setOk: true, readBack: 0'u32, sp: frameBase,
+                  pc: accessHandler, halted: false, framePc: 0x444'u32,
+                  reads: @[0x008'u32]),
+      "VBR 0x00000000: the handler comes from $008",
+      $vbrZero, "the $008 handler, one read of $008")
 
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
 # program reports what its text declares and what its run adjudicated,
