@@ -44,18 +44,21 @@ import mcf5307/exception
 #
 # d0..d7 live in `ctx.dRegs`, a0..a6 in `ctx.aRegs`, and a7 is `ctx.sp`.
 # `regFileGet`/`regFileSet` are the single-index view the ABI accessors and
-# the MOVEM mask use: 0..7 = d0..d7, 8..15 = a0..a7, 16 = sr, 17 = pc,
-# 18 = vbr.
+# the MOVEM mask use: 0..7 = d0..d7, 8..15 = a0..a7, 16 = sr, 17 = pc, and
+# 18 upwards the control registers - 18 = vbr, 19 = cacr, 20 = acr0,
+# 21 = acr1, 22 = rambar0, 23 = rambar1, 24 = mbar.
 #
-# 18 IS A CONTROL REGISTER AND NOT PART OF THE REGISTER FILE, AND IT IS HERE
+# THE CONTROL REGISTERS ARE NOT PART OF THE REGISTER FILE, AND THEY ARE HERE
 # BECAUSE THIS INDEX SPACE IS THE ONLY CHANNEL A HOST HAS. `MOVEC` is the
-# machine's own way to write VBR and it reaches nothing outside a running
+# machine's own way to write them and it reaches nothing outside a running
 # program; a host that must place the machine at a vector table the firmware
-# has not filled yet has no other door. The MOVEM mask never names an index
+# has not filled yet has no other door, and a test that must see where a
+# `MOVEC` put its value has none either. The MOVEM mask never names an index
 # above 15, so widening this view does not widen that instruction.
 #
-# 17 STAYS READ-ONLY THROUGH `regFileSet` AND 18 DOES NOT. The program counter
-# is written by `mcf5307_reset`, which is the entry point that owns it.
+# 17 STAYS READ-ONLY THROUGH `regFileSet` AND THE CONTROL REGISTERS DO NOT. The
+# program counter is written by `mcf5307_reset`, which is the entry point that
+# owns it.
 
 proc regD*(ctx: MCF5307Ctx; n: uint8): uint32 =
   ctx.dRegs[n and 7]
@@ -84,6 +87,18 @@ proc regFileGet*(ctx: MCF5307Ctx; index: int): uint32 =
     ctx.pc
   elif index == 18:
     ctx.vbr
+  elif index == 19:
+    ctx.cacr
+  elif index == 20:
+    ctx.acr0
+  elif index == 21:
+    ctx.acr1
+  elif index == 22:
+    ctx.rambar0
+  elif index == 23:
+    ctx.rambar1
+  elif index == 24:
+    ctx.mbar
   else:
     0
 
@@ -102,6 +117,24 @@ proc regFileSet*(ctx: MCF5307Ctx; index: int; v: uint32): bool =
     true
   elif index == 18:
     ctx.vbr = v
+    true
+  elif index == 19:
+    ctx.cacr = v
+    true
+  elif index == 20:
+    ctx.acr0 = v
+    true
+  elif index == 21:
+    ctx.acr1 = v
+    true
+  elif index == 22:
+    ctx.rambar0 = v
+    true
+  elif index == 23:
+    ctx.rambar1 = v
+    true
+  elif index == 24:
+    ctx.mbar = v
     true
   else:
     false
@@ -673,7 +706,7 @@ proc takePendingWriteFault*(ctx: MCF5307Ctx) =
 
 proc mcf5307_set_reg*(ctx: MCF5307Ctx; index: cint; value: uint32): cint
     {.exportc: "mcf5307_set_reg", cdecl, dynlib.} =
-  if ctx.isNil or index < 0 or index > 18:
+  if ctx.isNil or index < 0 or index > 24:
     return cast[cint](0)
   if regFileSet(ctx, int(index), value):
     return cast[cint](1)
@@ -681,7 +714,7 @@ proc mcf5307_set_reg*(ctx: MCF5307Ctx; index: cint; value: uint32): cint
 
 proc mcf5307_get_reg*(ctx: MCF5307Ctx; index: cint): uint32
     {.exportc: "mcf5307_get_reg", cdecl, dynlib.} =
-  if ctx.isNil or index < 0 or index > 18:
+  if ctx.isNil or index < 0 or index > 24:
     return 0'u32
   regFileGet(ctx, int(index))
 

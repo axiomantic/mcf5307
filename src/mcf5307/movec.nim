@@ -107,7 +107,12 @@ proc movecFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   let ext = fetchExt(ctx)
   if ctx.halted:
     return 0'u32
-  if controlRegisterFor(movecControlField(ext)) == crUnimplemented:
+  # THE MAP IS CONSULTED ONCE AND THE REFUSAL AND THE STORE BOTH READ THAT ONE
+  # ANSWER. Two calls would be two decodes of one instruction, and a later
+  # change to `controlRegisterFor` could then be refused by one and accepted by
+  # the other.
+  let destination = controlRegisterFor(movecControlField(ext))
+  if destination == crUnimplemented:
     # Undefined control register space produces undefined results. This core
     # HALTS rather than running on, and `fault` stays clear: the encoding is
     # valid and only its semantics are absent. A core that accepted the write
@@ -115,6 +120,26 @@ proc movecFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
     # report nothing.
     ctx.halted = true
     return 0'u32
+  # THE SOURCE IS THE REGISTER THE EXTENSION WORD NAMES, ACROSS BOTH FILES. The
+  # A/D bit selects the file and Ry selects within it, so an implementation
+  # that read a data register whatever the encoding said would move the wrong
+  # value for every `movec Ay,Rc` the firmware issues.
+  let source =
+    if movecSourceIsAddressRegister(ext): regA(ctx, movecSourceRegister(ext))
+    else: regD(ctx, movecSourceRegister(ext))
+  # THE VALUE IS STORED AS WRITTEN AND IS NOT MASKED HERE. VBR's unimplemented
+  # low bits are dropped by `exception.nim` AT THE DISPATCH, so a reader of the
+  # field sees what the machine was given rather than what one consumer of it
+  # makes of the value; the other registers have no consumer to mask for.
+  case destination
+  of crCacr: ctx.cacr = source
+  of crAcr0: ctx.acr0 = source
+  of crAcr1: ctx.acr1 = source
+  of crVbr: ctx.vbr = source
+  of crRambar0: ctx.rambar0 = source
+  of crRambar1: ctx.rambar1 = source
+  of crMbar: ctx.mbar = source
+  of crUnimplemented: discard
   movecExecuteCycles
 
 # ---------------------------------------------------------------------------

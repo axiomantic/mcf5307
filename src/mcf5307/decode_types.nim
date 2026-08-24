@@ -131,6 +131,23 @@ type
     # suite adjudicates.
     vbr*: uint32                ## the vector base register
 
+    # THE REST OF THE CONTROL REGISTERS THIS PART IMPLEMENTS. `movec.nim`
+    # writes them and NOTHING IN THIS CORE READS THEM: the cache, the access
+    # control regions, the on-chip SRAM and the peripheral base are not
+    # modelled, so each holds what was written and changes no behaviour.
+    #
+    # THEY ARE FIELDS ANYWAY, AND THE ALTERNATIVE IS WHAT DECIDES IT. A core
+    # that dropped the write instead would let firmware configure a register
+    # and report nothing, and the task that gives one of these a meaning would
+    # have no value to give it a meaning ABOUT. The register file publishes
+    # them, so the landing is observable before the behaviour exists.
+    cacr*: uint32               ## the cache control register
+    acr0*: uint32               ## access control register 0
+    acr1*: uint32               ## access control register 1
+    rambar0*: uint32            ## the SRAM base address register
+    rambar1*: uint32            ## the second SRAM base address register
+    mbar*: uint32               ## the peripheral module base address register
+
     # The interrupt input. `mcf5307/irq` owns every rule about these fields;
     # they live here because the context type lives here and `irq.nim` is above
     # this module.

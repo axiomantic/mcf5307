@@ -114,6 +114,32 @@ proc mcf5307_reset*(ctx: MCF5307Ctx; initialSp: uint32; initialPc: uint32)
   ctx.sr = 0x2700'u32
   ctx.halted = false
   ctx.fault = false
+  # THE CONTROL REGISTERS, TO THE VALUES THE MANUAL GIVES THEM AT RESET.
+  #
+  # TWO OF THE SEVEN ARE STATED OUTRIGHT AND FIVE ARE NOT, AND THE DIFFERENCE
+  # IS WHY THIS COMMENT EXISTS. The MCF5307 User's Manual gives the vector base
+  # register `$00000000` at reset (section 3.7's reset exception) and says a
+  # hardware reset CLEARS the CACR (section 5.5). The ACRs, the RAMBARs and the
+  # MBAR are weaker: the manual guarantees only that the enable or valid bit is
+  # forced to zero and calls the remaining bits unaffected or uninitialised, so
+  # no full reset value is documented for them. Section 5.6 states the stronger
+  # reading for the ACRs - reset "places 0's in all CACR and ACR bits" - and
+  # the manual therefore disagrees with itself about those two.
+  #
+  # ZERO IS CHOSEN FOR ALL FIVE, AND THE ALTERNATIVE IS WHAT DECIDES IT. Zero
+  # satisfies every documented constraint, including the weak ones: the enable
+  # and valid bits are the low bit or bit 15 of their registers and zero clears
+  # them. Leaving the undocumented bits at whatever the previous run wrote
+  # would make this core's reset depend on its own history, which is a
+  # divergence a host cannot see and cannot reproduce.
+  ctx.vbr = 0'u32
+  ctx.cacr = 0'u32
+  ctx.acr0 = 0'u32
+  ctx.acr1 = 0'u32
+  ctx.rambar0 = 0'u32
+  ctx.rambar1 = 0'u32
+  ctx.mbar = 0'u32
+
   # A reset discards a store's recorded access error rather than carrying it
   # into the reset handler. The capture names a program counter and a status
   # register of the program this call has just ended; taking it after the reset

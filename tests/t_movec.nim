@@ -153,7 +153,15 @@ const
   dirtyD = 0x12345678'u32
   dirtyA = 0x0BADC0DE'u32
   handlerBase = 0x400'u32  ## where the seeded vector-8 entry points
-  memSize = 0x1000
+  vbrTableBase = 0x0010_0000'u32
+    ## THE BASE IS ABOVE THE IMPLEMENTED-BIT BOUNDARY AND NOT AN ARBITRARY
+    ## ADDRESS. `exception.nim` masks the vector base with `vbrImplementedMask`,
+    ## so a base whose set bits all fall in the low twenty would dispatch from
+    ## zero and a case built on it would pass against a core that ignored the
+    ## register entirely.
+  vbrHandlerBase = 0x0010_0400'u32
+    ## Where the VBR-based vector-8 slot points.
+  memSize = 0x0010_1000
 
 type TestBoard = object
   bytes: array[memSize, uint8]
@@ -314,6 +322,200 @@ block:
               fv: 0x4020_0700'u32,
               stackedPc: execBase)
   check(got, want, "movec in user state takes the vector-8 privilege violation")
+
+# ---------------------------------------------------------------------------
+# THE VALUE THE INSTRUCTION CARRIES, READ BACK THROUGH THE ONLY CHANNEL A HOST
+# HAS.
+#
+# EVERY REGISTER IS WRITTEN FROM A DIFFERENT SOURCE REGISTER AND EVERY SOURCE
+# CARRIES A DIFFERENT VALUE. Two stores wired to each other's destination then
+# leave BOTH read-backs holding a value that belongs to the other, and both
+# cases go red; a single shared value would let a swap pass. The A/D bit and
+# Ry are varied across the seven for the same reason: a store that read `d0`
+# whatever the extension word named would answer every case that used `d0`.
+#
+# THE WHOLE CONTROL FILE IS ASSERTED PER CASE AND NOT ONLY THE REGISTER UNDER
+# TEST. A store that wrote its value into every field would satisfy a
+# single-field read-back.
+
+const
+  dSeed: array[8, uint32] = [
+    0xD000_5A5A'u32, 0xD111_5A5A'u32, 0xD222_5A5A'u32, 0xD333_5A5A'u32,
+    vbrTableBase or 0x0801'u32,
+    0xD555_5A5A'u32, 0xD666_5A5A'u32, 0xD777_5A5A'u32]
+      ## `d4` CARRIES A USABLE VECTOR BASE because it is the VBR case's source
+      ## and the consumer case below dispatches through what it writes. Its low
+      ## bits are set and are NOT part of the base: `vbrImplementedMask` drops
+      ## them at the dispatch and the field keeps them, which is what separates
+      ## a core that stores the written value from one that stores the masked
+      ## one.
+  aSeed: array[7, uint32] = [
+    0xA000_5A5A'u32, 0xA111_5A5A'u32, 0xA222_5A5A'u32, 0xA333_5A5A'u32,
+    0xA444_5A5A'u32, 0xA555_5A5A'u32, 0xA666_5A5A'u32]
+
+type ControlFile = tuple[cacr, acr0, acr1, vbr, rambar0, rambar1, mbar: uint32]
+
+const
+  # The register-file indices the ABI publishes for the control registers.
+  ixVbr = 18
+  ixCacr = 19
+  ixAcr0 = 20
+  ixAcr1 = 21
+  ixRambar0 = 22
+  ixRambar1 = 23
+  ixMbar = 24
+
+  noControlRegisterWritten: ControlFile =
+    (cacr: 0'u32, acr0: 0'u32, acr1: 0'u32, vbr: 0'u32,
+     rambar0: 0'u32, rambar1: 0'u32, mbar: 0'u32)
+
+proc controlFileOf(ctx: MCF5307Ctx): ControlFile =
+  (cacr: mcf5307_get_reg(ctx, ixCacr),
+   acr0: mcf5307_get_reg(ctx, ixAcr0),
+   acr1: mcf5307_get_reg(ctx, ixAcr1),
+   vbr: mcf5307_get_reg(ctx, ixVbr),
+   rambar0: mcf5307_get_reg(ctx, ixRambar0),
+   rambar1: mcf5307_get_reg(ctx, ixRambar1),
+   mbar: mcf5307_get_reg(ctx, ixMbar))
+
+proc seedContext(ctx: MCF5307Ctx) =
+  ## Every data and address register carries a value no other register carries.
+  for n in 0 .. 7:
+    discard mcf5307_set_reg(ctx, cint(n), dSeed[n])
+  for n in 0 .. 6:
+    discard mcf5307_set_reg(ctx, cint(8 + n), aSeed[n])
+
+proc freshSeededCtx(words: openArray[uint16];
+                    mem: seq[(uint32, uint32)] = @[]): MCF5307Ctx =
+  for i in 0 ..< memSize:
+    board.bytes[i] = 0'u8
+  for i in 0 ..< words.len:
+    boardWrite(board, execBase + 2'u32 * uint32(i), 2, uint32(words[i]))
+  for (address, value) in mem:
+    boardWrite(board, address, 4, value)
+  result = mcf5307_create(addr board, bRead, bWrite, bIack)
+  mcf5307_reset(result, stackBase, execBase)
+  seedContext(result)
+  discard mcf5307_set_reg(result, 16, srSuper)
+
+proc runControlWrite(ext: uint16): tuple[ctl: ControlFile, halted: bool,
+                                         fault: bool, pc: uint32] =
+  ## Execute one `movec` and report the whole control file behind it.
+  let ctx = freshSeededCtx([0x4E7B'u16, ext])
+  discard mcf5307_exec(ctx, 1'u32)
+  (ctl: controlFileOf(ctx), halted: ctx.halted, fault: ctx.fault,
+   pc: mcf5307_get_reg(ctx, 17))
+
+proc landed(ext: uint16): auto =
+  ## The shape an accepted `movec` produced: the whole control file, and the
+  ## run state that says the instruction ran both its words.
+  let o = runControlWrite(ext)
+  (ctl: o.ctl, halted: o.halted, fault: o.fault, pc: o.pc)
+
+proc onlyAt(position: int; value: uint32): ControlFile =
+  ## The control file in which ONE register holds `value` and every other holds
+  ## its reset value. `position` counts along `ControlFile`'s own order.
+  var slots: array[7, uint32]
+  slots[position] = value
+  (cacr: slots[0], acr0: slots[1], acr1: slots[2], vbr: slots[3],
+   rambar0: slots[4], rambar1: slots[5], mbar: slots[6])
+
+proc landedWant(want: ControlFile): auto =
+  (ctl: want, halted: false, fault: false, pc: execBase + 4'u32)
+
+check(landed(0x1002'u16), landedWant(onlyAt(0, dSeed[1])),
+      "movec %d1,CACR (0x002) stores d1 into CACR and nothing else")
+
+check(landed(0x2004'u16), landedWant(onlyAt(1, dSeed[2])),
+      "movec %d2,ACR0 (0x004) stores d2 into ACR0 and nothing else")
+
+check(landed(0xB005'u16), landedWant(onlyAt(2, aSeed[3])),
+      "movec %a3,ACR1 (0x005) stores a3 into ACR1 and nothing else")
+
+check(landed(0x4801'u16), landedWant(onlyAt(3, dSeed[4])),
+      "movec %d4,VBR (0x801) stores d4 unmasked into VBR and nothing else")
+
+check(landed(0xDC04'u16), landedWant(onlyAt(4, aSeed[5])),
+      "movec %a5,RAMBAR0 (0xC04) stores a5 into RAMBAR0 and nothing else")
+
+check(landed(0x6C05'u16), landedWant(onlyAt(5, dSeed[6])),
+      "movec %d6,RAMBAR1 (0xC05) stores d6 into RAMBAR1 and nothing else")
+
+check(landed(0xEC0F'u16), landedWant(onlyAt(6, aSeed[6])),
+      "movec %a6,MBAR (0xC0F) stores a6 into MBAR and nothing else")
+
+# THE REFUSAL PATH WRITES NOTHING, AND IT IS ASSERTED AND NOT ASSUMED. A store
+# placed ahead of the unimplemented-register test would leave the halt intact
+# and this case is what separates the two orders.
+
+block:
+  let o = runControlWrite(0x0006'u16)
+  check((ctl: o.ctl, halted: o.halted, fault: o.fault),
+        (ctl: noControlRegisterWritten, halted: true, fault: false),
+        "movec %d0,0x006 halts and writes no control register")
+
+# ---------------------------------------------------------------------------
+# RESET.
+#
+# THE CASE CARRIES THE STATE BEFORE THE RESET AS WELL AS THE STATE AFTER IT. A
+# case that asserted only the zeros would pass against a core that never stored
+# anything, which is the whole defect this file is closing.
+
+block:
+  let ctx = freshSeededCtx([0x4E7B'u16, 0x1002'u16,
+                            0x4E7B'u16, 0x2004'u16,
+                            0x4E7B'u16, 0xB005'u16,
+                            0x4E7B'u16, 0x4801'u16,
+                            0x4E7B'u16, 0xDC04'u16,
+                            0x4E7B'u16, 0x6C05'u16,
+                            0x4E7B'u16, 0xEC0F'u16])
+  for _ in 0 .. 6:
+    discard mcf5307_exec(ctx, 1'u32)
+  let before = controlFileOf(ctx)
+  mcf5307_reset(ctx, stackBase, execBase)
+  let after = controlFileOf(ctx)
+  # THE RESET VALUES ARE THE MANUAL'S. The MCF5307 User's Manual gives VBR
+  # `$00000000` at reset, and gives the CACR and the ACRs all zeros. It gives
+  # the RAMBARs and the MBAR only their valid bit cleared and calls the rest
+  # uninitialised, so zero is a value that satisfies what the manual states
+  # rather than one it states; `cpu.nim` carries the same note at the site.
+  check((before: before, after: after),
+        (before: (cacr: dSeed[1], acr0: dSeed[2], acr1: aSeed[3],
+                  vbr: dSeed[4], rambar0: aSeed[5], rambar1: dSeed[6],
+                  mbar: aSeed[6]),
+         after: noControlRegisterWritten),
+        "reset clears every control register the seven writes had filled")
+
+# ---------------------------------------------------------------------------
+# THE CONSUMER.
+#
+# STORING IS NOT THE DELIVERABLE. A core that kept the value in a field no
+# dispatch consulted would pass every case above and would fail identically to
+# one that discarded it. VBR is the one register of the seven this core
+# consumes, so its case runs an exception AFTER the write and asserts that the
+# handler address came from the base the instruction supplied.
+#
+# THE ZERO-BASED SLOT IS SEEDED WITH A DIFFERENT ADDRESS. A core that dispatched
+# from zero would then reach a plausible handler rather than address zero, so
+# the case separates "read the wrong base" from "read nothing at all".
+
+const decoyHandler = 0x0000_0700'u32
+
+block:
+  let ctx = freshSeededCtx(
+    [0x4E7B'u16, 0x4801'u16,   # movec %d4,VBR
+     0x46FC'u16, 0x0700'u16,   # move.w #$0700,%sr - leave supervisor state
+     0x4E7B'u16, 0xEC0F'u16],  # movec %a6,MBAR - privileged, so it violates
+    mem = @[(vbrTableBase + 4'u32 * 8'u32, vbrHandlerBase),
+            (4'u32 * 8'u32, decoyHandler)])
+  for _ in 0 .. 2:
+    discard mcf5307_exec(ctx, 1'u32)
+  check((pc: mcf5307_get_reg(ctx, 17), vbr: mcf5307_get_reg(ctx, ixVbr),
+         halted: ctx.halted, fault: ctx.fault,
+         mbar: mcf5307_get_reg(ctx, ixMbar)),
+        (pc: vbrHandlerBase, vbr: dSeed[4], halted: false, fault: false,
+         mbar: 0'u32),
+        "the exception after movec to VBR dispatches from the base it wrote")
 
 # The registry lines. They are data and not a verdict: this
 # program reports what its text declares and what its run adjudicated,
