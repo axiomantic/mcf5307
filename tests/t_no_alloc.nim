@@ -106,8 +106,6 @@ const
   seedD0 = 0x12345678'u32
   instructions = 10_000_000
   burstInstructions = 1_000
-  nopCycles = 4'u32     ## what one NOP costs this core: the fetch plus the
-                        ## execution pipe.
 
 var page: array[pageBytes, uint8]
 var fetchCount = 0
@@ -162,9 +160,10 @@ let afterRegisters = counts()
 # ---------------------------------------------------------------------------
 # Ten million instructions, one per call.
 #
-# A budget of one cycle runs exactly one instruction whatever that instruction
-# costs, because `mcf5307_exec` saturates after the step rather than declining
-# to take it. It is the budget `conformance/runner.cpp` passes.
+# A BUDGET OF ONE CYCLE RUNS EXACTLY ONE INSTRUCTION whatever that instruction
+# costs, because `mcf5307_exec` tests the budget only BEFORE a step rather than
+# declining to take one it cannot pay for. It is the budget
+# `conformance/runner.cpp` passes.
 
 let beforeExec = counts()
 for index in 1 .. instructions:
@@ -188,12 +187,23 @@ let afterDestroy = counts()
 #
 # The budget is exact and not generous. At `nopCycles` a NOP the budget below
 # is spent to the cycle on the last instruction, so the run ends because the
-# budget ran out and not because the loop saturated.
+# budget ran out and lands on an instruction boundary rather than past one.
 #
-# The return of `mcf5307_exec` is not asserted. The loop saturates at its
-# budget, so a non-halting run returns
-# the budget whatever it cost - an assertion on it would compare the budget to
-# itself.
+# `nopCycles` IS MEASURED AND NOT TYPED, AND THAT IS WHAT MAKES THE BURST CASE
+# BELOW ABLE TO FAIL. It is the return of one budget-of-one call, which is the
+# whole retired cost of one NOP. A core that clamped that return at the budget
+# would report 1 here, the burst budget would be a quarter of what it should
+# be, and `bursted.fetches` would be short of `burstInstructions` - so the
+# existing case is the witness and no new case is needed. A typed 4 here would
+# have hidden that: the burst would have run its instructions either way.
+
+# ONE NOP'S COST, MEASURED THROUGH THE SHIPPED ENTRY POINT ON A CONTEXT THAT
+# IS THEN THROWN AWAY. This runs outside every allocation window, so the one
+# allocation `mcf5307_create` makes here is not counted by any case.
+let costContext = mcf5307_create(addr page, bRead, bWrite, bIack)
+mcf5307_reset(costContext, stackBase, execBase)
+let nopCycles = mcf5307_exec(costContext, 1'u32)
+mcf5307_destroy(costContext)
 
 let burstContext = mcf5307_create(addr page, bRead, bWrite, bIack)
 mcf5307_reset(burstContext, stackBase, execBase)

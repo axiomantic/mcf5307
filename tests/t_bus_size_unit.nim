@@ -138,8 +138,8 @@ proc freshBoard(opWord: uint16) =
 proc runOne(opWord: uint16) =
   ## One instruction at `execBase`, through the published entry points, with a0
   ## pointing at the operand. The budget of 1 cycle retires exactly one
-  ## instruction: `step` charges at least the fetch, so the loop saturates and
-  ## leaves after it.
+  ## instruction: `step` charges at least the fetch, so the loop finds the
+  ## budget spent when it next tests it and leaves after that instruction.
   freshBoard(opWord)
   let ctx = mcf5307_create(addr board, recordingRead, recordingWrite,
                            recordingIack)

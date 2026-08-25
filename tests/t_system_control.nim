@@ -91,10 +91,20 @@ proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
   discard
 
 type Outcome = object
-  cycles: uint32
-    ## `mcf5307_exec(ctx, 1)` SATURATES AT ITS BUDGET, so this is 1 for an
-    ## instruction that ran and 0 for one that halted before spending
-    ## anything. `cpu.nim`'s header block says why it is not a cycle count.
+  ran: bool
+    ## DID THE INSTRUCTION RUN? It is `mcf5307_exec(ctx, 1) > 0`, and it is a
+    ## BOOLEAN because that is all the call can tell this suite. The return is
+    ## the whole retired cost of the instruction - `cpu.nim`'s header block is
+    ## the contract - and that cost differs per encoding, so an expectation
+    ## written here would be a per-row cycle LITERAL transcribed beside the
+    ## executor that computes it. This suite has no second way to derive one:
+    ## the rows that take an exception leave the machine inside a handler, so
+    ## a generous-budget reference run does not stop after one instruction.
+    ##
+    ## THE COST ITSELF IS PINNED, and not here. `tests/t_exec_budget.nim`
+    ## holds the return of a budgeted call against a cost it MEASURES, for
+    ## every budget in a sweep. What this field carries is the ran-or-trapped
+    ## bit the rows below actually turn on, under a name that says so.
   fault: bool
   halted: bool
   d: array[8, uint32]
@@ -123,7 +133,7 @@ proc runIns(words: openArray[uint16]; sr: uint32;
   # earlier write would be overwritten.
   discard mcf5307_set_reg(ctx, 16, sr)
 
-  result.cycles = mcf5307_exec(ctx, 1'u32)
+  result.ran = mcf5307_exec(ctx, 1'u32) > 0'u32
   result.fault = ctx.fault
   result.halted = ctx.halted
   for i in 0 ..< 8:
@@ -134,7 +144,7 @@ proc runIns(words: openArray[uint16]; sr: uint32;
   result.pc = mcf5307_get_reg(ctx, 17)
 
 proc whole(o: Outcome): auto =
-  (cycles: o.cycles, fault: o.fault, halted: o.halted, pc: o.pc,
+  (ran: o.ran, fault: o.fault, halted: o.halted, pc: o.pc,
    d: o.d, a: o.a, sr: o.sr)
 
 proc dWith(reg: int; value: uint32): array[8, uint32] =
@@ -147,14 +157,14 @@ proc wordInto(reg: int; value: uint32): array[8, uint32] =
 
 
 check(whole(runIns([0x40C4'u16], srSuper)),
-    (cycles: 1'u32, fault: false, halted: false, pc: execBase + 2'u32,
+    (ran: true, fault: false, halted: false, pc: execBase + 2'u32,
      d: wordInto(4, srSuper), a: dirtyA, sr: srSuper),
     "move.w %sr,%d4 in supervisor state transfers the status register")
 
 block:
   let o = runIns([0x40C4'u16], srUser,
                  mem = @[(4'u32 * 8'u32, handlerBase)])
-  let got = (cycles: o.cycles, fault: o.fault, halted: o.halted, pc: o.pc,
+  let got = (ran: o.ran, fault: o.fault, halted: o.halted, pc: o.pc,
              sr: o.sr, d: o.d, a: o.a,
              fv: boardReadValue(board, stackBase - 8'u32, 4),
              stackedPc: boardReadValue(board, stackBase - 4'u32, 4))
@@ -163,7 +173,7 @@ block:
   # exception changed it. The handler runs with S set and T clear.
   var wantA = dirtyA
   wantA[7] = stackBase - 8'u32
-  let want = (cycles: 1'u32, fault: false, halted: false, pc: handlerBase,
+  let want = (ran: true, fault: false, halted: false, pc: handlerBase,
               sr: 0x2700'u32, d: dirtyD, a: wantA,
               fv: 0x4020_0700'u32,
               stackedPc: execBase)
@@ -174,13 +184,13 @@ block:
 block:
   let o = runIns([0x46FC'u16, 0x2700'u16], srUser,
                  mem = @[(4'u32 * 8'u32, handlerBase)])
-  let got = (cycles: o.cycles, fault: o.fault, halted: o.halted, pc: o.pc,
+  let got = (ran: o.ran, fault: o.fault, halted: o.halted, pc: o.pc,
              sr: o.sr, d: o.d, a: o.a,
              fv: boardReadValue(board, stackBase - 8'u32, 4),
              stackedPc: boardReadValue(board, stackBase - 4'u32, 4))
   var wantA = dirtyA
   wantA[7] = stackBase - 8'u32
-  let want = (cycles: 1'u32, fault: false, halted: false, pc: handlerBase,
+  let want = (ran: true, fault: false, halted: false, pc: handlerBase,
               sr: 0x2700'u32, d: dirtyD, a: wantA,
               fv: 0x4020_0700'u32,
               stackedPc: execBase)
@@ -189,36 +199,36 @@ block:
 
 
 check(whole(runIns([0x42C0'u16], srUserFlags)),
-    (cycles: 1'u32, fault: false, halted: false, pc: execBase + 2'u32,
+    (ran: true, fault: false, halted: false, pc: execBase + 2'u32,
      d: wordInto(0, 0x0009'u32), a: dirtyA, sr: srUserFlags),
     "move.w %ccr,%d0 in USER state does not trap and zero-extends the CCR")
 
 check(whole(runIns([0x44C0'u16], srUser)),
-    (cycles: 1'u32, fault: false, halted: false, pc: execBase + 2'u32,
+    (ran: true, fault: false, halted: false, pc: execBase + 2'u32,
      d: dirtyD, a: dirtyA, sr: (srUser and not 0x1F'u32) or 0x18'u32),
     "move.w %d0,%ccr in USER state does not trap and writes X/N/Z/V/C")
 
 check(whole(runIns([0x42C0'u16], srSuperFlags)),
-    (cycles: 1'u32, fault: false, halted: false, pc: execBase + 2'u32,
+    (ran: true, fault: false, halted: false, pc: execBase + 2'u32,
      d: wordInto(0, 0x0009'u32), a: dirtyA, sr: srSuperFlags),
     "move.w %ccr,%d0 in supervisor state transfers the same value")
 
 # ---------------------------------------------------------------------------
 
 check(whole(runIns([0x44FC'u16, 0xFFFF'u16], srSuper)),
-    (cycles: 1'u32, fault: false, halted: false, pc: execBase + 4'u32,
+    (ran: true, fault: false, halted: false, pc: execBase + 4'u32,
      d: dirtyD, a: dirtyA, sr: 0x271F'u32),
     "move.w #$FFFF,%ccr sets X/N/Z/V/C and touches no other status bit")
 
 check(whole(runIns([0x44FC'u16, 0x0000'u16], srSuperFlags)),
-    (cycles: 1'u32, fault: false, halted: false, pc: execBase + 4'u32,
+    (ran: true, fault: false, halted: false, pc: execBase + 4'u32,
      d: dirtyD, a: dirtyA, sr: 0x2700'u32),
     "move.w #$0000,%ccr clears X/N/Z/V/C and touches no other status bit")
 
 # ---------------------------------------------------------------------------
 
 check(whole(runIns([0x46FC'u16, 0x2000'u16], srSuper)),
-    (cycles: 1'u32, fault: false, halted: false, pc: execBase + 4'u32,
+    (ran: true, fault: false, halted: false, pc: execBase + 4'u32,
      d: dirtyD, a: dirtyA, sr: 0x2000'u32),
     "0x3001B41E move.w #8192,%sr writes the whole status register")
 
@@ -237,12 +247,12 @@ check(whole(runIns([0x40C4'u16], srSuper)).fault, false,
 # ---------------------------------------------------------------------------
 
 check(whole(runIns([0x46FC'u16, 0x0700'u16], srSuper)),
-    (cycles: 1'u32, fault: false, halted: false, pc: execBase + 4'u32,
+    (ran: true, fault: false, halted: false, pc: execBase + 4'u32,
      d: dirtyD, a: dirtyA, sr: 0x0700'u32),
     "move.w #$0700,%sr clears S and leaves the one A7 where it was")
 
 
-const rejected = (cycles: 0'u32, fault: true, halted: true,
+const rejected = (ran: false, fault: true, halted: true,
                   pc: execBase + 2'u32,
                   d: dirtyD, a: dirtyA, sr: srSuper)
 
@@ -292,27 +302,27 @@ check(whole(runIns([0x4AC0'u16], srSuper)), rejected,
 # ---------------------------------------------------------------------------
 
 check(whole(runIns([0x40C0'u16], srSuper)),
-    (cycles: 1'u32, fault: false, halted: false, pc: execBase + 2'u32,
+    (ran: true, fault: false, halted: false, pc: execBase + 2'u32,
      d: wordInto(0, srSuper), a: dirtyA, sr: srSuper),
     "move.w %sr,%d0 writes d0 and no other register")
 
 check(whole(runIns([0x40C7'u16], srSuper)),
-    (cycles: 1'u32, fault: false, halted: false, pc: execBase + 2'u32,
+    (ran: true, fault: false, halted: false, pc: execBase + 2'u32,
      d: wordInto(7, srSuper), a: dirtyA, sr: srSuper),
     "move.w %sr,%d7 writes d7 and no other register")
 
 check(whole(runIns([0x42C4'u16], srSuperFlags)),
-    (cycles: 1'u32, fault: false, halted: false, pc: execBase + 2'u32,
+    (ran: true, fault: false, halted: false, pc: execBase + 2'u32,
      d: wordInto(4, 0x0009'u32), a: dirtyA, sr: srSuperFlags),
     "move.w %ccr,%d4 writes d4 and no other register")
 
 check(whole(runIns([0x44C4'u16], srSuper)),
-    (cycles: 1'u32, fault: false, halted: false, pc: execBase + 2'u32,
+    (ran: true, fault: false, halted: false, pc: execBase + 2'u32,
      d: dirtyD, a: dirtyA, sr: (srSuper and not 0x1F'u32) or 0x0F'u32),
     "move.w %d4,%ccr reads d4 and no other register")
 
 check(whole(runIns([0x46C4'u16], srSuper)),
-    (cycles: 1'u32, fault: false, halted: false, pc: execBase + 2'u32,
+    (ran: true, fault: false, halted: false, pc: execBase + 2'u32,
      d: dirtyD, a: dirtyA, sr: dirtyD[4] and 0xFFFF'u32),
     "move.w %d4,%sr writes the whole status register from d4")
 

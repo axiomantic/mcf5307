@@ -1258,8 +1258,9 @@ block:
 # machine sits at the handler's entry is the sequence both rules govern.
 #
 # THE BUDGET IS ONE CYCLE PER CALL, so each call runs exactly one instruction:
-# `mcf5307_exec` saturates rather than counting (the cycle block at the head of
-# `src/mcf5307/cpu.nim`), and every instruction here costs more than one.
+# the loop tests the budget only BEFORE a step (the cycle block at the head of
+# `src/mcf5307/cpu.nim`), and every instruction here costs more than one. The
+# RETURN of each call is the instruction's whole cost and is discarded here.
 
 block:
   let ctx = newCtx(0)

@@ -130,12 +130,20 @@ const
   zero8: array[8, uint32] = [0'u32, 0, 0, 0, 0, 0, 0, 0]
 
 type Outcome = object
-  cycles: uint32
-    ## `mcf5307_exec(ctx, 1)`'s return, which is not a cycle count despite the
-    ## name. `mcf5307_exec` saturates at its budget, and every instruction in
-    ## this group costs 2 for the fetch plus at least one more, so the value is
-    ## 1 for an instruction that ran and 0 for one that trapped. Uncertainty 2
-    ## in the `logic.nim` header says nothing asserts the cycle counts.
+  ran: bool
+    ## DID THE INSTRUCTION RUN? It is `mcf5307_exec(ctx, 1) > 0`, and it is a
+    ## BOOLEAN because that is all the call can tell this suite. The return is
+    ## the whole retired cost of the instruction - `cpu.nim`'s header block is
+    ## the contract - and that cost differs per encoding, so an expectation
+    ## written here would be a per-row cycle LITERAL transcribed beside the
+    ## executor that computes it. This suite has no second way to derive one:
+    ## the rows that take an exception leave the machine inside a handler, so
+    ## a generous-budget reference run does not stop after one instruction.
+    ##
+    ## THE COST ITSELF IS PINNED, and not here. `tests/t_exec_budget.nim`
+    ## holds the return of a budgeted call against a cost it MEASURES, for
+    ## every budget in a sweep. What this field carries is the ran-or-trapped
+    ## bit the rows below actually turn on, under a name that says so.
   fault: bool
   halted: bool
   d: array[8, uint32]
@@ -172,7 +180,7 @@ proc runIns(words: openArray[uint16];
   # in `t_alu`: the memory after the encoding is zero and `0x0000` is not an
   # instruction this part has. The return is 1 for an instruction that ran and
   # 0 for one that trapped.
-  result.cycles = mcf5307_exec(ctx, 1'u32)
+  result.ran = mcf5307_exec(ctx, 1'u32) > 0'u32
   result.fault = ctx.fault
   result.halted = ctx.halted
   for i in 0 .. 7:
@@ -231,8 +239,8 @@ proc expectTrapD(o: Outcome; n: int; unchanged: uint32; label: string) =
   ## `unchanged` is seeded non-zero by every caller. A trap case whose
   ## register starts at zero asserts 0 == 0 in this half and would pass
   ## against a core that wrote a zero into it.
-  let got = (reg: o.d[n], fault: o.fault, halted: o.halted, cycles: o.cycles)
-  let wanted = (reg: unchanged, fault: true, halted: true, cycles: 0'u32)
+  let got = (reg: o.d[n], fault: o.fault, halted: o.halted, ran: o.ran)
+  let wanted = (reg: unchanged, fault: true, halted: true, ran: false)
   check(got == wanted, label, $got, $wanted)
 
 proc expectTrapA(o: Outcome; n: int; unchanged: uint32; label: string) =
@@ -240,8 +248,8 @@ proc expectTrapA(o: Outcome; n: int; unchanged: uint32; label: string) =
   ## an address register. `eaResolve` answers `erAn` for that operand and
   ## `eaRefWrite` puts the result into the register, so the register a removed
   ## mask would disturb is an A and not a D.
-  let got = (reg: o.a[n], fault: o.fault, halted: o.halted, cycles: o.cycles)
-  let wanted = (reg: unchanged, fault: true, halted: true, cycles: 0'u32)
+  let got = (reg: o.a[n], fault: o.fault, halted: o.halted, ran: o.ran)
+  let wanted = (reg: unchanged, fault: true, halted: true, ran: false)
   check(got == wanted, label, $got, $wanted)
 
 proc freshCtx(): MCF5307Ctx =
@@ -325,9 +333,9 @@ block:
                  d = [0x0F0F0F0F'u32, 0x12345678'u32, 0, 0, 0, 0, 0, 0],
                  a = [0'u32, 0x11223344'u32, 0, 0, 0, 0, 0, 0])
   let got = (d0: o.d[0], d1: o.d[1], a1: o.a[1], sr: o.sr,
-             fault: o.fault, halted: o.halted, cycles: o.cycles)
+             fault: o.fault, halted: o.halted, ran: o.ran)
   let want = (d0: 0x0F0F0F0F'u32, d1: 0x12345678'u32, a1: 0x11223344'u32,
-              sr: srBase, fault: false, halted: false, cycles: 1'u32)
+              sr: srBase, fault: false, halted: false, ran: true)
   check(got == want,
     "cmpa.l %d0,%a1 compares and writes no register",
     $got, $want)
@@ -371,9 +379,9 @@ block:
                     d = [0'u32, 7, 0, 0, 0, 0, 0, 0], sr = bitDirty or ccrZ,
                     mem = pcWindow)
   let gotSet = (d1: oSet.d[1], mem: mem32(0x104'u32), mem2: mem32(0x108'u32),
-                sr: oSet.sr, fault: oSet.fault, cycles: oSet.cycles)
+                sr: oSet.sr, fault: oSet.fault, ran: oSet.ran)
   let wantSet = (d1: 7'u32, mem: 0xAABB80C3'u32, mem2: 0x40558022'u32,
-                 sr: bitDirty, fault: false, cycles: 1'u32)
+                 sr: bitDirty, fault: false, ran: true)
   check(gotSet == wantSet,
     "btst %d1,(4,%pc) reads the byte at 0x106, finds bit 7 set, " &
     "clears Z and writes nothing",
@@ -383,9 +391,9 @@ block:
                       d = [0'u32, 6, 0, 0, 0, 0, 0, 0], sr = bitDirty,
                       mem = pcWindow)
   let gotClear = (d1: oClear.d[1], mem: mem32(0x104'u32), sr: oClear.sr,
-                  fault: oClear.fault, cycles: oClear.cycles)
+                  fault: oClear.fault, ran: oClear.ran)
   let wantClear = (d1: 6'u32, mem: 0xAABB80C3'u32, sr: bitDirty or ccrZ,
-                   fault: false, cycles: 1'u32)
+                   fault: false, ran: true)
   check(gotClear == wantClear,
     "btst %d1,(4,%pc) with a bit number of 6 finds a clear bit at 0x106 " &
     "and sets Z",
@@ -401,9 +409,9 @@ block:
                       d = [0'u32, 7, 4, 0, 0, 0, 0, 0], sr = bitDirty or ccrZ,
                       mem = pcWindow)
   let gotIndex = (d1: oIndex.d[1], d2: oIndex.d[2], mem: mem32(0x108'u32),
-                  sr: oIndex.sr, fault: oIndex.fault, cycles: oIndex.cycles)
+                  sr: oIndex.sr, fault: oIndex.fault, ran: oIndex.ran)
   let wantIndex = (d1: 7'u32, d2: 4'u32, mem: 0x40558022'u32, sr: bitDirty,
-                   fault: false, cycles: 1'u32)
+                   fault: false, ran: true)
   check(gotIndex == wantIndex,
     "btst %d1,(4,%pc,%d2) reads the byte at 0x10a, finds bit 7 set, " &
     "clears Z and writes nothing",
@@ -511,9 +519,9 @@ block:
                  sr = bitDirty or ccrZ,
                  mem = @[(0x200'u32, 0x08AABBCC'u32)])
   let got = (mem: mem32(0x200'u32), a0: o.a[0], sr: o.sr, fault: o.fault,
-             cycles: o.cycles)
+             ran: o.ran)
   let want = (mem: 0x08AABBCC'u32, a0: 0x200'u32, sr: bitDirty, fault: false,
-              cycles: 1'u32)
+              ran: true)
   check(got == want,
     "btst #3,(%a0) reads one byte, clears Z, and disturbs no neighbour",
     $got, $want)

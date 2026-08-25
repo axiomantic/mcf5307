@@ -49,19 +49,36 @@ import mcf5307/irq
 # The cycle counts, and why nothing checks them. Stated once here; the four
 # executor modules point at this block instead of repeating it.
 #
-# `mcf5307_exec` SATURATES AT ITS BUDGET, and that is the whole mechanism. A
-# caller that passes a budget of 1 gets 1 for an instruction that ran and 0 for
-# one that trapped, and no count at all. Flattened to 0-or-1 it reads
-# like a counter and is not one.
+# `mcf5307_exec` REPORTS THE COST OF EVERYTHING THAT RAN, AND MAY THEREFORE
+# RETURN MORE THAN THE BUDGET IT WAS GIVEN. The loop tests the budget only
+# BEFORE a step, so the last instruction of a call has already retired when the
+# budget is found to be spent; there is nothing left to decline. A caller that
+# passes a budget of 1 gets the whole cost of the one instruction that ran -
+# `nopCycles + fetchCycles` for a NOP - and 0 for one that trapped.
+#
+# THE OVERRUN IS BOUNDED BY ONE INSTRUCTION AND BY NOTHING ELSE. The return is
+# at most `maxCycles` plus the cost of the single instruction that crossed the
+# budget, so a caller carrying the difference forward carries a bounded
+# quantity. `tests/t_exec_budget.nim` pins the exact return for every budget in
+# a sweep, and pins it against a cost it MEASURES rather than transcribes.
+#
+# WHY IT IS NOT CLAMPED, WHICH IT WAS. A clamp made the return no greater than
+# the budget for every call, so a consumer computing `spent - want` got a
+# floor-of-zero difference that could never be anything but zero, and an
+# overrun the machine really took was invisible to it. The clamped return also
+# flattened to 0-or-1 at a budget of 1, which reads like a counter and is not
+# one. What is returned now is not a cycle-ACCURATE count either - the numbers
+# below and in the executors are this core's own, and the paragraph after next
+# says where they did not come from - but it is at least the sum of them.
 #
 # How to read any number here or in an executor. None was derived from the
 # manual, and the split into a fetch cost plus an executor return is this
 # core's own: the manual's timing tables time WHOLE instructions and decompose
 # nothing.
 #
-# Cycle accuracy, if it is ever wanted, needs a new return type rather than
-# better constants: a saturating `uint32` cannot report a count the caller
-# bounded.
+# Cycle accuracy, if it is ever wanted, needs better constants and not a new
+# return type. The return now carries the sum the executors produced, so the
+# channel is there and it is the numbers going into it that have no source.
 
 const
   fetchCycles = 2'u32   ## one 16-bit instruction fetch
@@ -264,10 +281,12 @@ proc step(ctx: MCF5307Ctx): uint32 =
 
 proc mcf5307_exec*(ctx: MCF5307Ctx; maxCycles: uint32): uint32
     {.exportc: "mcf5307_exec", cdecl, dynlib.} =
-  ## Run at most `max_cycles` cycles and return the cycles actually spent.
-  ## The loop stops when the budget is exhausted, or earlier when the machine
-  ## halts (a fault, an illegal instruction, or a recognized opcode that has
-  ## no executor yet).
+  ## Run until at least `max_cycles` cycles have been spent and return the
+  ## cycles actually spent, WHICH MAY EXCEED `max_cycles` by up to the cost of
+  ## one instruction: no instruction is abandoned once it has started. The loop
+  ## stops when the budget is reached, or earlier when the machine halts (a
+  ## fault, an illegal instruction, or a recognized opcode with no implemented
+  ## semantics). The block at the head of this module is the contract.
   if ctx.isNil or ctx.halted:
     return 0
   var spent = 0'u32
@@ -313,8 +332,11 @@ proc mcf5307_exec*(ctx: MCF5307Ctx; maxCycles: uint32): uint32
       break
     if cost == 0'u32:
       break
-    if spent + cost > maxCycles:
-      spent = maxCycles
-      break
+    # THE INSTRUCTION HAS ALREADY RETIRED, SO ITS WHOLE COST IS SPENT. The
+    # `while` above is the only place the budget is tested, and it is tested
+    # BEFORE a step and never after one: nothing here can un-run the step that
+    # has just happened, so a clamp at `maxCycles` would report less than the
+    # machine did. See the block at the head of this module for what that costs
+    # a caller.
     spent = spent + cost
   result = spent

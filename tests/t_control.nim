@@ -114,12 +114,13 @@ const
 
 type Outcome = object
   cycles: uint32
-    ## `mcf5307_exec(ctx, 1)`'s return, which is not a cycle count despite the
-    ## name. `mcf5307_exec` saturates at its budget and every instruction in
-    ## this group costs 2 for the fetch plus at least one more, so the value is
-    ## 1 for an instruction that ran and 0 for one that trapped. The
-    ## `cycles: 0` half of every trap tuple below asserts "it did not run" and
-    ## asserts no count; uncertainty 3 in `control.nim`'s header says so.
+    ## `mcf5307_exec(ctx, 1)`'s RETURN. It is the WHOLE RETIRED COST of the one
+    ## instruction the call ran - `cpu.nim`'s header block is the contract -
+    ## and this suite reads only whether it is zero. The `cycles: 0` half of
+    ## every trap tuple below asserts "it did not run" and asserts no count;
+    ## uncertainty 3 in `control.nim`'s header says why no count is asserted.
+    ## `tests/t_exec_budget.nim` is where the cost itself is pinned, against a
+    ## figure it measures rather than transcribes.
   fault: bool
   halted: bool
   d: array[8, uint32]
