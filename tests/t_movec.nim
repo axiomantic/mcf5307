@@ -199,10 +199,20 @@ proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
   discard
 
 type Outcome = object
-  cycles: uint32
-    ## `mcf5307_exec(ctx, 1)` SATURATES AT ITS BUDGET, so this is 1 for an
-    ## instruction that ran and 0 for one that halted before spending
-    ## anything. `cpu.nim`'s header block says why it is not a cycle count.
+  ran: bool
+    ## DID THE INSTRUCTION RUN? It is `mcf5307_exec(ctx, 1) > 0`, and it is a
+    ## BOOLEAN because that is all the call can tell this suite. The return is
+    ## the whole retired cost of the instruction - `cpu.nim`'s header block is
+    ## the contract - and that cost differs per encoding, so an expectation
+    ## written here would be a per-row cycle LITERAL transcribed beside the
+    ## executor that computes it. This suite has no second way to derive one:
+    ## the rows that take an exception leave the machine inside a handler, so
+    ## a generous-budget reference run does not stop after one instruction.
+    ##
+    ## THE COST ITSELF IS PINNED, and not here. `tests/t_exec_budget.nim`
+    ## holds the return of a budgeted call against a cost it MEASURES, for
+    ## every budget in a sweep. What this field carries is the ran-or-trapped
+    ## bit the rows below actually turn on, under a name that says so.
   fault: bool
   halted: bool
   d0: uint32
@@ -231,7 +241,7 @@ proc runIns(words: openArray[uint16]; sr: uint32;
   # in supervisor state and pass.
   discard mcf5307_set_reg(ctx, 16, sr)
 
-  result.cycles = mcf5307_exec(ctx, 1'u32)
+  result.ran = mcf5307_exec(ctx, 1'u32) > 0'u32
   result.fault = ctx.fault
   result.halted = ctx.halted
   result.d0 = mcf5307_get_reg(ctx, 0)
@@ -245,10 +255,10 @@ proc ranAndConsumedBothWords(o: Outcome): auto =
   ## discriminating field: `MOVEC` is TWO words, so a core that consumed only
   ## the opcode word would leave the pc at `execBase + 2` and decode the
   ## extension word as the next instruction.
-  (cycles: o.cycles, fault: o.fault, halted: o.halted, pc: o.pc,
+  (ran: o.ran, fault: o.fault, halted: o.halted, pc: o.pc,
    d0: o.d0, a0: o.a0, sr: o.sr, a7: o.a7)
 
-const accepted = (cycles: 1'u32, fault: false, halted: false,
+const accepted = (ran: true, fault: false, halted: false,
                   pc: execBase + 4'u32, d0: dirtyD, a0: dirtyA,
                   sr: srSuper, a7: stackBase)
   ## NOTHING ARCHITECTURAL CHANGES. The control registers this part carries are
@@ -290,7 +300,7 @@ check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x8C04'u16], srSuper)),
 # states: `halted` set and `fault` clear. A core that accepted these instead
 # would run on with a register write that reached nothing.
 
-const refused = (cycles: 0'u32, fault: false, halted: true,
+const refused = (ran: false, fault: false, halted: true,
                  pc: execBase + 4'u32, d0: dirtyD, a0: dirtyA,
                  sr: srSuper, a7: stackBase)
 
@@ -311,14 +321,14 @@ check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0800'u16], srSuper)),
 block:
   let o = runIns([0x4E7B'u16, 0x0C0F'u16], srUser,
                  mem = @[(4'u32 * 8'u32, handlerBase)])
-  let got = (cycles: o.cycles, fault: o.fault, halted: o.halted, pc: o.pc,
+  let got = (ran: o.ran, fault: o.fault, halted: o.halted, pc: o.pc,
              sr: o.sr, a7: o.a7, d0: o.d0,
              fv: boardReadValue(board, stackBase - 8'u32, 4),
              stackedPc: boardReadValue(board, stackBase - 4'u32, 4))
   # `fv` is FORMAT 4 (A7 was already longword aligned), FS 0 (this is not an
   # access error), VECTOR 8, and the status register AS IT WAS BEFORE the
   # exception changed it. The handler runs with S set and T clear.
-  let want = (cycles: 1'u32, fault: false, halted: false, pc: handlerBase,
+  let want = (ran: true, fault: false, halted: false, pc: handlerBase,
               sr: 0x2700'u32, a7: stackBase - 8'u32, d0: dirtyD,
               fv: 0x4020_0700'u32,
               stackedPc: execBase)

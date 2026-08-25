@@ -156,7 +156,17 @@ mcf5307_ctx* mcf5307_create(void* user,
 void mcf5307_destroy(mcf5307_ctx* ctx);
 void mcf5307_reset(mcf5307_ctx* ctx, uint32_t initial_sp, uint32_t initial_pc);
 
-/* Runs at most `max_cycles` cycles and returns the cycles actually spent. */
+/* Runs until at least `max_cycles` cycles have been spent, and returns the
+ * cycles actually spent.
+ *
+ * THE RETURN MAY BE GREATER THAN `max_cycles`, by up to the cost of one
+ * instruction. The budget is tested only at an instruction boundary, so an
+ * instruction that starts inside the budget runs to completion and its whole
+ * cost is reported. A caller that must not lose the difference carries
+ * `spent - max_cycles` forward into its next budget.
+ *
+ * It returns 0 when nothing ran: a nil or already-halted context, a budget of
+ * zero, or a first instruction that trapped. */
 uint32_t mcf5307_exec(mcf5307_ctx* ctx, uint32_t max_cycles);
 
 /* The register file, indexed by one integer:
