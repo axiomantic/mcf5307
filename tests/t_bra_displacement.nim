@@ -19,7 +19,7 @@
 ## is used. If the 8-bit displacement field in the instruction word is all ones
 ## (0xFF), the 32-bit displacement (longword immediately following the
 ## instruction) is used" - ColdFire Family Programmer's Reference Manual, Rev.
-## 3, printed page 4-19. The longword form first appeared in ISA_B and this part
+## 3, printed page 4-20. The longword form first appeared in ISA_B and this part
 ## implements ISA_A, so `0xff` is refused.
 ##
 ## THE SIGN EXTENSION IS WRITTEN OUT HERE AND NOT IMPORTED FROM THE CORE. `s8`
