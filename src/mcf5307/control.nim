@@ -267,7 +267,8 @@ proc setCompareCc(ctx: MCF5307Ctx; src, dst, res: uint32; borrow: bool) =
 # ---------------------------------------------------------------------------
 # BRA, BSR and Bcc.
 
-proc execBranch(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
+proc execBranch(ctx: MCF5307Ctx; word: uint16; d: Decoded;
+                insnPc: uint32): uint32 =
   ## One branch. `d.size` carries the FORM the decoder read out of the
   ## displacement byte: 1 is the byte displacement in the opcode word, 2 the
   ## 16-bit displacement in the word after it, and 4 the 32-bit form that this
@@ -306,7 +307,9 @@ proc execBranch(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
     if ctx.halted:
       return 0'u32
   if d.op != opBcc or conditionHolds(ctx.sr, d.destReg):
-    ctx.pc = target
+    transferControl(ctx, target, insnPc)
+    if ctx.halted:
+      return 0'u32
   # No timing CELL carries 2 or 3, but the NOTES beneath those tables do, and
   # the notes run past the end of the table. They put BRA's 2 and BSR's 3
   # inside a documented 1-to-3 range; Bcc's note continues onto the following
@@ -410,7 +413,7 @@ proc execCompare(ctx: MCF5307Ctx; d: Decoded): uint32 =
 # ---------------------------------------------------------------------------
 # JMP and JSR.
 
-proc execJump(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execJump(ctx: MCF5307Ctx; d: Decoded; insnPc: uint32): uint32 =
   ## `JMP <ea>` and `JSR <ea>`. The operand is a CONTROL address and the
   ## instruction jumps to the ADDRESS ITSELF and never to what is at it: JMP is
   ## "Address of <ea> -> PC".
@@ -432,13 +435,15 @@ proc execJump(ctx: MCF5307Ctx; d: Decoded): uint32 =
     writeMem(ctx, ctx.sp, 4, ctx.pc)
     if ctx.halted:
       return 0'u32
-  ctx.pc = target
+  transferControl(ctx, target, insnPc)
+  if ctx.halted:
+    return 0'u32
   5'u32
 
 # ---------------------------------------------------------------------------
 # RTS and RTE.
 
-proc execRts(ctx: MCF5307Ctx): uint32 =
+proc execRts(ctx: MCF5307Ctx; insnPc: uint32): uint32 =
   ## "(SP) -> PC; SP + 4 -> SP". The pop is read BEFORE
   ## the stack pointer moves, and the pointer moves only when the read
   ## succeeded.
@@ -446,10 +451,12 @@ proc execRts(ctx: MCF5307Ctx): uint32 =
   if ctx.halted:
     return 0'u32
   ctx.sp = ctx.sp + 4'u32
-  ctx.pc = target
+  transferControl(ctx, target, insnPc)
+  if ctx.halted:
+    return 0'u32
   8'u32
 
-proc execRte(ctx: MCF5307Ctx): uint32 =
+proc execRte(ctx: MCF5307Ctx; insnPc: uint32): uint32 =
   ## The inverse of `takeException`.
   ##
   ## THE FORMAT FIELD IS VALIDATED FIRST. The processor "first examines the
@@ -481,7 +488,9 @@ proc execRte(ctx: MCF5307Ctx): uint32 =
     return 0'u32
   ctx.sr = first and 0xFFFF'u32
   ctx.sp = ctx.sp + 4'u32 + format
-  ctx.pc = target
+  transferControl(ctx, target, insnPc)
+  if ctx.halted:
+    return 0'u32
   14'u32
 
 # ---------------------------------------------------------------------------
@@ -497,8 +506,9 @@ proc execTrap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## Those vectors stack "the PC of the next instruction that follows the
   ## instruction that caused the fault". `ctx.pc` is already that address:
   ## `step` advanced it past the opcode word and TRAP has no extension words.
-  ## The vectors that stack the FAULT address instead - the access error, the
-  ## address error, the illegal instruction - are not this module's.
+  ## The address error stacks the FAULT address instead, which is why the
+  ## branch and jump executors carry `insnPc` and this one does not: `ctx.pc`
+  ## is the wrong value for that vector and the right one for these.
   takeException(ctx, 32'u8 + (d.destReg and 0xF'u8), ctx.pc)
   if ctx.halted:
     return 0'u32
@@ -514,13 +524,19 @@ proc controlFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   ## `cpu.nim` - and halts the context with `fault` set on an illegal size, an
   ## illegal effective address, a 32-bit branch displacement or an exception
   ## frame whose format field is not one of the four the part writes.
+  # THE ADDRESS OF THE OPCODE WORD, WHICH THE EXECUTORS CANNOT RECOVER FOR
+  # THEMSELVES. `step` has advanced `ctx.pc` past the opcode and nothing else
+  # yet, so it is one instruction word back from here - but an executor that
+  # has consumed an extension word can no longer say that, and each of the four
+  # below needs it for the address error's stacked program counter.
+  let insnPc = ctx.pc - insWordBytes
   case d.op
-  of opBra, opBsr, opBcc: execBranch(ctx, word, d)
+  of opBra, opBsr, opBcc: execBranch(ctx, word, d, insnPc)
   of opScc: execScc(ctx, d)
   of opTst: execTst(ctx, d)
   of opCmp, opCmpa, opCmpi: execCompare(ctx, d)
-  of opJmp, opJsr: execJump(ctx, d)
-  of opRts: execRts(ctx)
-  of opRte: execRte(ctx)
+  of opJmp, opJsr: execJump(ctx, d, insnPc)
+  of opRts: execRts(ctx, insnPc)
+  of opRte: execRte(ctx, insnPc)
   of opTrap: execTrap(ctx, d)
   else: trap(ctx)
