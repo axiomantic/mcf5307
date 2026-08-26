@@ -59,7 +59,10 @@ set(MCF5307_CLAIM_IDS
     "reset_edge_resample_suite_t_irq"
     "reset_edge_clear_suite_t_irq"
     "write_fault_deferral_suite_t_bus_fault"
-    "one_iteration_suite_t_irq")
+    "one_iteration_suite_t_irq"
+    "address_error_odd_target_suite_t_control"
+    "bra_base_suite_t_bra_displacement"
+    "bra_isab_suite_t_bra_displacement")
 
 # EVERY `CLAIM_TEXT` BELOW IS QUOTED FROM ITS `CLAIM_FILE` AND IS NOT A SUMMARY
 # OF IT. The driver looks the text up in the file before it measures anything,
@@ -419,6 +422,79 @@ set(CLAIM_one_iteration_suite_t_irq_EDITS 1)
 set(CLAIM_one_iteration_suite_t_irq_EDIT_1_FILE "mcf5307/cpu.nim")
 set(CLAIM_one_iteration_suite_t_irq_EDIT_1_FIND "    if not ctx.atHandlerEntry:\n      if takeInterrupt(ctx):\n        if ctx.halted:\n          break\n    ctx.atHandlerEntry = false\n")
 set(CLAIM_one_iteration_suite_t_irq_EDIT_1_REPLACE "    if not ctx.atHandlerEntry:\n      if takeInterrupt(ctx):\n        if ctx.halted:\n          break\n        ctx.atHandlerEntry = false\n        continue\n    ctx.atHandlerEntry = false\n")
+
+# --- the odd control-transfer target ----------------------------------------
+# `src/mcf5307/machine.nim`'s `transferControl` refuses an odd target and takes
+# the address error, which the MCF5307 User's Manual requires of any attempted
+# execution transferring control to an odd instruction address.
+#
+# THE MUTATION DELETES THE REFUSAL AND KEEPS THE ASSIGNMENT, which is the core
+# this repository shipped until the check was written - and that core FAULTS on
+# every one of these cases too, one instruction later, from the illegal-encoding
+# path, with no frame written. So the entry is registered against a suite whose
+# rows read the HANDLER and the FRAME. A row that asserted `fault == true` would
+# be green under this mutation and the count below would be zero.
+#
+# `discard faultPc` KEEPS THE PARAMETER USED. Without it the mutant fails to
+# compile under this project's flag set, and a mutation that does not compile
+# reports nothing.
+#
+# THE COUNT WAS MEASURED against this tree by compiling `t_control` against a
+# mutated copy of `src/`, with the unmutated copy on the same harness reporting
+# 175 passed and 0 red.
+set(CLAIM_address_error_odd_target_suite_t_control_KIND "suite-red")
+set(CLAIM_address_error_odd_target_suite_t_control_SUITE "t_control")
+set(CLAIM_address_error_odd_target_suite_t_control_EXPECT_RED 6)
+set(CLAIM_address_error_odd_target_suite_t_control_CLAIM_FILE "tests/t_control.nim")
+set(CLAIM_address_error_odd_target_suite_t_control_CLAIM_TEXT "reds exactly six cases of this file, and the seventh")
+set(CLAIM_address_error_odd_target_suite_t_control_EDITS 1)
+set(CLAIM_address_error_odd_target_suite_t_control_EDIT_1_FILE "mcf5307/machine.nim")
+set(CLAIM_address_error_odd_target_suite_t_control_EDIT_1_FIND "  if (target and 1'u32) != 0'u32:\n    takeException(ctx, vecAddressError, faultPc, fsInstructionFetch)\n  else:\n    ctx.pc = target\n")
+set(CLAIM_address_error_odd_target_suite_t_control_EDIT_1_REPLACE "  discard faultPc\n  ctx.pc = target\n")
+
+# --- the branch displacement sweep ------------------------------------------
+# `tests/t_bra_displacement.nim` runs every value the displacement byte can
+# hold. IT LANDED GREEN. A suite that was never watched failing is a claim about
+# coverage and not a measurement of it, so the two entries below are what make
+# it one, and each was WATCHED reddening this suite before it was written down.
+#
+# TWO ENTRIES AND NOT ONE, because they are two different wrong cores and the
+# sweep separates them differently. Both red the sweep's own comparison; the
+# BASE mutation additionally reds the 16-bit marker row and leaves the ISA_B row
+# green, and the ISA_B mutation does the reverse. A single entry would have been
+# satisfied by either.
+#
+# THE BASE MUTATION MOVES THE DISPLACEMENT BASE from the opcode's address plus
+# two to the opcode's address, which is the reading the manual's sentence exists
+# to exclude.
+#
+# THE ISA_B MUTATION ACCEPTS `0xff` as an ordinary byte displacement. The
+# longword form first appeared in ISA_B and this part implements ISA_A; the
+# pinned assembler refuses to assemble `bra.l` under `-mcpu=5307` at all, so no
+# generated corpus case can carry this and only a hand-built word reaches it.
+#
+# BOTH COUNTS WERE MEASURED against this tree by compiling
+# `t_bra_displacement` against a mutated copy of `src/`, with the unmutated copy
+# on the same harness reporting 4 passed and 0 red.
+set(CLAIM_bra_base_suite_t_bra_displacement_KIND "suite-red")
+set(CLAIM_bra_base_suite_t_bra_displacement_SUITE "t_bra_displacement")
+set(CLAIM_bra_base_suite_t_bra_displacement_EXPECT_RED 2)
+set(CLAIM_bra_base_suite_t_bra_displacement_CLAIM_FILE "tests/t_bra_displacement.nim")
+set(CLAIM_bra_base_suite_t_bra_displacement_CLAIM_TEXT "that base reds TWO cases of this file.")
+set(CLAIM_bra_base_suite_t_bra_displacement_EDITS 1)
+set(CLAIM_bra_base_suite_t_bra_displacement_EDIT_1_FILE "mcf5307/control.nim")
+set(CLAIM_bra_base_suite_t_bra_displacement_EDIT_1_FIND "  let base = ctx.pc\n")
+set(CLAIM_bra_base_suite_t_bra_displacement_EDIT_1_REPLACE "  let base = ctx.pc - insWordBytes\n")
+
+set(CLAIM_bra_isab_suite_t_bra_displacement_KIND "suite-red")
+set(CLAIM_bra_isab_suite_t_bra_displacement_SUITE "t_bra_displacement")
+set(CLAIM_bra_isab_suite_t_bra_displacement_EXPECT_RED 2)
+set(CLAIM_bra_isab_suite_t_bra_displacement_CLAIM_FILE "tests/t_bra_displacement.nim")
+set(CLAIM_bra_isab_suite_t_bra_displacement_CLAIM_TEXT "that marker reds TWO cases of this file.")
+set(CLAIM_bra_isab_suite_t_bra_displacement_EDITS 1)
+set(CLAIM_bra_isab_suite_t_bra_displacement_EDIT_1_FILE "mcf5307/control.nim")
+set(CLAIM_bra_isab_suite_t_bra_displacement_EDIT_1_FIND "  if d.size == 4'u8:\n    return trap(ctx)\n")
+set(CLAIM_bra_isab_suite_t_bra_displacement_EDIT_1_REPLACE "  if d.size == 4'u8:\n    discard\n")
 
 # ---------------------------------------------------------------------------
 # THE DRIVER.

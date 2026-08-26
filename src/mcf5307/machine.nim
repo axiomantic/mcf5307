@@ -698,6 +698,43 @@ proc takePendingWriteFault*(ctx: MCF5307Ctx) =
     return
   takeExceptionCopiedSr(ctx, vecAccessError, stackedPc, fs, stackedSr)
 
+proc transferControl*(ctx: MCF5307Ctx; target: uint32; faultPc: uint32) =
+  ## Write `target` into the program counter, or take the address error when
+  ## it is odd. `faultPc` is the address of the instruction doing the
+  ## transferring.
+  ##
+  ## "Any attempted execution transferring control to an odd instruction
+  ## address (i.e., if bit 0 of the target address is set) results in an
+  ## address error exception" - MCF5307 User's Manual, section 3.5.2. The
+  ## Programmer's Reference Manual, Rev. 3 assigns the vector and stops there:
+  ## its section 11.1.3 names a table of processor exceptions that the revision
+  ## does not carry, so nothing in it says what raises this one.
+  ##
+  ## IT IS A FUNNEL AND NOT A CHECK PER EXECUTOR, for the reason the note above
+  ## `atHandlerEntry` gives about its own line: a rule spelled once at the
+  ## single site every control transfer passes through cannot be acquired by
+  ## one branch form and forgotten by another. The alternative - a test beside
+  ## each `ctx.pc = target` - is silent for whichever executor is added next.
+  ##
+  ## THE STACKED PROGRAM COUNTER IS THE TRANSFERRING INSTRUCTION'S, not the odd
+  ## address and not the instruction after it: vector 3 is marked `Fault` in
+  ## the vector assignments, and "fault refers to the PC of the instruction
+  ## that caused the exception".
+  ##
+  ## `fsInstructionFetch` IS THE FAULT STATUS. The field is defined for access
+  ## and address errors, and `0100` - "error on instruction fetch" - is the one
+  ## defined code naming the access this exception exists to refuse.
+  ##
+  ## THE PROGRAM COUNTER LOADED BY `takeException` ITSELF IS NOT CHECKED HERE,
+  ## and a vector table entry with bit 0 set therefore still enters a handler
+  ## at an odd address. The manual puts that case in the fault-on-fault halted
+  ## state, which this core has no representation for yet; routing the handler
+  ## address through this procedure would recurse instead.
+  if (target and 1'u32) != 0'u32:
+    takeException(ctx, vecAddressError, faultPc, fsInstructionFetch)
+  else:
+    ctx.pc = target
+
 # ---------------------------------------------------------------------------
 # The register access the conformance harness needs. The C ABI in
 # `include/mcf5307.h` declares these. `index` 0..7 is d0..d7, 8..14 is a0..a6,

@@ -808,6 +808,126 @@ block:
     $want)
 
 # ---------------------------------------------------------------------------
+# BLOCK 11. THE ODD CONTROL-TRANSFER TARGET.
+#
+# "Any attempted execution transferring control to an odd instruction address
+# (i.e., if bit 0 of the target address is set) results in an address error
+# exception" - MCF5307 User's Manual, section 3.5.2, printed page 3-15. The
+# ColdFire Family Programmer's Reference Manual, Rev. 3 does NOT answer this:
+# its section 11.1.3 names a table of processor exceptions that the revision
+# does not contain, so the vector assignment is all it carries.
+#
+# A CORE WITHOUT THE CHECK STILL FAULTS, AND THAT IS WHY EVERY CASE HERE
+# ASSERTS THE HANDLER AND THE FRAME RATHER THAN A FLAG. An odd program counter
+# makes the next fetch read one half of each of two neighbouring words, and
+# almost every such word is an encoding this part refuses - so `fault` and
+# `halted` come back set, from the WRONG exception, one instruction late, with
+# no frame written. A `fault == true` assertion passes on both cores.
+#
+# THE TARGET IS ODD IN EACH CASE AND THE SAME INSTRUCTION WITH AN EVEN TARGET
+# IS ALREADY GREEN ELSEWHERE IN THIS FILE - block 10's two BSR rows and block
+# 6's branch rows - so the pair is a known positive beside each negative.
+#
+# THE STACKED PROGRAM COUNTER IS THE TRANSFERRING INSTRUCTION'S OWN ADDRESS.
+# Table 3-1 marks vector 3 `Fault`, and "fault refers to the PC of the
+# instruction that caused the exception".
+#
+# THE FAULT STATUS IS `0100`, "error on instruction fetch", the one code of
+# Table 3-3 that names the access this exception refuses to make. FS[3-2] and
+# FS[1-0] are not adjacent in the frame word, so `0100` reaches it as
+# `1 shl 26` alone.
+#
+# THE CHECK IS PINNED BY MUTATION AND NOT BY THIS PARAGRAPH.
+# `tests/t_claims.cmake` registers
+# `address_error_odd_target_suite_t_control`, which takes the odd-target test
+# out of `transferControl` and leaves the bare assignment behind. That mutation
+# reds exactly six cases of this file, and the seventh - the BSR push read-back
+# - stays green, because a core with no check pushes correctly and then
+# transfers to the odd address anyway. A row weakened to a flag moves that
+# count and the entry refutes; a date beside this paragraph would not.
+
+const
+  addressErrorHandler = 0x600'u32
+  addressErrorVector = 0x00C'u32   ## 4 * 3
+  addressErrorFv =
+    (4'u32 shl 28) or (1'u32 shl 26) or (3'u32 shl 18) or allDirty
+
+proc expectAddressError(o: Outcome; frameBase: uint32; label: string) =
+  ## The whole machine state after a transfer to an odd address: the handler
+  ## entered, the frame written where the stack pointer put it, and the
+  ## transferring instruction's address stacked.
+  let got = (pc: o.pc, a7: o.a[7], sr: o.sr,
+             fv: mem32(frameBase), stackedPc: mem32(frameBase + 4'u32),
+             fault: o.fault, halted: o.halted)
+  let want = (pc: addressErrorHandler, a7: frameBase, sr: allDirty,
+              fv: addressErrorFv, stackedPc: execBase,
+              fault: false, halted: false)
+  check(got == want, label, $got, $want)
+
+block:
+  # `bra.b` with displacement 1: base is the opcode's address plus two, so the
+  # target is `execBase + 2 + 1` and odd.
+  let o = runIns([0x6001'u16], a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase],
+                 sr = allDirty,
+                 mem = @[(addressErrorVector, addressErrorHandler)])
+  expectAddressError(o, stackBase - 8'u32,
+    "bra.b to an odd target takes the address error")
+
+block:
+  # The word form reaches the same place through a different displacement
+  # path: a core that checked the byte form alone would leave this one silent.
+  let o = runIns([0x6000'u16, 0x0101'u16],
+                 a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase], sr = allDirty,
+                 mem = @[(addressErrorVector, addressErrorHandler)])
+  expectAddressError(o, stackBase - 8'u32,
+    "bra.w to an odd target takes the address error")
+
+block:
+  # `beq.b`, and `allDirty` sets Z, so the branch is TAKEN. A not-taken branch
+  # transfers control nowhere and must not fault; block 6 carries those.
+  let o = runIns([0x6701'u16], a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase],
+                 sr = allDirty,
+                 mem = @[(addressErrorVector, addressErrorHandler)])
+  expectAddressError(o, stackBase - 8'u32,
+    "beq.b taken to an odd target takes the address error")
+
+block:
+  # `jmp (%a0)`. The odd address is in the register rather than in the opcode.
+  let o = runIns([0x4ED0'u16], a = [0x201'u32, 0, 0, 0, 0, 0, 0, stackBase],
+                 sr = allDirty,
+                 mem = @[(addressErrorVector, addressErrorHandler)])
+  expectAddressError(o, stackBase - 8'u32,
+    "jmp to an odd target takes the address error")
+
+block:
+  # `rts`. The odd address comes off the stack, and the pop has already moved
+  # A7 when the transfer is refused - so the frame lands eight bytes below the
+  # POPPED pointer and not below the one the instruction started with.
+  let o = runIns([0x4E75'u16],
+                 a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase - 4'u32],
+                 sr = allDirty,
+                 mem = @[(addressErrorVector, addressErrorHandler),
+                         (stackBase - 4'u32, 0x301'u32)])
+  expectAddressError(o, stackBase - 8'u32,
+    "rts to an odd target takes the address error")
+
+block:
+  # `bsr.b`. The return address is pushed BEFORE the transfer, so the push
+  # stands and the frame goes below it. The pushed value is read back here
+  # rather than left to the frame assertion: a BSR that skipped its push and
+  # then faulted would put the frame at the same place.
+  let o = runIns([0x6101'u16], a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase],
+                 sr = allDirty,
+                 mem = @[(addressErrorVector, addressErrorHandler)])
+  expectAddressError(o, stackBase - 12'u32,
+    "bsr.b to an odd target takes the address error below its own push")
+  let got = mem32(stackBase - 4'u32)
+  let want = execBase + 2'u32
+  check(got == want,
+    "bsr.b to an odd target has already pushed the return address",
+    $got, $want)
+
+# ---------------------------------------------------------------------------
 
 echo ""
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
