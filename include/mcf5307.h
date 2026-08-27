@@ -145,10 +145,56 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * armed again, carrying the vector and the autovector flag of that
  * presentation; one the board had already lowered is not. */
 
-/* Runs the Nim runtime's initialiser once. It is idempotent, and it is what
- * a C++ caller calls instead of ever naming `NimMain`. */
-void mcf5307_runtime_init(void);
+/* `MCF5307_MUST_CHECK` marks a return value a caller should not drop. It is a
+ * COMPILER DIAGNOSTIC AND NOT A MECHANISM: a toolchain that does not know the
+ * attribute expands it to nothing and says so in no way at all, which is the
+ * silent-success shape this project refuses to rest anything on. It is here
+ * because it costs nothing and catches the mistake early on the two compilers
+ * that build this library's only consumer. WHAT ACTUALLY PROTECTS A CALLER WHO
+ * IGNORES THE STATUS IS DESCRIBED AT `mcf5307_runtime_init` BELOW. */
+#if defined(__GNUC__) || defined(__clang__)
+#  define MCF5307_MUST_CHECK __attribute__((warn_unused_result))
+#else
+#  define MCF5307_MUST_CHECK
+#endif
 
+/* Runs the Nim runtime's initialiser once. It is idempotent, and it is what
+ * a C++ caller calls instead of ever naming `NimMain`.
+ *
+ * RETURNS 1 WHEN THE RUNTIME IS INITIALISED AND THE LIBRARY IS USABLE, AND 0
+ * WHEN IT IS NOT. It is a truth value and NOT a POSIX-style error code, which
+ * is the convention every other `int` in this header already uses:
+ * `mcf5307_set_reg`, `mcf5307_halted`, `isp1181_setup` and
+ * `isp1181_set_backend` all answer 1 for yes. Two conventions inside one
+ * contract is a footgun a caller reads once and gets backwards.
+ *
+ * THE ONLY WAY IT ANSWERS 0 IS A STALLED ONE-TIME LATCH. The call is
+ * idempotent because a latch admits exactly one initialising thread and makes
+ * every other caller wait for it. A wait that reaches its deadline gives up,
+ * marks the latch abandoned and answers 0 here, and every later call answers 0
+ * as well: the state is terminal. One line of diagnosis goes to standard error
+ * the first time it happens.
+ *
+ * AN EARLIER VERSION OF THIS CONTRACT DECLARED `void` AND THE LIBRARY ENDED
+ * THE PROCESS ON THAT PATH. A library has no business killing its host - a
+ * plugin that aborts takes the digital audio workstation with it and the user
+ * loses unsaved work that has nothing to do with this core - and the abort
+ * stood only because a `void` return carried no way to say `I failed`.
+ *
+ * WHAT HAPPENS TO A CALLER THAT IGNORES THIS STATUS, WHICH C PERMITS AND NO
+ * ATTRIBUTE CAN PREVENT. `mcf5307_create` and `isp1181_create` ask the same
+ * latch themselves, and both RETURN NULL once it is abandoned. Every remaining
+ * call in this header already documents its answer for a nil context - 0, a
+ * refusal, or nothing at all - so a caller that dropped the status gets a
+ * library that does nothing, and never one that answers out of a runtime that
+ * was never initialised. That refusal is the mechanism; this status is the
+ * advice that lets a host report the fault instead of guessing at it. */
+MCF5307_MUST_CHECK int mcf5307_runtime_init(void);
+
+/* Allocates a core context, or RETURNS NULL WHEN `mcf5307_runtime_init` HAS
+ * REPORTED A STALL. The allocation needs the runtime this call refuses to
+ * assume, and a null context is a value every other core call above already
+ * answers for. See `mcf5307_runtime_init`. */
 mcf5307_ctx* mcf5307_create(void* user,
                             mcf5307_read_fn rd,
                             mcf5307_write_fn wr,
@@ -269,6 +315,8 @@ typedef void (*isp1181_irq_fn)(void* user, int asserted);
 typedef void (*isp1181_tx_fn)(void* user, int endpoint,
                               const uint8_t* data, size_t len);
 
+/* Allocates a device handle, or RETURNS NULL WHEN `mcf5307_runtime_init` HAS
+ * REPORTED A STALL, for the reason `mcf5307_create` gives. */
 isp1181_ctx* isp1181_create(void* user, isp1181_irq_fn irq, isp1181_tx_fn tx);
 void isp1181_destroy(isp1181_ctx* ctx);
 uint8_t isp1181_read(isp1181_ctx* ctx, uint32_t addr);
