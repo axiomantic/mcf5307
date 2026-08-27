@@ -120,7 +120,24 @@ numbering, and they are the firmware's only route into an endpoint's IN buffer.
 it. Those six are now numbered from ISP1362 Rev. 06 as recorded above, and the
 firmware reaches `queueIn` through `0x01` then `0x61`. **The connection is only
 as good as the inheritance**, which is the open item at the top of this
-section.
+section. The other end is `isp1181_in_token`, the published entry point through
+which a host collects a validated packet; nothing about it is inherited, since
+an IN token is a property of USB and not of this part's command map.
+
+**What the same pages settle about endpoint direction, and what they do not.**
+`queueIn` and `transmit` once refused endpoints 1 to 3 because no source stated
+whether a single endpoint buffer carries one direction or both. ISP1362 Rev. 06
+pp.51-53 answer that: the `EPDIR` bit of DcEndpointConfiguration selects the
+direction, and the document states it as IN meaning input for the USB host, so
+a buffer carries exactly one direction. **The refusal stands and its reason has
+moved.** Acting on `EPDIR` needs the bit's POSITION inside the byte that
+`0x20+n` writes, and no document on this machine gives it; `endpointConfig`
+holds that byte undecoded. A bit index chosen here would make the model obey a
+firmware configuration write in a way the firmware could not detect as wrong,
+which is the class of invention this model refuses everywhere else. **What
+would settle it:** read the DcEndpointConfiguration bit map in the ISP1181B
+data sheet, or in ISP1362 Rev. 06 Table 110, and decode `endpointConfig` in
+`src/isp1181/isp1181.nim`.
 
 **What is still open in the set-up interlock.** ISP1362 p.53 states that a
 set-up packet flushes the IN buffer and disables Validate and Clear on both
@@ -132,10 +149,13 @@ set-up delivery route is a change to the published C API and is an operator
 decision, not a repair.
 
 
-**`isp1181_tx_fn` carries no contract in `include/mcf5307.h`.** Its sibling
-`isp1181_irq_fn` has a paragraph; the transmit callback has none, so what a
-zero-length transmit would mean to a host is unstated. `queueIn` refuses an
-empty packet for that reason rather than choosing a meaning.
+**`isp1181_tx_fn` carries no contract of its own in `include/mcf5307.h`.** Its
+sibling `isp1181_irq_fn` has a paragraph; the transmit callback has none, so
+what a zero-length transmit would mean to a host is unstated. `queueIn` refuses
+an empty packet for that reason rather than choosing a meaning. What the header
+does now state, at `isp1181_in_token`, is when the callback is reached and how
+long its pointer lives - facts about the model's own entry point rather than
+about the callback's meaning to a host.
 
 ## The rule for a new citation
 

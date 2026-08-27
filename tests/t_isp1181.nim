@@ -541,10 +541,20 @@ check(negative == wantNegative,
 # ---------------------------------------------------------------------------
 # The device-to-host path and the callback it owes.
 #
-# A model that stored the transmit callback and never called it looks exactly
-# like one whose device had nothing to send, from the host's side and from the
-# log's, so the case below drives a packet into the IN buffer and asserts the
-# call - its endpoint, its length and every byte of it.
+# THE HOST INSTALLS A TRANSMIT CALLBACK AT CONSTRUCTION AND IT IS THE ONLY WAY
+# A BYTE LEAVES THIS MODEL. A model that stored the callback and never called
+# it looks exactly like one whose device had nothing to send, from the host's
+# side and from the log's, so the case below drives a packet into the IN buffer
+# and asserts the CALL - its endpoint, its length and every byte of it.
+#
+# EVERY BYTE AND EVERY LOG LINE BELOW IS A HAND-WRITTEN LITERAL.
+#
+# THE QUEUE IS DRIVEN DIRECTLY HERE ON PURPOSE. `queueIn` and `transmit` are
+# the mechanism, and this block takes them as the subject; the block below
+# drives the same mechanism from the firmware's own command bytes, and
+# `t_isp1181_stub` drives it from the published C entry points. A case that
+# went through the ports here would be asserting the decode twice and the
+# callback once.
 
 type TxRecord = tuple[calls: int, endpoint: int, bytes: seq[uint8],
                       length: int]
@@ -615,9 +625,9 @@ proc driveTxRefusals(): TxRefusal =
 let txRefusal = driveTxRefusals()
 let wantTxRefusal: TxRefusal = (
     queued: @[false, false, false, false], calls: 0,
-    log: @["isp1181: endpoint 1 has one buffer and no source on this " &
-           "machine states whether it carries the IN direction; nothing is " &
-           "queued",
+    log: @["isp1181: endpoint 1 carries its direction in the EPDIR bit of " &
+           "its configuration and no source on this machine gives that " &
+           "bit's position; nothing is queued",
            "isp1181: a transmit was queued for endpoint 4, which this model " &
            "does not implement; nothing is queued",
            "isp1181: a transmit was queued for endpoint -1, which this " &

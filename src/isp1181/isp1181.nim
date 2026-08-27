@@ -41,6 +41,13 @@
 ## Buffer (`0x10`, `0x12` to `0x14`) followed by Clear Buffer (`0x70`, `0x72`
 ## to `0x74`), which is the sequence the authority states.
 ##
+## `transmit` IS CALLED BY THE HOST AND NOT BY THE VALIDATE. A validate is the
+## firmware saying the buffer is now the host's; it is not the moment the host
+## collects it. A model that transmitted there would push a packet at a host
+## that had not asked, and would spend the packet on the one call it got. The
+## host asks through `isp1181_in_token`, which is the bus's IN token and the
+## other half of `isp1181_rx`. `src/isp1181/stub.nim` carries the entry point.
+##
 ## Those opcodes are inherited and not read from an ISP1181 document. They come
 ## from Table 109 of the ISP1362 data sheet, Rev. 06, which states that it
 ## integrates the ISP1181B peripheral controller - a claim of integration and
@@ -268,11 +275,21 @@ proc queueIn*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
   ## endpoint's IN buffer, waiting for the host to collect them. `false` is the
   ## refusal, and every refusal writes the line that says which one it is.
   ##
-  ## Only endpoint 0 has an IN buffer in this model. `fifoShape` gives endpoint
-  ## 0 two buffers and names them OUT and IN, and gives endpoints 1 to 3 one
-  ## buffer each and names it neither. No source on this machine says whether a
-  ## single endpoint buffer carries one direction or both, so a queue on 1 to 3
-  ## is refused rather than aimed at the buffer a delivery also lands in.
+  ## THE FIRMWARE REACHES THIS THROUGH `0x01` THEN `0x61` - Write control IN
+  ## buffer, then Validate control IN buffer. `commitValidate` is the caller.
+  ## The two opcodes are inherited from ISP1362 Rev. 06 Table 109 and were not
+  ## read from an ISP1181 document; the module head states the limit.
+  ##
+  ## ONLY ENDPOINT 0 HAS AN IN BUFFER IN THIS MODEL, AND THE BLOCK IS NOW A
+  ## MISSING BIT POSITION RATHER THAN A MISSING CONCEPT. ISP1362 Rev. 06
+  ## pp.51-53 settle that an endpoint buffer is not directionless: the EPDIR
+  ## bit of DcEndpointConfiguration selects IN or OUT, so a single buffer
+  ## carries exactly one of them. WHAT NO SOURCE ON THIS MACHINE GIVES IS
+  ## EPDIR'S POSITION IN THE BYTE `0x20+n` WRITES, and `endpointConfig` holds
+  ## that byte undecoded. A bit index chosen here would make the model obey the
+  ## firmware's configuration writes in a way the firmware could not detect as
+  ## wrong, so a queue on 1 to 3 is still refused and the refusal names the bit
+  ## it is waiting for.
   if m.isNil:
     return false
   if endpoint < 0 or endpoint >= outFifoOfEndpoint.len:
@@ -280,9 +297,9 @@ proc queueIn*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
            ", which this model does not implement; nothing is queued")
     return false
   if endpoint != 0:
-    m.note("isp1181: endpoint " & $endpoint & " has one buffer and no " &
-           "source on this machine states whether it carries the IN " &
-           "direction; nothing is queued")
+    m.note("isp1181: endpoint " & $endpoint & " carries its direction in " &
+           "the EPDIR bit of its configuration and no source on this " &
+           "machine gives that bit's position; nothing is queued")
     return false
   if data.len == 0:
     m.note("isp1181: an empty packet was queued for endpoint 0 IN and no " &
@@ -312,9 +329,9 @@ proc transmit*(m: ISP1181; endpoint: int): bool =
            ", which this model does not implement; nothing is transmitted")
     return false
   if endpoint != 0:
-    m.note("isp1181: endpoint " & $endpoint & " has one buffer and no " &
-           "source on this machine states whether it carries the IN " &
-           "direction; nothing is transmitted")
+    m.note("isp1181: endpoint " & $endpoint & " carries its direction in " &
+           "the EPDIR bit of its configuration and no source on this " &
+           "machine gives that bit's position; nothing is transmitted")
     return false
   if m.fifos[inFifoOfEndpoint0].isEmpty:
     m.note("isp1181: endpoint 0 IN has no packet to send; the host is not " &
