@@ -1,9 +1,32 @@
 // conformance/runner.cpp - the CPU-5 ColdFire conformance corpus runner.
 //
-// Check: `ctest --test-dir build --no-tests=error -R ^mcf5307_conformance_all$`
-// runs every committed case and reports `0 tests failed`. The runner prints
-// the failing instruction, the differing register and both values on a
-// failure.
+// Check: `ctest --test-dir build --no-tests=error -R
+// '^mcf5307_conformance_(move|alu|control)$'` runs every committed case of
+// every group whose executors exist AT THIS REVISION and reports `0 tests
+// failed`. The runner prints the failing instruction, the differing register
+// and both values on a failure.
+//
+// THE LOGIC GROUP CANNOT PASS HERE, AND ITS TWO REGISTRATIONS ARE LEFT
+// REGISTERED AND FAILING ON PURPOSE. This revision carries the decoder and the
+// move and arithmetic executors. CPU-9 writes the logic, bit-operation and
+// shift executors, and until it lands each of the eight committed logic cases
+// reaches no executor and TRAPS. MEASURED at this revision:
+// `mcf5307_conformance_logic` prints `mcf5307_conformance_logic: 8 cases, 8
+// failed`, and `mcf5307_conformance_all`, which runs all four groups, fails
+// with it.
+//
+// THE LINE ABOVE PREVIOUSLY NAMED `^mcf5307_conformance_all$` AND CLAIMED IT
+// REPORTED `0 tests failed`. It did not. MEASURED with that exact command at
+// this revision: `1 tests failed out of 1`, ctest exit 8. The claim was false
+// from the commit that added the logic corpus, and a check line that cannot
+// pass is worse than an absent one, because it is READ as a check somebody
+// ran.
+//
+// NOTHING IS SILENCED TO MAKE THE NEW LINE TRUE. All five tests stay
+// registered, the two that fail keep failing, and the corpus is untouched;
+// what changed is the sentence stating what has been verified.
+// `mcf5307_conformance_all` is the right target again the day CPU-9 lands,
+// and the narrowing above has to be deleted then.
 //
 // The runner registers one CTest test per group, and the group is selected by
 // the registered test NAME, never by a forwarded argument (CPU-5's own note
