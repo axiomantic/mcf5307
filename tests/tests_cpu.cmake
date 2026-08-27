@@ -3165,11 +3165,15 @@ mcf5307_check_case_sites("t_isp1181_command_set"
 # driven-count inside the expected value, so a sweep that stopped iterating
 # fails on that count rather than on this figure. What this figure catches is
 # a whole case removed.
-# MOVED 24 -> 26 WITH THE DATA-FLOW COMMANDS. The two added cases are the
-# illegal class - the four codes ISP1362 Rev. 06 Table 109 parenthesises and
-# forbids - and the one accepted command that legitimately speaks on a fresh
-# handle, which block 1 exempts and this case asserts.
-mcf5307_check_case_total("t_isp1181_command_set" "${isp_cmd_run_out}" 26)
+# WHAT THE FIGURE COVERS, so that a move reads as a decision. Beyond the
+# three opcode sweeps, the illegal class and the accepted-and-speaking case,
+# the suite carries the endpoint-configuration family: the sixteen slot names
+# ISP1362 Rev. 06 section 15.1.1 gives, the ordering that family shares with
+# every other family that numbers endpoints, the sweep that requires each slot
+# to be accepted or to name itself in one line, endpoint 3 configured through
+# its own slot, and the peek selection that separates a slot index from an
+# endpoint number.
+mcf5307_check_case_total("t_isp1181_command_set" "${isp_cmd_run_out}" 31)
 
 ]==])
 
@@ -3301,9 +3305,12 @@ mcf5307_check_case_sites("t_isp1181"
 # the read-out-and-clear round trip through the ports, its refused-endpoint
 # control on the same handle, the write-then-validate IN path, and the four
 # codes the authority parenthesises as illegal.
-# MOVED 26 -> 27 WITH THE EPDIR DECODE. The added case drives an endpoint
-# configured IN and one configured OUT on one handle.
-mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 27)
+# THE EPDIR DECODE IS TWO OF THE CASES THIS FIGURE COVERS, one per direction:
+# a queue and a transmit on an endpoint configured IN against one configured
+# OUT, and a host delivery refused on an endpoint configured IN against one
+# configured OUT. The bit governs both halves of a single buffer, so a figure
+# that covered only the transmit half would let the receive half go untested.
+mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 28)
 
 ]==])
 

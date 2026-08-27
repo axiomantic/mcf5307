@@ -64,12 +64,13 @@ const
 # design document spells out. The six commands those documents name WITHOUT an
 # opcode are not here and cannot be: an opcode chosen by this suite would be
 # asserting its own guess.
-const implementedOpcodes: array[41, uint8] = [
+const implementedOpcodes: array[42, uint8] = [
   0xF6'u8,                                    # reset
   0xBA'u8, 0xBB'u8,                           # hardware configuration
   0xB8'u8, 0xB9'u8,                           # mode
   0xB6'u8, 0xB7'u8,                           # device address
-  0x20'u8, 0x21'u8, 0x22'u8, 0x23'u8,         # endpoint configuration 0 to 3
+  0x20'u8, 0x21'u8,                           # control configuration, OUT then IN
+  0x22'u8, 0x23'u8, 0x24'u8,                  # endpoint 1 to 3 configuration
   0xD2'u8,                                    # peek
   0xC0'u8,                                    # interrupt register
   0xC2'u8, 0xC3'u8,                           # interrupt enable
@@ -110,17 +111,17 @@ const notImplemented: array[100, tuple[opcode: uint8, name: string]] = [
   (0xF0'u8, "DMA"), (0xF1'u8, "DMA"), (0xF2'u8, "DMA"), (0xF3'u8, "DMA"),
   (0xB5'u8, "chip identifier"),
   (0xB4'u8, "frame number"),
-  (0x24'u8, "endpoint 4 configuration"),
-  (0x25'u8, "endpoint 5 configuration"),
-  (0x26'u8, "endpoint 6 configuration"),
-  (0x27'u8, "endpoint 7 configuration"),
-  (0x28'u8, "endpoint 8 configuration"),
-  (0x29'u8, "endpoint 9 configuration"),
-  (0x2A'u8, "endpoint 10 configuration"),
-  (0x2B'u8, "endpoint 11 configuration"),
-  (0x2C'u8, "endpoint 12 configuration"),
-  (0x2D'u8, "endpoint 13 configuration"),
-  (0x2E'u8, "endpoint 14 configuration"),
+  (0x25'u8, "endpoint 4 configuration"),
+  (0x26'u8, "endpoint 5 configuration"),
+  (0x27'u8, "endpoint 6 configuration"),
+  (0x28'u8, "endpoint 7 configuration"),
+  (0x29'u8, "endpoint 8 configuration"),
+  (0x2A'u8, "endpoint 9 configuration"),
+  (0x2B'u8, "endpoint 10 configuration"),
+  (0x2C'u8, "endpoint 11 configuration"),
+  (0x2D'u8, "endpoint 12 configuration"),
+  (0x2E'u8, "endpoint 13 configuration"),
+  (0x2F'u8, "endpoint 14 configuration"),
   (0x02'u8, "endpoint 1 buffer write"),
   (0x03'u8, "endpoint 2 buffer write"),
   (0x04'u8, "endpoint 3 buffer write"),
@@ -268,7 +269,7 @@ proc driveImplemented(): Accepted =
     elif m.logLines.len != 0:
       result.firstBad = "0x" & toHex(opcode) & " logged: " & m.logLines[0]
 
-const wantAccepted: Accepted = (firstBad: "", driven: 40)
+const wantAccepted: Accepted = (firstBad: "", driven: 41)
 
 let accepted = driveImplemented()
 check(accepted == wantAccepted,
@@ -352,7 +353,13 @@ for value in 0 .. 255:
               " is not in the specified command set; the read answers 0x00"))
 
 let unspecified = driveRefused(unspecifiedRows)
-const wantUnspecified: Refused = (firstBad: "", driven: 111)
+# THE PIN MOVED, AND WHY IT MOVED IS RECORDED HERE RATHER THAN IN A COMMIT
+# MESSAGE. `0x2F` used to sit in this class because the endpoint-configuration
+# family was numbered `0x20+k` as endpoint k, which ran out of names at `0x2E`.
+# ISP1362 Rev. 06 section 15.1.1 numbers the family control OUT, control IN,
+# then endpoints 1 to 14, so `0x2F` is endpoint 14's slot and the authority
+# numbers it. It left this class by being NUMBERED, not by being reclassified.
+const wantUnspecified: Refused = (firstBad: "", driven: 110)
 check(unspecified == wantUnspecified,
       "unspecified: every unnumbered opcode answers benignly and logs one line",
       $unspecified, $wantUnspecified)
@@ -396,8 +403,14 @@ let partition: Partition = (implemented: accepted.driven +
                             total: accepted.driven + speaking.driven +
                                    refused.driven + illegalDriven.driven +
                                    unspecified.driven)
-const wantPartition: Partition = (implemented: 41, refused: 100, illegal: 4,
-                                  unspecified: 111, total: 256)
+# THE TWO FIGURES THAT MOVED, AND THE ONE REASON BOTH MOVED FOR. Renumbering
+# the endpoint-configuration family onto section 15.1.1's slot ordering makes
+# `0x24` endpoint 3's configuration, which this model carries a buffer for, so
+# it joins the implemented class; and it makes `0x2F` endpoint 14's, which the
+# authority numbers, so it leaves the unspecified class. `refused` is unchanged
+# because the family gave up one member and took one back.
+const wantPartition: Partition = (implemented: 42, refused: 100, illegal: 4,
+                                  unspecified: 110, total: 256)
 check(partition == wantPartition,
       "partition: the four classes cover all 256 opcodes and none twice",
       $partition, $wantPartition)
@@ -412,6 +425,7 @@ const wantUnnumbered: seq[string] = @[]
 check(@unnumberedCommands == wantUnnumbered,
       "gap: no command is left named without an opcode",
       $(@unnumberedCommands), $wantUnnumbered)
+
 
 # ---------------------------------------------------------------------------
 # BLOCK 4. ACCEPTED HAS TO MEAN SOMETHING, so the paired commands are driven
@@ -679,20 +693,21 @@ check(big == wantBig,
       $big, $wantBig)
 
 # PEEK READS AND DOES NOT CONSUME, which is the whole difference between it and
-# a buffer read. The endpoint it reads is the one the last accepted
-# `0x20+idx` selected, because that is the only endpoint selector the authority
-# gives this model.
+# a buffer read. The buffer it reads is the one the last accepted
+# `0x20+k` selected, because that is the only selector the authority gives this
+# model - and `k` is a SLOT and not an endpoint number, so `0x22` selects
+# endpoint 1 and not endpoint 2.
 type Peek = tuple[first: uint8, second: uint8, pending: int, logged: int]
 
 proc peekTwice(): Peek =
   let m = fresh()
-  discard m.deliver(2, [0x5A'u8, 0x5B'u8])
+  discard m.deliver(1, [0x5A'u8, 0x5B'u8])
   m.portWrite(commandPort, 0x22'u8)
   m.portWrite(commandPort, 0xD2'u8)
   let first = m.portRead(dataPort)
   m.portWrite(commandPort, 0xD2'u8)
   let secondByte = m.portRead(dataPort)
-  result = (first: first, second: secondByte, pending: fifoAt(m, 3).pending,
+  result = (first: first, second: secondByte, pending: fifoAt(m, 2).pending,
             logged: m.logLines.len)
 
 let peeked = peekTwice()
@@ -701,6 +716,27 @@ let wantPeeked: Peek = (first: 0x5A'u8, second: 0x5A'u8, pending: 1,
 check(peeked == wantPeeked,
       "peek: 0xD2 reads the selected endpoint's head byte and consumes none",
       $peeked, $wantPeeked)
+
+# THE CONTROL IN SLOT IS THE ONE THAT SEPARATES THE TWO READINGS. Under the
+# slot ordering `0x21` selects endpoint 0's IN buffer; under a reading that
+# takes `k` for an endpoint number it selects endpoint 1's. The buffer is empty
+# either way, so the name in the line is the whole observation.
+type SlotSelect = tuple[value: uint8, log: seq[string]]
+
+proc peekAfterControlIn(): SlotSelect =
+  let m = fresh()
+  m.writeVia(0x21'u8, [0x00'u8])
+  m.portWrite(commandPort, 0xD2'u8)
+  result = (value: m.portRead(dataPort), log: m.logLines)
+
+let slotSelect = peekAfterControlIn()
+let wantSlotSelect: SlotSelect = (value: benign,
+    log: @["isp1181: peek on endpoint 0 IN found no packet; the read " &
+           "answers 0x00"])
+check(slotSelect == wantSlotSelect,
+      "peek: 0x21 selects endpoint 0's IN buffer, which is the slot the " &
+        "authority puts second",
+      $slotSelect, $wantSlotSelect)
 
 # PEEKING AN EMPTY BUFFER ANSWERS BENIGNLY AND SAYS SO. A zero returned in
 # silence is the answer a full buffer holding a zero byte would give.
@@ -796,6 +832,143 @@ let wantIrqRun: IrqRun = (trace: @[1, 0], asserted: false)
 check(irqRun == wantIrqRun,
       "irq: the line follows the enabled bits and reports each change once",
       $irqRun, $wantIrqRun)
+
+# ---------------------------------------------------------------------------
+# BLOCK 3a. THE ENDPOINT-CONFIGURATION FAMILY IS NUMBERED AS THE AUTHORITY
+# NUMBERS IT, and the sixteen names are written out here by hand.
+#
+# ISP1362 Rev. 06 section 15.1.1 states the write codes as "20 to 2F - write
+# (control OUT, control IN, endpoints 1 to 14)" and states that the sixteen
+# configurations are programmed in sequence from endpoint 0 OUT to endpoint 14.
+# So the slot ordering is the same one the stall, status, buffer-read and
+# buffer-clear families already use, whose endpoint 1 form is base + 2.
+#
+# THE NAMES ARE ASSERTED AND NOT ONLY THE CLASSES. A model that classified
+# every slot correctly and named `0x24` "endpoint 4 configuration" would refuse
+# a firmware's endpoint 3 write in a line that sent its reader to the wrong
+# endpoint, which is a wrong answer wearing a loud message.
+
+const configurationNames: array[16, string] = [
+  "control OUT configuration", "control IN configuration",
+  "endpoint 1 configuration", "endpoint 2 configuration",
+  "endpoint 3 configuration", "endpoint 4 configuration",
+  "endpoint 5 configuration", "endpoint 6 configuration",
+  "endpoint 7 configuration", "endpoint 8 configuration",
+  "endpoint 9 configuration", "endpoint 10 configuration",
+  "endpoint 11 configuration", "endpoint 12 configuration",
+  "endpoint 13 configuration", "endpoint 14 configuration"]
+
+type Naming = tuple[firstBad: string, checked: int]
+
+proc configurationNaming(): Naming =
+  result = (firstBad: "", checked: 0)
+  for slot in 0 ..< configurationNames.len:
+    let opcode = uint8(0x20 + slot)
+    inc result.checked
+    if result.firstBad.len > 0:
+      continue
+    let got = classify(opcode).name
+    if got != configurationNames[slot]:
+      result.firstBad = "0x" & toHex(opcode) & " named `" & got & "` want `" &
+        configurationNames[slot] & "`"
+
+let naming = configurationNaming()
+const wantNaming: Naming = (firstBad: "", checked: 16)
+check(naming == wantNaming,
+      "configuration: the sixteen slots carry the authority's own names",
+      $naming, $wantNaming)
+
+# THE ENDPOINT-CONFIGURATION FAMILY SHARES ITS ORDERING WITH THE OTHER
+# FAMILIES, and the assertion is made against the OTHER families rather than
+# against a second copy of the same list. A family that drifted alone would
+# satisfy a list written beside it and would fail here.
+
+type Ordering = tuple[firstBad: string, checked: int]
+
+proc familyOrdering(): Ordering =
+  result = (firstBad: "", checked: 0)
+  for (base, noun) in [(0x10, "buffer read"), (0x40, "stall"),
+                       (0x50, "status"), (0x70, "buffer clear"),
+                       (0x80, "unstall"), (0x20, "configuration")]:
+    for endpoint in 1 .. 14:
+      inc result.checked
+      if result.firstBad.len > 0:
+        continue
+      let opcode = uint8(base + 1 + endpoint)
+      let want = "endpoint " & $endpoint & " " & noun
+      let got = classify(opcode).name
+      if got != want:
+        result.firstBad = "0x" & toHex(opcode) & " named `" & got &
+          "` want `" & want & "`"
+
+let ordering = familyOrdering()
+const wantOrdering: Ordering = (firstBad: "", checked: 84)
+check(ordering == wantOrdering,
+      "configuration: endpoint n sits at base + 1 + n in every family that " &
+        "numbers endpoints",
+      $ordering, $wantOrdering)
+
+# NO CONFIGURATION WRITE IS SILENTLY DROPPED. Every one of the sixteen slots
+# either becomes the pending command or writes exactly one log line naming
+# itself, and the two outcomes are separated so that neither can stand in for
+# the other. A slot that did neither would be a write the firmware issued and
+# the model reported nowhere.
+
+type Loudness = tuple[accepted: seq[int], loud: seq[int],
+                      unaccounted: seq[int]]
+  ## `unaccounted` IS BROADER THAN SILENCE ON PURPOSE. It holds a slot the
+  ## model dropped without a word AND a slot whose one line names a different
+  ## slot, because a reader sent to the wrong endpoint is no better served than
+  ## a reader sent nowhere.
+
+proc configurationLoudness(): Loudness =
+  for slot in 0 ..< configurationNames.len:
+    let opcode = uint8(0x20 + slot)
+    let m = fresh()
+    m.portWrite(commandPort, opcode)
+    if m.lastCommand == int(opcode) and m.logLines.len == 0:
+      result.accepted.add(slot)
+    elif m.logLines.len == 1 and configurationNames[slot] in m.logLines[0]:
+      result.loud.add(slot)
+    else:
+      result.unaccounted.add(slot)
+
+let loudness = configurationLoudness()
+const wantLoudness: Loudness = (accepted: @[0, 1, 2, 3, 4],
+                                loud: @[5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+                                unaccounted: @[])
+check(loudness == wantLoudness,
+      "configuration: every slot is accepted or names itself in one line, " &
+        "and none goes unaccounted for",
+      $loudness, $wantLoudness)
+
+# ENDPOINT 3 CAN BE CONFIGURED, WHICH IS WHAT MOVED `0x24` INTO THE
+# IMPLEMENTED CLASS. Its slot is `0x24` under section 15.1.1's ordering, this
+# model carries a buffer for it, and with EPDIR set the endpoint queues and
+# transmits like endpoint 1 does.
+
+type Endpoint3 = tuple[queued: bool, sent: bool, log: seq[string]]
+
+var sent3 = 0
+
+proc countTx(user: pointer; endpoint: cint; data: ptr uint8;
+             length: csize_t) {.cdecl.} =
+  inc sent3
+
+proc driveEndpoint3(): Endpoint3 =
+  sent3 = 0
+  let m = newISP1181(addr hostToken, ignoreIrq, countTx)
+  m.writeVia(0x24'u8, [0x40'u8])
+  let queued = m.queueIn(3, [0xA5'u8])
+  let sent = m.transmit(3)
+  (queued: queued, sent: sent, log: m.logLines)
+
+let endpoint3 = driveEndpoint3()
+let wantEndpoint3: Endpoint3 = (queued: true, sent: true, log: @[])
+check(endpoint3 == wantEndpoint3,
+      "configuration: endpoint 3 is configured through 0x24 and an IN " &
+        "EPDIR lets it queue and transmit",
+      $endpoint3, $wantEndpoint3)
 
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT.
 const declaredCaseSites = declaredSites
