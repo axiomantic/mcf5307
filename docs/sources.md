@@ -26,7 +26,7 @@ against, which is the thing a later reader actually has to reproduce.
 | "the ColdFire Family Programmer's Reference Manual", "…, Rev. 3" | *CFPRM, ColdFire® Family Programmer's Reference Manual*, Freescale Semiconductor. Vendor designation `CFPRM`. Revision 3. | **Not in this repository.** Obtain the PDF from the vendor archive by its designation. |
 | "the MCF5307 User's Manual", "… (1998)", "the manual's timing tables" | Motorola, *MCF5307 ColdFire Integrated Microprocessor User's Manual*, `MCF5307UM/AD`, 1998. 456 pages, scanned paper. SHA-256 `86cbcc8c9caa933fe10275a975a78d914df86771df9f0bc22d03de8b1aff91fa`. | **Not in this repository.** Obtain the PDF by its designation and check the hash before using a value from it. |
 | "the authority" (`src/isp1181/`), for everything except the data-flow command opcodes | **UNNAMED.** See below. | Unknown. |
-| "Table 109 of the ISP1362 data sheet, Rev. 06" (`src/isp1181/commands.nim`, `src/isp1181/isp1181.nim`, `tests/t_isp1181_command_set.nim`) | ST-NXP Wireless, *ISP1362 — Single-chip USB On-The-Go controller*, Product data sheet, doc id `ISP1362_6`, Rev. 06, 21 January 2009. 149 pages. | **Not in this repository.** Obtain the PDF by its designation and revision. **It is not a document about the part this model names — see "The inherited command map" below before using a value from it.** |
+| "Table 109 of the ISP1362 data sheet, Rev. 06", "ISP1362 Rev. 06 Table 143", "ISP1362 Rev. 06 p.53" (`src/isp1181/commands.nim`, `src/isp1181/isp1181.nim`, `tests/t_isp1181.nim`, `tests/t_isp1181_command_set.nim`) | ST-NXP Wireless, *ISP1362 — Single-chip USB On-The-Go controller*, Product data sheet, doc id `ISP1362_6`, Rev. 06, 21 January 2009. 149 pages. | **Not in this repository.** Obtain the PDF by its designation and revision. **It is not a document about the part this model names — see "The inherited command map" below before using a value from it.** |
 
 **ColdFire condition codes differ from the 68000.** The CFPRM is the
 authority for them, and a 68000 reference is not. `AGENTS.md` states the same
@@ -80,6 +80,69 @@ the general commands that table numbers (error code, unlock, scratch) were
 **not** adopted: inheriting a family nothing drives would spend the same
 uncertainty for no consumer.
 
+## The interrupt-register bit assignment
+
+**The five endpoint-completion bits are assigned, and they are the only bits
+that are.** The assignment lives in `interruptBitOfFifo` in
+`src/isp1181/isp1181.nim`: bit 8 for endpoint 0 OUT, bit 9 for endpoint 0 IN,
+and bits 10, 11 and 12 for endpoints 1, 2 and 3.
+
+**TWO SOURCES AGREE ON THAT RANGE, AND ONE OF THEM IS THIS MACHINE'S OWN
+FIRMWARE.** That is a stronger position than anything else in `src/isp1181/`
+holds, and it is still not a citation.
+
+| Source | What it says | What it is worth |
+|---|---|---|
+| The emulated firmware's service routine at `CODE:0x30053C38` | Reads four status bytes, returns at once when they are zero, dispatches bits 0, 1 and 2 to bus routines, bits 8 and 9 to fixed routines, and bits 10 to 16 through a table of per-endpoint function pointers at `0x30119C62`. Its enable write, command `0xC2` with `0x00001F07`, arms bits 0, 1, 2 and 8 to 12 at three call sites. | A **measurement of the program this model has to satisfy**. It is not a statement about the part, and a different firmware image could dispatch differently. |
+| ISP1362 Rev. 06, Tables 142 and 143 | Bit 0 `RESET`, 1 `RESUME`, 2 `SUSPND`, 3 `EOT`, 4 `SOF`, 5 `PSOF`, 6 `SP_EOT`, 7 `BUSTATUS`, 8 `EP0OUT`, 9 `EP0IN`, 10 to 23 `EP1` to `EP14`. | **INHERITED, exactly as the command map is.** The ISP1181B data sheet was not retrieved, and the integration claim recorded above is not a claim of a byte-identical register map. |
+
+The agreement covers bit 0, bits 8 and 9 as the two control-endpoint
+directions, and bits 10 and upwards as one bit per endpoint in order. The
+firmware's enable arms bits 8 to 12 and this model carries exactly five
+buffers, which is the same five.
+
+**WHERE THE TWO SOURCES DISAGREE, NOTHING IS ASSIGNED.** The firmware
+dispatches bit 1 to suspend and bit 2 to resume; the inherited table calls bit
+1 `RESUME` and bit 2 `SUSPND`. The two are swapped, and this repository has no
+document that settles which is right.
+
+**What is deliberately NOT assigned, and why:**
+
+| Bits | Why not |
+|---|---|
+| 0, 1, 2 — bus reset, suspend, resume | The sources disagree on 1 and 2, **and** this model's API carries no bus event at all: `isp1181_rx` delivers an endpoint and bytes. A bit nothing can set is a latch that never fires, which is the same case as the set-up interlock below. |
+| 3 to 7 — EOT, SOF, PSOF, SP\_EOT, BUSTATUS | The firmware's enable arms none of them and its service routine dispatches none of them, so the second source stands alone. The model has no end-of-transfer, no DMA and no frame source of its own — the frame counter lives in `src/isp1181/stub.nim` and is advanced by the caller. |
+| 13 to 23 — EP4 to EP14 | This model carries no buffer for those endpoints, so no event here could set one. |
+
+**The clearing route, and the hang it is there to prevent.** The interrupt
+register does **not** clear when the firmware reads it with `0xC0`: the read
+reports the register and leaves it, which is the behaviour a registered case in
+`tests/t_isp1181.nim` already pinned before any bit could be set. The
+firmware's service routine reads four status bytes and never writes them back,
+so **a bit with no other route out of the register would leave the emulated
+machine spinning in its own handler.** The route taken is a read of the owning
+endpoint's status register, `0x50+n`.
+
+**That route is INHERITED too**, from ISP1362 Rev. 06 p.53, which states that
+the endpoint interrupt bit is cleared by reading `DcEndpointStatus` and that
+the `D0`-`DF` *Check* forms of the same read explicitly do not clear it. The
+model clears at the COMMAND rather than at the data-port read, because the
+document separates the clearing form from the non-clearing one by the opcode.
+
+**`0xD2` is not treated as a Check form here.** ISP1362 numbers `D0`-`DF` as
+check endpoint status; this model's `0xD2` is peek, from the unnamed authority
+below. The two sources disagree about that byte, nothing in this change touches
+it, and it is recorded so that a later reader meets the conflict rather than
+discovering it.
+
+**What would settle it.** Read the interrupt-register table and the
+`DcEndpointStatus` description in the ISP1181B data sheet itself. Failing that,
+run the emulated firmware against this model and observe whether its
+per-endpoint handler issues `0x50` to `0x54`. **If it does not, the clearing
+route is wrong and the machine will spin** — the model would then need a
+different route, and inventing one without a source is what this file exists to
+prevent.
+
 ## Two facts that were recorded as the authority's and are the firmware's
 
 `src/isp1181/isp1181.nim` carried "endpoint 1 is 16 bytes" and "endpoint 3 is
@@ -107,8 +170,10 @@ register cannot name it either.**
 
 The same headers record what is known to be absent: the ISP1181 datasheet
 itself, an ISP1362 driver header, and any open-source ISP1181 emulation. The
-gaps those absences produce are carried in the code as unnumbered commands
-and as an unassigned interrupt-register bit, rather than as a guess.
+gaps those absences produce are carried in the code as unnumbered commands and
+as unassigned interrupt-register bits, rather than as a guess. The bits that
+ARE assigned are the five the firmware and the inherited table agree on, and
+the section above states what that agreement is worth.
 
 This is a real gap in the citation chain, not a formatting problem. A reader
 cannot check a single ISP1181 fact in this repository against anything.
@@ -179,6 +244,8 @@ ISA_A accepts. Their pin is in `docs/toolchain.md`.
 | The table above is complete — every external document any header cites has a row | A registered check that extracts document-shaped citations from `src/` and `include/` and asserts each one has a row here |
 | The `MCF5307UM/AD` hash above identifies the copy every manual-derived value in this tree was taken from | Re-read one value per citing module against a PDF with that hash |
 | The CFPRM revision every header means is 3 | Two headers name Rev. 3 and the rest name the manual alone; re-read one value per citing module against Rev. 3 |
+| A read of `0x50+n` is the route by which the emulated firmware clears an endpoint interrupt, so its service routine terminates | Run the firmware against this model in the consuming emulator and observe whether the per-endpoint handler issues `0x50` to `0x54`. A handler that does not would spin, and the route would have to move |
+| The interrupt-register bit layout the emulated firmware obeys is the one ISP1362 Rev. 06 Table 143 gives | Read the interrupt-register table in the ISP1181B data sheet. The two sources already disagree on bits 1 and 2, which are unassigned for that reason |
 
 ## Related
 
