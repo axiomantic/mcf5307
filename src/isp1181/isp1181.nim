@@ -151,6 +151,18 @@ const
     ## because the register the firmware reads most often is the interrupt
     ## register, whose zero means no interrupt is pending.
   fifoCount* = 5
+  epdirBit = 0x40'u8
+    ## EPDIR in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 places it at
+    ## bit 6 of the byte `0x20+n` writes, and Table 111 gives its meaning:
+    ## "This bit defines the endpoint direction (0 = OUT, 1 = IN)". The same
+    ## table places FIFOEN at bit 7, DBLBUF at bit 5, FFOISO at bit 4 and
+    ## `FFOSZ[3:0]` in the low nibble.
+    ##
+    ## THE POSITION IS INHERITED AND NOT READ FROM AN ISP1181 DOCUMENT. ISP1362
+    ## Rev. 06 states that it integrates the ISP1181B peripheral controller,
+    ## which is a claim of INTEGRATION and not of a byte-identical register map,
+    ## and the ISP1181B data sheet itself was not retrieved. `docs/sources.md`
+    ## carries the limit in full.
   softctBit* = 0x01'u8
     ## The mode register bits. The rest - DISGLBL `0x02`, DBGMOD `0x04`,
     ## INTENA `0x08`, GOSUSP `0x20`, SNDRSU `0x40`, DMAWD `0x80` - live in the
@@ -198,6 +210,39 @@ const inFifoOfEndpoint0 = 1
   ## The buffer a packet for the host waits in. It is endpoint 0's second
   ## buffer - the one `fifoShape` names IN - and it is the only buffer in this
   ## model that a delivery from the host never touches.
+
+const inBufferOfEndpoint: array[4, int] = [inFifoOfEndpoint0, 2, 3, 4]
+  ## The buffer that carries an endpoint's DEVICE-TO-HOST direction. Endpoint 0
+  ## has two buffers and this is its IN one; endpoints 1 to 3 have one buffer
+  ## each, and whether that buffer is the IN one is what EPDIR says.
+
+type BufferDirection = enum
+  ## Which way one buffer faces, or that this model cannot say.
+  bdOut
+  bdIn
+  bdUnconfigurable
+    ## The buffer's DcEndpointConfiguration byte is not one this model carries,
+    ## so its EPDIR bit was never written here. It is kept apart from `bdOut`
+    ## because the two are different findings: one is a direction the firmware
+    ## chose, the other is a direction the firmware could not express.
+
+proc directionOfBuffer(m: ISP1181; index: int): BufferDirection =
+  ## THE CONTROL ENDPOINT'S TWO BUFFERS DO NOT CONSULT EPDIR. ISP1362 Rev. 06
+  ## section 15.1.1 states that control endpoints have fixed configurations and
+  ## are included in the initialization sequence only to be given their default
+  ## values, so their direction is a property of the endpoint and not of a byte
+  ## the firmware may write differently.
+  ##
+  ## `endpointConfig` IS INDEXED AS THE CONFIGURATION SEQUENCE IS. Section
+  ## 15.1.1 orders the sixteen slots control OUT, control IN, then endpoints 1
+  ## to 14, and `fifos` is in that same order, so slot and buffer share one
+  ## index. The slots past `endpointConfig`'s length are the ones no command
+  ## this model accepts can write.
+  if index <= inFifoOfEndpoint0:
+    return (if index == inFifoOfEndpoint0: bdIn else: bdOut)
+  if index >= m.endpointConfig.len:
+    return bdUnconfigurable
+  if (m.endpointConfig[index] and epdirBit) != 0: bdIn else: bdOut
 
 proc fifoName*(index: int): string = fifoNames[index]
 
@@ -311,37 +356,40 @@ proc queueIn*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
   ## The two opcodes are inherited from ISP1362 Rev. 06 Table 109 and were not
   ## read from an ISP1181 document; the module head states the limit.
   ##
-  ## ONLY ENDPOINT 0 HAS AN IN BUFFER IN THIS MODEL, AND THE BLOCK IS NOW A
-  ## MISSING BIT POSITION RATHER THAN A MISSING CONCEPT. ISP1362 Rev. 06
-  ## pp.51-53 settle that an endpoint buffer is not directionless: the EPDIR
-  ## bit of DcEndpointConfiguration selects IN or OUT, so a single buffer
-  ## carries exactly one of them. WHAT NO SOURCE ON THIS MACHINE GIVES IS
-  ## EPDIR'S POSITION IN THE BYTE `0x20+n` WRITES, and `endpointConfig` holds
-  ## that byte undecoded. A bit index chosen here would make the model obey the
-  ## firmware's configuration writes in a way the firmware could not detect as
-  ## wrong, so a queue on 1 to 3 is still refused and the refusal names the bit
-  ## it is waiting for.
+  ## WHICH ENDPOINT MAY BE QUEUED IS READ OUT OF ITS CONFIGURATION BYTE.
+  ## Endpoints 1 to 3 carry ONE buffer each and EPDIR is which way it faces, so
+  ## the question the model asks is not which endpoint this is but what the
+  ## firmware configured it as. `directionOfBuffer` states where the bit and the
+  ## slot ordering come from.
   if m.isNil:
     return false
-  if endpoint < 0 or endpoint >= outFifoOfEndpoint.len:
+  if endpoint < 0 or endpoint >= inBufferOfEndpoint.len:
     m.note("isp1181: a transmit was queued for endpoint " & $endpoint &
            ", which this model does not implement; nothing is queued")
     return false
-  if endpoint != 0:
-    m.note("isp1181: endpoint " & $endpoint & " carries its direction in " &
-           "the EPDIR bit of its configuration and no source on this " &
-           "machine gives that bit's position; nothing is queued")
+  let index = inBufferOfEndpoint[endpoint]
+  case m.directionOfBuffer(index)
+  of bdIn: discard
+  of bdOut:
+    m.note("isp1181: endpoint " & $endpoint & " is configured OUT - EPDIR " &
+           "is 0 in its DcEndpointConfiguration - so it has no IN buffer; " &
+           "nothing is queued")
+    return false
+  of bdUnconfigurable:
+    m.note("isp1181: endpoint " & $endpoint & " has no DcEndpointConfiguration " &
+           "byte in this model, so its EPDIR bit cannot be read; nothing is " &
+           "queued")
     return false
   if data.len == 0:
-    m.note("isp1181: an empty packet was queued for endpoint 0 IN and no " &
-           "source on this machine states what a zero-length IN packet " &
-           "carries; nothing is queued")
+    m.note("isp1181: an empty packet was queued for " & fifoNames[index] &
+           " and no source on this machine states what a zero-length IN " &
+           "packet carries; nothing is queued")
     return false
-  if not m.fifos[inFifoOfEndpoint0].accept(data):
-    m.note("isp1181: " & fifoNames[inFifoOfEndpoint0] &
+  if not m.fifos[index].accept(data):
+    m.note("isp1181: " & fifoNames[index] &
            " refused a packet of " & $data.len & " bytes; the buffer holds " &
-           $m.fifos[inFifoOfEndpoint0].pending & " of " &
-           $m.fifos[inFifoOfEndpoint0].buffers)
+           $m.fifos[index].pending & " of " &
+           $m.fifos[index].buffers)
     return false
   true
 
@@ -360,26 +408,34 @@ proc transmit*(m: ISP1181; endpoint: int): bool =
   ## tell the firmware a transfer completed against a host that had not asked.
   if m.isNil:
     return false
-  if endpoint < 0 or endpoint >= outFifoOfEndpoint.len:
+  if endpoint < 0 or endpoint >= inBufferOfEndpoint.len:
     m.note("isp1181: a transmit was requested for endpoint " & $endpoint &
            ", which this model does not implement; nothing is transmitted")
     return false
-  if endpoint != 0:
-    m.note("isp1181: endpoint " & $endpoint & " carries its direction in " &
-           "the EPDIR bit of its configuration and no source on this " &
-           "machine gives that bit's position; nothing is transmitted")
+  let index = inBufferOfEndpoint[endpoint]
+  case m.directionOfBuffer(index)
+  of bdIn: discard
+  of bdOut:
+    m.note("isp1181: endpoint " & $endpoint & " is configured OUT - EPDIR " &
+           "is 0 in its DcEndpointConfiguration - so it has no IN buffer; " &
+           "nothing is transmitted")
     return false
-  if m.fifos[inFifoOfEndpoint0].isEmpty:
-    m.note("isp1181: endpoint 0 IN has no packet to send; the host is not " &
-           "called")
+  of bdUnconfigurable:
+    m.note("isp1181: endpoint " & $endpoint & " has no DcEndpointConfiguration " &
+           "byte in this model, so its EPDIR bit cannot be read; nothing is " &
+           "transmitted")
+    return false
+  if m.fifos[index].isEmpty:
+    m.note("isp1181: " & fifoNames[index] & " has no packet to send; the " &
+           "host is not called")
     return false
   if m.tx.isNil:
-    m.note("isp1181: endpoint 0 IN holds a packet and the host installed no " &
-           "transmit callback; the packet is kept")
+    m.note("isp1181: " & fifoNames[index] & " holds a packet and the host " &
+           "installed no transmit callback; the packet is kept")
     return false
-  var packet = m.fifos[inFifoOfEndpoint0].take()
+  var packet = m.fifos[index].take()
   m.tx(m.user, cint(endpoint), addr packet[0], csize_t(packet.len))
-  m.raiseInterrupt(1'u32 shl interruptBitOfFifo[inFifoOfEndpoint0])
+  m.raiseInterrupt(1'u32 shl interruptBitOfFifo[index])
   true
 
 
