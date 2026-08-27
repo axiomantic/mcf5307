@@ -520,6 +520,78 @@ isp1181_destroy(selector)
 isp1181_destroy(counter)
 isp1181_destroy(wrapping)
 
+# ---------------------------------------------------------------------------
+# BLOCK 11. THE SELECTOR C CAN REACH.
+#
+# `setBackend` above is Nim's and C has no reach into it. A C caller that
+# cannot select the full model gets the stub's discard on every delivery, and
+# the discard is silent: the handle answers, the callbacks stay quiet, and no
+# byte the host delivered is anywhere.
+#
+# THE TWO VALUES BELOW ARE HAND-WRITTEN LITERALS AND NOT THE MODULE'S
+# CONSTANTS. They are the numbers `include/mcf5307.h` publishes as
+# `MCF5307_ISP1181_BACKEND_STUB` and `MCF5307_ISP1181_BACKEND_FULL_MODEL`, and
+# a suite that imported them would agree with any renumbering at all - which
+# is exactly the change that would silently repoint every existing C caller.
+
+const
+  backendStubValue = 0'i32
+  backendFullModelValue = 1'i32
+
+type CSelect = tuple[atCreate: string, accepted: cint, afterSet: string,
+                     peeked: string]
+
+proc driveCSelect(): CSelect =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  let atCreate = $backend(handle)
+  let accepted = isp1181_set_backend(handle, cint(backendFullModelValue))
+  let afterSet = $backend(handle)
+  var packet = packetBytes
+  isp1181_rx(handle, cint(0), addr packet[0], csize_t(packet.len))
+  let seen = peekEndpoint0(handle)
+  isp1181_destroy(handle)
+  (atCreate: atCreate, accepted: accepted, afterSet: afterSet,
+   peeked: "0x" & toHex(seen))
+
+const wantCSelect: CSelect = (atCreate: "Stub", accepted: cint(1),
+                              afterSet: "FullModel", peeked: "0xA5")
+
+let cSelect = driveCSelect()
+check(cSelect == wantCSelect,
+      "selector: the published setter moves a handle to the full model and " &
+        "a delivery through the C entry point then reaches its buffer",
+      $cSelect, $wantCSelect)
+
+# A VALUE THE CONTRACT DOES NOT NAME IS REFUSED AND CHANGES NOTHING. A setter
+# that fell through to a default would repoint the handle on a caller's typo,
+# and the caller would read a success it never got.
+type CRefuse = tuple[toStub: cint, afterStub: string, refused: cint,
+                     afterRefusal: string, nilHandle: cint]
+
+proc driveCRefuse(): CRefuse =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  discard isp1181_set_backend(handle, cint(backendFullModelValue))
+  let toStub = isp1181_set_backend(handle, cint(backendStubValue))
+  let afterStub = $backend(handle)
+  discard isp1181_set_backend(handle, cint(backendFullModelValue))
+  let refused = isp1181_set_backend(handle, cint(7))
+  let afterRefusal = $backend(handle)
+  isp1181_destroy(handle)
+  let absent: ISP1181Ctx = nil
+  (toStub: toStub, afterStub: afterStub, refused: refused,
+   afterRefusal: afterRefusal,
+   nilHandle: isp1181_set_backend(absent, cint(backendFullModelValue)))
+
+const wantCRefuse: CRefuse = (toStub: cint(1), afterStub: "Stub",
+                              refused: cint(0), afterRefusal: "FullModel",
+                              nilHandle: cint(0))
+
+let cRefuse = driveCRefuse()
+check(cRefuse == wantCRefuse,
+      "selector: the setter moves back to the stub, refuses an unnamed " &
+        "value and refuses a nil handle, and neither refusal moves anything",
+      $cRefuse, $wantCRefuse)
+
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this program reports
 # what its text declares and what its run adjudicated, and the registered
 # test's driver is what compares them.

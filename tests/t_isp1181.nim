@@ -551,6 +551,272 @@ check(negative == wantNegative,
       "negative: an unimplemented command answers benignly, logs, and changes nothing",
       $negative, $wantNegative)
 
+# ---------------------------------------------------------------------------
+# BLOCK 6. THE DEVICE-TO-HOST PATH AND THE CALLBACK IT OWES.
+#
+# THE HOST INSTALLS A TRANSMIT CALLBACK AT CONSTRUCTION AND IT IS THE ONLY WAY
+# A BYTE LEAVES THIS MODEL. A model that stored the callback and never called
+# it looks exactly like one whose device had nothing to send, from the host's
+# side and from the log's, so the case below drives a packet into the IN buffer
+# and asserts the CALL - its endpoint, its length and every byte of it.
+#
+# EVERY BYTE AND EVERY LOG LINE BELOW IS A HAND-WRITTEN LITERAL.
+#
+# WHAT THE FIRMWARE CANNOT DO HERE, AND WHY IT IS NOT A DEFECT OF THIS BLOCK:
+# `buffer write` and `validate` are two of the six commands the authority names
+# and does not number, so no command byte reaches `queueIn`. The queue is
+# driven directly for the same reason `raiseInterrupt` is - the mechanism is
+# real and the opcode that would reach it is a gap in the specification.
+
+type TxRecord = tuple[calls: int, endpoint: int, bytes: seq[uint8],
+                      length: int]
+
+var txSeen: TxRecord = (calls: 0, endpoint: -1, bytes: @[], length: -1)
+
+proc recordTx(user: pointer; endpoint: cint; data: ptr uint8;
+              length: csize_t) {.cdecl.} =
+  inc txSeen.calls
+  txSeen.endpoint = int(endpoint)
+  txSeen.length = int(length)
+  txSeen.bytes = @[]
+  if not data.isNil:
+    let raw = cast[ptr UncheckedArray[uint8]](data)
+    for index in 0 ..< int(length):
+      txSeen.bytes.add(raw[index])
+
+proc recording(): ISP1181 =
+  newISP1181(addr hostToken, ignoreIrq, recordTx)
+
+const inPacket: array[4, uint8] = [0xDE'u8, 0xAD'u8, 0xBE'u8, 0xEF'u8]
+
+# A QUEUED PACKET REACHES THE HOST ONCE AND THE BUFFER IS THEN EMPTY. The
+# second transmit is what separates a buffer that was consumed from one that
+# was copied: a model that left the packet in place would call the host twice
+# with the same bytes and the firmware would never learn the transfer ended.
+type TxWalk = tuple[queued: bool, sent: bool, seen: TxRecord, again: bool,
+                    callsAfter: int, log: seq[string]]
+
+proc driveTransmit(): TxWalk =
+  txSeen = (calls: 0, endpoint: -1, bytes: @[], length: -1)
+  let m = recording()
+  let queued = m.queueIn(0, inPacket)
+  let sent = m.transmit(0)
+  let seen = txSeen
+  let again = m.transmit(0)
+  (queued: queued, sent: sent, seen: seen, again: again,
+   callsAfter: txSeen.calls, log: m.logLines)
+
+let txWalk = driveTransmit()
+let wantTxWalk: TxWalk = (
+    queued: true, sent: true,
+    seen: (calls: 1, endpoint: 0,
+           bytes: @[0xDE'u8, 0xAD'u8, 0xBE'u8, 0xEF'u8], length: 4),
+    again: false, callsAfter: 1,
+    log: @["isp1181: endpoint 0 IN has no packet to send; the host is not " &
+           "called"])
+check(txWalk == wantTxWalk,
+      "transmit: a queued packet reaches the host callback once, whole, and " &
+        "leaves the buffer empty",
+      $txWalk, $wantTxWalk)
+
+# THE REFUSALS EACH NAME THEIR OWN REASON. An endpoint this model does not
+# implement, an endpoint whose single buffer has no stated direction, and an
+# empty packet are three different findings, and a model that answered all
+# three the same way would hide which one a reader met.
+type TxRefusal = tuple[queued: seq[bool], calls: int, log: seq[string]]
+
+proc driveTxRefusals(): TxRefusal =
+  txSeen = (calls: 0, endpoint: -1, bytes: @[], length: -1)
+  let m = recording()
+  var queued: seq[bool]
+  for endpoint in [1, 4, -1]:
+    queued.add(m.queueIn(endpoint, inPacket))
+  queued.add(m.queueIn(0, newSeq[uint8](0)))
+  (queued: queued, calls: txSeen.calls, log: m.logLines)
+
+let txRefusal = driveTxRefusals()
+let wantTxRefusal: TxRefusal = (
+    queued: @[false, false, false, false], calls: 0,
+    log: @["isp1181: endpoint 1 has one buffer and no source on this " &
+           "machine states whether it carries the IN direction; nothing is " &
+           "queued",
+           "isp1181: a transmit was queued for endpoint 4, which this model " &
+           "does not implement; nothing is queued",
+           "isp1181: a transmit was queued for endpoint -1, which this " &
+           "model does not implement; nothing is queued",
+           "isp1181: an empty packet was queued for endpoint 0 IN and no " &
+           "source on this machine states what a zero-length IN packet " &
+           "carries; nothing is queued"])
+check(txRefusal == wantTxRefusal,
+      "transmit: a queue this model cannot honour is refused, names its " &
+        "reason and calls no host",
+      $txRefusal, $wantTxRefusal)
+
+# A HOST THAT INSTALLED NO CALLBACK KEEPS ITS PACKET. Dropping the packet on
+# the floor would leave the firmware with a buffer that emptied itself and a
+# transfer that never happened.
+type NilTx = tuple[queued: bool, sent: bool, stillThere: int,
+                   log: seq[string]]
+
+proc driveNilTx(): NilTx =
+  let m = newISP1181(addr hostToken, ignoreIrq, nil)
+  let queued = m.queueIn(0, inPacket)
+  let sent = m.transmit(0)
+  (queued: queued, sent: sent, stillThere: fifoAt(m, 1).pending,
+   log: m.logLines)
+
+let nilTx = driveNilTx()
+let wantNilTx: NilTx = (
+    queued: true, sent: false, stillThere: 1,
+    log: @["isp1181: endpoint 0 IN holds a packet and the host installed no " &
+           "transmit callback; the packet is kept"])
+check(nilTx == wantNilTx,
+      "transmit: a model with no host callback keeps the packet and says so",
+      $nilTx, $wantNilTx)
+
+# ---------------------------------------------------------------------------
+# BLOCK 6. THE DATA-FLOW COMMANDS, WHICH ARE WHAT THE FIRMWARE ACTUALLY NEEDS.
+#
+# THE CHECK THAT MATTERS IS A ROUND TRIP THROUGH THE PORTS AND NOT A CALL OF
+# `fifoAt`. A packet the host delivered has to leave the model through the same
+# command/data ports the firmware drives, or the model has an OUT FIFO nothing
+# can dequeue - which is the state this block was written to end.
+#
+# THE LENGTH PREFIX IS IN BAND. The authority puts the packet length in the
+# first two bytes of the endpoint buffer, lower byte first, so a read of an
+# N-byte packet yields N + 2 bytes. A model that answered the payload alone
+# would hand the firmware a packet two bytes short of what it was told to
+# expect, and nothing in the payload would mark it short.
+
+const outPacket = [0xDE'u8, 0xAD'u8, 0xBE'u8, 0xEF'u8]
+
+type ReadOut = tuple[delivered: bool, readBack: seq[uint8],
+                     pendingAfterRead: int, pendingAfterClear: int,
+                     log: seq[string]]
+
+proc driveReadOut(): ReadOut =
+  let m = fresh()
+  let delivered = m.deliver(0, outPacket)
+  let readBack = m.readVia(0x10'u8, 2 + outPacket.len)
+  let pendingAfterRead = fifoAt(m, 0).pending
+  m.portWrite(commandPort, 0x70'u8)
+  (delivered: delivered, readBack: readBack,
+   pendingAfterRead: pendingAfterRead,
+   pendingAfterClear: fifoAt(m, 0).pending, log: m.logLines)
+
+let readOut = driveReadOut()
+let wantReadOut: ReadOut = (
+    delivered: true,
+    readBack: @[0x04'u8, 0x00'u8, 0xDE'u8, 0xAD'u8, 0xBE'u8, 0xEF'u8],
+    pendingAfterRead: 1, pendingAfterClear: 0,
+    log: @["isp1181: a packet reached endpoint 0 and no source names the " &
+           "interrupt register bit for it; no interrupt is raised"])
+check(readOut == wantReadOut,
+      "data flow: a delivered packet is read out whole behind its length " &
+        "prefix, survives the read and is consumed by the clear",
+      $readOut, $wantReadOut)
+
+# THE CONTROL COMES FROM THE SAME POPULATION AND THE SAME HANDLE. A zero read
+# from an endpoint the model does not carry proves nothing on its own: an
+# implementation that refused EVERY read buffer command would produce it too.
+# `0x16` is read endpoint 5 buffer - numbered by the authority, outside this
+# model's four endpoints - and it is driven on the handle the positive case
+# just succeeded on, through the same `readVia`.
+type ReadOutControl = tuple[readBack: seq[uint8], log: seq[string]]
+
+proc driveReadOutControl(): ReadOutControl =
+  let m = fresh()
+  discard m.deliver(0, outPacket)
+  discard m.readVia(0x10'u8, 2 + outPacket.len)
+  let before = m.logLines.len
+  let readBack = m.readVia(0x16'u8, 2 + outPacket.len)
+  (readBack: readBack, log: m.logLines[before .. ^1])
+
+let readOutControl = driveReadOutControl()
+# THE TRAILING LINES ARE THE DOCUMENTED SEQUENCING CHOICE AND NOT NOISE. The
+# module head states that a command this model REFUSES leaves a transfer
+# already in progress LIVE, so the six reads after the refused `0x16` are
+# served by the exhausted `0x10` that preceded it. Asserting them here pins
+# that choice at the one place a reader meets its consequence.
+let wantReadOutControl: ReadOutControl = (
+    readBack: @[benign, benign, benign, benign, benign, benign],
+    log: @["isp1181: command 0x16 (endpoint 5 buffer read) is not " &
+           "implemented; the read answers 0x00",
+           "isp1181: command 0x10 (control OUT buffer read) yields 6 bytes " &
+           "and a 7th was read; the read answers 0x00",
+           "isp1181: command 0x10 (control OUT buffer read) yields 6 bytes " &
+           "and a 8th was read; the read answers 0x00",
+           "isp1181: command 0x10 (control OUT buffer read) yields 6 bytes " &
+           "and a 9th was read; the read answers 0x00",
+           "isp1181: command 0x10 (control OUT buffer read) yields 6 bytes " &
+           "and a 10th was read; the read answers 0x00",
+           "isp1181: command 0x10 (control OUT buffer read) yields 6 bytes " &
+           "and a 11th was read; the read answers 0x00",
+           "isp1181: command 0x10 (control OUT buffer read) yields 6 bytes " &
+           "and a 12th was read; the read answers 0x00"])
+check(readOutControl == wantReadOutControl,
+      "data flow: a read buffer command for an endpoint outside this model " &
+        "is refused on the same handle that just answered one",
+      $readOutControl, $wantReadOutControl)
+
+# THE IN PATH IS THE OTHER HALF, AND IT IS WHAT `queueIn` WAS WAITING FOR.
+# Write control IN buffer stages the bytes and Validate commits them; only
+# after the validate can `transmit` hand them to the host.
+type WriteIn = tuple[pendingBeforeValidate: int, pendingAfterValidate: int,
+                     sent: bool, seen: TxRecord, log: seq[string]]
+
+proc driveWriteIn(): WriteIn =
+  txSeen = (calls: 0, endpoint: -1, bytes: @[], length: -1)
+  let m = recording()
+  m.writeVia(0x01'u8, [0x02'u8, 0x00'u8, 0x55'u8, 0xAA'u8])
+  let before = fifoAt(m, 1).pending
+  m.portWrite(commandPort, 0x61'u8)
+  let after = fifoAt(m, 1).pending
+  let sent = m.transmit(0)
+  (pendingBeforeValidate: before, pendingAfterValidate: after,
+   sent: sent, seen: txSeen, log: m.logLines)
+
+let writeIn = driveWriteIn()
+let wantWriteIn: WriteIn = (
+    pendingBeforeValidate: 0, pendingAfterValidate: 1, sent: true,
+    seen: (calls: 1, endpoint: 0, bytes: @[0x55'u8, 0xAA'u8], length: 2),
+    log: @[])
+check(writeIn == wantWriteIn,
+      "data flow: write control IN buffer stages a packet, validate commits " &
+        "it and only then does it reach the host",
+      $writeIn, $wantWriteIn)
+
+# THE ILLEGAL CODES ARE REFUSALS AND NOT NO-OPS. The authority parenthesises
+# `00`, `11`, `60` and `71` as illegal, and documents validating an OUT buffer
+# and clearing an IN buffer as UNPREDICTABLE. A model that accepted them and
+# did nothing would be answering a command the hardware does not have.
+type Illegal = tuple[log: seq[string], pending: seq[int]]
+
+proc driveIllegal(): Illegal =
+  let m = fresh()
+  discard m.deliver(0, outPacket)
+  let before = m.logLines.len
+  for opcode in [0x00'u8, 0x11'u8, 0x60'u8, 0x71'u8]:
+    m.portWrite(commandPort, opcode)
+  (log: m.logLines[before .. ^1],
+   pending: @[fifoAt(m, 0).pending, fifoAt(m, 1).pending])
+
+let illegal = driveIllegal()
+let wantIllegal: Illegal = (
+    log: @["isp1181: command 0x00 (write control OUT buffer) is illegal - " &
+           "the endpoint is read-only; nothing is done",
+           "isp1181: command 0x11 (read control IN buffer) is illegal - the " &
+           "endpoint is write-only; nothing is done",
+           "isp1181: command 0x60 (validate control OUT buffer) is illegal - " &
+           "validating an OUT buffer is unpredictable; nothing is done",
+           "isp1181: command 0x71 (clear control IN buffer) is illegal - " &
+           "clearing an IN buffer is unpredictable; nothing is done"],
+    pending: @[1, 0])
+check(illegal == wantIllegal,
+      "data flow: the four illegal buffer codes are refused by name and " &
+        "leave every buffer as it was",
+      $illegal, $wantIllegal)
+
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT.
 const declaredCaseSites = declaredSites
 const declaredOffGreenPathSites = offGreenPathSites

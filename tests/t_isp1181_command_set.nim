@@ -5,12 +5,18 @@
 ## that asked `commands.nim` which opcodes it implements and then asserted that
 ## it implements them would pass against any table at all.
 ##
-## THE THIRD CLASS IS NOT AN INVENTION OF THIS SUITE, IT IS A GAP IN THE
-## AUTHORITY. The authority names buffer write, buffer read, stall, status,
-## validate and clear, and gives an opcode for NONE of them. No ISP1181 datasheet and no ISP1362 driver header exists on this
-## machine. So the model carries no opcode for those six, and every opcode the
-## authority does not number answers benignly and says so. `commands.nim`
-## states the gap where it lives.
+## THERE ARE FOUR CLASSES AND EACH NAMES A DIFFERENT FINDING. `ccImplemented`
+## and `ccNotImplemented` are decisions this project took. `ccIllegal` is a
+## byte the authority NUMBERS AND FORBIDS. `ccUnspecified` is a byte no source
+## on this machine describes at all, and it did not go away when the six
+## data-flow commands were numbered - 111 bytes are still in it.
+##
+## THE DATA-FLOW OPCODES ARE INHERITED. They are typed here from Table 109 of
+## the ISP1362 data sheet, Rev. 06, which states that it integrates the
+## ISP1181B peripheral controller - a claim of INTEGRATION, not of a
+## byte-identical command map. The ISP1181B data sheet itself was not read.
+## `docs/sources.md` carries the limit; this suite would go red against a part
+## whose map differs, which is the point of typing the literals out.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code.
 
@@ -58,7 +64,7 @@ const
 # design document spells out. The six commands those documents name WITHOUT an
 # opcode are not here and cannot be: an opcode chosen by this suite would be
 # asserting its own guess.
-const implementedOpcodes: array[16, uint8] = [
+const implementedOpcodes: array[41, uint8] = [
   0xF6'u8,                                    # reset
   0xBA'u8, 0xBB'u8,                           # hardware configuration
   0xB8'u8, 0xB9'u8,                           # mode
@@ -67,7 +73,32 @@ const implementedOpcodes: array[16, uint8] = [
   0xD2'u8,                                    # peek
   0xC0'u8,                                    # interrupt register
   0xC2'u8, 0xC3'u8,                           # interrupt enable
-  0xF4'u8]                                    # acknowledge setup
+  0xF4'u8,                                    # acknowledge setup
+  0x01'u8,                            # control IN buffer write
+  0x10'u8,                            # control OUT buffer read
+  0x12'u8,                            # endpoint 1 buffer read
+  0x13'u8,                            # endpoint 2 buffer read
+  0x14'u8,                            # endpoint 3 buffer read
+  0x40'u8,                            # control OUT stall
+  0x41'u8,                            # control IN stall
+  0x42'u8,                            # endpoint 1 stall
+  0x43'u8,                            # endpoint 2 stall
+  0x44'u8,                            # endpoint 3 stall
+  0x50'u8,                            # control OUT status
+  0x51'u8,                            # control IN status
+  0x52'u8,                            # endpoint 1 status
+  0x53'u8,                            # endpoint 2 status
+  0x54'u8,                            # endpoint 3 status
+  0x61'u8,                            # control IN buffer validate
+  0x70'u8,                            # control OUT buffer clear
+  0x72'u8,                            # endpoint 1 buffer clear
+  0x73'u8,                            # endpoint 2 buffer clear
+  0x74'u8,                            # endpoint 3 buffer clear
+  0x80'u8,                            # control OUT unstall
+  0x81'u8,                            # control IN unstall
+  0x82'u8,                            # endpoint 1 unstall
+  0x83'u8,                            # endpoint 2 unstall
+  0x84'u8]                            # endpoint 3 unstall
 
 # THE NOT-IMPLEMENTED LIST, HAND-WRITTEN, with the name each document gives it.
 # `scratch`, `unlock` and `isochronous` are named by the documents WITHOUT an
@@ -75,7 +106,7 @@ const implementedOpcodes: array[16, uint8] = [
 # opcode the authority does not number falls to the unspecified class below,
 # which answers benignly and logs. The gap is only expensive on the
 # IMPLEMENTED side.
-const notImplemented: array[17, tuple[opcode: uint8, name: string]] = [
+const notImplemented: array[100, tuple[opcode: uint8, name: string]] = [
   (0xF0'u8, "DMA"), (0xF1'u8, "DMA"), (0xF2'u8, "DMA"), (0xF3'u8, "DMA"),
   (0xB5'u8, "chip identifier"),
   (0xB4'u8, "frame number"),
@@ -89,7 +120,113 @@ const notImplemented: array[17, tuple[opcode: uint8, name: string]] = [
   (0x2B'u8, "endpoint 11 configuration"),
   (0x2C'u8, "endpoint 12 configuration"),
   (0x2D'u8, "endpoint 13 configuration"),
-  (0x2E'u8, "endpoint 14 configuration")]
+  (0x2E'u8, "endpoint 14 configuration"),
+  (0x02'u8, "endpoint 1 buffer write"),
+  (0x03'u8, "endpoint 2 buffer write"),
+  (0x04'u8, "endpoint 3 buffer write"),
+  (0x05'u8, "endpoint 4 buffer write"),
+  (0x06'u8, "endpoint 5 buffer write"),
+  (0x07'u8, "endpoint 6 buffer write"),
+  (0x08'u8, "endpoint 7 buffer write"),
+  (0x09'u8, "endpoint 8 buffer write"),
+  (0x0A'u8, "endpoint 9 buffer write"),
+  (0x0B'u8, "endpoint 10 buffer write"),
+  (0x0C'u8, "endpoint 11 buffer write"),
+  (0x0D'u8, "endpoint 12 buffer write"),
+  (0x0E'u8, "endpoint 13 buffer write"),
+  (0x0F'u8, "endpoint 14 buffer write"),
+  (0x15'u8, "endpoint 4 buffer read"),
+  (0x16'u8, "endpoint 5 buffer read"),
+  (0x17'u8, "endpoint 6 buffer read"),
+  (0x18'u8, "endpoint 7 buffer read"),
+  (0x19'u8, "endpoint 8 buffer read"),
+  (0x1A'u8, "endpoint 9 buffer read"),
+  (0x1B'u8, "endpoint 10 buffer read"),
+  (0x1C'u8, "endpoint 11 buffer read"),
+  (0x1D'u8, "endpoint 12 buffer read"),
+  (0x1E'u8, "endpoint 13 buffer read"),
+  (0x1F'u8, "endpoint 14 buffer read"),
+  (0x45'u8, "endpoint 4 stall"),
+  (0x46'u8, "endpoint 5 stall"),
+  (0x47'u8, "endpoint 6 stall"),
+  (0x48'u8, "endpoint 7 stall"),
+  (0x49'u8, "endpoint 8 stall"),
+  (0x4A'u8, "endpoint 9 stall"),
+  (0x4B'u8, "endpoint 10 stall"),
+  (0x4C'u8, "endpoint 11 stall"),
+  (0x4D'u8, "endpoint 12 stall"),
+  (0x4E'u8, "endpoint 13 stall"),
+  (0x4F'u8, "endpoint 14 stall"),
+  (0x55'u8, "endpoint 4 status"),
+  (0x56'u8, "endpoint 5 status"),
+  (0x57'u8, "endpoint 6 status"),
+  (0x58'u8, "endpoint 7 status"),
+  (0x59'u8, "endpoint 8 status"),
+  (0x5A'u8, "endpoint 9 status"),
+  (0x5B'u8, "endpoint 10 status"),
+  (0x5C'u8, "endpoint 11 status"),
+  (0x5D'u8, "endpoint 12 status"),
+  (0x5E'u8, "endpoint 13 status"),
+  (0x5F'u8, "endpoint 14 status"),
+  (0x62'u8, "endpoint 1 buffer validate"),
+  (0x63'u8, "endpoint 2 buffer validate"),
+  (0x64'u8, "endpoint 3 buffer validate"),
+  (0x65'u8, "endpoint 4 buffer validate"),
+  (0x66'u8, "endpoint 5 buffer validate"),
+  (0x67'u8, "endpoint 6 buffer validate"),
+  (0x68'u8, "endpoint 7 buffer validate"),
+  (0x69'u8, "endpoint 8 buffer validate"),
+  (0x6A'u8, "endpoint 9 buffer validate"),
+  (0x6B'u8, "endpoint 10 buffer validate"),
+  (0x6C'u8, "endpoint 11 buffer validate"),
+  (0x6D'u8, "endpoint 12 buffer validate"),
+  (0x6E'u8, "endpoint 13 buffer validate"),
+  (0x6F'u8, "endpoint 14 buffer validate"),
+  (0x75'u8, "endpoint 4 buffer clear"),
+  (0x76'u8, "endpoint 5 buffer clear"),
+  (0x77'u8, "endpoint 6 buffer clear"),
+  (0x78'u8, "endpoint 7 buffer clear"),
+  (0x79'u8, "endpoint 8 buffer clear"),
+  (0x7A'u8, "endpoint 9 buffer clear"),
+  (0x7B'u8, "endpoint 10 buffer clear"),
+  (0x7C'u8, "endpoint 11 buffer clear"),
+  (0x7D'u8, "endpoint 12 buffer clear"),
+  (0x7E'u8, "endpoint 13 buffer clear"),
+  (0x7F'u8, "endpoint 14 buffer clear"),
+  (0x85'u8, "endpoint 4 unstall"),
+  (0x86'u8, "endpoint 5 unstall"),
+  (0x87'u8, "endpoint 6 unstall"),
+  (0x88'u8, "endpoint 7 unstall"),
+  (0x89'u8, "endpoint 8 unstall"),
+  (0x8A'u8, "endpoint 9 unstall"),
+  (0x8B'u8, "endpoint 10 unstall"),
+  (0x8C'u8, "endpoint 11 unstall"),
+  (0x8D'u8, "endpoint 12 unstall"),
+  (0x8E'u8, "endpoint 13 unstall"),
+  (0x8F'u8, "endpoint 14 unstall")]
+
+# THE ILLEGAL LIST, HAND-WRITTEN. The authority parenthesises these four codes
+# and gives each a reason: two endpoints have a direction that forbids the
+# access, and two operations it documents as UNPREDICTABLE. They are numbered
+# and forbidden, which is a different finding from unnumbered, so they get a
+# list and a class of their own rather than falling to the unspecified sweep.
+const illegalCommands: array[4, tuple[opcode: uint8, name: string,
+                                      detail: string]] = [
+  (0x00'u8, "write control OUT buffer", "the endpoint is read-only"),
+  (0x11'u8, "read control IN buffer", "the endpoint is write-only"),
+  (0x60'u8, "validate control OUT buffer",
+   "validating an OUT buffer is unpredictable"),
+  (0x71'u8, "clear control IN buffer",
+   "clearing an IN buffer is unpredictable")]
+
+# THE IMPLEMENTED COMMANDS THAT SPEAK ON A FRESH HANDLE. Block 1 asserts that
+# an accepted command is silent, and one accepted command is legitimately not:
+# a validate with no buffer write staged for it is a firmware fault the model
+# reports. It is listed here WITH ITS LINE rather than exempted, so the
+# exception is asserted and not merely skipped.
+const speaksOnFreshHandle: array[1, tuple[opcode: uint8, want: string]] = [
+  (0x61'u8, "isp1181: a validate for endpoint 0 IN found no buffer write " &
+            "staged for it; nothing is validated")]
 
 var hostToken = 0xC0FFEE
 
@@ -114,6 +251,12 @@ type Accepted = tuple[firstBad: string, driven: int]
 proc driveImplemented(): Accepted =
   result = (firstBad: "", driven: 0)
   for opcode in implementedOpcodes:
+    var speaks = false
+    for row in speaksOnFreshHandle:
+      if row.opcode == opcode:
+        speaks = true
+    if speaks:
+      continue
     let m = fresh()
     m.portWrite(commandPort, opcode)
     inc result.driven
@@ -125,7 +268,7 @@ proc driveImplemented(): Accepted =
     elif m.logLines.len != 0:
       result.firstBad = "0x" & toHex(opcode) & " logged: " & m.logLines[0]
 
-const wantAccepted: Accepted = (firstBad: "", driven: 16)
+const wantAccepted: Accepted = (firstBad: "", driven: 40)
 
 let accepted = driveImplemented()
 check(accepted == wantAccepted,
@@ -177,7 +320,7 @@ for row in notImplemented:
             ") is not implemented; the read answers 0x00"))
 
 let refused = driveRefused(notImplementedRows)
-const wantRefused: Refused = (firstBad: "", driven: 17)
+const wantRefused: Refused = (firstBad: "", driven: 100)
 check(refused == wantRefused,
       "not implemented: every command answers benignly and logs one line",
       $refused, $wantRefused)
@@ -200,39 +343,74 @@ for value in 0 .. 255:
   for row in notImplemented:
     if row.opcode == opcode:
       numbered = true
+  for row in illegalCommands:
+    if row.opcode == opcode:
+      numbered = true
   if not numbered:
     unspecifiedRows.add((opcode: opcode,
         want: "isp1181: command 0x" & toHex(opcode) &
               " is not in the specified command set; the read answers 0x00"))
 
 let unspecified = driveRefused(unspecifiedRows)
-const wantUnspecified: Refused = (firstBad: "", driven: 223)
+const wantUnspecified: Refused = (firstBad: "", driven: 111)
 check(unspecified == wantUnspecified,
       "unspecified: every unnumbered opcode answers benignly and logs one line",
       $unspecified, $wantUnspecified)
 
+# THE FOUR ILLEGAL CODES ANSWER BENIGNLY AND NAME THE PROHIBITION. The line
+# says a THIRD thing: not "not implemented" (a decision this project took) and
+# not "not in the specified command set" (a gap in the sources), but that the
+# authority numbers the byte and forbids it.
+var illegalRows: seq[tuple[opcode: uint8, want: string]]
+for row in illegalCommands:
+  illegalRows.add((opcode: row.opcode,
+      want: "isp1181: command 0x" & toHex(row.opcode) & " (" & row.name &
+            ") is illegal - " & row.detail & "; nothing is done"))
+
+let illegalDriven = driveRefused(illegalRows)
+const wantIllegal: Refused = (firstBad: "", driven: 4)
+check(illegalDriven == wantIllegal,
+      "illegal: every code the authority forbids answers benignly and names " &
+        "the prohibition",
+      $illegalDriven, $wantIllegal)
+
+# THE ONE ACCEPTED COMMAND THAT SPEAKS. It is driven here with its line
+# asserted, so block 1's exemption costs no coverage.
+let speaking = driveRefused(@speaksOnFreshHandle)
+const wantSpeaking: Refused = (firstBad: "0x61 became the pending command",
+                               driven: 1)
+check(speaking == wantSpeaking,
+      "accepted-and-speaking: a validate with nothing staged is accepted, " &
+        "recorded as pending and reports the fault",
+      $speaking, $wantSpeaking)
+
 # THE THREE CLASSES PARTITION THE BYTE. Without this the three sweeps above
 # could each be green over a set that left opcodes untouched.
-type Partition = tuple[implemented: int, refused: int, unspecified: int,
-                       total: int]
-let partition: Partition = (implemented: accepted.driven,
+type Partition = tuple[implemented: int, refused: int, illegal: int,
+                       unspecified: int, total: int]
+let partition: Partition = (implemented: accepted.driven +
+                                         speaking.driven,
                             refused: refused.driven,
+                            illegal: illegalDriven.driven,
                             unspecified: unspecified.driven,
-                            total: accepted.driven + refused.driven +
+                            total: accepted.driven + speaking.driven +
+                                   refused.driven + illegalDriven.driven +
                                    unspecified.driven)
-const wantPartition: Partition = (implemented: 16, refused: 17,
-                                  unspecified: 223, total: 256)
+const wantPartition: Partition = (implemented: 41, refused: 100, illegal: 4,
+                                  unspecified: 111, total: 256)
 check(partition == wantPartition,
-      "partition: the three classes cover all 256 opcodes and none twice",
+      "partition: the four classes cover all 256 opcodes and none twice",
       $partition, $wantPartition)
 
 # THE SIX COMMANDS THE AUTHORITY NAMES WITHOUT AN OPCODE are recorded in the
 # model rather than left in a comment, so that the day a datasheet arrives the
 # list to close is a list and not a paragraph.
-const wantUnnumbered = @["buffer write", "buffer read", "stall", "status",
-                         "validate", "clear"]
+# THE LIST IS EMPTY AND THE CHECK IS KEPT. The six it held are numbered from
+# ISP1362 Rev. 06 Table 109; asserting the empty case is what makes a future
+# named-but-unnumbered command show up here as a change rather than as silence.
+const wantUnnumbered: seq[string] = @[]
 check(@unnumberedCommands == wantUnnumbered,
-      "gap: the six commands named without an opcode are recorded by name",
+      "gap: no command is left named without an opcode",
       $(@unnumberedCommands), $wantUnnumbered)
 
 # ---------------------------------------------------------------------------
