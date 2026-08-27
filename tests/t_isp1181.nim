@@ -762,9 +762,15 @@ check(txRefusal == wantTxRefusal,
 # DcEndpointConfiguration and Table 111 gives it as 0 = OUT, 1 = IN; section
 # 15.1.1 orders the sixteen configuration slots control OUT, control IN, then
 # endpoints 1 to 14, so `0x22` carries endpoint 1's byte and `0x23` carries
-# endpoint 2's. The positive and the negative differ in that one bit and in
-# nothing else: a model that ignored the bit would answer both the same way,
-# and a model that read a neighbouring bit would answer both wrongly.
+# endpoint 2's. `0xC1 xor 0x81` is `0x40`, so the positive and the negative
+# differ in that ONE bit and in nothing else.
+#
+# FFOSZ IS HELD EQUAL ACROSS THE PAIR AND IS NOT A SIZE CLAIM HERE. Giving each
+# endpoint the FFOSZ its own buffer would encode varies a second field of the
+# byte, and a pair that varies two fields isolates neither. What this model
+# reads a buffer's shape out of is `fifoShape` in `src/isp1181/isp1181.nim`; it
+# reads no size out of DcEndpointConfiguration at all, so holding the low
+# nibble equal costs the run nothing and buys the pair its one-bit property.
 type Epdir = tuple[queuedIn: bool, sentIn: bool, seen: TxRecord,
                    queuedOut: bool, interruptRegister: seq[uint8],
                    log: seq[string]]
@@ -773,7 +779,7 @@ proc driveEpdir(): Epdir =
   txSeen = (calls: 0, endpoint: -1, bytes: @[], length: -1)
   let m = recording()
   m.writeVia(0x22'u8, [0xC1'u8])
-  m.writeVia(0x23'u8, [0x84'u8])
+  m.writeVia(0x23'u8, [0x81'u8])
   let queuedIn = m.queueIn(1, inPacket)
   let sentIn = m.transmit(1)
   let queuedOut = m.queueIn(2, inPacket)
@@ -800,15 +806,16 @@ check(epdir == wantEpdir,
 # endpoint the firmware configured IN has nowhere to land, and a model that
 # accepted it would raise that endpoint's interrupt and show the firmware an
 # OUT packet on a buffer it had declared for transmission. The endpoint
-# configured OUT in the same run is the control: the two differ in EPDIR and in
-# nothing else, so a model that refused every delivery would fail on it.
+# configured OUT in the same run is the control: `0xC1 xor 0x81` is `0x40`, so
+# the two differ in EPDIR and in nothing else. FFOSZ is held equal across the
+# pair for the reason the transmit half above states.
 type DeliverEpdir = tuple[intoIn: bool, intoOut: bool, pending: seq[int],
                           log: seq[string]]
 
 proc driveDeliverEpdir(): DeliverEpdir =
   let m = fresh()
   m.writeVia(0x22'u8, [0xC1'u8])
-  m.writeVia(0x23'u8, [0x84'u8])
+  m.writeVia(0x23'u8, [0x81'u8])
   let intoIn = m.deliver(1, [0x11'u8])
   let intoOut = m.deliver(2, [0x22'u8])
   var pending: seq[int]
