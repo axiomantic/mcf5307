@@ -19,9 +19,32 @@
 ## gives the enable's value `0x1F07` and not its width, and an enable narrower
 ## than the register it masks could not mask it, so it is the register's width.
 ##
-## No source on this machine assigns an interrupt-register bit to an event, so
-## this model assigns none and says so on every delivery. The alternative was a
-## bit chosen here, which the firmware would then obey.
+## THE ENDPOINT-COMPLETION BITS ARE ASSIGNED AND NOTHING ELSE IS. Two
+## sources agree on them: the emulated firmware's own service routine, which
+## dispatches bits 8 and 9 to fixed routines and bits 10 upwards to a table of
+## per-endpoint function pointers, and the inherited ISP1362 Rev. 06 Table 143
+## layout, in which bit 8 is EP0OUT, bit 9 is EP0IN and bits 10 upwards are
+## EP1 and after. The firmware's own interrupt enable, `0x00001F07`, arms
+## bits 8 to 12, one for each buffer this model carries.
+## `interruptBitOfFifo` is the assignment - its length is `fifoCount`, so a
+## buffer added without a bit does not compile - and `docs/sources.md` records
+## what each half of the agreement is worth.
+##
+## THE BUS BITS 0 TO 2 AND THE TRANSFER BITS 3 TO 7 ARE STILL UNASSIGNED, and
+## the two sources DISAGREE about two of them: the firmware dispatches bit 1 to
+## suspend and bit 2 to resume, and the inherited table calls bit 1 RESUME and
+## bit 2 SUSPND. Nothing here would set them either way - this model's API
+## delivers an endpoint and bytes and carries no bus event at all - so they are
+## left where the disagreement leaves them.
+##
+## THE INTERRUPT REGISTER DOES NOT CLEAR WHEN THE FIRMWARE READS IT. `0xC0`
+## reports the register and leaves it, and the bit is taken away by a read of
+## the owning endpoint's status register, `0x50+n`. THAT ROUTE IS INHERITED
+## from ISP1362 Rev. 06 p.53 and not read from an ISP1181 document, and it is
+## the piece that keeps the emulated firmware out of its own handler: the
+## service routine reads four status bytes and never writes them back, so a bit
+## with no route out of the register would spin the machine. `docs/sources.md`
+## carries what is still owed on it.
 ##
 ## Two sequencing rules below are this file's and not the authority's, because
 ## no document on this machine states either way. First, a command this model
@@ -161,6 +184,16 @@ const outFifoOfEndpoint: array[4, int] = [0, 2, 3, 4]
   ## endpoint with two, and a delivery is an OUT transfer, so it lands in
   ## index 0 and never in the IN buffer at index 1.
 
+const interruptBitOfFifo: array[fifoCount, int] = [8, 9, 10, 11, 12]
+  ## The interrupt-register bit each buffer owns, indexed as `fifos` is. The
+  ## module head names the two sources that agree on this range and the two
+  ## bits on which they do not.
+  ##
+  ## THE ARRAY STOPS WHERE THE BUFFERS DO AND THAT IS NOT A LIMIT OF THE
+  ## ASSIGNMENT. Both sources carry per-endpoint bits past 12 - the firmware's
+  ## pointer table reaches bit 16 - and this model carries no buffer for them,
+  ## so there is no event here that could set one.
+
 const inFifoOfEndpoint0 = 1
   ## The buffer a packet for the host waits in. It is endpoint 0's second
   ## buffer - the one `fifoShape` names IN - and it is the only buffer in this
@@ -265,9 +298,7 @@ proc deliver*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
            $data.len & " bytes; the buffer holds " &
            $m.fifos[index].pending & " of " & $m.fifos[index].buffers)
     return false
-  m.note("isp1181: a packet reached endpoint " & $endpoint &
-         " and no source names the interrupt register bit for it; no " &
-         "interrupt is raised")
+  m.raiseInterrupt(1'u32 shl interruptBitOfFifo[index])
   true
 
 proc queueIn*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
@@ -322,6 +353,11 @@ proc transmit*(m: ISP1181; endpoint: int): bool =
   ## The packet is consumed only when the host is actually called. A model that
   ## emptied the buffer and then found no callback would leave the firmware
   ## with a transfer that completed and a host that never saw it.
+  ##
+  ## THE INTERRUPT IS RAISED HERE AND NOT AT THE VALIDATE, for the same reason
+  ## the packet leaves here: the validate is the firmware handing the buffer to
+  ## the host, and this is the host taking it. A bit set at the validate would
+  ## tell the firmware a transfer completed against a host that had not asked.
   if m.isNil:
     return false
   if endpoint < 0 or endpoint >= outFifoOfEndpoint.len:
@@ -343,6 +379,7 @@ proc transmit*(m: ISP1181; endpoint: int): bool =
     return false
   var packet = m.fifos[inFifoOfEndpoint0].take()
   m.tx(m.user, cint(endpoint), addr packet[0], csize_t(packet.len))
+  m.raiseInterrupt(1'u32 shl interruptBitOfFifo[inFifoOfEndpoint0])
   true
 
 
@@ -527,6 +564,12 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
     if opcode >= statusControlOut and int(opcode) < int(statusControlOut) + 0x10:
       let offset = int(opcode) - int(statusControlOut)
       let index = (if offset <= 1: offset else: outFifoOfEndpoint[offset - 1])
+      # THE STATUS READ IS THE ROUTE THE BIT LEAVES THE INTERRUPT REGISTER BY,
+      # and it is taken at the COMMAND and not at the data-port read: ISP1362
+      # Rev. 06 p.53 separates the clearing form from a non-clearing one by the
+      # OPCODE, so it is the opcode that decides and not whether the byte was
+      # collected. The module head states what the route is inherited from.
+      m.clearInterrupt(1'u32 shl interruptBitOfFifo[index])
       m.beginTransfer(opcode, tfRead, 1, uint32(m.statusByte(index)))
       return
 

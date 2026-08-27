@@ -691,7 +691,7 @@ proc peekTwice(): Peek =
 
 let peeked = peekTwice()
 let wantPeeked: Peek = (first: 0x5A'u8, second: 0x5A'u8, pending: 1,
-                        logged: 1)
+                        logged: 0)
 check(peeked == wantPeeked,
       "peek: 0xD2 reads the selected endpoint's head byte and consumes none",
       $peeked, $wantPeeked)
@@ -739,11 +739,9 @@ check(fifoReset == wantFifoReset,
 # ---------------------------------------------------------------------------
 # Block 7. The IRQ3 line.
 #
-# No source on this machine assigns an interrupt-register bit to an event, so
-# the model assigns none and says so once per delivery. That silence is what the
-# case pins: a model whose interrupt simply never fired would be
-# indistinguishable from the stub, and this suite has to be able to tell them
-# apart.
+# A DELIVERY DRIVES THE WHOLE PATH: the packet reaches the buffer, the bit its
+# endpoint owns is set, the enable the firmware writes admits it, and the line
+# follows. Endpoint 1's bit is `10`, so the register reads `0x0000_0400`.
 
 type Delivery = tuple[accepted: bool, pending: int, interrupt: seq[uint8],
                       asserted: bool, log: seq[string]]
@@ -758,11 +756,10 @@ proc deliverOnce(): Delivery =
 
 let delivered = deliverOnce()
 let wantDelivered: Delivery = (accepted: true, pending: 1,
-    interrupt: @[0x00'u8, 0x00'u8, 0x00'u8, 0x00'u8], asserted: false,
-    log: @["isp1181: a packet reached endpoint 1 and no source names the " &
-           "interrupt register bit for it; no interrupt is raised"])
+    interrupt: @[0x00'u8, 0x04'u8, 0x00'u8, 0x00'u8], asserted: true,
+    log: @[])
 check(delivered == wantDelivered,
-      "irq: a delivery raises no interrupt and names the missing assignment",
+      "irq: a delivery raises the interrupt its own endpoint owns",
       $delivered, $wantDelivered)
 
 # The derivation itself is tested with a mask this suite chooses, so that the

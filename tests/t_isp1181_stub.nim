@@ -705,6 +705,64 @@ check(inTokenInert == wantInTokenInert,
         "answers zero rather than aborting",
       $inTokenInert, $wantInTokenInert)
 
+# ---------------------------------------------------------------------------
+# BLOCK 13. THE IRQ LINE A C CALLER CAN SEE.
+#
+# EVERY STEP BELOW GOES THROUGH A PUBLISHED ENTRY POINT. The enable is written
+# with `isp1181_write` as the firmware writes it, the packet arrives through
+# `isp1181_rx` as the bus delivers it, and what the case asserts is the
+# argument the C caller's own `isp1181_irq_fn` received. A model that set the
+# bit and never reached the callback would satisfy every Nim-side case in
+# `t_isp1181` and would leave IRQ3 dead in the consumer.
+#
+# EVERY BYTE IS A HAND-WRITTEN LITERAL. `0xC2` is write interrupt enable and
+# `0x07 0x1F 0x00 0x00` is `0x00001F07` lower byte first, which is the value
+# the emulated firmware writes. `0x50` is read control OUT endpoint status.
+
+var lineTrace: seq[string]
+
+proc recordLine(user: pointer; asserted: cint) {.cdecl.} =
+  lineTrace.add("user=" & (if user == addr hostToken: "host" else: "OTHER") &
+                " asserted=" & $int(asserted))
+
+const
+  writeInterruptEnable = 0xC2'u8
+  readControlOutStatus = 0x50'u8
+
+type Line = tuple[trace: seq[string], refusedTrace: seq[string],
+                  clearedTrace: seq[string]]
+
+proc driveLine(): Line =
+  lineTrace = @[]
+  let handle = isp1181_create(addr hostToken, recordLine, recordTx)
+  setBackend(handle, FullModel)
+  isp1181_write(handle, commandPort, writeInterruptEnable)
+  for value in [0x07'u8, 0x1F'u8, 0x00'u8, 0x00'u8]:
+    isp1181_write(handle, dataPort, value)
+  isp1181_rx(handle, cint(0), addr payload[0], csize_t(1))
+  result.trace = lineTrace
+  isp1181_rx(handle, cint(4), addr payload[0], csize_t(1))
+  result.refusedTrace = lineTrace
+  isp1181_write(handle, commandPort, readControlOutStatus)
+  discard isp1181_read(handle, dataPort)
+  result.clearedTrace = lineTrace
+  isp1181_destroy(handle)
+
+# THE KNOWN NEGATIVE IS ON THE SAME HANDLE, THROUGH THE SAME ENTRY POINT.
+# Endpoint 4 is an endpoint this model does not carry, and it is delivered to
+# after endpoint 0 has already lit the line: a callback that fired on any
+# delivery at all would add a second entry here, and one that never fired
+# would leave the first list empty.
+let line = driveLine()
+let wantLine: Line = (
+    trace: @["user=host asserted=1"],
+    refusedTrace: @["user=host asserted=1"],
+    clearedTrace: @["user=host asserted=1", "user=host asserted=0"])
+check(line == wantLine,
+      "irq: a delivery through isp1181_rx reaches the C caller's callback, " &
+        "a refused one does not, and a status read drops the line",
+      $line, $wantLine)
+
 # The registry lines. They are data and not a verdict: this program reports
 # what its text declares and what its run adjudicated, and the registered
 # test's driver is what compares them.

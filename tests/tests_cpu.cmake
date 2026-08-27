@@ -2961,7 +2961,7 @@ mcf5307_check_case_sites("t_isp1181_stub" "@MCF5307_ISP1181_STUB_SOURCE@"
 # iteration, so this figure counts properties and not addresses. A sweep that
 # stopped iterating is caught by the iteration count inside the case's own
 # expected value, which is why the two guards do not overlap here.
-mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 28)
+mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 29)
 
 ]==])
 
@@ -3214,7 +3214,7 @@ mcf5307_check_case_sites("t_isp1181"
 # driven-count inside the expected value, so a sweep that stopped iterating
 # fails on that count rather than on this figure. What this figure catches is
 # a whole case removed.
-mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 23)
+mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 26)
 
 ]==])
 

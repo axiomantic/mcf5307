@@ -5,13 +5,23 @@
 ## line by calling the code that writes it, would pass against any table and any
 ## wording at all.
 ##
-## No source on this machine names the interrupt-register bit for any event, so
-## there is no event whose bit this suite could assert. What is assertable is
-## the register itself - its width, its byte order, that a clear is per bit,
-## and that nothing in the model lights a bit on its own. The last of those is
-## the one that would silently become false the day somebody picks a bit, so it
-## is written as a sweep with a positive control beside it: a model whose
-## register were stuck at zero would satisfy the sweep and fails the control.
+## EVERY OPCODE AND EVERY LOG LINE BELOW IS A HAND-WRITTEN LITERAL. A suite
+## that asked the model which opcodes it implements, or that built an expected
+## log line by calling the code that writes it, would pass against any table
+## and any wording at all.
+##
+## THE INTERRUPT REGISTER IS DRIVEN AS FAR AS IT IS ASSIGNED AND NO FURTHER.
+## The endpoint-completion bits are assigned and are asserted here by the event
+## that sets each one; the bus bits, the transfer bits and the endpoints this
+## model does not carry are not assigned, and there is no event whose bit this
+## suite could assert. What IS assertable of the register itself is its
+## width, its byte order, that a clear is per bit, and that no COMMAND byte
+## lights a bit. The last of those is written as a sweep with a positive
+## control beside it: a model whose register were stuck at zero would satisfy
+## the sweep and fails the control.
+##
+## MIT licensed and clean-room with respect to GPL and LGPL code. Nothing here
+## is copied from a Philips or NXP document.
 
 import std/strutils
 
@@ -238,11 +248,7 @@ proc refusedSelection(): Selection =
 
 let selection = refusedSelection()
 let wantSelection: Selection = (peeked: 0xA2'u8,
-    log: @["isp1181: a packet reached endpoint 0 and no source names the " &
-           "interrupt register bit for it; no interrupt is raised",
-           "isp1181: a packet reached endpoint 2 and no source names the " &
-           "interrupt register bit for it; no interrupt is raised",
-           "isp1181: command 0x24 (endpoint 4 configuration) is not " &
+    log: @["isp1181: command 0x24 (endpoint 4 configuration) is not " &
            "implemented; the read answers 0x00"])
 check(selection == wantSelection,
       "fifos: a refused endpoint-configuration command leaves the selection alone",
@@ -301,9 +307,7 @@ proc refusalLines(): Refusals =
 
 let refusals = refusalLines()
 let wantRefusals: Refusals = (
-    full: @["isp1181: a packet reached endpoint 3 and no source names the " &
-            "interrupt register bit for it; no interrupt is raised",
-            "isp1181: endpoint 3 refused a packet of 2 bytes; the buffer " &
+    full: @["isp1181: endpoint 3 refused a packet of 2 bytes; the buffer " &
             "holds 1 of 1"],
     oversize: @["isp1181: endpoint 1 refused a packet of 17 bytes; the " &
                 "buffer holds 0 of 2"])
@@ -418,11 +422,13 @@ check(quiet == wantQuiet,
       "interrupt register: no command byte lights a bit, and a bit can be lit",
       $quiet, $wantQuiet)
 
-# A delivery raises nothing at any endpoint and says why, and it says it under
-# the enable the firmware actually writes. The interrupt enable is driven to
-# `0x1F07` first, so every bit the firmware arms is armed while the packets
-# arrive. A model that had picked a bit for a delivery would light the line
-# here, which is the direction this case wants: the silence is the assertion.
+# A DELIVERY LIGHTS THE BIT ITS OWN ENDPOINT OWNS, AND IT LIGHTS THE LINE. The
+# interrupt enable is driven to `0x1F07` first, so every bit the firmware arms
+# is armed while the packets arrive. EVERY ENDPOINT IS DRIVEN IN ONE CASE
+# BECAUSE A SINGLE SHARED BIT WOULD PASS ANY CASE THAT DROVE ONE ENDPOINT. The
+# expected register is written as one hand-typed literal per byte: bit 8 for
+# endpoint 0 OUT and bits 10, 11 and 12 for endpoints 1 to 3, which is
+# `0x0000_1D00` and reads back least significant byte first.
 type Deliveries = tuple[accepted: seq[bool], interrupt: seq[uint8],
                         asserted: bool, log: seq[string]]
 
@@ -437,18 +443,119 @@ proc deliverEverywhere(): Deliveries =
 
 let deliveries = deliverEverywhere()
 let wantDeliveries: Deliveries = (accepted: @[true, true, true, true],
-    interrupt: @[0x00'u8, 0x00'u8, 0x00'u8, 0x00'u8], asserted: false,
-    log: @["isp1181: a packet reached endpoint 0 and no source names the " &
-           "interrupt register bit for it; no interrupt is raised",
-           "isp1181: a packet reached endpoint 1 and no source names the " &
-           "interrupt register bit for it; no interrupt is raised",
-           "isp1181: a packet reached endpoint 2 and no source names the " &
-           "interrupt register bit for it; no interrupt is raised",
-           "isp1181: a packet reached endpoint 3 and no source names the " &
-           "interrupt register bit for it; no interrupt is raised"])
+    interrupt: @[0x00'u8, 0x1D'u8, 0x00'u8, 0x00'u8], asserted: true,
+    log: @[])
 check(deliveries == wantDeliveries,
-      "interrupt register: no delivery lights a bit under the firmware's enable",
+      "interrupt register: a delivery lights its own endpoint's bit and the line",
       $deliveries, $wantDeliveries)
+
+# A DELIVERY THE MODEL REFUSES LIGHTS NOTHING, AND THE PROOF IS ON THE HANDLE
+# WHOSE ENDPOINT 3 JUST ANSWERED. A zero register after a refusal proves
+# nothing on its own - a model that had never assigned a bit would answer zero
+# too - so the known positive and the two known negatives run through the same
+# handle, the same enable and the same entry point. Endpoint 3 is
+# single-buffered, so its second packet is refused by a buffer that exists;
+# endpoint 4 is refused by a model that does not carry it.
+type Refused = tuple[first: bool, afterFirst: seq[uint8], second: bool,
+                     afterSecond: seq[uint8], fourth: bool,
+                     afterFourth: seq[uint8], asserted: bool,
+                     log: seq[string]]
+
+proc refusedDelivery(): Refused =
+  let m = fresh()
+  m.writeVia(0xC2'u8, [0x07'u8, 0x1F'u8, 0x00'u8, 0x00'u8])
+  result.first = m.deliver(3, [0x01'u8])
+  result.afterFirst = m.readVia(0xC0'u8, 4)
+  m.clearInterrupt(0xFFFF_FFFF'u32)
+  result.second = m.deliver(3, [0x02'u8])
+  result.afterSecond = m.readVia(0xC0'u8, 4)
+  result.fourth = m.deliver(4, [0x03'u8])
+  result.afterFourth = m.readVia(0xC0'u8, 4)
+  result.asserted = m.irqAsserted
+  result.log = m.logLines
+
+let refused = refusedDelivery()
+let wantRefused: Refused = (
+    first: true, afterFirst: @[0x00'u8, 0x10'u8, 0x00'u8, 0x00'u8],
+    second: false, afterSecond: @[0x00'u8, 0x00'u8, 0x00'u8, 0x00'u8],
+    fourth: false, afterFourth: @[0x00'u8, 0x00'u8, 0x00'u8, 0x00'u8],
+    asserted: false,
+    log: @["isp1181: endpoint 3 refused a packet of 1 bytes; the buffer " &
+           "holds 1 of 1",
+           "isp1181: a packet reached endpoint 4, which this model does not " &
+           "implement; the packet is dropped"])
+check(refused == wantRefused,
+      "interrupt register: a refused delivery lights nothing, beside one that does",
+      $refused, $wantRefused)
+
+# READING AN ENDPOINT'S STATUS TAKES THAT ENDPOINT'S BIT AND LEAVES THE REST.
+# THIS IS THE ROUTE THAT KEEPS THE FIRMWARE OUT OF ITS OWN HANDLER. The
+# interrupt register does not clear on a `0xC0` read - the case above this
+# block pins that - and the firmware's service routine never writes it back,
+# so a bit that only a Nim-side caller could clear would leave the emulated
+# firmware spinning. `0x50+n` is the route, and it is INHERITED from ISP1362
+# Rev. 06 p.53 rather than read from an ISP1181 document.
+#
+# TWO BITS ARE LIT AND TAKEN AWAY ONE AT A TIME, so a status read that emptied
+# the register is separated from one that takes its own endpoint's bit.
+type StatusClear = tuple[before: seq[uint8], status: seq[uint8],
+                         afterOne: seq[uint8], afterBoth: seq[uint8],
+                         asserted: seq[bool], log: seq[string]]
+
+proc statusReadClears(): StatusClear =
+  let m = fresh()
+  m.writeVia(0xC2'u8, [0x07'u8, 0x1F'u8, 0x00'u8, 0x00'u8])
+  discard m.deliver(0, [0x11'u8])
+  discard m.deliver(1, [0x22'u8])
+  result.before = m.readVia(0xC0'u8, 4)
+  result.asserted.add(m.irqAsserted)
+  result.status = m.readVia(0x52'u8, 1)
+  result.afterOne = m.readVia(0xC0'u8, 4)
+  result.asserted.add(m.irqAsserted)
+  discard m.readVia(0x50'u8, 1)
+  result.afterBoth = m.readVia(0xC0'u8, 4)
+  result.asserted.add(m.irqAsserted)
+  result.log = m.logLines
+
+let statusClear = statusReadClears()
+let wantStatusClear: StatusClear = (
+    before: @[0x00'u8, 0x05'u8, 0x00'u8, 0x00'u8], status: @[0x20'u8],
+    afterOne: @[0x00'u8, 0x01'u8, 0x00'u8, 0x00'u8],
+    afterBoth: @[0x00'u8, 0x00'u8, 0x00'u8, 0x00'u8],
+    asserted: @[true, true, false], log: @[])
+check(statusClear == wantStatusClear,
+      "interrupt register: a status read takes its own endpoint's bit and drops the line",
+      $statusClear, $wantStatusClear)
+
+# THE HOST COLLECTING THE PACKET IS WHAT LIGHTS ENDPOINT 0 IN, AND THE
+# VALIDATE IS NOT. A validate is the firmware saying the buffer is now the
+# host's; the transfer has not happened yet, and a model that raised the
+# interrupt there would tell the firmware a packet was delivered to a host
+# that had not asked for it. The register is read between the two so that the
+# silence at the validate is asserted rather than assumed.
+type InInterrupt = tuple[afterValidate: seq[uint8], sent: bool,
+                         afterToken: seq[uint8], asserted: bool,
+                         log: seq[string]]
+
+proc hostCollectLights(): InInterrupt =
+  let m = fresh()
+  m.writeVia(0xC2'u8, [0x07'u8, 0x1F'u8, 0x00'u8, 0x00'u8])
+  m.writeVia(0x01'u8, [0x02'u8, 0x00'u8, 0xAB'u8, 0xCD'u8])
+  m.portWrite(commandPort, 0x61'u8)
+  result.afterValidate = m.readVia(0xC0'u8, 4)
+  result.sent = m.transmit(0)
+  result.afterToken = m.readVia(0xC0'u8, 4)
+  result.asserted = m.irqAsserted
+  result.log = m.logLines
+
+let inInterrupt = hostCollectLights()
+let wantInInterrupt: InInterrupt = (
+    afterValidate: @[0x00'u8, 0x00'u8, 0x00'u8, 0x00'u8], sent: true,
+    afterToken: @[0x00'u8, 0x02'u8, 0x00'u8, 0x00'u8], asserted: true,
+    log: @[])
+check(inInterrupt == wantInInterrupt,
+      "interrupt register: the host collecting endpoint 0 IN lights bit 9, and the validate does not",
+      $inInterrupt, $wantInInterrupt)
 
 # ---------------------------------------------------------------------------
 # Block 4. The SOFTCT bit.
@@ -532,7 +639,7 @@ let wantNegative: Negative = (
                  "isp1181: a data port read arrived with no command pending; " &
                  "the read answers 0x00"],
     hw: @[0x00'u8, 0x23'u8], mode: @[0x01'u8],
-    interrupt: @[0x04'u8, 0x00'u8, 0x00'u8, 0x00'u8],
+    interrupt: @[0x04'u8, 0x08'u8, 0x00'u8, 0x00'u8],
     pending: @[0, 0, 0, 1, 0])
 check(negative == wantNegative,
       "negative: an unimplemented command answers benignly, logs, and changes nothing",
@@ -696,9 +803,7 @@ let readOut = driveReadOut()
 let wantReadOut: ReadOut = (
     delivered: true,
     readBack: @[0x04'u8, 0x00'u8, 0xDE'u8, 0xAD'u8, 0xBE'u8, 0xEF'u8],
-    pendingAfterRead: 1, pendingAfterClear: 0,
-    log: @["isp1181: a packet reached endpoint 0 and no source names the " &
-           "interrupt register bit for it; no interrupt is raised"])
+    pendingAfterRead: 1, pendingAfterClear: 0, log: @[])
 check(readOut == wantReadOut,
       "data flow: a delivered packet is read out whole behind its length " &
         "prefix, survives the read and is consumed by the clear",
