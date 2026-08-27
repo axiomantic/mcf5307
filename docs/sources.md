@@ -189,20 +189,54 @@ section. The other end is `isp1181_in_token`, the published entry point through
 which a host collects a validated packet; nothing about it is inherited, since
 an IN token is a property of USB and not of this part's command map.
 
-**What the same pages settle about endpoint direction, and what they do not.**
-`queueIn` and `transmit` once refused endpoints 1 to 3 because no source stated
-whether a single endpoint buffer carries one direction or both. ISP1362 Rev. 06
-pp.51-53 answer that: the `EPDIR` bit of DcEndpointConfiguration selects the
-direction, and the document states it as IN meaning input for the USB host, so
-a buffer carries exactly one direction. **The refusal stands and its reason has
-moved.** Acting on `EPDIR` needs the bit's POSITION inside the byte that
-`0x20+n` writes, and no document on this machine gives it; `endpointConfig`
-holds that byte undecoded. A bit index chosen here would make the model obey a
-firmware configuration write in a way the firmware could not detect as wrong,
-which is the class of invention this model refuses everywhere else. **What
-would settle it:** read the DcEndpointConfiguration bit map in the ISP1181B
-data sheet, or in ISP1362 Rev. 06 Table 110, and decode `endpointConfig` in
-`src/isp1181/isp1181.nim`.
+**What the same pages settle about endpoint direction.** `queueIn` and
+`transmit` once refused endpoints 1 to 3 because no source stated whether a
+single endpoint buffer carries one direction or both. ISP1362 Rev. 06 pp.51-53
+answer that: the `EPDIR` bit of DcEndpointConfiguration selects the direction,
+and the document states it as IN meaning input for the USB host, so a buffer
+carries exactly one direction. **The bit's POSITION is now read and no longer
+missing.** ISP1362 Rev. 06, Table 110, "DcEndpointConfiguration register: bit
+allocation", gives the byte that `0x20+n` writes as:
+
+| Bit | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
+|---|---|---|---|---|---|---|---|---|
+| Symbol | FIFOEN | EPDIR | DBLBUF | FFOISO | `FFOSZ[3:0]` | | | |
+| Reset | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Access | R/W | R/W | R/W | R/W | R/W | R/W | R/W | R/W |
+
+Table 111 gives bit 6 as: "EPDIR   This bit defines the endpoint direction
+(0 = OUT, 1 = IN); it also determines the DMA transfer direction (0 = read,
+1 = write)." `src/isp1181/isp1181.nim` decodes bit 6 out of `endpointConfig`,
+and an endpoint the firmware configured IN may now be queued and transmitted.
+
+**THE POSITION IS INHERITED AND THE LIMIT IS UNCHANGED.** ISP1362 Rev. 06
+states on p.1 that it integrates the ISP1181B peripheral controller, and p.51
+weakens even that to "similar to the ISP1181B in 16-bit bus mode". **The
+ISP1181B data sheet itself was never retrieved.** Table 110 is therefore an
+INHERITED bit map, exactly as Table 109's opcodes are, and this citation does
+not raise the confidence of anything in this section. A firmware image that
+disagrees with bit 6 is evidence against the inheritance, not a bug in the
+firmware. **What would settle it:** the DcEndpointConfiguration bit map in an
+ISP1181B or ISP1181 data sheet.
+
+**What Table 110's own section settles that this model does NOT follow.**
+Section 15.1.1 states the write codes as "20 to 2F - write (control OUT,
+control IN, endpoints 1 to 14)", and states that the sixteen configurations are
+programmed "in sequence (from endpoint 0 OUT to endpoint 14)". So slot `0x20+k`
+is endpoint 0 OUT for k = 0, endpoint 0 IN for k = 1, and endpoint k - 1 for
+k >= 2 - the same ordering the stall, status, buffer-read and buffer-clear
+families already use in `src/isp1181/commands.nim`, whose endpoint 1 form is
+base + 2. The endpoint-configuration family in that file is the one family that
+instead reads `0x20+k` as endpoint k, so it names `0x24` "endpoint 4
+configuration" where the document names it endpoint 3, and leaves `0x2F`
+unnumbered where the document numbers it endpoint 14. **The direction decode
+follows the DOCUMENT's ordering**, because a decode on the other ordering would
+read a neighbouring endpoint's byte and the firmware could not detect it; the
+`classify` names and the peek selector still carry the older reading.
+Reconciling them moves the opcode partition - `0x24` becomes implemented and
+`0x2F` leaves `ccUnspecified` - and is an operator decision, not a repair.
+Endpoint 3's slot is `0x24`, which this model does not accept, so endpoint 3
+cannot be configured IN and `queueIn` and `transmit` say exactly that.
 
 **What is still open in the set-up interlock.** ISP1362 p.53 states that a
 set-up packet flushes the IN buffer and disables Validate and Clear on both

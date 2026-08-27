@@ -719,9 +719,11 @@ check(txWalk == wantTxWalk,
       $txWalk, $wantTxWalk)
 
 # THE REFUSALS EACH NAME THEIR OWN REASON. An endpoint this model does not
-# implement, an endpoint whose single buffer has no stated direction, and an
-# empty packet are three different findings, and a model that answered all
-# three the same way would hide which one a reader met.
+# implement, an endpoint whose single buffer the firmware has left facing OUT,
+# and an empty packet are three different findings, and a model that answered
+# all three the same way would hide which one a reader met. Endpoint 1 is
+# driven on a handle no configuration byte has reached, and Table 110 gives
+# every bit of that register a reset value of 0, so EPDIR reads OUT.
 type TxRefusal = tuple[queued: seq[bool], calls: int, log: seq[string]]
 
 proc driveTxRefusals(): TxRefusal =
@@ -736,9 +738,9 @@ proc driveTxRefusals(): TxRefusal =
 let txRefusal = driveTxRefusals()
 let wantTxRefusal: TxRefusal = (
     queued: @[false, false, false, false], calls: 0,
-    log: @["isp1181: endpoint 1 carries its direction in the EPDIR bit of " &
-           "its configuration and no source on this machine gives that " &
-           "bit's position; nothing is queued",
+    log: @["isp1181: endpoint 1 is configured OUT - EPDIR is 0 in its " &
+           "DcEndpointConfiguration - so it has no IN buffer; nothing is " &
+           "queued",
            "isp1181: a transmit was queued for endpoint 4, which this model " &
            "does not implement; nothing is queued",
            "isp1181: a transmit was queued for endpoint -1, which this " &
@@ -750,6 +752,44 @@ check(txRefusal == wantTxRefusal,
       "transmit: a queue this model cannot honour is refused, names its " &
         "reason and calls no host",
       $txRefusal, $wantTxRefusal)
+
+# EPDIR DECIDES WHICH ENDPOINT MAY TRANSMIT, AND THE TWO OUTCOMES ARE DRIVEN ON
+# ONE HANDLE. ISP1362 Rev. 06 Table 110 puts EPDIR at bit 6 of
+# DcEndpointConfiguration and Table 111 gives it as 0 = OUT, 1 = IN; section
+# 15.1.1 orders the sixteen configuration slots control OUT, control IN, then
+# endpoints 1 to 14, so `0x22` carries endpoint 1's byte and `0x23` carries
+# endpoint 2's. The positive and the negative differ in that ONE bit and in
+# nothing else: a model that ignored the bit would answer both the same way,
+# and a model that read a neighbouring bit would answer both wrongly.
+type Epdir = tuple[queuedIn: bool, sentIn: bool, seen: TxRecord,
+                   queuedOut: bool, interruptRegister: seq[uint8],
+                   log: seq[string]]
+
+proc driveEpdir(): Epdir =
+  txSeen = (calls: 0, endpoint: -1, bytes: @[], length: -1)
+  let m = recording()
+  m.writeVia(0x22'u8, [0xC1'u8])
+  m.writeVia(0x23'u8, [0x84'u8])
+  let queuedIn = m.queueIn(1, inPacket)
+  let sentIn = m.transmit(1)
+  let queuedOut = m.queueIn(2, inPacket)
+  (queuedIn: queuedIn, sentIn: sentIn, seen: txSeen, queuedOut: queuedOut,
+   interruptRegister: m.readVia(0xC0'u8, 4), log: m.logLines)
+
+let epdir = driveEpdir()
+let wantEpdir: Epdir = (
+    queuedIn: true, sentIn: true,
+    seen: (calls: 1, endpoint: 1,
+           bytes: @[0xDE'u8, 0xAD'u8, 0xBE'u8, 0xEF'u8], length: 4),
+    queuedOut: false,
+    interruptRegister: @[0x00'u8, 0x04'u8, 0x00'u8, 0x00'u8],
+    log: @["isp1181: endpoint 2 is configured OUT - EPDIR is 0 in its " &
+           "DcEndpointConfiguration - so it has no IN buffer; nothing is " &
+           "queued"])
+check(epdir == wantEpdir,
+      "EPDIR: an endpoint configured IN transmits and raises its own bit, " &
+        "and one configured OUT is refused by name",
+      $epdir, $wantEpdir)
 
 # A HOST THAT INSTALLED NO CALLBACK KEEPS ITS PACKET. Dropping the packet on
 # the floor would leave the firmware with a buffer that emptied itself and a

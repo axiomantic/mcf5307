@@ -88,11 +88,13 @@ type Family = object
   inOnly: bool
     ## THE FAMILY ADDRESSES AN IN BUFFER. This model gives endpoint 0 an OUT
     ## buffer and an IN buffer and gives endpoints 1 to 3 ONE buffer each, whose
-    ## direction the EPDIR bit of DcEndpointConfiguration selects and whose bit
-    ## position no source on this machine gives, so an IN-only family is
-    ## implemented for the control endpoint and NOT for the rest. They are
-    ## `ccNotImplemented` and not `ccImplemented`: the byte is numbered by the
-    ## authority and this model does not carry the buffer it names.
+    ## direction the EPDIR bit of DcEndpointConfiguration selects at run time.
+    ## An IN-only family is implemented for the control endpoint and NOT for the
+    ## rest: whether one of those buffers faces IN is a property of the
+    ## configuration the firmware wrote, and a CLASSIFICATION is a property of
+    ## the opcode alone, so the class cannot depend on it. They are
+    ## `ccNotImplemented` and not `ccImplemented`, and the model's own refusal
+    ## names the configured direction when the firmware drives one.
 
 const families: array[7, Family] = [
   Family(controlOut: -1, controlIn: 0x01, endpointBase: 0x02,

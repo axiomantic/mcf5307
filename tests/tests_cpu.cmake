@@ -3301,7 +3301,9 @@ mcf5307_check_case_sites("t_isp1181"
 # the read-out-and-clear round trip through the ports, its refused-endpoint
 # control on the same handle, the write-then-validate IN path, and the four
 # codes the authority parenthesises as illegal.
-mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 26)
+# MOVED 26 -> 27 WITH THE EPDIR DECODE. The added case drives an endpoint
+# configured IN and one configured OUT on one handle.
+mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 27)
 
 ]==])
 
