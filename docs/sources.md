@@ -219,24 +219,46 @@ disagrees with bit 6 is evidence against the inheritance, not a bug in the
 firmware. **What would settle it:** the DcEndpointConfiguration bit map in an
 ISP1181B or ISP1181 data sheet.
 
-**What Table 110's own section settles that this model does NOT follow.**
-Section 15.1.1 states the write codes as "20 to 2F - write (control OUT,
-control IN, endpoints 1 to 14)", and states that the sixteen configurations are
-programmed "in sequence (from endpoint 0 OUT to endpoint 14)". So slot `0x20+k`
-is endpoint 0 OUT for k = 0, endpoint 0 IN for k = 1, and endpoint k - 1 for
-k >= 2 - the same ordering the stall, status, buffer-read and buffer-clear
-families already use in `src/isp1181/commands.nim`, whose endpoint 1 form is
-base + 2. The endpoint-configuration family in that file is the one family that
-instead reads `0x20+k` as endpoint k, so it names `0x24` "endpoint 4
-configuration" where the document names it endpoint 3, and leaves `0x2F`
-unnumbered where the document numbers it endpoint 14. **The direction decode
-follows the DOCUMENT's ordering**, because a decode on the other ordering would
-read a neighbouring endpoint's byte and the firmware could not detect it; the
-`classify` names and the peek selector still carry the older reading.
-Reconciling them moves the opcode partition - `0x24` becomes implemented and
-`0x2F` leaves `ccUnspecified` - and is an operator decision, not a repair.
-Endpoint 3's slot is `0x24`, which this model does not accept, so endpoint 3
-cannot be configured IN and `queueIn` and `transmit` say exactly that.
+**What Table 110's own section settles, and which this model now follows
+throughout.** Section 15.1.1 states the write codes as "20 to 2F - write
+(control OUT, control IN, endpoints 1 to 14)", and states that the sixteen
+configurations are programmed "in sequence (from endpoint 0 OUT to endpoint
+14)". So slot `0x20+k` is endpoint 0 OUT for k = 0, endpoint 0 IN for k = 1,
+and endpoint k - 1 for k >= 2 - the same ordering the stall, status,
+buffer-read and buffer-clear families already use, whose endpoint 1 form is
+base + 2.
+
+The endpoint-configuration family was the one family that instead read `0x20+k`
+as endpoint k. It is now numbered by the same procedure as every other family
+in `src/isp1181/commands.nim`, so the ordering cannot drift for one family
+alone; `0x24` is endpoint 3's slot, and `0x2F` is endpoint 14's. Three things
+followed from the reconciliation, and each is an operator decision rather than
+a repair:
+
+- **`0x24` joined the implemented class.** This model carries a buffer for
+  endpoint 3, so its configuration slot is one the model can honour, and
+  endpoint 3 may now be configured IN. `queueIn` and `transmit` no longer have
+  an endpoint whose EPDIR bit they cannot read, and the direction enum lost the
+  case that reported one.
+- **`0x2F` left `ccUnspecified`.** It leaves that class by being NUMBERED by
+  section 15.1.1 and not by any reclassification. The opcode partition the
+  command-set suite pins moved with it, and the suite records the reason beside
+  the pinned figure.
+- **The peek selector reads its operand as a SLOT.** `0x20+k` selects buffer k
+  directly, because section 15.1.1's slot ordering is the order the model's own
+  buffers are in. The older reading passed `k` through an endpoint-to-buffer
+  table, so `0x21` - endpoint 0's IN buffer - selected endpoint 1's buffer
+  instead, and every slot from 1 upward named a neighbour.
+
+**The direction decode always followed the DOCUMENT's ordering**, because a
+decode on the other ordering would read a neighbouring endpoint's byte and the
+firmware could not detect it. The rest of the model has now been brought onto
+it.
+
+**EPDIR refuses in both directions.** A single endpoint buffer faces one way,
+so a host packet arriving at an endpoint the firmware configured IN has nowhere
+to land, and `deliver` refuses it by name for the same reason `queueIn` refuses
+an endpoint configured OUT.
 
 **What is still open in the set-up interlock.** ISP1362 p.53 states that a
 set-up packet flushes the IN buffer and disables Validate and Clear on both

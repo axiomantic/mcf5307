@@ -3088,7 +3088,7 @@ mcf5307_check_case_sites("t_isp1181_command_set"
 # driven-count inside the expected value, so a sweep that stopped iterating
 # fails on that count rather than on this figure. What this figure catches is
 # a whole case removed.
-mcf5307_check_case_total("t_isp1181_command_set" "${isp_cmd_run_out}" 26)
+mcf5307_check_case_total("t_isp1181_command_set" "${isp_cmd_run_out}" 31)
 
 ]==])
 
@@ -3214,7 +3214,7 @@ mcf5307_check_case_sites("t_isp1181"
 # driven-count inside the expected value, so a sweep that stopped iterating
 # fails on that count rather than on this figure. What this figure catches is
 # a whole case removed.
-mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 27)
+mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 28)
 
 ]==])
 

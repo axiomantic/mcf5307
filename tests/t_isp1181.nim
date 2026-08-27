@@ -212,12 +212,20 @@ check(aliased == wantAliased,
 type Mapping = tuple[accepted: seq[bool], peeked: seq[uint8],
                      pending: seq[int]]
 
+const outSlotOfEndpoint: array[4, int] = [0, 2, 3, 4]
+  ## THE CONFIGURATION SLOT THAT SELECTS EACH ENDPOINT'S OUT BUFFER, written
+  ## out by hand from ISP1362 Rev. 06 section 15.1.1: the sixteen slots are
+  ## control OUT, control IN, then endpoints 1 to 14, so endpoint 0's OUT
+  ## buffer is slot 0 and endpoint n's is slot n + 1. Slot 1 is endpoint 0's IN
+  ## buffer and appears here for no endpoint, which is why the peek below never
+  ## reaches it.
+
 proc endpointMapping(): Mapping =
   let m = fresh()
   for endpoint in 0 .. 3:
     result.accepted.add(m.deliver(endpoint, [uint8(0xE0 + endpoint), 0x00'u8]))
   for endpoint in 0 .. 3:
-    m.portWrite(commandPort, uint8(0x20 + endpoint))
+    m.portWrite(commandPort, uint8(0x20 + outSlotOfEndpoint[endpoint]))
     m.portWrite(commandPort, 0xD2'u8)
     result.peeked.add(m.portRead(dataPort))
   for index in 0 ..< fifoCount:
@@ -240,15 +248,15 @@ type Selection = tuple[peeked: uint8, log: seq[string]]
 proc refusedSelection(): Selection =
   let m = fresh()
   discard m.deliver(0, [0xA0'u8])
-  discard m.deliver(2, [0xA2'u8])
+  discard m.deliver(1, [0xA1'u8])
   m.portWrite(commandPort, 0x22'u8)
-  m.portWrite(commandPort, 0x24'u8)
+  m.portWrite(commandPort, 0x25'u8)
   m.portWrite(commandPort, 0xD2'u8)
   result = (peeked: m.portRead(dataPort), log: m.logLines)
 
 let selection = refusedSelection()
-let wantSelection: Selection = (peeked: 0xA2'u8,
-    log: @["isp1181: command 0x24 (endpoint 4 configuration) is not " &
+let wantSelection: Selection = (peeked: 0xA1'u8,
+    log: @["isp1181: command 0x25 (endpoint 4 configuration) is not " &
            "implemented; the read answers 0x00"])
 check(selection == wantSelection,
       "fifos: a refused endpoint-configuration command leaves the selection alone",
@@ -786,6 +794,38 @@ check(epdir == wantEpdir,
       "EPDIR: an endpoint configured IN transmits and raises its own bit, " &
         "and one configured OUT is refused by name",
       $epdir, $wantEpdir)
+
+# EPDIR REFUSES IN BOTH DIRECTIONS, and the negative half is driven here. A
+# single endpoint buffer faces ONE way, so a host packet arriving at an
+# endpoint the firmware configured IN has nowhere to land, and a model that
+# accepted it would raise that endpoint's interrupt and show the firmware an
+# OUT packet on a buffer it had declared for transmission. The endpoint
+# configured OUT in the same run is the control: the two differ in EPDIR and in
+# nothing else, so a model that refused every delivery would fail on it.
+type DeliverEpdir = tuple[intoIn: bool, intoOut: bool, pending: seq[int],
+                          log: seq[string]]
+
+proc driveDeliverEpdir(): DeliverEpdir =
+  let m = fresh()
+  m.writeVia(0x22'u8, [0xC1'u8])
+  m.writeVia(0x23'u8, [0x84'u8])
+  let intoIn = m.deliver(1, [0x11'u8])
+  let intoOut = m.deliver(2, [0x22'u8])
+  var pending: seq[int]
+  for index in 0 ..< fifoCount:
+    pending.add(fifoAt(m, index).pending)
+  (intoIn: intoIn, intoOut: intoOut, pending: pending, log: m.logLines)
+
+let deliverEpdir = driveDeliverEpdir()
+let wantDeliverEpdir: DeliverEpdir = (
+    intoIn: false, intoOut: true, pending: @[0, 0, 0, 1, 0],
+    log: @["isp1181: endpoint 1 is configured IN - EPDIR is 1 in its " &
+           "DcEndpointConfiguration - so it has no OUT buffer; the packet " &
+           "is dropped"])
+check(deliverEpdir == wantDeliverEpdir,
+      "EPDIR: a host packet for an endpoint configured IN is refused by " &
+        "name and one configured OUT is taken",
+      $deliverEpdir, $wantDeliverEpdir)
 
 # A host that installed no callback keeps its packet. Dropping the packet on
 # the floor would leave the firmware with a buffer that emptied itself and a

@@ -53,26 +53,24 @@ const unnumberedCommands*: seq[string] = @[]
   ## list rather than a new mechanism, and the empty case stays asserted rather
   ## than merely absent.
 
-const
-  epConfigBase = 0x20'u8
-    ## Endpoint configuration is `0x20+idx`. It is the one command family the
-    ## authority gives a base for.
-  epConfigImplemented = 4
-    ## Endpoints 0 to 3, which are the endpoints the five FIFOs cover. Endpoints
-    ## 4 to 14 are in the authority's not-needed list.
-  epConfigNumbered = 15
-    ## `0x20+14` is the last endpoint the authority names in either direction.
-    ## `0x2F` is numbered by neither list and falls to `ccUnspecified`.
-
 const modelEndpoints = 4
   ## Endpoints 0 to 3, which are the endpoints this model's FIFOs cover. The
   ## authority numbers 0 to 14 in every data-flow family; the rest are numbered
   ## and not carried here.
 
 type Family = object
-  ## One data-flow command family from Table 109, as the three pieces every
-  ## row of that table has: where the family starts, which byte (if any) the
-  ## authority parenthesises as illegal, and what to call it.
+  ## One command family whose sixteen codes address the sixteen endpoint
+  ## buffers in order, as the three pieces every such row has: where the family
+  ## starts, which byte (if any) the authority parenthesises as illegal, and
+  ## what to call it.
+  ##
+  ## THE ORDERING IS THE SAME FOR EVERY FAMILY AND IS THE REASON THIS TYPE
+  ## EXISTS. ISP1362 Rev. 06 section 15.1.1 states the endpoint-configuration
+  ## codes as "20 to 2F - write (control OUT, control IN, endpoints 1 to 14)",
+  ## and Table 109 gives the data-flow families the same shape. A family that
+  ## carried its own numbering could disagree with the rest and nothing in a
+  ## table beside it would notice; every family here is numbered by this one
+  ## procedure instead, so the ordering cannot drift for one of them alone.
   controlOut: int      ## opcode of the control OUT form, or -1 when illegal
   controlIn: int       ## opcode of the control IN form, or -1 when illegal
   endpointBase: int    ## opcode of endpoint 1's form
@@ -91,7 +89,7 @@ type Family = object
     ## `ccNotImplemented` and not `ccImplemented`, and the model's own refusal
     ## names the configured direction when the firmware drives one.
 
-const families: array[7, Family] = [
+const families: array[8, Family] = [
   Family(controlOut: -1, controlIn: 0x01, endpointBase: 0x02,
          noun: "buffer write", illegalOpcode: 0x00,
          illegalName: "write control OUT buffer",
@@ -115,6 +113,14 @@ const families: array[7, Family] = [
          illegalDetail: "clearing an IN buffer is unpredictable"),
   Family(controlOut: 0x80, controlIn: 0x81, endpointBase: 0x82,
          noun: "unstall", illegalOpcode: -1, illegalName: "",
+         illegalDetail: ""),
+  # THE ONE ROW THAT IS NOT FROM TABLE 109. The endpoint-configuration codes
+  # come from ISP1362 Rev. 06 section 15.1.1 and the register they write from
+  # Table 110. The row's shape is the same because the document gives it the
+  # same shape, and `docs/sources.md` records that both citations are inherited
+  # from a part that only claims to INTEGRATE the ISP1181B.
+  Family(controlOut: 0x20, controlIn: 0x21, endpointBase: 0x22,
+         noun: "configuration", illegalOpcode: -1, illegalName: "",
          illegalDetail: "")]
 
 proc classifyFamily(opcode: int): (bool, Command) =
@@ -140,17 +146,8 @@ proc classifyFamily(opcode: int): (bool, Command) =
   (false, Command(class: ccUnspecified, name: ""))
 
 proc classify*(opcode: uint8): Command =
-  ## The class and the name of one command byte. The only place either list is
-  ## written down.
-  if opcode >= epConfigBase and
-      int(opcode) < int(epConfigBase) + epConfigNumbered:
-    let index = int(opcode) - int(epConfigBase)
-    if index < epConfigImplemented:
-      return Command(class: ccImplemented,
-                     name: "endpoint " & $index & " configuration")
-    return Command(class: ccNotImplemented,
-                   name: "endpoint " & $index & " configuration")
-
+  ## The class and the name of one command byte. THE ONLY PLACE EITHER LIST IS
+  ## WRITTEN DOWN.
   let (claimed, dataFlow) = classifyFamily(int(opcode))
   if claimed:
     return dataFlow

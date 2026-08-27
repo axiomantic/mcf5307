@@ -93,6 +93,12 @@ import std/strutils
 import ./commands
 import ./fifo
 
+const fifoCount* = 5
+  ## THE BUFFERS THIS MODEL CARRIES, and the length of every per-buffer array
+  ## below. They are `fifos`' own order - endpoint 0 OUT, endpoint 0 IN, then
+  ## endpoints 1 to 3 - which is the order ISP1362 Rev. 06 section 15.1.1 gives
+  ## the endpoint-configuration slots.
+
 type
   Isp1181IrqFn* = proc (user: pointer; asserted: cint) {.cdecl.}
     ## The logical interrupt state and not the pin state. The interrupt is
@@ -135,11 +141,15 @@ type
     deviceAddress: uint8
     interruptEnable: uint32
     interruptRegister: uint32
-    endpointConfig: array[4, uint8]
-    selected: int                ## The endpoint the last 0x20+idx selected.
+    endpointConfig: array[fifoCount, uint8]
+      ## One DcEndpointConfiguration byte per buffer, INDEXED AS `fifos` IS.
+      ## ISP1362 Rev. 06 section 15.1.1 orders the configuration slots control
+      ## OUT, control IN, then endpoints 1 to 14, which is the order `fifos`
+      ## is in, so a slot and the buffer it configures share one index.
+    selected: int                ## The BUFFER the last 0x20+k selected.
     asserted: bool
-    fifos: array[5, Fifo]
-    stalled: array[5, bool]      ## EPSTAL, per buffer, set by 0x40-0x4F.
+    fifos: array[fifoCount, Fifo]
+    stalled: array[fifoCount, bool]   ## EPSTAL, per buffer, set by 0x40-0x4F.
     stage: seq[uint8]            ## Bytes a buffer-write command has taken.
     stageFifo: int               ## Where a validate would commit `stage`.
     readBuf: seq[uint8]          ## The bytes a buffer-read command offers.
@@ -150,7 +160,6 @@ const
     ## The byte the model answers when it has nothing true to say. It is zero
     ## because the register the firmware reads most often is the interrupt
     ## register, whose zero means no interrupt is pending.
-  fifoCount* = 5
   epdirBit = 0x40'u8
     ## EPDIR in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 places it at
     ## bit 6 of the byte `0x20+n` writes, and Table 111 gives its meaning:
@@ -217,14 +226,9 @@ const inBufferOfEndpoint: array[4, int] = [inFifoOfEndpoint0, 2, 3, 4]
   ## each, and whether that buffer is the IN one is what EPDIR says.
 
 type BufferDirection = enum
-  ## Which way one buffer faces, or that this model cannot say.
+  ## Which way one buffer faces.
   bdOut
   bdIn
-  bdUnconfigurable
-    ## The buffer's DcEndpointConfiguration byte is not one this model carries,
-    ## so its EPDIR bit was never written here. It is kept apart from `bdOut`
-    ## because the two are different findings: one is a direction the firmware
-    ## chose, the other is a direction the firmware could not express.
 
 proc directionOfBuffer(m: ISP1181; index: int): BufferDirection =
   ## THE CONTROL ENDPOINT'S TWO BUFFERS DO NOT CONSULT EPDIR. ISP1362 Rev. 06
@@ -236,12 +240,9 @@ proc directionOfBuffer(m: ISP1181; index: int): BufferDirection =
   ## `endpointConfig` IS INDEXED AS THE CONFIGURATION SEQUENCE IS. Section
   ## 15.1.1 orders the sixteen slots control OUT, control IN, then endpoints 1
   ## to 14, and `fifos` is in that same order, so slot and buffer share one
-  ## index. The slots past `endpointConfig`'s length are the ones no command
-  ## this model accepts can write.
+  ## index.
   if index <= inFifoOfEndpoint0:
     return (if index == inFifoOfEndpoint0: bdIn else: bdOut)
-  if index >= m.endpointConfig.len:
-    return bdUnconfigurable
   if (m.endpointConfig[index] and epdirBit) != 0: bdIn else: bdOut
 
 proc fifoName*(index: int): string = fifoNames[index]
@@ -338,6 +339,17 @@ proc deliver*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
            ", which this model does not implement; the packet is dropped")
     return false
   let index = outFifoOfEndpoint[endpoint]
+  # EPDIR REFUSES A DELIVERY FOR THE SAME REASON IT REFUSES A QUEUE. Endpoints
+  # 1 to 3 carry ONE buffer each and the bit says which way it faces, so a
+  # packet from the host arriving at a buffer the firmware pointed IN has
+  # nowhere to land. Taking it would raise that endpoint's own interrupt and
+  # show the firmware an OUT transfer on a buffer it declared for transmission,
+  # which is the plausible wrong outcome this file refuses everywhere else.
+  if m.directionOfBuffer(index) == bdIn:
+    m.note("isp1181: endpoint " & $endpoint & " is configured IN - EPDIR is " &
+           "1 in its DcEndpointConfiguration - so it has no OUT buffer; the " &
+           "packet is dropped")
+    return false
   if not m.fifos[index].accept(data):
     m.note("isp1181: " & fifoNames[index] & " refused a packet of " &
            $data.len & " bytes; the buffer holds " &
@@ -374,11 +386,6 @@ proc queueIn*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
     m.note("isp1181: endpoint " & $endpoint & " is configured OUT - EPDIR " &
            "is 0 in its DcEndpointConfiguration - so it has no IN buffer; " &
            "nothing is queued")
-    return false
-  of bdUnconfigurable:
-    m.note("isp1181: endpoint " & $endpoint & " has no DcEndpointConfiguration " &
-           "byte in this model, so its EPDIR bit cannot be read; nothing is " &
-           "queued")
     return false
   if data.len == 0:
     m.note("isp1181: an empty packet was queued for " & fifoNames[index] &
@@ -419,11 +426,6 @@ proc transmit*(m: ISP1181; endpoint: int): bool =
     m.note("isp1181: endpoint " & $endpoint & " is configured OUT - EPDIR " &
            "is 0 in its DcEndpointConfiguration - so it has no IN buffer; " &
            "nothing is transmitted")
-    return false
-  of bdUnconfigurable:
-    m.note("isp1181: endpoint " & $endpoint & " has no DcEndpointConfiguration " &
-           "byte in this model, so its EPDIR bit cannot be read; nothing is " &
-           "transmitted")
     return false
   if m.fifos[index].isEmpty:
     m.note("isp1181: " & fifoNames[index] & " has no packet to send; the " &
@@ -629,7 +631,11 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
       m.beginTransfer(opcode, tfRead, 1, uint32(m.statusByte(index)))
       return
 
-  if opcode >= epConfigBase and int(opcode) - int(epConfigBase) < 4:
+  if opcode >= epConfigBase and
+      int(opcode) - int(epConfigBase) < m.endpointConfig.len:
+    # THE SLOT INDEX IS THE BUFFER INDEX. `endpointConfig` states where that
+    # comes from; accepting exactly the slots this model carries a byte for is
+    # what keeps the two in step, and `classify` refuses the rest by name.
     m.selected = int(opcode) - int(epConfigBase)
     m.beginTransfer(opcode, tfWrite, 1, 0)
     return
@@ -650,8 +656,11 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
   of peekCommand:
     # `m.selected` is set only by an endpoint-configuration command, so this
     # couples the peek target to configuration. That coupling is this file's
-    # choice where the authority is silent.
-    let index = outFifoOfEndpoint[m.selected]
+    # choice where the authority is silent, and the head block names it. The
+    # value is a BUFFER index and is used as one: it is the slot the
+    # configuration command carried, and section 15.1.1's slot ordering is
+    # `fifos`' own.
+    let index = m.selected
     let head = m.fifos[index].peek()
     if head.ok:
       m.beginTransfer(opcode, tfRead, 1, uint32(head.value))
