@@ -27,7 +27,7 @@ against, which is the thing a later reader actually has to reproduce.
 | "the MCF5307 User's Manual", "… (1998)", "the manual's timing tables" | Motorola, *MCF5307 ColdFire Integrated Microprocessor User's Manual*, `MCF5307UM/AD`, 1998. 456 pages, scanned paper. SHA-256 `86cbcc8c9caa933fe10275a975a78d914df86771df9f0bc22d03de8b1aff91fa`. | **Not in this repository.** Obtain the PDF by its designation and check the hash before using a value from it. |
 | "the authority" (`src/isp1181/`), for everything except the data-flow command opcodes | **UNNAMED.** See below. | Unknown. |
 | "Table 109 of the ISP1362 data sheet, Rev. 06", "ISP1362 Rev. 06 Table 143", "ISP1362 Rev. 06 p.53" (`src/isp1181/commands.nim`, `src/isp1181/isp1181.nim`, `tests/t_isp1181.nim`, `tests/t_isp1181_command_set.nim`) | ST-NXP Wireless, *ISP1362 — Single-chip USB On-The-Go controller*, Product data sheet, doc id `ISP1362_6`, Rev. 06, 21 January 2009. 149 pages. SHA-256 `4deba3293e2c10bd3e93c159c50a3ba111d138f389a1456e8484a361e307a856`, 4,264,300 bytes. | **Not in this repository.** Obtain the PDF by its designation and revision, and check the hash before using a value from it. **It is not a document about the part this model names — see "The inherited command map" below before using a value from it.** |
-| Not yet cited in any header. Corroborates the DcEndpointConfiguration and DcEndpointStatus decodes recorded below. | Philips Semiconductors, *ISP1362 Embedded Programming Guide*, application note `AN10008-01`, internal Rev. 0.9, June 2002. 99 pages. SHA-256 `77ce2e5c3cd82969f1465b068e36ffb7335fe99823ef69479d59d3ab15d34aa3`. | **Not in this repository.** Obtain by its designation and check the hash. **It is an APPLICATION NOTE and not a data sheet, and it is about the ISP1362 and not the ISP1181B — the inheritance limit below applies to it unchanged.** |
+| Not yet cited in any header. Corroborates the DcEndpointConfiguration, DcEndpointStatus and DcInterrupt readings recorded below. | Philips Semiconductors, *ISP1362 Embedded Programming Guide*, application note `AN10008-01`, internal Rev. 0.9, June 2002. 99 pages. SHA-256 `77ce2e5c3cd82969f1465b068e36ffb7335fe99823ef69479d59d3ab15d34aa3`. | **Not in this repository.** Obtain by its designation and check the hash. **It is an APPLICATION NOTE and not a data sheet, and it is about the ISP1362 and not the ISP1181B — the inheritance limit below applies to it unchanged.** |
 
 **ColdFire condition codes differ from the 68000.** The CFPRM is the
 authority for them, and a 68000 reference is not. `AGENTS.md` states the same
@@ -100,17 +100,47 @@ holds, and it is still not a citation.
 | Source | What it says | What it is worth |
 |---|---|---|
 | The emulated firmware's service routine at `CODE:0x30053C38` | Reads four status bytes, returns at once when they are zero, dispatches bits 0, 1 and 2 to bus routines, bits 8 and 9 to fixed routines, and bits 10 to 16 through a table of per-endpoint function pointers at `0x30119C62`. Its enable write, command `0xC2` with `0x00001F07`, arms bits 0, 1, 2 and 8 to 12 at three call sites. | A **measurement of the program this model has to satisfy**. It is not a statement about the part, and a different firmware image could dispatch differently. |
-| ISP1362 Rev. 06, Tables 142 and 143 | Bit 0 `RESET`, 1 `RESUME`, 2 `SUSPND`, 3 `EOT`, 4 `SOF`, 5 `PSOF`, 6 `SP_EOT`, 7 `BUSTATUS`, 8 `EP0OUT`, 9 `EP0IN`, 10 to 23 `EP1` to `EP14`. | **INHERITED, exactly as the command map is.** The ISP1181B data sheet was not retrieved, and the integration claim recorded above is not a claim of a byte-identical register map. |
+| ISP1362 Rev. 06, Tables 142 and 143, p.121 | Bit 0 `RESET`, 1 `RESUME`, 2 `SUSPND`, 3 `EOT`, 4 `SOF`, 5 `PSOF`, 6 `SP_EOT`, 7 `BUSTATUS`, 8 `EP0OUT`, 9 `EP0IN`, 10 to 23 `EP1` to `EP14`. | **INHERITED, exactly as the command map is.** The ISP1181B data sheet was not retrieved, and the integration claim recorded above is not a claim of a byte-identical register map. |
 
 The agreement covers bit 0, bits 8 and 9 as the two control-endpoint
 directions, and bits 10 and upwards as one bit per endpoint in order. The
 firmware's enable arms bits 8 to 12 and this model carries exactly five
 buffers, which is the same five.
 
+**THE AGREEMENT ON BITS 11 AND 12 IS REACHED TWICE, BY ROUTES THAT SHARE NO
+STEP, AND THAT IS THE STRONGEST CORROBORATION THIS PROJECT HOLDS.** The
+firmware's own dispatch table, read off the booted machine, gives bit 11 the
+TRANSMIT handler and bit 12 the RECEIVE handler. Table 142 gives bit 11 as `EP2`
+and bit 12 as `EP3`, and the configuration bytes the firmware writes — recorded
+below — make endpoint 2 IN and endpoint 3 OUT. IN is device to host, which is
+transmit; OUT is host to device, which is receive. **Neither derivation used the
+other**: one is a handler-address table, the other is a register bit map plus
+three data bytes.
+
 **WHERE THE TWO SOURCES DISAGREE, NOTHING IS ASSIGNED.** The firmware
 dispatches bit 1 to suspend and bit 2 to resume; the inherited table calls bit
 1 `RESUME` and bit 2 `SUSPND`. The two are swapped, and this repository has no
 document that settles which is right.
+
+**A SECOND ISP1362 DOCUMENT TAKES THE TABLE'S SIDE, AND IT DOES NOT SETTLE IT.**
+`AN10008-01` §11.6.2, p.63, instructs the reader to *"Detect the suspend
+interrupt (bit 2 of the DcInterrupt register)"*. That is two ISP1362 documents
+against one firmware image, and the firmware is the only one of the three that
+describes the part this model actually has to satisfy. **Weight of documents is
+not evidence about a different part.** The disagreement stands.
+
+**AND IT IS NOT A DEFECT IN THIS MODEL.** `interruptBitOfFifo` is the only thing
+in `src/isp1181/isp1181.nim` that ever raises an interrupt bit, and it holds
+`[8, 9, 10, 11, 12]`. Bits 0, 1 and 2 are never set by any route, so no code here
+takes a side on the swap and no repair is owed while the disagreement is open.
+
+**`AN10008-01` CORROBORATES THE SOURCE SET AND SUPPLIES NO OTHER POSITION.** Its
+Figure 12-3, p.69, gives a worked service routine that tests bus reset, suspend,
+EOT and SOF-or-pseudo-SOF as an exclusive chain and then the endpoint sources
+`EP0IN`, `EP0OUT`, `EP01`, `EP02`, `EP03` and `EP0E`, all by symbolic name. **Its
+Table 12-2 is a graphic and carries no extractable text**, so apart from the
+suspend sentence above the numbers come from the data sheet and not from the
+guide.
 
 **What is deliberately NOT assigned, and why:**
 
@@ -437,7 +467,7 @@ ISA_A accepts. Their pin is in `docs/toolchain.md`.
 | The `MCF5307UM/AD` hash above identifies the copy every manual-derived value in this tree was taken from | Re-read one value per citing module against a PDF with that hash |
 | The CFPRM revision every header means is 3 | Two headers name Rev. 3 and the rest name the manual alone; re-read one value per citing module against Rev. 3 |
 | A read of `0x50+n` is the route by which the emulated firmware clears an endpoint interrupt, so its service routine terminates | Run the firmware against this model in the consuming emulator and observe whether the per-endpoint handler issues `0x50` to `0x54`. A handler that does not would spin, and the route would have to move |
-| The interrupt-register bit layout the emulated firmware obeys is the one ISP1362 Rev. 06 Table 143 gives | Read the interrupt-register table in the ISP1181B data sheet. The two sources already disagree on bits 1 and 2, which are unassigned for that reason |
+| The interrupt-register bit layout the emulated firmware obeys is the one ISP1362 Rev. 06 Table 143 (p.121) gives | Read the interrupt-register table in the ISP1181B data sheet. The two sources already disagree on bits 1 and 2, which are unassigned for that reason. `AN10008-01` §11.6.2 p.63 also puts suspend at bit 2, which is a second ISP1362 document and not a second part |
 | Every row of `fifoShape` is the size and buffering scheme the emulated firmware configures. All three of endpoints 1 to 3 AGREE with the configuration bytes recorded above, but the agreement is CONSISTENT and not PINNED: nothing reads `endpointConfig` back into `fifoShape`, so a firmware image configuring different sizes would leave the table standing and report nothing | Derive `fifoShape` from the configuration writes, or add a registered check that decodes each observed byte and asserts it against the corresponding row, so a disagreeing image turns the suite red. Endpoints 0 OUT and 0 IN are not covered by the three bytes at all and would need their own observation |
 | `DBLBUF` is bit 5, and `FFOSZ` `0001` and `0011` select 16 and 64 bytes for a non-isochronous endpoint | Read from ISP1362 Rev. 06 Table 110/111 (p.107) and Table 16 (p.52), and INHERITED exactly as every other ISP1362 value here is. Unlike `EPDIR` at bit 6, neither field is read by this model, so no test constrains it. Read the DcEndpointConfiguration bit map and the buffer-memory size table in an ISP1181B or ISP1181 data sheet |
 | The firmware makes only the three endpoint-configuration writes recorded above | §15.1.1 says allocation begins only after all sixteen slots are configured in sequence, which three writes do not satisfy. Re-run the recorder over a full boot and count every `0x20`-`0x2F` command it sees. **No count is asserted in this file until that is done** |
