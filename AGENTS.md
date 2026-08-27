@@ -38,7 +38,7 @@ ctest --test-dir <build> --no-tests=error -R '^t0_|^t_' --output-on-failure
 ```
 
 `^t0_|^t_` is the pattern `.github/workflows/ci.yml` carries as `T0_PATTERN`.
-It excludes `abi_smoke` and the `mcf5307_conformance_*` runs; `ci.yml` keeps a
+It excludes the `mcf5307_conformance_*` runs and nothing else; `ci.yml` keeps a
 written roster of exactly those exclusions, so read the roster there rather than
 trusting this line **or the preset** — the preset is a second copy of the
 pattern, not its source.
@@ -76,11 +76,13 @@ alters the published C ABI needs it too: the consumer that links this library is
   `build/` and `build-asan/`. A `ctest --test-dir build` typed after a
   `cmake --build --preset t0` reads a different tree from the one just built.
   Pick one form per check.
-- **`-- -k` is not optional under a Makefile generator.** `abi_smoke` does not
-  link — it takes the address of published C ABI symbols that are not
-  implemented yet — and without keep-going the targets after it are never built,
-  so ctest reports them `***Not Run` and counts them failed. Ninja's spelling is
-  `-- -k 0`.
+- **`-- -k` under a Makefile generator is what keeps a build failure readable.**
+  A target that did not build leaves its registered test `***Not Run`, and ctest
+  counts that as failed. Without keep-going the targets after the first failure
+  are never attempted either, so one broken target reds every suite behind it
+  and the report stops naming which one broke. Keep-going is not a way of
+  ignoring a broken build: `cmake --build` still exits non-zero. Ninja's
+  spelling is `-- -k 0`.
 - **The Nim compile runs at CONFIGURE time**, not at build time. `src/*.nim`,
   `.nim-version`, `include/mcf5307.h`, `tests/abi_smoke_symbols.inc`,
   `tests/abi_stub.c` and `tests/t_*.nim` are registered as configure
