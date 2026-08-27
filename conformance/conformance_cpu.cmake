@@ -86,3 +86,16 @@ add_test(NAME mcf5307_conformance_control
     COMMAND mcf5307_conformance --group control "${MCF5307_CONFORMANCE_CORPUS}")
 add_test(NAME mcf5307_conformance_all
     COMMAND mcf5307_conformance "${MCF5307_CONFORMANCE_CORPUS}")
+
+# ---------------------------------------------------------------------------
+# Put every test this list registered behind the build gate.
+#
+# The gate is registered in the root list, not here, because it is a property
+# of the whole build tree; this call is the `conformance/` side of it and it
+# owns nothing but this directory's own tests. Without it the five conformance
+# tests are exactly the ones the reproduction showed reporting Passed over a
+# `conformance/runner.cpp` that no longer compiles.
+#
+# Last line for the same reason as in `tests/tests_cpu.cmake`: it reads the
+# directory's `TESTS` property and so covers what is registered above it.
+mcf5307_require_current_build()
