@@ -77,13 +77,28 @@
 ## not of a byte-identical command map. The ISP1181B data sheet itself was not
 ## retrieved.
 ##
-## The set-up interlock is not implemented and the reason is a missing route.
-## The authority states that a set-up packet flushes the IN buffer and disables
-## Validate and Clear on both control endpoints until the firmware acknowledges
-## with `0xF4`. Nothing in this model's API delivers a set-up packet -
-## `isp1181_rx` carries an endpoint and bytes and no set-up flag - so the
-## interlock would be a latch that nothing ever sets. A guard that can never
-## fire fails exactly like a guard that is absent.
+## THE SET-UP INTERLOCK IS IMPLEMENTED AND `isp1181_setup` IS THE ROUTE THAT
+## SETS IT. The authority states that a set-up packet flushes the IN buffer and
+## disables Validate and Clear on both control endpoints until the firmware
+## acknowledges with `0xF4`; ISP1362 Rev. 06 §12.3.6 p.53 and §15.2.7 p.117 are
+## the two halves. This model once carried none of it, and the reason was a
+## MISSING ROUTE and not a decision to skip: `isp1181_rx` carries an endpoint
+## and bytes and no set-up flag, so the interlock would have been a latch that
+## nothing ever sets. `deliverSetup` is that route, and `isp1181_setup` is its
+## published entry point.
+##
+## SETUPT IS BIT 2 AND THE POSITION IS READ FROM THE DOCUMENT. ISP1362 Rev. 06
+## Table 126 gives the DcEndpointStatus bit allocation and Table 127 gives bit 2
+## as "Logic 1 indicates that the buffer contains a set-up packet". It is
+## INHERITED exactly as the opcodes are and it is NOT a reading of firmware
+## behaviour. WHEN THE BIT CLEARS is the part the document does not state, and
+## `statusByte` and the Clear Buffer arm of `writeCommand` name the inference
+## and its ground; `docs/sources.md` carries it as an Unverified row.
+##
+## OVERWRITE, BIT 3, IS THE ONE PART OF §12.3.6 STILL ABSENT. `deliverSetup`
+## refuses a set-up packet arriving at a full control OUT buffer rather than
+## overwriting one the firmware has not acknowledged, because the bit that
+## would report the overwrite is not tracked.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. Nothing here
 ## is copied from a Philips or NXP document.
@@ -147,6 +162,16 @@ type
       ## OUT, control IN, then endpoints 1 to 14, which is the order `fifos`
       ## is in, so a slot and the buffer it configures share one index.
     selected: int                ## The BUFFER the last 0x20+k selected.
+    setupHeld: bool
+      ## SETUPT for the CONTROL OUT buffer, and for that buffer alone. ISP1362
+      ## Rev. 06 Table 127 gives bit 2 as "Logic 1 indicates that the buffer
+      ## contains a set-up packet", and a set-up packet reaches no other buffer
+      ## in this model, so a per-buffer array here would be four latches that
+      ## nothing can ever set.
+    setupUnacknowledged: bool
+      ## The interlock section 12.3.6 arms: Validate Buffer and Clear Buffer
+      ## are disabled on both control endpoints from the arrival of a set-up
+      ## packet until `0xF4` acknowledges it.
     asserted: bool
     fifos: array[fifoCount, Fifo]
     stalled: array[fifoCount, bool]   ## EPSTAL, per buffer, set by 0x40-0x4F.
@@ -214,6 +239,12 @@ const interruptBitOfFifo: array[fifoCount, int] = [8, 9, 10, 11, 12]
   ## ASSIGNMENT. Both sources carry per-endpoint bits past 12 - the firmware's
   ## pointer table reaches bit 16 - and this model carries no buffer for them,
   ## so there is no event here that could set one.
+
+const outFifoOfEndpoint0 = 0
+  ## The buffer a set-up packet lands in, named because the set-up path uses it
+  ## as ITSELF and not as "whatever endpoint 0 decodes to". A SETUP token is
+  ## defined only for a control endpoint, and control OUT is the one control
+  ## endpoint this model can receive on.
 
 const inFifoOfEndpoint0 = 1
   ## The buffer a packet for the host waits in. It is endpoint 0's second
@@ -284,6 +315,8 @@ proc clearState(m: ISP1181) =
   for i in 0 ..< fifoCount:
     m.fifos[i].clear()
     m.stalled[i] = false
+  m.setupHeld = false
+  m.setupUnacknowledged = false
   m.updateIrq()
 
 proc newISP1181*(user: pointer; irq: Isp1181IrqFn;
@@ -356,6 +389,60 @@ proc deliver*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
            $m.fifos[index].pending & " of " & $m.fifos[index].buffers)
     return false
   m.raiseInterrupt(1'u32 shl interruptBitOfFifo[index])
+  true
+
+proc deliverSetup*(m: ISP1181; data: openArray[uint8]): bool =
+  ## A SET-UP packet from the host. `false` is the refusal, and every refusal
+  ## writes the line that says which one it is.
+  ##
+  ## THIS IS A SEPARATE ENTRY POINT AND NOT A FLAG ON `deliver`, and it carries
+  ## NO ENDPOINT. A SETUP token is defined only for a control endpoint, this
+  ## model has exactly one it can receive on, and an endpoint argument here
+  ## would be a parameter with one legal value - a value a computed endpoint
+  ## could miss, with nothing to catch it.
+  ##
+  ## WHAT THE ARRIVAL DOES IS ISP1362 Rev. 06 SECTION 12.3.6, p.53, READ AND
+  ## NOT INFERRED: "The arrival of a set-up packet flushes the IN buffer, and
+  ## disables the Validate Buffer and Clear Buffer commands for the control IN
+  ## and OUT endpoints. The microprocessor must re-enable these commands by
+  ## sending an acknowledge set-up command to both the control endpoints."
+  ## Table 127's bit 7 and section 15.2.3 add the unstall: a control endpoint
+  ## "is automatically unstalled on receiving a set-up token", "regardless of
+  ## the packet content".
+  ##
+  ## OVERWRITE IS THE ONE PART OF SECTION 12.3.6 THIS MODEL DOES NOT CARRY. The
+  ## authority gives bit 3 to a set-up packet that landed on an unacknowledged
+  ## one, and the model tracks no such bit, so a set-up packet arriving at a
+  ## full buffer is REFUSED BY NAME rather than silently overwriting: an
+  ## overwrite with no bit to report it is the plausible wrong outcome this
+  ## file refuses everywhere else.
+  if m.isNil:
+    return false
+  if data.len == 0:
+    m.note("isp1181: a set-up packet of zero bytes reached " &
+           fifoNames[outFifoOfEndpoint0] &
+           " and a SETUP transaction carries eight; nothing is delivered")
+    return false
+  if m.fifos[outFifoOfEndpoint0].isFull:
+    m.note("isp1181: a set-up packet reached " &
+           fifoNames[outFifoOfEndpoint0] &
+           ", which already holds " & $m.fifos[outFifoOfEndpoint0].pending &
+           " of " & $m.fifos[outFifoOfEndpoint0].buffers &
+           "; the authority reports that case in OVERWRITE, which this model " &
+           "does not track, so the packet is dropped rather than overwriting")
+    return false
+  if not m.fifos[outFifoOfEndpoint0].accept(data):
+    m.note("isp1181: " & fifoNames[outFifoOfEndpoint0] &
+           " refused a set-up packet of " & $data.len & " bytes; the buffer " &
+           "holds " & $m.fifos[outFifoOfEndpoint0].pending & " of " &
+           $m.fifos[outFifoOfEndpoint0].buffers)
+    return false
+  m.fifos[inFifoOfEndpoint0].clear()
+  m.stalled[outFifoOfEndpoint0] = false
+  m.stalled[inFifoOfEndpoint0] = false
+  m.setupHeld = true
+  m.setupUnacknowledged = true
+  m.raiseInterrupt(1'u32 shl interruptBitOfFifo[outFifoOfEndpoint0])
   true
 
 proc queueIn*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
@@ -471,12 +558,33 @@ proc outFifoOf(m: ISP1181; opcode, controlBase, endpointBase: uint8): int =
     return outFifoOfEndpoint[endpoint]
   -1
 
+proc noteInterlock(m: ISP1181; opcode: uint8; name: string) =
+  ## THE INTERLOCK REFUSES OUT LOUD. A Validate or Clear that did nothing and
+  ## said nothing would tell the firmware its buffer was cleared when it was
+  ## not, which is the one outcome this model refuses everywhere. The refusal
+  ## leaves the transfer in flight exactly as the two class refusals in
+  ## `writeCommand` do, and for the same reason the head block gives.
+  m.note("isp1181: command 0x" & toHex(opcode) & " (" & name &
+         ") is disabled until the set-up packet is acknowledged with 0xF4; " &
+         "nothing is done")
+
 proc statusByte(m: ISP1181; index: int): uint8 =
   ## The DcEndpointStatus register as far as this model carries it: EPSTAL
-  ## (bit 7), EPFULL1 (bit 6) and EPFULL0 (bit 5).
+  ## (bit 7), EPFULL1 (bit 6), EPFULL0 (bit 5) and SETUPT (bit 2).
   ##
-  ## DATA_PID, OVER, SETUPT and CPUBUF read zero and the model does not track
-  ## them.
+  ## THE BIT POSITIONS ARE READ AND NOT INFERRED. ISP1362 Rev. 06, Table 126,
+  ## "DcEndpointStatus register: bit allocation", places EPSTAL, EPFULL1,
+  ## EPFULL0, DATA_PID, OVERWRITE, SETUPT and CPUBUF at bits 7 down to 1, with
+  ## bit 0 reserved. Table 127 gives bit 2 as "SETUPT   Logic 1 indicates that
+  ## the buffer contains a set-up packet". The position is INHERITED in exactly
+  ## the sense the module head gives that word - ISP1362 states that it
+  ## integrates the ISP1181B and the ISP1181B document was not retrieved - and
+  ## it is not a reading of firmware behaviour.
+  ##
+  ## DATA_PID, OVERWRITE AND CPUBUF STILL READ ZERO AND THE MODEL DOES NOT
+  ## TRACK THEM. That is a gap, and it is stated in the module head and in
+  ## `docs/sources.md` rather than on every read, because a note per read would
+  ## bury the notes that mark a refusal.
   let pending = m.fifos[index].pending
   result = 0'u8
   if m.stalled[index]:
@@ -485,6 +593,8 @@ proc statusByte(m: ISP1181; index: int): uint8 =
     result = result or 0x40'u8
   if pending >= 1:
     result = result or 0x20'u8
+  if index == outFifoOfEndpoint0 and m.setupHeld:
+    result = result or 0x04'u8
 
 proc beginBufferRead(m: ISP1181; opcode: uint8; index: int) =
   ## The packet is not consumed. The authority's OUT sequence is Read Buffer
@@ -593,7 +703,21 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
 
     let clearIndex = m.outFifoOf(opcode, clearControlOut, clearEndpointBase)
     if clearIndex >= 0:
+      if clearIndex == outFifoOfEndpoint0 and m.setupUnacknowledged:
+        m.noteInterlock(opcode, command.name)
+        return
       discard m.fifos[clearIndex].take()
+      # SETUPT GOES AWAY WITH THE PACKET AND NOT WITH THE ACKNOWLEDGE, AND
+      # THAT LAST STEP IS THIS FILE'S INFERENCE. Table 127 gives bit 2 as
+      # "the buffer CONTAINS a set-up packet" - a statement about content -
+      # and gives no clearing rule for it, where bit 3 OVERWRITE in the same
+      # table is spelled out as cleared by "a read back of this register".
+      # The authority knows how to write a read-to-clear bit and did not write
+      # one here, so the read leaves it and the clear that empties the buffer
+      # takes it. `docs/sources.md` records this as an inference from the
+      # wording rather than as a sentence in the document.
+      if clearIndex == outFifoOfEndpoint0:
+        m.setupHeld = false
       m.beginTransfer(opcode, tfNone, 0, 0)
       return
 
@@ -601,6 +725,9 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
       m.beginBufferWrite(opcode, inFifoOfEndpoint0)
       return
     if opcode == validateControlIn:
+      if m.setupUnacknowledged:
+        m.noteInterlock(opcode, command.name)
+        return
       m.commitValidate(inFifoOfEndpoint0)
       m.beginTransfer(opcode, tfNone, 0, 0)
       return
@@ -669,8 +796,14 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
         " found no packet; the read answers 0x00"
       m.beginTransfer(opcode, tfAbsent, 1, 0)
   else:
-    # `0xF4` acknowledge setup. The authority gives the opcode and no effect, so
-    # the model accepts it and changes nothing.
+    # `0xF4` acknowledge set up. ISP1362 Rev. 06 section 15.2.7 and section
+    # 12.3.6 give the effect: it RE-ENABLES the Validate Buffer and Clear
+    # Buffer commands that the arrival of a set-up packet disabled on both
+    # control endpoints. It does NOT take SETUPT away - section 12.3.6 says
+    # the set-up packet "stays in the buffer" until acknowledged, and what
+    # removes it from the buffer is the clear that the acknowledge just
+    # re-enabled.
+    m.setupUnacknowledged = false
     m.beginTransfer(opcode, tfNone, 0, 0)
 
 proc commitOperand(m: ISP1181) =

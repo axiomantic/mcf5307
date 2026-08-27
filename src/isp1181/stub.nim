@@ -108,6 +108,32 @@ proc isp1181_rx*(ctx: ISP1181Ctx; endpoint: cint; data: ptr uint8;
     discard deliver(ctx.model, int(endpoint),
         toOpenArray(cast[ptr UncheckedArray[uint8]](data), 0, int(length) - 1))
 
+proc isp1181_setup*(ctx: ISP1181Ctx; data: ptr uint8;
+                    length: csize_t): cint
+    {.exportc: "isp1181_setup", cdecl, dynlib.} =
+  ## A SET-UP packet from the host. `include/mcf5307.h` states the contract;
+  ## 1 means the control OUT buffer took it.
+  ##
+  ## A NIL POINTER OR A ZERO LENGTH DELIVERS NOTHING AT ALL, for the reason
+  ## `isp1181_rx` gives: a caller with no buffer is not a caller offering an
+  ## empty packet, and a zero-byte packet OCCUPIES A SLOT.
+  ##
+  ## THE STUB ANSWERS ZERO AND CHANGES NOTHING, which is the whole of what the
+  ## stub is: a device present in the CS3 window with nothing to say.
+  if ctx.isNil:
+    return 0
+  case ctx.backend
+  of Stub: 0
+  of FullModel:
+    if data.isNil or length == 0:
+      0
+    elif deliverSetup(ctx.model,
+        toOpenArray(cast[ptr UncheckedArray[uint8]](data), 0,
+                    int(length) - 1)):
+      1
+    else:
+      0
+
 proc isp1181_in_token*(ctx: ISP1181Ctx; endpoint: cint): cint
     {.exportc: "isp1181_in_token", cdecl, dynlib.} =
   ## The host asking the device for a packet. `include/mcf5307.h` states the

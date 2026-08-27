@@ -268,6 +268,28 @@ void isp1181_write(isp1181_ctx* ctx, uint32_t addr, uint8_t value);
 void isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
                 size_t len);
 
+/* A SET-UP packet from the host, which on the bus is a SETUP token followed
+ * by its data stage. It is a SEPARATE ENTRY POINT from `isp1181_rx` and not a
+ * flag on it, because a SETUP token is not an ordinary OUT packet: its arrival
+ * flushes the control IN buffer, unstalls both control endpoints, and disables
+ * the Validate Buffer and Clear Buffer commands on both of them until the
+ * firmware issues acknowledge set up. A device that took a set-up packet
+ * through `isp1181_rx` would raise the same interrupt and leave the firmware's
+ * control handler with no way to tell a SETUP from an OUT.
+ *
+ * IT CARRIES NO ENDPOINT ARGUMENT. A SETUP token is defined only for a control
+ * endpoint and this model has exactly one it can receive on, so an endpoint
+ * parameter here would have a single legal value - one a computed endpoint
+ * could miss with nothing to catch it.
+ *
+ * Returns 1 when the packet was accepted into the control OUT buffer and 0
+ * otherwise. A 0 is not an error code: it is what the device answers for a nil
+ * handle, for a zero-length packet, when the stub backend is selected, and
+ * when the control OUT buffer already holds an unacknowledged set-up packet -
+ * the case the device reports in the OVERWRITE bit, which this model does not
+ * track and therefore refuses rather than silently overwriting. */
+int isp1181_setup(isp1181_ctx* ctx, const uint8_t* data, size_t len);
+
 /* The host asks the device for a packet, which on the bus is an IN token.
  * `isp1181_rx` is the host handing a packet TO the device and this is its
  * other half, so the two directions are driven the same way: by the host, at

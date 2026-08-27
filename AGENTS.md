@@ -87,6 +87,28 @@ alters the published C ABI needs it too: the consumer that links this library is
   dependencies, so an ordinary edit to one of them re-runs the configure by
   itself. A change those paths do not cover reaches nothing until
   `cmake -S . -B <build>` runs again.
+- **A LIST FILE IS A DEPENDENCY BY MTIME, AND A RESTORE THAT REWINDS MTIME
+  DEFEATS IT.** The per-suite drivers under `<build>/tests/*_driver.cmake` are
+  GENERATED from templates inside `tests/tests_cpu.cmake`, and the case-total
+  pins (`mcf5307_check_case_total`) live in the template, not in the driver.
+  CMake does re-generate them when it sees the list file as newer — an ordinary
+  edit is picked up by `cmake --build` on its own, with no explicit configure.
+  **What it does NOT pick up is a list file whose mtime went BACKWARDS**: a `mv`
+  from a `sed -i.bak` backup, a `git checkout` of an older blob, or a copied
+  tree all leave the stale driver in place, and the suite is then graded against
+  a pin that is on nobody's disk. MEASURED: restoring `tests/tests_cpu.cmake`
+  from a `.bak` left a driver carrying a deliberately wrong pin of `999` while
+  the source read `32`, and the suite failed against a figure the tree did not
+  contain. **After any restore of a list file, `touch` it before reconfiguring**,
+  and confirm the pin inside the generated driver rather than in the source.
+- **`cmake --build --preset t0` does not build `t0_corpus_parses`, and
+  `ctest --preset t0` runs it.** The t0 build preset carries
+  `--target mcf5307_tests`; `t0_corpus_parses` is a separate `add_executable`
+  in `conformance/conformance_cpu.cmake` that the `^t0_|^t_` test pattern
+  matches. MEASURED: deleting the binary and running the t0 build target does
+  not bring it back, and ctest then reports it `***Not Run`, which it counts as
+  a failure. On a clean clone this reads as a real red. Build it by name —
+  `cmake --build <build> --target t0_corpus_parses` — or use the `full` preset.
 - **Never configure this repository's own build tree with
   `-DMCF5307_ABI_GATE=OFF`.** The switch exists for a host that cannot run a
   symbol reader; it disarms step 4a whole, and the cache entry then persists

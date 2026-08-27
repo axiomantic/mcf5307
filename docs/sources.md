@@ -110,7 +110,7 @@ document that settles which is right.
 
 | Bits | Why not |
 |---|---|
-| 0, 1, 2 — bus reset, suspend, resume | The sources disagree on 1 and 2, **and** this model's API carries no bus event at all: `isp1181_rx` delivers an endpoint and bytes. A bit nothing can set is a latch that never fires, which is the same case as the set-up interlock below. |
+| 0, 1, 2 — bus reset, suspend, resume | The sources disagree on 1 and 2, **and** this model's API carries no bus event at all: `isp1181_rx` delivers an endpoint and bytes, and `isp1181_setup` delivers a set-up packet. A bit nothing can set is a latch that never fires. **The set-up interlock was once the other example of this shape and is no longer**: it was cited here as a second case of a latch with nothing to set it, and `isp1181_setup` is the route that sets it. These three bits keep the shape on their own. |
 | 3 to 7 — EOT, SOF, PSOF, SP\_EOT, BUSTATUS | The firmware's enable arms none of them and its service routine dispatches none of them, so the second source stands alone. The model has no end-of-transfer, no DMA and no frame source of its own — the frame counter lives in `src/isp1181/stub.nim` and is advanced by the caller. |
 | 13 to 23 — EP4 to EP14 | This model carries no buffer for those endpoints, so no event here could set one. |
 
@@ -260,14 +260,53 @@ so a host packet arriving at an endpoint the firmware configured IN has nowhere
 to land, and `deliver` refuses it by name for the same reason `queueIn` refuses
 an endpoint configured OUT.
 
-**What is still open in the set-up interlock.** ISP1362 p.53 states that a
-set-up packet flushes the IN buffer and disables Validate and Clear on both
-control endpoints until the firmware sends Acknowledge set up (`0xF4`) to both.
-**This model does not implement that**, and the reason is a missing route
-rather than a decision to skip it: `isp1181_rx` delivers an endpoint and bytes
-and carries no set-up flag, so the latch would have nothing to set it. Adding a
-set-up delivery route is a change to the published C API and is an operator
-decision, not a repair.
+**The set-up interlock is implemented, and the route it was missing is now
+published.** ISP1362 Rev. 06 §12.3.6, p.53, states that a set-up packet flushes
+the IN buffer and disables Validate and Clear on both control endpoints until
+the firmware sends Acknowledge set up (`0xF4`) to both, and §15.2.7, p.117,
+gives `0xF4` the matching effect. This model once did not implement any of it,
+and the reason recorded here was a **missing route** rather than a decision to
+skip: `isp1181_rx` delivers an endpoint and bytes and carries no set-up flag,
+so the latch had nothing to set it. **The operator took the API decision**:
+`isp1181_setup` is a new published symbol — the twenty-fifth — and it is a
+SEPARATE entry point rather than a flag on `isp1181_rx` or a sentinel endpoint
+value, so no existing caller's signature moved and no computed endpoint can
+reach the set-up path by accident.
+
+**SETUPT is bit 2, and that position is READ.** ISP1362 Rev. 06, Table 126,
+"DcEndpointStatus register: bit allocation", p.114, gives bits 7 down to 1 as
+EPSTAL, EPFULL1, EPFULL0, DATA_PID, OVERWRITE, SETUPT, CPUBUF with bit 0
+reserved, and Table 127, p.115, gives bit 2 as *"SETUPT   Logic 1 indicates
+that the buffer contains a set-up packet."* It is INHERITED in the same sense
+every Table-109 opcode is — ISP1362 states that it integrates the ISP1181B and
+the ISP1181B document was never retrieved — but it is a reading of the
+DOCUMENT and **not** a reading of firmware behaviour. A note elsewhere in this
+project's records attributes the position to the emulated firmware's control-OUT
+handler; that attribution is wrong, and the table above is where the bit comes
+from.
+
+**What the document does NOT settle is when SETUPT CLEARS, and the model's rule
+is an INFERENCE FROM TABLE 127's OWN WORDING.** Table 127 gives no clearing
+rule for bit 2. In the same table bit 3 OVERWRITE is spelled out — *"a read
+back of this register clears this bit"* — so the authority demonstrably knows
+how to write a read-to-clear bit and did not write one for bit 2. Bit 2's text
+is a statement about buffer CONTENT, so the model takes the bit away when the
+buffer stops holding the packet: at the Clear Buffer command, which §12.3.6 has
+just re-enabled by way of `0xF4`. The resulting sequence is the one §12.3.6
+describes — set-up arrives, the packet *"stays in the buffer"*, the firmware
+acknowledges, the firmware clears. **The clearing rule is therefore
+DATASHEET-DERIVED BY INFERENCE and is not a sentence in the document.** No
+firmware trace on this machine was consulted for it, and none is needed for the
+sequence to close. **What would settle it:** the `DcEndpointStatus` description
+in an ISP1181B or ISP1181 data sheet, which is the same document owed for the
+clearing route above.
+
+**OVERWRITE (bit 3) is the one part of §12.3.6 this model still does not
+carry.** The authority gives bit 3 to a set-up packet that landed on an
+unacknowledged one. The model tracks no such bit, so `isp1181_setup` REFUSES a
+set-up packet arriving at a full control OUT buffer, by name and with a log
+line, rather than overwriting silently. An overwrite with no bit to report it
+is the plausible wrong outcome the model refuses everywhere else.
 
 
 **`isp1181_tx_fn` carries no contract of its own in `include/mcf5307.h`.** Its
@@ -302,6 +341,7 @@ ISA_A accepts. Their pin is in `docs/toolchain.md`.
 | The CFPRM revision every header means is 3 | Two headers name Rev. 3 and the rest name the manual alone; re-read one value per citing module against Rev. 3 |
 | A read of `0x50+n` is the route by which the emulated firmware clears an endpoint interrupt, so its service routine terminates | Run the firmware against this model in the consuming emulator and observe whether the per-endpoint handler issues `0x50` to `0x54`. A handler that does not would spin, and the route would have to move |
 | The interrupt-register bit layout the emulated firmware obeys is the one ISP1362 Rev. 06 Table 143 gives | Read the interrupt-register table in the ISP1181B data sheet. The two sources already disagree on bits 1 and 2, which are unassigned for that reason |
+| SETUPT is taken away by the Clear Buffer command that empties the control OUT buffer. INFERRED from Table 127's wording — bit 2 describes buffer content and, unlike bit 3, carries no read-to-clear sentence | Read the `DcEndpointStatus` description in an ISP1181B or ISP1181 data sheet. Failing that, run the emulated firmware against this model and observe whether its control handler re-reads `0x50` after `0x70` and finds bit 2 low |
 
 ## Related
 
