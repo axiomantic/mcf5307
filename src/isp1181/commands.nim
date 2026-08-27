@@ -87,8 +87,9 @@ type Family = object
   illegalDetail: string
   inOnly: bool
     ## THE FAMILY ADDRESSES AN IN BUFFER. This model gives endpoint 0 an OUT
-    ## buffer and an IN buffer and gives endpoints 1 to 3 ONE buffer whose
-    ## direction no source on this machine states, so an IN-only family is
+    ## buffer and an IN buffer and gives endpoints 1 to 3 ONE buffer each, whose
+    ## direction the EPDIR bit of DcEndpointConfiguration selects and whose bit
+    ## position no source on this machine gives, so an IN-only family is
     ## implemented for the control endpoint and NOT for the rest. They are
     ## `ccNotImplemented` and not `ccImplemented`: the byte is numbered by the
     ## authority and this model does not carry the buffer it names.

@@ -592,6 +592,126 @@ check(cRefuse == wantCRefuse,
         "value and refuses a nil handle, and neither refusal moves anything",
       $cRefuse, $wantCRefuse)
 
+# ---------------------------------------------------------------------------
+# BLOCK 12. THE DEVICE-TO-HOST ROUTE A C CALLER CAN DRIVE.
+#
+# `isp1181_rx` IS THE HOST HANDING A PACKET TO THE DEVICE, AND THIS IS ITS
+# OTHER HALF: the host asking the device for one, which is what an IN token
+# is on the bus. A transmit callback the constructor stores and nothing ever
+# calls looks, from the host's side, exactly like a device that never had
+# anything to send - so the case below drives the firmware's own command bytes
+# through `isp1181_write` and asserts the CALL, its endpoint, its length and
+# every byte of it.
+#
+# EVERY BYTE BELOW IS A HAND-WRITTEN LITERAL. `0x01` is write control IN
+# buffer and `0x61` is validate control IN buffer, and the two bytes between
+# them are the in-band length prefix, lower byte first.
+
+var inTxCalls = 0
+var inTxLog: seq[string]
+
+proc recordInTx(user: pointer; endpoint: cint; data: ptr uint8;
+                length: csize_t) {.cdecl.} =
+  ## THE TRANSCRIPT CARRIES `user`, WHICH IS THE ARGUMENT A CONSUMER CASTS
+  ## BACK TO ITS OWN OBJECT. An entry point that reached the callback with a
+  ## null or a foreign `user` would satisfy every byte-level assertion here
+  ## and would fault inside the host on the first packet.
+  inc inTxCalls
+  var bytes: seq[string]
+  if not data.isNil:
+    let raw = cast[ptr UncheckedArray[uint8]](data)
+    for index in 0 ..< int(length):
+      bytes.add("0x" & toHex(raw[index]))
+  inTxLog.add("user=" & (if user == addr hostToken: "host" else: "OTHER") &
+              " endpoint=" & $int(endpoint) & " len=" & $int(length) &
+              " bytes=" & bytes.join(" "))
+
+const
+  bufferWriteControlIn = 0x01'u8
+  validateControlIn = 0x61'u8
+  inPayload: array[4, uint8] = [0xDE'u8, 0xAD'u8, 0xBE'u8, 0xEF'u8]
+
+proc firmwareValidates(handle: ISP1181Ctx) =
+  isp1181_write(handle, commandPort, bufferWriteControlIn)
+  isp1181_write(handle, dataPort, uint8(inPayload.len))
+  isp1181_write(handle, dataPort, 0x00'u8)
+  for value in inPayload:
+    isp1181_write(handle, dataPort, value)
+  isp1181_write(handle, commandPort, validateControlIn)
+
+type InToken = tuple[first: cint, second: cint, calls: int, log: seq[string]]
+
+proc driveInToken(select: ISP1181Backend): InToken =
+  inTxCalls = 0
+  inTxLog = @[]
+  let handle = isp1181_create(addr hostToken, recordIrq, recordInTx)
+  setBackend(handle, select)
+  firmwareValidates(handle)
+  let first = isp1181_in_token(handle, cint(0))
+  let second = isp1181_in_token(handle, cint(0))
+  isp1181_destroy(handle)
+  (first: first, second: second, calls: inTxCalls, log: inTxLog)
+
+# THE SECOND TOKEN IS WHAT SEPARATES A BUFFER THAT WAS CONSUMED FROM ONE THAT
+# WAS COPIED. A model that left the packet in place would answer every token
+# with the same bytes and the firmware would never learn the transfer ended.
+let inTokenModel = driveInToken(FullModel)
+const wantInTokenModel: InToken = (
+    first: cint(1), second: cint(0), calls: 1,
+    log: @["user=host endpoint=0 len=4 bytes=0xDE 0xAD 0xBE 0xEF"])
+check(inTokenModel == wantInTokenModel,
+      "in token: a packet the firmware validated through the C write port " &
+        "reaches the host callback once, whole, and the buffer is then empty",
+      $inTokenModel, $wantInTokenModel)
+
+# THE CONTROL COMES FROM THE SAME POPULATION AND THE SAME HANDLE. A zero from
+# `isp1181_in_token` proves nothing on its own: an entry point that refused
+# every endpoint would answer zero too. Endpoint 1 is an endpoint this model
+# refuses to transmit for, and it is driven on the handle whose endpoint 0
+# just answered, through the same entry point, with a packet staged the same
+# way.
+type InTokenControl = tuple[endpoint0: cint, endpoint1: cint, calls: int,
+                            log: seq[string]]
+
+proc driveInTokenControl(): InTokenControl =
+  inTxCalls = 0
+  inTxLog = @[]
+  let handle = isp1181_create(addr hostToken, recordIrq, recordInTx)
+  setBackend(handle, FullModel)
+  firmwareValidates(handle)
+  let good = isp1181_in_token(handle, cint(0))
+  firmwareValidates(handle)
+  let refused = isp1181_in_token(handle, cint(1))
+  isp1181_destroy(handle)
+  (endpoint0: good, endpoint1: refused, calls: inTxCalls, log: inTxLog)
+
+let inTokenControl = driveInTokenControl()
+const wantInTokenControl: InTokenControl = (
+    endpoint0: cint(1), endpoint1: cint(0), calls: 1,
+    log: @["user=host endpoint=0 len=4 bytes=0xDE 0xAD 0xBE 0xEF"])
+check(inTokenControl == wantInTokenControl,
+      "in token: an endpoint this model will not transmit for answers zero " &
+        "and calls no host, on the handle whose endpoint 0 just answered",
+      $inTokenControl, $wantInTokenControl)
+
+# THE STUB IS INERT HERE TOO, AND A NIL HANDLE IS ANSWERED RATHER THAN
+# ABORTED. The stub is a device that is present and has nothing to say; a nil
+# handle reaching an abort would destroy a plugin session that has nothing to
+# do with this model.
+type InTokenInert = tuple[stub: InToken, nilHandle: cint]
+
+let absentHandle: ISP1181Ctx = nil
+let inTokenInert: InTokenInert = (
+    stub: driveInToken(Stub),
+    nilHandle: isp1181_in_token(absentHandle, cint(0)))
+const wantInTokenInert: InTokenInert = (
+    stub: (first: cint(0), second: cint(0), calls: 0, log: @[]),
+    nilHandle: cint(0))
+check(inTokenInert == wantInTokenInert,
+      "in token: the stub answers zero and calls no host, and a nil handle " &
+        "answers zero rather than aborting",
+      $inTokenInert, $wantInTokenInert)
+
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this program reports
 # what its text declares and what its run adjudicated, and the registered
 # test's driver is what compares them.

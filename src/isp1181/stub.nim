@@ -108,6 +108,21 @@ proc isp1181_rx*(ctx: ISP1181Ctx; endpoint: cint; data: ptr uint8;
     discard deliver(ctx.model, int(endpoint),
         toOpenArray(cast[ptr UncheckedArray[uint8]](data), 0, int(length) - 1))
 
+proc isp1181_in_token*(ctx: ISP1181Ctx; endpoint: cint): cint
+    {.exportc: "isp1181_in_token", cdecl, dynlib.} =
+  ## The host asking the device for a packet. `include/mcf5307.h` states the
+  ## contract; 1 means the transmit callback was called before this returned.
+  ##
+  ## THE STUB ANSWERS ZERO AND CALLS NOTHING, which is the whole of what the
+  ## stub is: a device present in the CS3 window with nothing to say. A stub
+  ## that reached the model here would call a host callback on a handle the
+  ## caller never moved.
+  if ctx.isNil:
+    return 0
+  case ctx.backend
+  of Stub: 0
+  of FullModel: (if transmit(ctx.model, int(endpoint)): 1 else: 0)
+
 const
   backendStubValue = 0'i32
     ## `MCF5307_ISP1181_BACKEND_STUB` in `include/mcf5307.h`.

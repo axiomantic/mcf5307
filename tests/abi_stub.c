@@ -168,6 +168,13 @@ void isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
     (void)len;
 }
 
+int isp1181_in_token(isp1181_ctx* ctx, int endpoint)
+{
+    (void)ctx;
+    (void)endpoint;
+    return 0;
+}
+
 int isp1181_set_backend(isp1181_ctx* ctx, int backend)
 {
     (void)ctx;

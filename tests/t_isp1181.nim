@@ -562,11 +562,12 @@ check(negative == wantNegative,
 #
 # EVERY BYTE AND EVERY LOG LINE BELOW IS A HAND-WRITTEN LITERAL.
 #
-# WHAT THE FIRMWARE CANNOT DO HERE, AND WHY IT IS NOT A DEFECT OF THIS BLOCK:
-# `buffer write` and `validate` are two of the six commands the authority names
-# and does not number, so no command byte reaches `queueIn`. The queue is
-# driven directly for the same reason `raiseInterrupt` is - the mechanism is
-# real and the opcode that would reach it is a gap in the specification.
+# THE QUEUE IS DRIVEN DIRECTLY HERE ON PURPOSE. `queueIn` and `transmit` are
+# the mechanism, and this block takes them as the subject; the block below
+# drives the same mechanism from the firmware's own command bytes, and
+# `t_isp1181_stub` drives it from the published C entry points. A case that
+# went through the ports here would be asserting the decode twice and the
+# callback once.
 
 type TxRecord = tuple[calls: int, endpoint: int, bytes: seq[uint8],
                       length: int]
@@ -637,9 +638,9 @@ proc driveTxRefusals(): TxRefusal =
 let txRefusal = driveTxRefusals()
 let wantTxRefusal: TxRefusal = (
     queued: @[false, false, false, false], calls: 0,
-    log: @["isp1181: endpoint 1 has one buffer and no source on this " &
-           "machine states whether it carries the IN direction; nothing is " &
-           "queued",
+    log: @["isp1181: endpoint 1 carries its direction in the EPDIR bit of " &
+           "its configuration and no source on this machine gives that " &
+           "bit's position; nothing is queued",
            "isp1181: a transmit was queued for endpoint 4, which this model " &
            "does not implement; nothing is queued",
            "isp1181: a transmit was queued for endpoint -1, which this " &

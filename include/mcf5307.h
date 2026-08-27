@@ -276,6 +276,23 @@ void isp1181_write(isp1181_ctx* ctx, uint32_t addr, uint8_t value);
 void isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
                 size_t len);
 
+/* The host asks the device for a packet, which on the bus is an IN token.
+ * `isp1181_rx` is the host handing a packet TO the device and this is its
+ * other half, so the two directions are driven the same way: by the host, at
+ * the moment the host chooses, with no schedule inside this model.
+ *
+ * Returns 1 when a packet was handed to `isp1181_tx_fn` before this call
+ * returned, and 0 otherwise. THE CALLBACK IS SYNCHRONOUS: a return of 1 means
+ * the host has already seen the bytes, and the pointer it was given does not
+ * outlive the call.
+ *
+ * A RETURN OF 0 IS THE NAK AND IT IS NOT AN ERROR CODE. It is what the device
+ * answers when the endpoint has nothing validated, when this model carries no
+ * IN buffer for that endpoint, when the handle carries no transmit callback,
+ * and for a nil handle. A packet the device could not hand over STAYS IN THE
+ * BUFFER, so a later token still collects it: a 0 costs the packet nothing. */
+int isp1181_in_token(isp1181_ctx* ctx, int endpoint);
+
 /* The implementation standing behind `isp1181_read`, `isp1181_write` and
  * `isp1181_rx`.
  *
