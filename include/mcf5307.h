@@ -268,6 +268,23 @@ void isp1181_write(isp1181_ctx* ctx, uint32_t addr, uint8_t value);
 void isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
                 size_t len);
 
+/* The implementation standing behind `isp1181_read`, `isp1181_write` and
+ * `isp1181_rx`.
+ *
+ * THE STUB IS THE DEFAULT AND A FRESH HANDLE SELECTS IT. The stub is a device
+ * that is present in the CS3 window and inert: every read answers 0x00,
+ * nothing a write leaves becomes readable, no interrupt is raised and neither
+ * callback is ever called. THE FULL MODEL IS A DIFFERENT DEVICE - it answers
+ * reads from its register file, keeps the packets `isp1181_rx` delivers, and
+ * may call back. Select it deliberately; nothing selects it for you. */
+#define MCF5307_ISP1181_BACKEND_STUB 0
+#define MCF5307_ISP1181_BACKEND_FULL_MODEL 1
+
+/* Returns 1 when the handle moved and 0 when the call was refused. A nil
+ * handle and a `backend` value neither macro above names are both refused,
+ * and a refusal moves nothing. */
+int isp1181_set_backend(isp1181_ctx* ctx, int backend);
+
 /* Advances the USB frame number by `sof_frames` USB Start-of-Frame frames.
  *
  * One SOF frame is 1 ms. The unit is NOT the 96 kHz audio frame. At a 96 kHz

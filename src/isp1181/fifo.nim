@@ -45,6 +45,18 @@ proc peek*(f: Fifo): tuple[ok: bool, value: uint8] =
     return (ok: false, value: 0'u8)
   (ok: true, value: f.packets[0][0])
 
+proc peekPacket*(f: Fifo): tuple[ok: bool, packet: seq[uint8]] =
+  ## The WHOLE oldest packet, without consuming it. `peek` above answers the
+  ## first byte and is kept: the two have different callers and collapsing them
+  ## would make the cheap question allocate.
+  ##
+  ## AN EMPTY BUFFER IS `ok: false` AND NOT AN EMPTY PACKET. A zero-length
+  ## packet and no packet at all are different states, and a caller that got
+  ## `@[]` for both would have no way to tell them apart.
+  if f.packets.len == 0:
+    return (ok: false, packet: @[])
+  (ok: true, packet: f.packets[0])
+
 proc take*(f: var Fifo): seq[uint8] =
   if f.packets.len == 0:
     return @[]

@@ -8,12 +8,26 @@
 ## called not-implemented, a real gap in the specification is reported as a
 ## decision somebody took.
 ##
-## The authority names buffer write, buffer read, stall, status, validate and
-## clear with no opcode at all, while giving an opcode for every other command
-## it names. No ISP1181 datasheet and no ISP1362 driver header exists on this
-## machine, so there is no source from which those opcodes could be read, and
-## this file assigns them none: an opcode chosen here would be a guess that the
-## firmware would obey. `unnumberedCommands` below carries them by name.
+## THE GAP THAT WAS HERE IS CLOSED, AND THE AUTHORITY THAT CLOSED IT IS NOT AN
+## ISP1181 DOCUMENT. The six commands this file once carried by name and not by
+## opcode - buffer write, buffer read, stall, status, validate and clear - are
+## numbered here from Table 109 of the ISP1362 data sheet, Rev. 06. That
+## document states that it integrates the ISP1181B peripheral controller, which
+## is a claim of INTEGRATION and NOT a statement that the two command maps are
+## byte-identical. THE ISP1181B DATA SHEET ITSELF WAS NOT READ. Every opcode
+## below is therefore INHERITED rather than read from the part this model
+## names, and `docs/sources.md` records it that way. A firmware that disagrees
+## with one of these opcodes is evidence against the inheritance, not a bug in
+## the firmware.
+##
+## `ccUnspecified` DID NOT GO AWAY. It is still the class of every byte the
+## authority does not number, and the general commands - error code, unlock,
+## scratch - are numbered by Table 109 and NOT adopted here, because closing
+## the data-flow gap is what the firmware needed and adopting a family nothing
+## drives would be inheritance without a consumer.
+##
+## MIT licensed and clean-room with respect to GPL and LGPL code. Nothing here
+## is copied from a Philips or NXP document.
 
 type
   CommandClass* = enum
@@ -23,16 +37,26 @@ type
     ccUnspecified
     ccImplemented
     ccNotImplemented
+    ccIllegal
+      ## A byte the authority NUMBERS AND FORBIDS. It is kept apart from
+      ## `ccUnspecified` because the two are different findings: one is a byte
+      ## no document describes, the other is a byte a document describes as
+      ## having no legal meaning. A model that merged them would report a
+      ## documented prohibition as a gap in its own sources.
 
   Command* = object
     class*: CommandClass
     name*: string
+    detail*: string
+      ## Why `ccIllegal` is illegal, in the authority's own terms. Empty for
+      ## every other class.
 
-const unnumberedCommands*: array[6, string] = [
-  "buffer write", "buffer read", "stall", "status", "validate", "clear"]
-  ## The commands the authority names and does not number. They are not
-  ## implemented, and they are not "not implemented" either: nothing decided
-  ## against them. This array is the whole of what is known about them.
+const unnumberedCommands*: seq[string] = @[]
+  ## THE COMMANDS THE AUTHORITY NAMES AND DOES NOT NUMBER. IT IS EMPTY, AND IT
+  ## IS KEPT. The six it used to hold are numbered above; keeping the list means
+  ## the next command that arrives named-but-unnumbered is an edit to a list
+  ## rather than a new mechanism, and it keeps the empty case asserted rather
+  ## than merely absent.
 
 const
   epConfigBase = 0x20'u8
@@ -45,6 +69,78 @@ const
     ## `0x20+14` is the last endpoint the authority names in either direction.
     ## `0x2F` is numbered by neither list and falls to `ccUnspecified`.
 
+const modelEndpoints = 4
+  ## Endpoints 0 to 3, which are the endpoints this model's FIFOs cover. The
+  ## authority numbers 0 to 14 in every data-flow family; the rest are numbered
+  ## and not carried here.
+
+type Family = object
+  ## One data-flow command family from Table 109, as the three pieces every
+  ## row of that table has: where the family starts, which byte (if any) the
+  ## authority parenthesises as illegal, and what to call it.
+  controlOut: int      ## opcode of the control OUT form, or -1 when illegal
+  controlIn: int       ## opcode of the control IN form, or -1 when illegal
+  endpointBase: int    ## opcode of endpoint 1's form
+  noun: string
+  illegalOpcode: int   ## the parenthesised byte, or -1 when the family has none
+  illegalName: string
+  illegalDetail: string
+  inOnly: bool
+    ## THE FAMILY ADDRESSES AN IN BUFFER. This model gives endpoint 0 an OUT
+    ## buffer and an IN buffer and gives endpoints 1 to 3 ONE buffer whose
+    ## direction no source on this machine states, so an IN-only family is
+    ## implemented for the control endpoint and NOT for the rest. They are
+    ## `ccNotImplemented` and not `ccImplemented`: the byte is numbered by the
+    ## authority and this model does not carry the buffer it names.
+
+const families: array[7, Family] = [
+  Family(controlOut: -1, controlIn: 0x01, endpointBase: 0x02,
+         noun: "buffer write", illegalOpcode: 0x00,
+         illegalName: "write control OUT buffer",
+         illegalDetail: "the endpoint is read-only", inOnly: true),
+  Family(controlOut: 0x10, controlIn: -1, endpointBase: 0x12,
+         noun: "buffer read", illegalOpcode: 0x11,
+         illegalName: "read control IN buffer",
+         illegalDetail: "the endpoint is write-only"),
+  Family(controlOut: 0x40, controlIn: 0x41, endpointBase: 0x42,
+         noun: "stall", illegalOpcode: -1, illegalName: "", illegalDetail: ""),
+  Family(controlOut: 0x50, controlIn: 0x51, endpointBase: 0x52,
+         noun: "status", illegalOpcode: -1, illegalName: "", illegalDetail: ""),
+  Family(controlOut: -1, controlIn: 0x61, endpointBase: 0x62,
+         noun: "buffer validate", illegalOpcode: 0x60,
+         illegalName: "validate control OUT buffer",
+         illegalDetail: "validating an OUT buffer is unpredictable",
+         inOnly: true),
+  Family(controlOut: 0x70, controlIn: -1, endpointBase: 0x72,
+         noun: "buffer clear", illegalOpcode: 0x71,
+         illegalName: "clear control IN buffer",
+         illegalDetail: "clearing an IN buffer is unpredictable"),
+  Family(controlOut: 0x80, controlIn: 0x81, endpointBase: 0x82,
+         noun: "unstall", illegalOpcode: -1, illegalName: "",
+         illegalDetail: "")]
+
+proc classifyFamily(opcode: int): (bool, Command) =
+  ## The data-flow families of Table 109. `false` means no family claims the
+  ## byte, which is NOT the same as the byte being unspecified: the caller
+  ## still has the register families and the general commands to try.
+  for family in families:
+    if family.illegalOpcode == opcode:
+      return (true, Command(class: ccIllegal, name: family.illegalName,
+                            detail: family.illegalDetail))
+    if family.controlOut == opcode:
+      return (true, Command(class: ccImplemented,
+                            name: "control OUT " & family.noun))
+    if family.controlIn == opcode:
+      return (true, Command(class: ccImplemented,
+                            name: "control IN " & family.noun))
+    if opcode >= family.endpointBase and opcode < family.endpointBase + 14:
+      let endpoint = opcode - family.endpointBase + 1
+      let name = "endpoint " & $endpoint & " " & family.noun
+      if endpoint < modelEndpoints and not family.inOnly:
+        return (true, Command(class: ccImplemented, name: name))
+      return (true, Command(class: ccNotImplemented, name: name))
+  (false, Command(class: ccUnspecified, name: ""))
+
 proc classify*(opcode: uint8): Command =
   ## The class and the name of one command byte. The only place either list is
   ## written down.
@@ -56,6 +152,10 @@ proc classify*(opcode: uint8): Command =
                      name: "endpoint " & $index & " configuration")
     return Command(class: ccNotImplemented,
                    name: "endpoint " & $index & " configuration")
+
+  let (claimed, dataFlow) = classifyFamily(int(opcode))
+  if claimed:
+    return dataFlow
 
   case opcode
   of 0xF6'u8: Command(class: ccImplemented, name: "reset")

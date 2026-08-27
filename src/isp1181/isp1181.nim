@@ -32,8 +32,37 @@
 ## endpoint-configuration command last selected, which couples selection to
 ## configuration where nothing here couples them.
 ##
-## The model is not wired to the five C entry points. `src/isp1181/stub.nim`
-## carries those and selects which implementation stands behind them.
+## THE C ENTRY POINTS LIVE IN `src/isp1181/stub.nim` AND SELECT BETWEEN THE
+## TWO IMPLEMENTATIONS. A fresh handle selects the stub and
+## `isp1181_set_backend` moves it here; the default was left where it was so
+## that no existing caller acquires a device that answers from a register file
+## and can call back without an edit of its own. This file supplies the model
+## and still selects nothing.
+##
+## THE DEVICE-TO-HOST PATH IS CONNECTED AT BOTH ENDS. `transmit` hands an
+## endpoint's IN buffer to the transmit callback, `queueIn` fills that buffer,
+## and the firmware now reaches `queueIn` through Write control IN buffer
+## (`0x01`) followed by Validate control IN buffer (`0x61`). The OUT direction
+## is Read Buffer (`0x10`, `0x12` to `0x14`) followed by Clear Buffer (`0x70`,
+## `0x72` to `0x74`), which is the sequence the authority states.
+##
+## THOSE OPCODES ARE INHERITED AND NOT READ FROM AN ISP1181 DOCUMENT. They come
+## from Table 109 of the ISP1362 data sheet, Rev. 06, which states that it
+## integrates the ISP1181B peripheral controller. THAT IS A CLAIM OF
+## INTEGRATION AND NOT OF A BYTE-IDENTICAL COMMAND MAP, and the ISP1181B data
+## sheet itself was not retrieved. `docs/sources.md` carries the limit in full.
+##
+## THE SET-UP INTERLOCK IS NOT IMPLEMENTED AND THE REASON IS A MISSING ROUTE.
+## The authority states that a set-up packet flushes the IN buffer and disables
+## Validate and Clear on both control endpoints until the firmware acknowledges
+## with `0xF4`. NOTHING IN THIS MODEL'S API DELIVERS A SET-UP PACKET -
+## `isp1181_rx` carries an endpoint and bytes and no set-up flag - so the
+## interlock would be a latch that nothing ever sets. A guard that can never
+## fire fails exactly like a guard that is absent, so it is left absent and
+## named here instead.
+##
+## MIT licensed and clean-room with respect to GPL and LGPL code. Nothing here
+## is copied from a Philips or NXP document.
 
 import std/strutils
 
@@ -54,12 +83,18 @@ type
     ## state of a command that takes no operand, and a data-port access in that
     ## state is refused rather than guessed at.
     ##
-    ## `tfAbsent` is a read with nothing behind it. It is a state rather than a
-    ## refusal at command time because the command was accepted: a peek of an
-    ## empty buffer is a legal command whose answer does not exist. The report
-    ## belongs to the read that asks for the byte, not to the command that set
-    ## the read up.
-    tfNone, tfWrite, tfRead, tfAbsent
+    ## `tfAbsent` IS A READ WITH NOTHING BEHIND IT, and it is a state rather
+    ## than a refusal at command time because the command WAS accepted: a peek
+    ## of an empty buffer is a legal command whose answer does not exist. The
+    ## report belongs to the read that asks for the byte, not to the command
+    ## that set the read up.
+    ##
+    ## `tfBufferRead` AND `tfBufferWrite` ARE VARIABLE WIDTH, which is why they
+    ## are states of their own and not `tfRead` and `tfWrite` with a wider
+    ## latch. A register operand is at most four bytes and fits the latch; an
+    ## endpoint buffer carries its own length in band, so its width is a
+    ## property of the packet and not of the opcode.
+    tfNone, tfWrite, tfRead, tfAbsent, tfBufferRead, tfBufferWrite
 
   ISP1181* = ref object
     user: pointer
@@ -80,6 +115,10 @@ type
     selected: int                ## The endpoint the last 0x20+idx selected.
     asserted: bool
     fifos: array[5, Fifo]
+    stalled: array[5, bool]      ## EPSTAL, per buffer, set by 0x40-0x4F.
+    stage: seq[uint8]            ## Bytes a buffer-write command has taken.
+    stageFifo: int               ## Where a validate would commit `stage`.
+    readBuf: seq[uint8]          ## The bytes a buffer-read command offers.
     log: seq[string]
 
 const
@@ -105,14 +144,31 @@ const fifoShape: array[fifoCount, tuple[capacity: int, buffers: int]] = [
   (64, 1),   ## endpoint 0 IN
   (16, 2),   ## endpoint 1
   (64, 2),   ## endpoint 2
-  (64, 1)]   ## endpoint 3 - single, deliberately. The design document says
-             ## "double" for this row and that is the error: the endpoint table
-             ## marks double-buffering where it exists and leaves EP3 unmarked.
+  (64, 1)]   ## endpoint 3 - single-buffered.
+  ##
+  ## EVERY ROW OF THIS TABLE IS A FIRMWARE CONFIGURATION AND NOT A PROPERTY OF
+  ## THE PART. ISP1362 Rev. 06 pp.51-53 put both numbers in the
+  ## DcEndpointConfiguration register: the buffer size in `FFOSZ[3:0]`, where
+  ## `0001` selects 16 bytes for a non-isochronous endpoint, and the buffering
+  ## scheme in `DBLBUF`. So "endpoint 1 is 16 bytes" and "endpoint 3 is
+  ## single-buffered" are facts about the image this model was measured
+  ## against, and they would be different facts under a different image.
+  ##
+  ## THE OBSERVATION IS KEPT AND ONLY ITS LABEL MOVES. These are still the best
+  ## evidence available for what the emulated firmware configures; they are
+  ## simply not statements about silicon. `docs/sources.md` records the same
+  ## correction, and nothing here reads `endpointConfig` back into this table -
+  ## a model that did would be the repair, and it is not this change.
 
 const outFifoOfEndpoint: array[4, int] = [0, 2, 3, 4]
   ## The buffer a packet from the host lands in. Endpoint 0 is the only
   ## endpoint with two, and a delivery is an OUT transfer, so it lands in
   ## index 0 and never in the IN buffer at index 1.
+
+const inFifoOfEndpoint0 = 1
+  ## The buffer a packet for the host waits in. It is endpoint 0's SECOND
+  ## buffer - the one `fifoShape` names IN - and it is the only buffer in this
+  ## model that a delivery from the host never touches.
 
 proc fifoName*(index: int): string = fifoNames[index]
 
@@ -147,8 +203,12 @@ proc clearState(m: ISP1181) =
   for i in 0 ..< m.endpointConfig.len:
     m.endpointConfig[i] = 0
   m.selected = 0
+  m.stage = @[]
+  m.stageFifo = -1
+  m.readBuf = @[]
   for i in 0 ..< fifoCount:
     m.fifos[i].clear()
+    m.stalled[i] = false
   m.updateIrq()
 
 proc newISP1181*(user: pointer; irq: Isp1181IrqFn;
@@ -214,6 +274,195 @@ proc deliver*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
          "interrupt is raised")
   true
 
+proc queueIn*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
+  ## The FIRMWARE side of a device-to-host transfer: bytes placed in the
+  ## endpoint's IN buffer, waiting for the host to collect them. `false` is the
+  ## refusal, and every refusal writes the line that says which one it is.
+  ##
+  ## THE FIRMWARE REACHES THIS THROUGH `0x01` THEN `0x61` - Write control IN
+  ## buffer, then Validate control IN buffer. `commitValidate` is the caller.
+  ## The two opcodes are inherited from ISP1362 Rev. 06 Table 109 and were not
+  ## read from an ISP1181 document; the module head states the limit.
+  ##
+  ## ONLY ENDPOINT 0 HAS AN IN BUFFER IN THIS MODEL. `fifoShape` gives endpoint
+  ## 0 two buffers and names them OUT and IN, and gives endpoints 1 to 3 one
+  ## buffer each and names it neither. No source on this machine says whether a
+  ## single endpoint buffer carries one direction or both, so a queue on 1 to 3
+  ## is refused rather than aimed at the buffer a delivery also lands in.
+  if m.isNil:
+    return false
+  if endpoint < 0 or endpoint >= outFifoOfEndpoint.len:
+    m.note("isp1181: a transmit was queued for endpoint " & $endpoint &
+           ", which this model does not implement; nothing is queued")
+    return false
+  if endpoint != 0:
+    m.note("isp1181: endpoint " & $endpoint & " has one buffer and no " &
+           "source on this machine states whether it carries the IN " &
+           "direction; nothing is queued")
+    return false
+  if data.len == 0:
+    m.note("isp1181: an empty packet was queued for endpoint 0 IN and no " &
+           "source on this machine states what a zero-length IN packet " &
+           "carries; nothing is queued")
+    return false
+  if not m.fifos[inFifoOfEndpoint0].accept(data):
+    m.note("isp1181: " & fifoNames[inFifoOfEndpoint0] &
+           " refused a packet of " & $data.len & " bytes; the buffer holds " &
+           $m.fifos[inFifoOfEndpoint0].pending & " of " &
+           $m.fifos[inFifoOfEndpoint0].buffers)
+    return false
+  true
+
+proc transmit*(m: ISP1181; endpoint: int): bool =
+  ## Hands the oldest packet in the endpoint's IN buffer to the host, through
+  ## the transmit callback the host installed at construction. THIS IS THE ONLY
+  ## PLACE A BYTE LEAVES THIS MODEL.
+  ##
+  ## THE PACKET IS CONSUMED ONLY WHEN THE HOST IS ACTUALLY CALLED. A model that
+  ## emptied the buffer and then found no callback would leave the firmware
+  ## with a transfer that completed and a host that never saw it, which is the
+  ## plausible wrong outcome this file refuses everywhere else.
+  if m.isNil:
+    return false
+  if endpoint < 0 or endpoint >= outFifoOfEndpoint.len:
+    m.note("isp1181: a transmit was requested for endpoint " & $endpoint &
+           ", which this model does not implement; nothing is transmitted")
+    return false
+  if endpoint != 0:
+    m.note("isp1181: endpoint " & $endpoint & " has one buffer and no " &
+           "source on this machine states whether it carries the IN " &
+           "direction; nothing is transmitted")
+    return false
+  if m.fifos[inFifoOfEndpoint0].isEmpty:
+    m.note("isp1181: endpoint 0 IN has no packet to send; the host is not " &
+           "called")
+    return false
+  if m.tx.isNil:
+    m.note("isp1181: endpoint 0 IN holds a packet and the host installed no " &
+           "transmit callback; the packet is kept")
+    return false
+  var packet = m.fifos[inFifoOfEndpoint0].take()
+  m.tx(m.user, cint(endpoint), addr packet[0], csize_t(packet.len))
+  true
+
+
+# ---------------------------------------------------------------------------
+# THE DATA-FLOW COMMANDS. The opcode-to-buffer map is the one piece of decoding
+# these families need, and it is written once here rather than in each of them.
+#
+# THE INHERITED OPCODES ARE NAMED AS INHERITED WHERE THEY ARE USED. Every
+# opcode in this section comes from Table 109 of the ISP1362 data sheet, Rev.
+# 06, which states that it integrates the ISP1181B peripheral controller. That
+# is a claim of INTEGRATION and not a statement that the two command maps agree
+# byte for byte, and no ISP1181B document was read. `src/isp1181/commands.nim`
+# and `docs/sources.md` both carry the same limit.
+
+const
+  bufferWriteControlIn = 0x01'u8
+  bufferReadControlOut = 0x10'u8
+  bufferReadEndpointBase = 0x12'u8
+  stallControlOut = 0x40'u8
+  statusControlOut = 0x50'u8
+  validateControlIn = 0x61'u8
+  clearControlOut = 0x70'u8
+  clearEndpointBase = 0x72'u8
+  unstallControlOut = 0x80'u8
+  lengthPrefixBytes = 2
+    ## The authority puts the packet length in the first two bytes of the
+    ## endpoint buffer, LOWER BYTE FIRST.
+
+proc outFifoOf(m: ISP1181; opcode, controlBase, endpointBase: uint8): int =
+  ## The OUT buffer a data-flow opcode names, or -1. `controlBase` is the
+  ## control OUT form and `endpointBase` is endpoint 1's.
+  if opcode == controlBase:
+    return outFifoOfEndpoint[0]
+  let endpoint = int(opcode) - int(endpointBase) + 1
+  if endpoint >= 1 and endpoint < outFifoOfEndpoint.len:
+    return outFifoOfEndpoint[endpoint]
+  -1
+
+proc statusByte(m: ISP1181; index: int): uint8 =
+  ## The DcEndpointStatus register as far as this model carries it: EPSTAL
+  ## (bit 7), EPFULL1 (bit 6) and EPFULL0 (bit 5).
+  ##
+  ## DATA_PID, OVER, SETUPT AND CPUBUF READ ZERO AND THE MODEL DOES NOT TRACK
+  ## THEM. That is a gap, and it is stated in the module head and in
+  ## `docs/sources.md` rather than on every read, because a note per read would
+  ## bury the notes that mark a refusal.
+  let pending = m.fifos[index].pending
+  result = 0'u8
+  if m.stalled[index]:
+    result = result or 0x80'u8
+  if pending >= 2:
+    result = result or 0x40'u8
+  if pending >= 1:
+    result = result or 0x20'u8
+
+proc beginBufferRead(m: ISP1181; opcode: uint8; index: int) =
+  ## THE PACKET IS NOT CONSUMED. The authority's OUT sequence is Read Buffer
+  ## then Clear Buffer, so the read leaves the buffer as it found it and the
+  ## clear is what empties it. A read that consumed would make the clear a
+  ## no-op and would lose a packet the firmware retried.
+  let head = m.fifos[index].peekPacket()
+  var bytes = newSeq[uint8](lengthPrefixBytes)
+  if head.ok:
+    bytes[0] = uint8(head.packet.len and 0xFF)
+    bytes[1] = uint8((head.packet.len shr 8) and 0xFF)
+    for value in head.packet:
+      bytes.add(value)
+  # AN EMPTY BUFFER IS NOT AN ANOMALY AND WRITES NO LINE. The authority puts
+  # the length in band, so a length of zero IS the truthful answer to a read of
+  # an empty buffer, and firmware polls that buffer. `peek` logs its empty case
+  # because it promises a BYTE and has none; a buffer read promises a LENGTH
+  # and has one.
+  m.readBuf = bytes
+  m.pending = int(opcode)
+  m.transfer = tfBufferRead
+  m.width = bytes.len
+  m.index = 0
+
+proc beginBufferWrite(m: ISP1181; opcode: uint8; index: int) =
+  ## The staging half of the authority's IN sequence: Write Buffer, then
+  ## Validate Buffer. NOTHING REACHES A FIFO HERE. A write that committed on
+  ## its own would make the validate a no-op, and the interlock the authority
+  ## puts on the validate would then guard nothing.
+  m.stage = @[]
+  m.stageFifo = index
+  m.pending = int(opcode)
+  m.transfer = tfBufferWrite
+  m.width = lengthPrefixBytes + m.fifos[index].capacity
+  m.index = 0
+
+proc commitValidate(m: ISP1181; index: int) =
+  ## Validate: the staged bytes become a packet the host can collect.
+  if m.stageFifo != index:
+    m.note("isp1181: a validate for " & fifoNames[index] &
+           " found no buffer write staged for it; nothing is validated")
+    return
+  if m.stage.len < lengthPrefixBytes:
+    m.note("isp1181: a validate for " & fifoNames[index] & " found " &
+           $m.stage.len & " staged byte" &
+           (if m.stage.len == 1: "" else: "s") &
+           " and the length prefix alone is " & $lengthPrefixBytes &
+           "; nothing is validated")
+    m.stage = @[]
+    m.stageFifo = -1
+    return
+  let declared = int(m.stage[0]) or (int(m.stage[1]) shl 8)
+  let payload = m.stage[lengthPrefixBytes .. ^1]
+  m.stage = @[]
+  m.stageFifo = -1
+  if declared != payload.len:
+    # THE DECLARED LENGTH IS NOT TRUSTED OVER THE BYTES. A model that sent
+    # `declared` bytes out of a shorter buffer would read past the packet, and
+    # one that silently sent the payload would hand the host a packet of a
+    # length the firmware did not ask for.
+    m.note("isp1181: a validate for " & fifoNames[index] & " declared " &
+           $declared & " byte" & (if declared == 1: "" else: "s") & " and " &
+           $payload.len & " followed; nothing is validated")
+    return
+  discard m.queueIn(0, payload)
+
 proc beginTransfer(m: ISP1181; opcode: uint8; kind: Transfer; width: int;
                    value: uint32) =
   m.pending = int(opcode)
@@ -236,8 +485,60 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
     m.note("isp1181: command 0x" & toHex(opcode) &
            " is not in the specified command set; the read answers 0x00")
     return
+  of ccIllegal:
+    # THE AUTHORITY PARENTHESISES THESE FOUR AND FORBIDS THEM. Two of the four
+    # it documents as UNPREDICTABLE, which is not the same as harmless, so the
+    # model refuses rather than accepting and doing nothing: an accepted no-op
+    # would tell the firmware the command exists.
+    m.note("isp1181: command 0x" & toHex(opcode) & " (" & command.name &
+           ") is illegal - " & command.detail & "; nothing is done")
+    return
   of ccImplemented:
     discard
+
+  # THE DATA-FLOW FAMILIES. Their opcodes are inherited from ISP1362 Rev. 06
+  # Table 109; the head block and `commands.nim` both state that the ISP1181B
+  # document itself was not read.
+  block dataFlow:
+    let readIndex = m.outFifoOf(opcode, bufferReadControlOut,
+                                bufferReadEndpointBase)
+    if readIndex >= 0:
+      m.beginBufferRead(opcode, readIndex)
+      return
+
+    let clearIndex = m.outFifoOf(opcode, clearControlOut, clearEndpointBase)
+    if clearIndex >= 0:
+      discard m.fifos[clearIndex].take()
+      m.beginTransfer(opcode, tfNone, 0, 0)
+      return
+
+    if opcode == bufferWriteControlIn:
+      m.beginBufferWrite(opcode, inFifoOfEndpoint0)
+      return
+    if opcode == validateControlIn:
+      m.commitValidate(inFifoOfEndpoint0)
+      m.beginTransfer(opcode, tfNone, 0, 0)
+      return
+
+    # THE IN HALF FOR ENDPOINTS 1 TO 3 NEVER REACHES HERE. `commands.nim`
+    # classifies it `ccNotImplemented`, because this model carries no IN buffer
+    # on those endpoints, and the class arm above has already refused it.
+
+  block stallFamily:
+    for (base, want) in [(stallControlOut, true), (unstallControlOut, false)]:
+      if opcode >= base and int(opcode) < int(base) + 0x10:
+        let offset = int(opcode) - int(base)
+        let index = (if offset <= 1: offset else: outFifoOfEndpoint[offset - 1])
+        m.stalled[index] = want
+        m.beginTransfer(opcode, tfNone, 0, 0)
+        return
+
+  block statusFamily:
+    if opcode >= statusControlOut and int(opcode) < int(statusControlOut) + 0x10:
+      let offset = int(opcode) - int(statusControlOut)
+      let index = (if offset <= 1: offset else: outFifoOfEndpoint[offset - 1])
+      m.beginTransfer(opcode, tfRead, 1, uint32(m.statusByte(index)))
+      return
 
   if opcode >= epConfigBase and int(opcode) - int(epConfigBase) < 4:
     m.selected = int(opcode) - int(epConfigBase)
@@ -288,6 +589,15 @@ proc commitOperand(m: ISP1181) =
       m.endpointConfig[m.pending - int(epConfigBase)] = uint8(m.latch)
 
 proc writeData(m: ISP1181; value: uint8) =
+  if m.transfer == tfBufferWrite:
+    if m.stage.len >= m.width:
+      let command = classify(uint8(m.pending))
+      m.note("isp1181: command 0x" & toHex(uint8(m.pending)) & " (" &
+             command.name & ") takes at most " & $m.width &
+             " bytes and a further one was written; the byte is discarded")
+      return
+    m.stage.add(value)
+    return
   if m.transfer != tfWrite:
     m.note("isp1181: a data port write of 0x" & toHex(value) &
            " arrived with no command pending; the byte is discarded")
@@ -311,7 +621,7 @@ proc readData(m: ISP1181): uint8 =
     m.note(m.absentNote)
     inc m.index
     return benignValue
-  if m.transfer notin {tfRead, tfAbsent}:
+  if m.transfer notin {tfRead, tfAbsent, tfBufferRead}:
     m.note("isp1181: a data port read arrived with no command pending; the " &
            "read answers 0x00")
     return benignValue
@@ -324,6 +634,10 @@ proc readData(m: ISP1181): uint8 =
            " was read; the read answers 0x00")
     inc m.index
     return benignValue
+  if m.transfer == tfBufferRead:
+    result = m.readBuf[m.index]
+    inc m.index
+    return
   result = uint8((m.latch shr (8 * m.index)) and 0xFF'u32)
   inc m.index
 
