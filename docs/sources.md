@@ -26,7 +26,8 @@ against, which is the thing a later reader actually has to reproduce.
 | "the ColdFire Family Programmer's Reference Manual", "…, Rev. 3" | *CFPRM, ColdFire® Family Programmer's Reference Manual*, Freescale Semiconductor. Vendor designation `CFPRM`. Revision 3. | **Not in this repository.** Obtain the PDF from the vendor archive by its designation. |
 | "the MCF5307 User's Manual", "… (1998)", "the manual's timing tables" | Motorola, *MCF5307 ColdFire Integrated Microprocessor User's Manual*, `MCF5307UM/AD`, 1998. 456 pages, scanned paper. SHA-256 `86cbcc8c9caa933fe10275a975a78d914df86771df9f0bc22d03de8b1aff91fa`. | **Not in this repository.** Obtain the PDF by its designation and check the hash before using a value from it. |
 | "the authority" (`src/isp1181/`), for everything except the data-flow command opcodes | **UNNAMED.** See below. | Unknown. |
-| "Table 109 of the ISP1362 data sheet, Rev. 06", "ISP1362 Rev. 06 Table 143", "ISP1362 Rev. 06 p.53" (`src/isp1181/commands.nim`, `src/isp1181/isp1181.nim`, `tests/t_isp1181.nim`, `tests/t_isp1181_command_set.nim`) | ST-NXP Wireless, *ISP1362 — Single-chip USB On-The-Go controller*, Product data sheet, doc id `ISP1362_6`, Rev. 06, 21 January 2009. 149 pages. | **Not in this repository.** Obtain the PDF by its designation and revision. **It is not a document about the part this model names — see "The inherited command map" below before using a value from it.** |
+| "Table 109 of the ISP1362 data sheet, Rev. 06", "ISP1362 Rev. 06 Table 143", "ISP1362 Rev. 06 p.53" (`src/isp1181/commands.nim`, `src/isp1181/isp1181.nim`, `tests/t_isp1181.nim`, `tests/t_isp1181_command_set.nim`) | ST-NXP Wireless, *ISP1362 — Single-chip USB On-The-Go controller*, Product data sheet, doc id `ISP1362_6`, Rev. 06, 21 January 2009. 149 pages. SHA-256 `4deba3293e2c10bd3e93c159c50a3ba111d138f389a1456e8484a361e307a856`, 4,264,300 bytes. | **Not in this repository.** Obtain the PDF by its designation and revision, and check the hash before using a value from it. **It is not a document about the part this model names — see "The inherited command map" below before using a value from it.** |
+| Not yet cited in any header. Corroborates the DcEndpointConfiguration and DcEndpointStatus decodes recorded below. | Philips Semiconductors, *ISP1362 Embedded Programming Guide*, application note `AN10008-01`, internal Rev. 0.9, June 2002. 99 pages. SHA-256 `77ce2e5c3cd82969f1465b068e36ffb7335fe99823ef69479d59d3ab15d34aa3`. | **Not in this repository.** Obtain by its designation and check the hash. **It is an APPLICATION NOTE and not a data sheet, and it is about the ISP1362 and not the ISP1181B — the inheritance limit below applies to it unchanged.** |
 
 **ColdFire condition codes differ from the 68000.** The CFPRM is the
 authority for them, and a 68000 reference is not. `AGENTS.md` states the same
@@ -65,6 +66,11 @@ seven data-flow families is inherited and unverified against the part.
 **ISP1181A** page appeared to match the low-nibble scheme. That page returned
 HTTP 403 and **was never read**, so it corroborates nothing and is recorded
 only so that a later reader does not mistake it for a second source.
+
+**AND `ISP1160` IS NOT THIS PART.** An `ISP1160` data sheet may be found beside
+the ISP1362 one. It is a USB HOST controller, not a peripheral controller, and
+nothing in this repository cites it. It is named here only so that a later reader
+meets the difference rather than adopting a value from it.
 
 **What would settle it.** Read the ISP1181B data sheet's own command overview
 table and compare it, opcode by opcode, against the literals in
@@ -129,6 +135,16 @@ the `D0`-`DF` *Check* forms of the same read explicitly do not clear it. The
 model clears at the COMMAND rather than at the data-port read, because the
 document separates the clearing form from the non-clearing one by the opcode.
 
+**`AN10008-01` STATES THE SAME ROUTE IN WORDS**, p.73: the Read Endpoint Status
+command, *"code 0x50"*, *"clears the control OUT interrupt bit of the Interrupt
+register, and at the same time returns status information"*, and *"This clears
+the corresponding endpoint interrupt."* **That is a second ISP1362 source for the
+ROUTE and no source at all for the OPEN QUESTION**, which is whether the emulated
+firmware actually issues `0x50` to `0x54`. A document cannot answer a question
+about a program, so the `Unverified` row for it stands unchanged. It also says
+nothing about clearing SETUPT itself — consistent with the inference recorded
+below, and not a statement of it.
+
 **`0xD2` is not treated as a Check form here.** ISP1362 numbers `D0`-`DF` as
 check endpoint status; this model's `0xD2` is peek, from the unnamed authority
 below. The two sources disagree about that byte, nothing in this change touches
@@ -147,19 +163,93 @@ prevent.
 
 `src/isp1181/isp1181.nim` carried "endpoint 1 is 16 bytes" and "endpoint 3 is
 single-buffered" as though they were fixed properties of the part. **Per ISP1362
-Rev. 06 pp.51-53 and its Table 110, both are firmware-programmable**, so
-neither is a hardware fact:
+Rev. 06 Table 110 (p.107), Table 111 (p.107) and Table 16 (p.52), both are
+firmware-programmable**, so neither is a hardware fact:
 
 | Recorded as | What it actually is |
 |---|---|
-| endpoint 1 holds 16 bytes | The buffer size is selected by `FFOSZ[3:0]` in the DcEndpointConfiguration register. `0001` selects 16 bytes for a non-isochronous endpoint. 16 bytes is a **configuration**, not a size the part has. |
+| endpoint 1 holds 16 bytes | The buffer size is selected by `FFOSZ[3:0]` in the DcEndpointConfiguration register. Table 111 gives that field only as "Selects the buffer memory size according to Table 16"; **Table 16, p.52, is where the sizes are**, and it gives `0001` as 16 bytes for a non-isochronous endpoint. 16 bytes is a **configuration**, not a size the part has. |
 | endpoint 3 is single-buffered | Buffering is selected per endpoint by the `DBLBUF` bit of the same register. Single-buffered is a **configuration**. |
 
-**The observation is kept and only its label moves.** The values almost
-certainly came from reading the emulated firmware's own configuration writes,
-which makes them a measurement of THIS firmware and good evidence for what
-`fifoShape` should hold. They are simply not statements about the silicon, and
-the difference matters the day a different firmware image is run.
+**The observation is kept and only its label moves.** They are measurements of
+THIS firmware and good evidence for what `fifoShape` should hold, not statements
+about the silicon, and the difference matters the day a different firmware image
+is run. **Where the values came from is no longer a supposition** — the section
+below records the three configuration bytes the firmware writes, read out of the
+booted machine.
+
+## The endpoint directions the firmware configures
+
+**MEASURED, in the consuming emulator, from the firmware's OWN endpoint-
+configuration writes.** The recorder pairs each `0x20+slot` command with the data
+byte that follows it, so these are bytes the G2 firmware writes at boot and not a
+value any document supplies:
+
+| Slot | Endpoint | Byte written | Bit 6 `EPDIR` | Direction |
+|---|---|---|---|---|
+| 2 | 1 | `0xE1` | 1 | IN — device to host |
+| 3 | 2 | `0xE3` | 1 | IN — device to host |
+| 4 | 3 | `0x83` | 0 | OUT — host to device |
+
+Slot to endpoint is §15.1.1's own ordering — control OUT, control IN, then
+endpoints 1 to 14 — which is the ordering the rest of this file already records
+and `endpointConfig` is already indexed by.
+
+**THE CONSEQUENCE, and it is why this measurement was owed.** Endpoint 2 is the
+firmware's TRANSMIT endpoint. **A patch delivered to endpoint 2 has nowhere to
+land**; a host must deliver it to **endpoint 3**. This model already refuses the
+wrong one — `deliver` rejects an endpoint whose `EPDIR` says IN — so the
+correction landed in the consuming emulator, which had carried the opposite
+assumption.
+
+**WHAT IS MEASURED, WHAT THIS MODEL ASSERTS, AND WHAT IS ONLY DECODED. Keeping
+those three apart is what this file is for.**
+
+| | Standing |
+|---|---|
+| The three bytes above | **MEASURED** from firmware behaviour. |
+| `EPDIR` is bit 6 | **ASSERTED BY THIS MODEL.** `epdirBit = 0x40` in `src/isp1181/isp1181.nim`, and `tests/t_isp1181.nim` drives both outcomes on one handle. A firmware image that disagreed would turn the suite red. |
+| `DBLBUF` is bit 5; `FFOSZ` `0001` is 16 bytes and `0011` is 64 bytes | **DECODED ONLY.** Nothing in this model reads either field out of `endpointConfig` — `fifoShape` is a constant — so no test can go red on them. Read from ISP1362 Rev. 06 Table 110/111 (p.107) and Table 16 (p.52), and INHERITED in exactly the sense every other ISP1362 value here is. `FFOISO` is 0 in all three bytes, so Table 16's non-isochronous column is the one that applies. **TWO ISP1362 DOCUMENTS AGREE ON BOTH**, which is stated below; two agreeing ISP1362 documents are still not an ISP1181B document. |
+
+**`fifoShape` AGREES WITH ALL THREE BYTES, AND THE AGREEMENT IS CONSISTENT
+RATHER THAN PINNED.**
+
+| Endpoint | Byte | `DBLBUF` | `FFOSZ` | Decodes to | `fifoShape` row |
+|---|---|---|---|---|---|
+| 1 | `0xE1` | 1 | `0001` | 16 bytes, double | `(16, 2)` |
+| 2 | `0xE3` | 1 | `0011` | 64 bytes, double | `(64, 2)` |
+| 3 | `0x83` | 0 | `0011` | 64 bytes, single | `(64, 1)` |
+
+So the receive endpoint genuinely does hold ONE 64-byte buffer, and that row was
+right for a reason nobody had checked. **The agreement is an observation made
+once, by hand, in this file.** Nothing reads a configuration byte back into
+`fifoShape`, so an image that configured different sizes would leave the table
+untouched and nothing would report it. That is the same gap the section above
+already names, and it is carried below as `Unverified` rather than closed here.
+
+**A SECOND ISP1362 DOCUMENT GIVES THE SAME FIELDS, AND THE FIRMWARE'S BYTES ARE
+ITS RECOMMENDED RECIPES.** `AN10008-01`, Table 12-5 and Figure 12-15 (pp.77-78),
+recommends a bulk endpoint as bit 7 enable, bit 6 `0` for OUT and `1` for IN, bit
+5 double buffering, bit 4 `0` for bulk, and `FFOSZ` `0011` for 64 bytes — and
+gives the same values as C constants: `EPCNFG_FIFO_EN 0x80`, `EPCNFG_IN_EN 0x40`,
+`EPCNFG_DBLBUF_EN 0x20`, `EPCNFG_NONISOSZ_64 0x03`. Composed, those are `0xE3`
+for bulk IN and `0x83` for bulk OUT: **the exact bytes the firmware writes for
+endpoints 2 and 3.** Endpoint 1's `0xE1` is the same IN recipe with the size
+field at `0001`.
+
+**That raises the standing of the decode and does NOT move the inheritance.**
+Both documents are about the ISP1362; the ISP1181B data sheet is still the one
+owed, and the `Unverified` row below is unchanged.
+
+**A tension the same page raises, and which nothing settles.** §15.1.1 states
+that buffer memory allocation "takes place only after all 16 endpoints have been
+configured in sequence", that control endpoints "must be included in the
+initialization sequence", and that allocation "starts when endpoint 14 has been
+configured". The recorder observed **three** writes. Either the firmware makes
+more that the recorder did not capture, or it makes only these three and the
+part it drives does not impose §15.1.1's sequence — and this repository cannot
+tell which. **No count of the firmware's configuration writes is asserted here**;
+only the three bytes above, each of which was seen.
 
 ## The unnamed authority
 
@@ -285,6 +375,13 @@ project's records attributes the position to the emulated firmware's control-OUT
 handler; that attribution is wrong, and the table above is where the bit comes
 from.
 
+**A SECOND DOCUMENT STATES IT TOO.** `AN10008-01`, p.73, describes the control
+OUT handler and names *"SETUPT bit (bit 2) of the DcEndpointStatus register"*.
+The same page's pseudo-code tests `EP_Status & 0x20` as *"whether the primary
+buffer is full"*, which puts `EPFULL0` at bit 5 — the position `statusByte`
+already composes. Two documents state bit 2, and both are ISP1362 documents, so
+**the position is DOCUMENTED rather than inferred and remains INHERITED.**
+
 **What the document does NOT settle is when SETUPT CLEARS, and the model's rule
 is an INFERENCE FROM TABLE 127's OWN WORDING.** Table 127 gives no clearing
 rule for bit 2. In the same table bit 3 OVERWRITE is spelled out — *"a read
@@ -341,7 +438,10 @@ ISA_A accepts. Their pin is in `docs/toolchain.md`.
 | The CFPRM revision every header means is 3 | Two headers name Rev. 3 and the rest name the manual alone; re-read one value per citing module against Rev. 3 |
 | A read of `0x50+n` is the route by which the emulated firmware clears an endpoint interrupt, so its service routine terminates | Run the firmware against this model in the consuming emulator and observe whether the per-endpoint handler issues `0x50` to `0x54`. A handler that does not would spin, and the route would have to move |
 | The interrupt-register bit layout the emulated firmware obeys is the one ISP1362 Rev. 06 Table 143 gives | Read the interrupt-register table in the ISP1181B data sheet. The two sources already disagree on bits 1 and 2, which are unassigned for that reason |
-| SETUPT is taken away by the Clear Buffer command that empties the control OUT buffer. INFERRED from Table 127's wording — bit 2 describes buffer content and, unlike bit 3, carries no read-to-clear sentence | Read the `DcEndpointStatus` description in an ISP1181B or ISP1181 data sheet. Failing that, run the emulated firmware against this model and observe whether its control handler re-reads `0x50` after `0x70` and finds bit 2 low |
+| Every row of `fifoShape` is the size and buffering scheme the emulated firmware configures. All three of endpoints 1 to 3 AGREE with the configuration bytes recorded above, but the agreement is CONSISTENT and not PINNED: nothing reads `endpointConfig` back into `fifoShape`, so a firmware image configuring different sizes would leave the table standing and report nothing | Derive `fifoShape` from the configuration writes, or add a registered check that decodes each observed byte and asserts it against the corresponding row, so a disagreeing image turns the suite red. Endpoints 0 OUT and 0 IN are not covered by the three bytes at all and would need their own observation |
+| `DBLBUF` is bit 5, and `FFOSZ` `0001` and `0011` select 16 and 64 bytes for a non-isochronous endpoint | Read from ISP1362 Rev. 06 Table 110/111 (p.107) and Table 16 (p.52), and INHERITED exactly as every other ISP1362 value here is. Unlike `EPDIR` at bit 6, neither field is read by this model, so no test constrains it. Read the DcEndpointConfiguration bit map and the buffer-memory size table in an ISP1181B or ISP1181 data sheet |
+| The firmware makes only the three endpoint-configuration writes recorded above | §15.1.1 says allocation begins only after all sixteen slots are configured in sequence, which three writes do not satisfy. Re-run the recorder over a full boot and count every `0x20`-`0x2F` command it sees. **No count is asserted in this file until that is done** |
+| SETUPT is taken away by the Clear Buffer command that empties the control OUT buffer. INFERRED from Table 127's wording — bit 2 describes buffer content and, unlike bit 3, carries no read-to-clear sentence | Read the `DcEndpointStatus` description in an ISP1181B or ISP1181 data sheet. Failing that, run the emulated firmware against this model and observe whether its control handler re-reads `0x50` after `0x70` and finds bit 2 low. `AN10008-01` p.73 says `0x50` clears the INTERRUPT bit and is silent on bit 2, which is corroboration of the inference and not proof of it |
 
 ## Related
 
