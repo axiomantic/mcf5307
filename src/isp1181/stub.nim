@@ -11,6 +11,9 @@
 ## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import ./isp1181
+# The one-time runtime latch. `isp1181_create` reads it for the reason
+# `mcf5307/cpu.nim` gives at its own `create`.
+import mcf5307/latch
 export Isp1181IrqFn, Isp1181TxFn
 
 type
@@ -51,6 +54,11 @@ proc advanceFrames*(ctx: ISP1181Ctx; frames: int) =
 proc isp1181_create*(user: pointer; irq: Isp1181IrqFn;
                      tx: Isp1181TxFn): ISP1181Ctx
     {.exportc: "isp1181_create", cdecl, dynlib.} =
+  ## IT REFUSES WHEN THE RUNTIME WAS ABANDONED. See `mcf5307_create` in
+  ## `mcf5307/cpu.nim`: the two allocate, the allocator needs the runtime, and
+  ## a nil handle is a value every `isp1181_*` call already answers for.
+  if runtimeAbandoned(runtimeLatch):
+    return nil
   new(result)
   result.backend = Stub
   result.frameNumber = 0'u16

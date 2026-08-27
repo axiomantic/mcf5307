@@ -5,8 +5,6 @@
 ## prefix and exports its own `<component>_runtime_init`, and nothing else
 ## changes.
 
-import std/atomics
-import system/ansi_c
 # The core submodules. The entry module imports them so that the compiler
 # compiles them into this library; it never names their symbols itself. The
 # `UnusedImport` warning is therefore expected and is masked. The exported
@@ -28,6 +26,10 @@ import mcf5307/state
 import isp1181/state
 import isp1181/stub
 {.pop.}
+
+# The latch. It is imported OUTSIDE the pushed warning mask because this
+# module names three of its symbols below.
+import mcf5307/latch
 
 # ---------------------------------------------------------------------------
 # The pragma set of every symbol this project publishes.
@@ -60,225 +62,44 @@ import isp1181/stub
 # `mcf5307_NimMain` is the runtime initializer that `--nimMainPrefix:mcf5307_`
 # renames. The prefix is what lets a second Nim library live in the same
 # binary, because the collision is on the default names alone.
-proc mcf5307_NimMain() {.importc: "mcf5307_NimMain", cdecl.}
+proc mcf5307_NimMain() {.importc: "mcf5307_NimMain", cdecl, gcsafe,
+                         raises: [].}
 
 # ---------------------------------------------------------------------------
-# The wait primitives.
+# `mcf5307_runtime_init` - the published entry point, and the only caller of
+# the runtime entry point in this project.
 #
-# `mcf5307_runtime_init` runs before the Nim runtime exists. Anything it calls
-# must therefore work without that runtime. These declarations name C library
-# functions directly, and they add no Nim module to the unit list.
-#
-# The deadline uses a monotonic clock and not the wall clock. `time` is wrong
-# here for two separate reasons.
-#
-#   Its resolution is one second, and the deadline is `time() + 5`. The start
-#   is truncated to a whole second and the comparison is truncated again, so
-#   the true wait is anything between four and five seconds rather than the
-#   five the constant names.
-#
-#   `time` reads the SETTABLE wall clock. An operator, NTP or a container start
-#   can step it backwards at any moment. A backward step moves the deadline
-#   away from the waiter, and the loop then spins with no end.
-#
-# `clock_gettime(CLOCK_MONOTONIC)` counts from an arbitrary origin, no caller
-# can set it, and its resolution is nanoseconds. `GetTickCount64` is the
-# Windows equivalent and it counts milliseconds since boot.
-#
-# `sched_yield`, or `SwitchToThread` on Windows, hands the core to another
-# thread. The wait loop below calls it. The Windows branch of both is
-# unmeasured; this host is macOS and it builds the other branch.
+# THE MECHANISM IS IN `mcf5307/latch` AND NOT HERE. Two other modules ask the
+# same latch whether the runtime was abandoned before they allocate, and a
+# suite drives it directly; that module states why neither can reach it
+# through this one.
 
-when defined(windows):
-  proc mcf5307TickCount(): uint64 {.
-      importc: "GetTickCount64", header: "<windows.h>", stdcall.}
-
-  proc mcf5307MonotonicMillis(): int64 =
-    int64(mcf5307TickCount())
-
-  proc mcf5307Yield(): cint {.
-      importc: "SwitchToThread", header: "<windows.h>",
-      stdcall, discardable.}
-else:
-  # The object is `importc` with a header, so Nim emits no definition of its
-  # own and the C compiler supplies the real layout. `clong` is the type of
-  # both members on macOS and on 64-bit Linux.
-  type
-    MCF5307TimeSpec {.importc: "struct timespec", header: "<time.h>".} = object
-      tv_sec: clong
-      tv_nsec: clong
-
-  let mcf5307ClockMonotonic {.importc: "CLOCK_MONOTONIC",
-      header: "<time.h>".}: cint
-
-  proc mcf5307ClockGetTime(clockId: cint; target: ptr MCF5307TimeSpec): cint {.
-      importc: "clock_gettime", header: "<time.h>", discardable.}
-
-  proc mcf5307MonotonicMillis(): int64 =
-    ## The monotonic clock in milliseconds.
-    ##
-    ## A failure of `clock_gettime` is not handled here, and it cannot be:
-    ## this procedure runs before the Nim runtime exists and the contract
-    ## carries no failure channel. `CLOCK_MONOTONIC` is mandatory in POSIX
-    ## 2008 and the call fails only for an invalid clock identifier.
-    var now: MCF5307TimeSpec
-    discard mcf5307ClockGetTime(mcf5307ClockMonotonic, addr now)
-    int64(now.tv_sec) * 1000'i64 + int64(now.tv_nsec) div 1_000_000'i64
-
-  proc mcf5307Yield(): cint {.
-      importc: "sched_yield", header: "<sched.h>", discardable.}
-
-# ---------------------------------------------------------------------------
-# The one-time latch.
-#
-# It holds its state in one atomic word. Measured on Nim 2.2.10, the C
-# translation is a file-scope `_Atomic NI64` with no initializer. Its value is
-# therefore zero before any Nim code runs, and the generated module initializer
-# holds no write to it. The latch needs no initializing call of its own.
-# That property is required and not incidental: this procedure runs before the
-# Nim runtime exists, so anything it touches must be correct at zero.
-#
-# `latchAbandoned` is the terminal failure state. Without it the word held no
-# value that ends a wait. A waiter could then spin until the process was
-# killed, and that is the fault this state exists to end.
-const
-  latchUntouched = 0
-  latchRunning = 1
-  latchDone = 2
-  latchAbandoned = 3
-
-# How long a caller waits for another thread to finish the initializer.
-#
-# THE BOUND IS A TRADE, AND IT SITS FAR ABOVE ANY INITIALIZER RUN OBSERVED ON
-# THIS HOST. A runtime initializer that needs five seconds is already broken. A
-# wait with no bound cannot report a stall at all, and that outcome is worse.
-#
-# The unit is milliseconds because the clock below reports milliseconds.
-const latchWaitMillis = 5000'i64
-
-var latch: Atomic[int]
-
-# True while this thread is inside `mcf5307_NimMain`. It translates to a
-# zero-initialized `NIM_THREADVAR`, so it needs no initializing call either. It
-# separates a re-entrant call on the initializing thread from a concurrent
-# first call on some other thread. The two look alike at the latch and need
-# opposite answers.
-#
-# There is a third case and this flag cannot see it. Another thread may call
-# this procedure while the initializing thread waits for that same thread. The
-# flag is false on the caller, so the caller waits, and the two threads then
-# wait for each other. An unbounded loop holds that deadlock spinning, with no
-# diagnostic and no end. The deadline below ends it.
-var initializing {.threadvar.}: bool
-
-proc mcf5307LatchStalled() {.noreturn.} =
-  ## Reports an abandoned latch and ends the process.
+proc mcf5307RuntimeInit(): cint {.exportc: "mcf5307_runtime_init",
+                                  mcf5307Abi.} =
+  ## Runs the Nim runtime's initializer once and REPORTS whether it succeeded.
   ##
-  ## The runtime is not initialized here, so every later call into this library
-  ## would run without it. A plain return to the caller would give a wrong
-  ## answer with exit status 0.
+  ## C++ never names `mcf5307_NimMain`. It calls this procedure instead.
   ##
-  ## Ending the process is the wrong answer and it is the only one available. A
-  ## library has no business killing its host: a JUCE plugin that aborts takes
-  ## the whole digital audio workstation with it, and the user loses unsaved
-  ## work that has nothing to do with this core.
+  ## THE RETURN IS 1 FOR USABLE AND 0 FOR NOT, which is the convention every
+  ## other `int` in `include/mcf5307.h` already uses. It is not a POSIX-style
+  ## error code, and mixing the two conventions inside one contract is the
+  ## footgun that decided it.
   ##
-  ## `include/mcf5307.h` declares `void mcf5307_runtime_init(void)`. That
-  ## signature carries no failure channel: no return value, no out-parameter
-  ## and no status call. There is no way for this procedure to say `I failed`
-  ## and return. `c_abort` is what is left.
+  ## AN EARLIER VERSION ENDED THE PROCESS HERE. A library has no business
+  ## killing its host: a plugin that aborts takes the whole digital audio
+  ## workstation with it and the user loses unsaved work that has nothing to do
+  ## with this core. The abort stood only because `void mcf5307_runtime_init(
+  ## void)` carried no failure channel at all. The contract now carries one.
   ##
-  ## The repair cannot start in this file. `cmake/Nim.cmake` step 4a fails the
-  ## configure step over any symbol the shared object exports that the contract
-  ## does not declare, so adding an `mcf5307_runtime_status` here stops the
-  ## configure step. The channel has to reach `include/mcf5307.h` first, as one
-  ## of:
-  ##   `int mcf5307_runtime_init(void);`         a non-zero result on failure
-  ##   `void mcf5307_runtime_init(int* status);` a status out-parameter
-  ##   `int mcf5307_runtime_ready(void);`        a separate query
-  ##
-  ## This procedure then returns instead of aborting and goes away.
-  ##
-  ## The text goes out one line at a time. Each line is a C string literal, so
-  ## the report needs no allocation and no Nim string.
-  discard c_fputs(
-    "mcf5307_runtime_init: the Nim runtime initializer did not finish.\n",
-    cstderr)
-  discard c_fputs(
-    "Another thread claimed the one-time latch and did not release it.\n",
-    cstderr)
-  discard c_fputs(
-    "One known cause: module initialization waits for a thread.\n", cstderr)
-  discard c_fputs(
-    "That thread then calls mcf5307_runtime_init itself.\n", cstderr)
-  discard c_fputs(
-    "The runtime is not initialized, so this process stops here.\n", cstderr)
-  c_abort()
-
-proc mcf5307RuntimeInit() {.exportc: "mcf5307_runtime_init", mcf5307Abi.} =
-  ## Runs the Nim runtime's initializer once.
-  ##
-  ## C++ never names `mcf5307_NimMain`. It calls this procedure, which is the
-  ## only caller of the runtime entry point in the project.
-  ##
-  ## The latch is claimed before the call and not after it. Two hazards decide
-  ## that order.
-  ##
-  ## The first hazard is re-entrancy. Any code that module initialization
-  ## reaches can call this procedure again. A latch claimed after the call
-  ## recurses without bound. A latch claimed before it terminates.
-  ##
-  ## The second hazard is concurrency. Nim 2.2 builds with threads on, and the
-  ## header promises an idempotent call with no single-thread precondition. A
-  ## plain boolean lets two threads both read false and both run the
-  ## initializer. The compare-and-exchange admits exactly one of them.
-  ##
-  ## A caller that loses the exchange waits, and the wait carries a deadline.
-  ## Returning early would hand back a runtime that does not exist yet. Waiting
-  ## for ever would hide the third case the `initializing` comment names.
-  let entryState = latch.load(moAcquire)
-  if entryState == latchDone:
-    return
-  if entryState == latchAbandoned:
-    mcf5307LatchStalled()
-
-  if initializing:
-    # A re-entrant call on the thread that is running the initializer. The
-    # initializer it would run is the one already on this stack.
-    return
-
-  var expected = latchUntouched
-  if latch.compareExchange(expected, latchRunning, moAcquireRelease, moAcquire):
-    initializing = true
-    mcf5307_NimMain()
-    initializing = false
-    latch.store(latchDone, moRelease)
-    return
-
-  # Another thread claimed the latch. Wait for that thread, and stop at the
-  # deadline. The waiter that stops writes `latchAbandoned` itself, so every
-  # other waiter ends at once instead of serving its own deadline.
-  let deadline = mcf5307MonotonicMillis() + latchWaitMillis
-  while true:
-    let waitedState = latch.load(moAcquire)
-    if waitedState == latchDone:
-      return
-    if waitedState == latchAbandoned:
-      mcf5307LatchStalled()
-    if mcf5307MonotonicMillis() >= deadline:
-      # The result of the exchange is read and is not discarded. There is a
-      # race between the load above and this line. The initializing thread can
-      # store `latchDone` in that window. The exchange then fails, `running`
-      # comes back holding `latchDone`, and the runtime IS initialized. A
-      # discarded result aborts a process whose runtime had just come up.
-      #
-      # A failure that reports any other value is a real stall. `latchRunning`
-      # means the initializing thread is still inside and out of time.
-      # `latchAbandoned` means another waiter reached its own deadline first.
-      var running = latchRunning
-      if not latch.compareExchange(
-          running, latchAbandoned, moAcquireRelease, moAcquire):
-        if running == latchDone:
-          return
-      mcf5307LatchStalled()
-    mcf5307Yield()
+  ## WHAT REPLACES THE ABORT'S GUARANTEE. The abort existed so that a caller
+  ## could not proceed with a runtime that does not exist. C lets a caller drop
+  ## a return value, so the status alone would not have kept that guarantee.
+  ## `mcf5307_create` and `isp1181_create` read the latch themselves and hand
+  ## back no context once it is abandoned, and every other call in the contract
+  ## already answers a documented benign value for a nil context. A caller that
+  ## ignores this status therefore gets a library that does nothing, and never
+  ## one that answers from an uninitialized runtime.
+  if runtimeInitOnce(runtimeLatch, mcf5307_NimMain):
+    cint(1)
+  else:
+    cint(0)
