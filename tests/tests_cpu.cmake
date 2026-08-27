@@ -3036,7 +3036,10 @@ mcf5307_check_case_sites("t_isp1181_stub" "@MCF5307_ISP1181_STUB_SOURCE@"
 # iteration, so this figure counts properties and not addresses. A sweep that
 # stopped iterating is caught by the iteration count inside the case's own
 # expected value, which is why the two guards do not overlap here.
-mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 29)
+# MOVED 29 -> 30 WITH `isp1181_setup`. The added case is the set-up entry
+# point on the stub backend: it answers 0 for a packet, for nil data and for a
+# nil handle, and reaches no register.
+mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 30)
 
 ]==])
 
@@ -3310,7 +3313,12 @@ mcf5307_check_case_sites("t_isp1181"
 # OUT, and a host delivery refused on an endpoint configured IN against one
 # configured OUT. The bit governs both halves of a single buffer, so a figure
 # that covered only the transmit half would let the receive half go untested.
-mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 28)
+# MOVED 28 -> 32 WITH THE SET-UP PACKET. The four added cases are BLOCK 7:
+# the one-bit pair that separates a set-up packet from an ordinary OUT packet
+# on the same bytes, SETUPT's survival of a status read and its removal by the
+# clear, the Validate/Clear interlock in both states, and the flush-and-unstall
+# the arrival performs.
+mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 32)
 
 ]==])
 

@@ -994,6 +994,161 @@ check(illegal == wantIllegal,
         "leave every buffer as it was",
       $illegal, $wantIllegal)
 
+# ---------------------------------------------------------------------------
+# BLOCK 7. THE SET-UP PACKET AND THE INTERLOCK IT ARMS.
+#
+# SETUPT IS BIT 2 OF DcEndpointStatus AND THAT POSITION IS READ, NOT INFERRED.
+# ISP1362 Rev. 06, Table 126 ("DcEndpointStatus register: bit allocation",
+# p.114) places the symbols EPSTAL, EPFULL1, EPFULL0, DATA_PID, OVERWRITE,
+# SETUPT, CPUBUF at bits 7 down to 1, and Table 127 (p.115) gives bit 2 as
+# "SETUPT   Logic 1 indicates that the buffer contains a set-up packet."
+#
+# THE ONE-BIT PAIR IS THE POINT OF THE FIRST CASE. The same four bytes reach
+# the same buffer by the two routes this model now has, and the two status
+# bytes differ in EXACTLY bit 2. A model that set the bit for every OUT packet
+# would pass a positive-only check and fails this one.
+
+const setupPacket = [0x80'u8, 0x06'u8, 0x00'u8, 0x01'u8]
+
+type SetupBit = tuple[ordinaryStatus: uint8, setupStatus: uint8,
+                      difference: uint8, ordinaryPending: int,
+                      setupPending: int]
+
+proc driveSetupBit(): SetupBit =
+  let ordinary = fresh()
+  discard ordinary.deliver(0, setupPacket)
+  let ordinaryStatus = ordinary.readVia(0x50'u8, 1)[0]
+
+  let setup = fresh()
+  discard setup.deliverSetup(setupPacket)
+  let setupStatus = setup.readVia(0x50'u8, 1)[0]
+
+  (ordinaryStatus: ordinaryStatus, setupStatus: setupStatus,
+   difference: ordinaryStatus xor setupStatus,
+   ordinaryPending: fifoAt(ordinary, 0).pending,
+   setupPending: fifoAt(setup, 0).pending)
+
+let setupBit = driveSetupBit()
+let wantSetupBit: SetupBit = (
+    ordinaryStatus: 0x20'u8, setupStatus: 0x24'u8, difference: 0x04'u8,
+    ordinaryPending: 1, setupPending: 1)
+check(setupBit == wantSetupBit,
+      "set-up: the same bytes by the ordinary route and the set-up route " &
+        "land in the same buffer and their status bytes differ in EXACTLY " &
+        "SETUPT, bit 2",
+      $setupBit, $wantSetupBit)
+
+# SETUPT IS NOT CLEARED BY READING THE STATUS REGISTER, AND THE CONTRAST IS
+# THE AUTHORITY'S OWN. Table 127 says of bit 3 OVERWRITE "a read back of this
+# register clears this bit" and says NO SUCH THING of bit 2. The datasheet
+# knows how to spell a read-to-clear bit and does not spell one here, so a
+# read leaves SETUPT standing. What takes it away is the buffer ceasing to
+# hold the set-up packet - bit 2's own wording is about buffer CONTENT - which
+# is the Clear Buffer command. THAT LAST STEP IS AN INFERENCE FROM THE
+# WORDING AND NOT A SENTENCE IN THE DOCUMENT, and `docs/sources.md` records it
+# as one.
+
+type SetupClear = tuple[afterSetup: uint8, afterSecondRead: uint8,
+                        afterAcknowledge: uint8, afterClear: uint8]
+
+proc driveSetupClear(): SetupClear =
+  let m = fresh()
+  discard m.deliverSetup(setupPacket)
+  let afterSetup = m.readVia(0x50'u8, 1)[0]
+  let afterSecondRead = m.readVia(0x50'u8, 1)[0]
+  m.portWrite(commandPort, 0xF4'u8)
+  let afterAcknowledge = m.readVia(0x50'u8, 1)[0]
+  m.portWrite(commandPort, 0x70'u8)
+  (afterSetup: afterSetup, afterSecondRead: afterSecondRead,
+   afterAcknowledge: afterAcknowledge, afterClear: m.readVia(0x50'u8, 1)[0])
+
+let setupClear = driveSetupClear()
+let wantSetupClear: SetupClear = (
+    afterSetup: 0x24'u8, afterSecondRead: 0x24'u8,
+    afterAcknowledge: 0x24'u8, afterClear: 0x00'u8)
+check(setupClear == wantSetupClear,
+      "set-up: SETUPT survives a status read and an acknowledge and is taken " &
+        "away by the clear that empties the buffer",
+      $setupClear, $wantSetupClear)
+
+# THE INTERLOCK. ISP1362 Rev. 06 section 12.3.6 (p.53): "The arrival of a
+# set-up packet flushes the IN buffer, and disables the Validate Buffer and
+# Clear Buffer commands for the control IN and OUT endpoints. The
+# microprocessor must re-enable these commands by sending an acknowledge
+# set-up command to both the control endpoints."
+#
+# THE REFUSAL IS A LOG LINE AND NOT A SILENT NO-OP, which is the rule the rest
+# of this model obeys: a command that did nothing and said nothing would tell
+# the firmware the buffer was cleared when it was not.
+
+type Interlock = tuple[clearRefusedLog: seq[string], pendingAfterRefused: int,
+                       validateRefusedPending: int, pendingAfterAllowed: int,
+                       validateAllowedPending: int]
+
+proc driveInterlock(): Interlock =
+  let m = fresh()
+  m.writeVia(0x01'u8, [0x02'u8, 0x00'u8, 0x55'u8, 0xAA'u8])
+  discard m.deliverSetup(setupPacket)
+  let before = m.logLines.len
+  m.portWrite(commandPort, 0x70'u8)
+  m.portWrite(commandPort, 0x61'u8)
+  let refusedLog = m.logLines[before .. ^1]
+  let pendingAfterRefused = fifoAt(m, 0).pending
+  let validateRefusedPending = fifoAt(m, 1).pending
+  m.portWrite(commandPort, 0xF4'u8)
+  m.writeVia(0x01'u8, [0x02'u8, 0x00'u8, 0x55'u8, 0xAA'u8])
+  m.portWrite(commandPort, 0x61'u8)
+  let validateAllowedPending = fifoAt(m, 1).pending
+  m.portWrite(commandPort, 0x70'u8)
+  (clearRefusedLog: refusedLog, pendingAfterRefused: pendingAfterRefused,
+   validateRefusedPending: validateRefusedPending,
+   pendingAfterAllowed: fifoAt(m, 0).pending,
+   validateAllowedPending: validateAllowedPending)
+
+let interlock = driveInterlock()
+let wantInterlock: Interlock = (
+    clearRefusedLog: @[
+      "isp1181: command 0x70 (control OUT buffer clear) is disabled until " &
+      "the set-up packet is acknowledged with 0xF4; nothing is done",
+      "isp1181: command 0x61 (control IN buffer validate) is disabled until " &
+      "the set-up packet is acknowledged with 0xF4; nothing is done"],
+    pendingAfterRefused: 1, validateRefusedPending: 0,
+    pendingAfterAllowed: 0, validateAllowedPending: 1)
+check(interlock == wantInterlock,
+      "set-up: the interlock refuses clear and validate on both control " &
+        "endpoints by name until 0xF4, and both work after it",
+      $interlock, $wantInterlock)
+
+# THE ARRIVAL FLUSHES THE IN BUFFER AND UNSTALLS BOTH CONTROL ENDPOINTS.
+# Section 12.3.6 states the flush. Table 127's bit 7 and section 15.2.3 state
+# the unstall: "The endpoint is automatically unstalled on receiving a set-up
+# token", "regardless of the packet content".
+
+type SetupArrival = tuple[inPendingBefore: int, inPendingAfter: int,
+                          stallBefore: seq[uint8], stallAfter: seq[uint8]]
+
+proc driveSetupArrival(): SetupArrival =
+  let m = fresh()
+  m.writeVia(0x01'u8, [0x02'u8, 0x00'u8, 0x55'u8, 0xAA'u8])
+  m.portWrite(commandPort, 0x61'u8)
+  let inPendingBefore = fifoAt(m, 1).pending
+  m.portWrite(commandPort, 0x40'u8)
+  m.portWrite(commandPort, 0x41'u8)
+  let stallBefore = @[m.readVia(0x50'u8, 1)[0], m.readVia(0x51'u8, 1)[0]]
+  discard m.deliverSetup(setupPacket)
+  (inPendingBefore: inPendingBefore, inPendingAfter: fifoAt(m, 1).pending,
+   stallBefore: stallBefore,
+   stallAfter: @[m.readVia(0x50'u8, 1)[0], m.readVia(0x51'u8, 1)[0]])
+
+let setupArrival = driveSetupArrival()
+let wantSetupArrival: SetupArrival = (
+    inPendingBefore: 1, inPendingAfter: 0,
+    stallBefore: @[0x80'u8, 0xA0'u8], stallAfter: @[0x24'u8, 0x00'u8])
+check(setupArrival == wantSetupArrival,
+      "set-up: the arrival flushes the control IN buffer and unstalls both " &
+        "control endpoints",
+      $setupArrival, $wantSetupArrival)
+
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT.
 const declaredCaseSites = declaredSites
 const declaredOffGreenPathSites = offGreenPathSites

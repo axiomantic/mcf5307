@@ -179,6 +179,8 @@ var payload: array[64, uint8]
 for i in 0 ..< 64:
   payload[i] = uint8(i)
 
+let nilCtxProbe: ISP1181Ctx = nil
+
 var rxCalls = 0
 for endpoint in endpoints:
   for length in lengths:
@@ -194,6 +196,31 @@ const wantRx: RxOutcome = (calls: 22, window: wantWindow)
 check(rxOutcome == wantRx,
       "rx: traffic on every endpoint is accepted and reaches no register",
       $rxOutcome, $wantRx)
+
+# THE SET-UP ENTRY POINT IS INERT ON THE STUB TOO, and it ANSWERS rather than
+# staying silent: `isp1181_setup` returns an int, so the stub's "nothing to
+# say" has a value and the suite can assert it. A stub that reached the model
+# here would arm the set-up interlock inside a handle the caller never moved.
+
+type SetupOutcome = tuple[accepted: int, nilData: int, nilHandle: int,
+                          window: Sweep]
+
+var setupAccepted = 0
+for length in lengths:
+  setupAccepted = setupAccepted or
+    int(isp1181_setup(ctx, addr payload[0], csize_t(length)))
+
+let setupOutcome: SetupOutcome = (
+    accepted: setupAccepted,
+    nilData: int(isp1181_setup(ctx, nil, csize_t(0))),
+    nilHandle: int(isp1181_setup(nilCtxProbe, addr payload[0], csize_t(8))),
+    window: sweepWindow(ctx))
+const wantSetup: SetupOutcome = (accepted: 0, nilData: 0, nilHandle: 0,
+                                 window: wantWindow)
+check(setupOutcome == wantSetup,
+      "set-up: the stub answers 0 for a packet, for nil data and for a nil " &
+        "handle, and reaches no register",
+      $setupOutcome, $wantSetup)
 
 # ---------------------------------------------------------------------------
 # BLOCK 5. The stub never calls the host back.
