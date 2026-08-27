@@ -238,7 +238,7 @@ those three apart is what this file is for.**
 | | Standing |
 |---|---|
 | The three bytes above | **MEASURED** from firmware behaviour. |
-| `EPDIR` is bit 6 | **ASSERTED BY THIS MODEL.** `epdirBit = 0x40` in `src/isp1181/isp1181.nim`, and `tests/t_isp1181.nim` drives both outcomes on one handle. A firmware image that disagreed would turn the suite red. |
+| `EPDIR` is bit 6 | **ASSERTED BY THIS MODEL.** `epdirBit = 0x40` in `src/isp1181/isp1181.nim`. `tests/t_isp1181.nim` drives both outcomes on one handle and `tests/t_isp1181_command_set.nim` reaches the same decode from the command side, and **moving `epdirBit` to any of the other seven bits turns the suite red** — measured by moving it to each of them in turn, not argued. **WHAT THAT PINS IS THE BIT POSITION THIS MODEL READS, AND NOTHING ELSE.** No test in this repository loads a firmware image; every configuration byte a test writes is the test's own. A part that carried the direction somewhere else would be modelled wrongly and the suite would stay green. That is weaker than pinning the firmware and stronger than the row below, where nothing constrains the value at all. |
 | `DBLBUF` is bit 5; `FFOSZ` `0001` is 16 bytes and `0011` is 64 bytes | **DECODED ONLY.** Nothing in this model reads either field out of `endpointConfig` — `fifoShape` is a constant — so no test can go red on them. Read from ISP1362 Rev. 06 Table 110/111 (p.107) and Table 16 (p.52), and INHERITED in exactly the sense every other ISP1362 value here is. `FFOISO` is 0 in all three bytes, so Table 16's non-isochronous column is the one that applies. **TWO ISP1362 DOCUMENTS AGREE ON BOTH**, which is stated below; two agreeing ISP1362 documents are still not an ISP1181B document. |
 
 **`fifoShape` AGREES WITH ALL THREE BYTES, AND THE AGREEMENT IS CONSISTENT
@@ -257,15 +257,36 @@ once, by hand, in this file.** Nothing reads a configuration byte back into
 untouched and nothing would report it. That is the same gap the section above
 already names, and it is carried below as `Unverified` rather than closed here.
 
-**A SECOND ISP1362 DOCUMENT GIVES THE SAME FIELDS, AND THE FIRMWARE'S BYTES ARE
-ITS RECOMMENDED RECIPES.** `AN10008-01`, Table 12-5 and Figure 12-15 (pp.77-78),
-recommends a bulk endpoint as bit 7 enable, bit 6 `0` for OUT and `1` for IN, bit
-5 double buffering, bit 4 `0` for bulk, and `FFOSZ` `0011` for 64 bytes — and
-gives the same values as C constants: `EPCNFG_FIFO_EN 0x80`, `EPCNFG_IN_EN 0x40`,
-`EPCNFG_DBLBUF_EN 0x20`, `EPCNFG_NONISOSZ_64 0x03`. Composed, those are `0xE3`
-for bulk IN and `0x83` for bulk OUT: **the exact bytes the firmware writes for
-endpoints 2 and 3.** Endpoint 1's `0xE1` is the same IN recipe with the size
-field at `0001`.
+**A SECOND ISP1362 DOCUMENT GIVES THE SAME FIELDS, AND THE FIRMWARE FOLLOWS ITS
+RECIPE FOR IN AND DEPARTS FROM IT FOR OUT.** `AN10008-01`, Table 12-5 and Figure
+12-15 (pp.77-78), recommends a bulk endpoint as bit 7 enable, bit 6 `0` for OUT
+and `1` for IN, **bit 5 double buffering — set for BOTH directions**, bit 4 `0`
+for bulk, and `FFOSZ` `0011` for 64 bytes; Figure 12-15 gives the same values as
+C constants, `EPCNFG_FIFO_EN 0x80`, `EPCNFG_IN_EN 0x40`, `EPCNFG_DBLBUF_EN 0x20`
+and `EPCNFG_NONISOSZ_64 0x03`, and passes `EPCNFG_DBLBUF_EN` in the bulk OUT call
+exactly as it does in the bulk IN one. So the two recommended bytes are
+`0x80|0x20|0x03` = **`0xA3` for bulk OUT** and `0x80|0x40|0x20|0x03` = **`0xE3`
+for bulk IN**.
+
+| Endpoint | Recommended for its direction | Byte the firmware writes | Agreement |
+|---|---|---|---|
+| 2 — IN | `0xE3` | `0xE3` | Every bit. |
+| 1 — IN | `0xE3` | `0xE1` | Every bit except `FFOSZ`, which is `0001` for 16 bytes rather than `0011` for 64. Bit 5 agrees. |
+| 3 — OUT | `0xA3` | `0x83` | Every bit **except bit 5**. The firmware clears `DBLBUF` where the note sets it. |
+
+**THE DISAGREEMENT IS THE USEFUL PART, AND IT IS A SECOND ROUTE TO THE `(64, 1)`
+ROW.** `fifoShape` already says endpoint 3 holds ONE 64-byte buffer, and until now
+that row rested on the decode of `0x83` alone. The note supplies an independent
+expectation to weigh it against: double buffering is what a bulk OUT endpoint is
+recommended to get, and this firmware does not take it. The two accounts of
+endpoint 3 were reached by different routes and agree.
+
+**WHAT IS MEASURED IS THAT BIT 5 IS 0 IN THE BYTE THE FIRMWARE WRITES.** That the
+clearing was a DELIBERATE choice is INFERRED, from the fact that the byte matches
+a published recipe in every other bit and differs in this one. Nothing in this
+repository establishes what the firmware's author intended, and a reader who
+wants the weaker reading — that the bit was simply never set — is not contradicted
+by any evidence here.
 
 **That raises the standing of the decode and does NOT move the inheritance.**
 Both documents are about the ISP1362; the ISP1181B data sheet is still the one
