@@ -134,6 +134,24 @@ const fifoCount* = 5
   ## endpoints 1 to 3 - which is the order ISP1362 Rev. 06 section 15.1.1 gives
   ## the endpoint-configuration slots.
 
+const controlSlotCount* = 2
+  ## THE SLOTS WHOSE GEOMETRY THE PART FIXES, and they are the first two in
+  ## section 15.1.1's ordering: control OUT and control IN. ISP1362 Rev. 06
+  ## Table 15 p.51 gives both as "64 (fixed)" against "programmable" for
+  ## endpoints 1 to 14, so a configuration byte cannot move them and no reader
+  ## of one should try.
+
+const controlFifoBytes* = 64
+  ## The control endpoint's buffer memory size. ISP1362 Rev. 06 Table 15 p.51,
+  ## "64 (fixed)" for endpoint 0 OUT and for endpoint 0 IN alike. THIS IS A
+  ## PROPERTY OF THE PART and not of the image, which is what makes it
+  ## different in kind from every figure in `fifoShape`.
+
+const controlFifoBuffers* = 1
+  ## The control endpoint's buffer depth. ISP1362 Rev. 06 Table 15 p.51 gives
+  ## "Double buffering: no" for both control rows, so one buffer is the part's
+  ## answer and DBLBUF has nothing to say about these two slots.
+
 type
   Isp1181IrqFn* = proc (user: pointer; asserted: cint) {.cdecl.}
     ## The logical interrupt state and not the pin state. The interrupt is
@@ -252,10 +270,26 @@ const
     ## which is a claim of INTEGRATION and not of a byte-identical register map,
     ## and the ISP1181B data sheet itself was not retrieved. `docs/sources.md`
     ## carries the limit in full.
-  fifoEnableBit = 0x80'u8
+  fifoEnableBit* = 0x80'u8
     ## FIFOEN in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 p.107 places
     ## it at bit 7 and Table 111 gives its meaning: "Logic 1 enables the FIFO
     ## buffer. Logic 0 disables the FIFO buffer." It is inherited on the same
+    ## terms as `epdirBit`.
+  dblbufBit* = 0x20'u8
+    ## DBLBUF in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 p.107 places
+    ## it at bit 5 and Table 111 p.107 gives its meaning: "Logic 1 enables the
+    ## double buffering." It is INHERITED on the same terms as `epdirBit`.
+  ffoisoBit* = 0x10'u8
+    ## FFOISO in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 p.107 places
+    ## it at bit 4 and Table 111 p.107 gives its meaning: "Logic 1 indicates an
+    ## isochronous endpoint. Logic 0 indicates a bulk or interrupt endpoint."
+    ## IT SELECTS WHICH COLUMN OF Table 16 p.52 `FFOSZ` IS READ IN, which is why
+    ## a size decode that ignored it would read the wrong table half the time.
+    ## It is INHERITED on the same terms as `epdirBit`.
+  ffoszMask* = 0x0F'u8
+    ## `FFOSZ[3:0]` in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 p.107
+    ## places it at bits 3 to 0 and Table 111 p.107 gives it as "Selects the
+    ## buffer memory size according to Table 16". It is INHERITED on the same
     ## terms as `epdirBit`.
   softctBit* = 0x01'u8
     ## The mode register bits. The rest - DISGLBL `0x02`, DBGMOD `0x04`,
@@ -270,8 +304,8 @@ const fifoNames: array[fifoCount, string] = [
   "endpoint 0 OUT", "endpoint 0 IN", "endpoint 1", "endpoint 2", "endpoint 3"]
 
 const fifoShape: array[fifoCount, tuple[capacity: int, buffers: int]] = [
-  (64, 1),   ## endpoint 0 OUT
-  (64, 1),   ## endpoint 0 IN
+  (controlFifoBytes, controlFifoBuffers),   ## endpoint 0 OUT
+  (controlFifoBytes, controlFifoBuffers),   ## endpoint 0 IN
   (16, 2),   ## endpoint 1
   (64, 2),   ## endpoint 2
   (64, 1)]   ## endpoint 3 - single-buffered.
@@ -283,7 +317,19 @@ const fifoShape: array[fifoCount, tuple[capacity: int, buffers: int]] = [
   ## scheme in `DBLBUF`. So "endpoint 1 is 16 bytes" and "endpoint 3 is
   ## single-buffered" are facts about the image this model was measured
   ## against, and they would be different facts under a different image.
-  ## Nothing here reads `endpointConfig` back into this table.
+  ##
+  ## THE OBSERVATION IS KEPT AND ONLY ITS LABEL MOVES. These are still the best
+  ## evidence available for what the emulated firmware configures; they are
+  ## simply not statements about silicon. `docs/sources.md` records the same
+  ## correction.
+  ##
+  ## IT IS THE BUFFER MEMORY THIS MODEL ALLOCATES AT RESET AND IT IS NO LONGER
+  ## WHAT ANY QUESTION ABOUT AN ENDPOINT'S GEOMETRY IS ANSWERED FROM.
+  ## `slotBufferGeometry` decodes `endpointConfig` instead, so a differently
+  ## configured image is reported as itself rather than as this table. What the
+  ## table still decides is the `Fifo` a packet actually meets, and those two
+  ## are pinned against each other for the measured image by a registered case
+  ## rather than by a sentence here.
 
 const outFifoOfEndpoint: array[4, int] = [0, 2, 3, 4]
   ## The buffer a packet from the host lands in. Endpoint 0 is the only
@@ -465,24 +511,100 @@ proc slotHasBuffer*(slot: int): bool =
   ## `fifoCount` has a register byte and no buffer, so it has no geometry.
   slot >= 0 and slot < fifoCount
 
-proc slotBufferGeometry*(slot: int): tuple[maxPacketBytes: int, buffers: int] =
-  ## The buffer behind the slot, as bytes and as depth. It is only defined
-  ## where `slotHasBuffer` says so and the caller checks that first; there is
-  ## no in-band answer here, because every integer this could return for a slot
-  ## with no buffer would be a size some consumer would then split packets to.
+proc nonIsoBufferBytes*(ffosz: uint8): int =
+  ## The buffer memory size `FFOSZ[3:0]` selects for a NON-ISOCHRONOUS
+  ## endpoint. ISP1362 Rev. 06 Table 16 p.52, the left-hand column: `0000` is 8
+  ## bytes, `0001` is 16, `0010` is 32 and `0011` is 64. Every remaining code is
+  ## marked **reserved** in that column.
+  ##
+  ## A RESERVED CODE ANSWERS -1 AND NOT A SIZE, and -1 is not a length. The
+  ## right-hand column of the same table gives those codes isochronous sizes
+  ## reaching 1023 bytes, so a decode that fell through to a default would be
+  ## reading the wrong column and would hand a producer a figure the part never
+  ## selected for it. There is no size to report and the caller is made to say
+  ## so.
+  case ffosz and ffoszMask
+  of 0b0000'u8: 8
+  of 0b0001'u8: 16
+  of 0b0010'u8: 32
+  of 0b0011'u8: 64
+  else: -1
+
+type SlotGeometryKind* = enum
+  ## What `slotBufferGeometry` found, and the four answers are four different
+  ## findings rather than a size and some ways of failing to have one.
+  sgNoSlot        ## No such slot, or no model.
+  sgNoBuffer      ## The slot is real and no buffer memory stands behind it.
+  sgUnnameable    ## A buffer whose configuration names no size this can report.
+  sgBuffer        ## A buffer, with its size and its depth.
+
+proc slotBufferGeometry*(m: ISP1181; slot: int):
+    tuple[kind: SlotGeometryKind; maxPacketBytes: int; buffers: int] =
+  ## The buffer behind the slot, as bytes and as depth, DECODED OUT OF THE
+  ## CONFIGURATION BYTE THE FIRMWARE WROTE. `maxPacketBytes` and `buffers` are
+  ## meaningful on `sgBuffer` alone; on every other answer they are zero because
+  ## zero is the value a caller that ignored `kind` would be least able to use,
+  ## and there is no size to report.
   ##
   ## The bytes are a maximum packet size. ISP1362 Rev. 06 section 12.3.3 p.51
   ## states it directly - "The size of the buffer memory determines the maximum
   ## packet size that the hardware can support for a given endpoint" - and
   ## `Fifo.accept` in `isp1181/fifo` refuses a longer packet whole.
   ##
-  ## It reads `fifoShape`, whose rows are properties of the measured firmware
-  ## image and not of the part. This proc publishes whatever `fifoShape` holds.
+  ## ENDPOINT 0 IS FIXED BY THE PART AND ITS BYTE IS NOT CONSULTED. Table 15
+  ## p.51 gives both control rows as "64 (fixed)" with double buffering "no",
+  ## and section 15.1.1 p.107 adds that the control endpoints "have fixed
+  ## configurations" and are written with their default values only to complete
+  ## the initialization sequence. So the two control slots have a geometry
+  ## whether or not this firmware ever configured them, and that geometry is
+  ## read out of Table 15 rather than out of a register the part does not take
+  ## it from.
   ##
-  ## `fifoShape` calls the first figure `capacity`, which is what it is to the
-  ## buffer; `maxPacketBytes` is what the same figure is to a producer, and
-  ## section 12.3.3 is the sentence that makes them one number.
-  (maxPacketBytes: fifoShape[slot].capacity, buffers: fifoShape[slot].buffers)
+  ## A SLOT THE FIRMWARE NEVER WROTE HAS NO GEOMETRY, AND ITS BITS DECODE TO A
+  ## PLAUSIBLE ONE. Table 110 p.107 resets every bit to 0, and `FFOSZ` = `0000`
+  ## is 8 bytes in Table 16 - a legal size, and the smallest, so a producer
+  ## handed it would split every frame to eight bytes and never see an error.
+  ## That is the answer this proc exists to refuse. `configWritten` is what
+  ## separates the reset value from a byte the firmware chose, and it is asked
+  ## before the byte is decoded.
+  ##
+  ## NO TEST CAN SEPARATE THAT CLAUSE FROM THE FIFOEN ONE BELOW IT, AND THE
+  ## ACCEPTANCE IS RECORDED HERE RATHER THAN LEFT TO BE REDISCOVERED. Table 110
+  ## p.107 resets FIFOEN to 0 along with every other bit, `clearState` clears
+  ## `endpointConfig` and `configWritten` together, and the only writer sets
+  ## both - so an unwritten slot always carries FIFOEN clear and reaches
+  ## `sgNoBuffer` by either route. Removing the clause would leave the model
+  ## answering a question about the WRITE RECORD out of a bit whose reset value
+  ## happens to agree, which is a different claim that is true by coincidence.
+  ## It is kept for that reason and not because a red test demands it.
+  ##
+  ## A DISABLED ENDPOINT HAS NO BUFFER, WHICH IS NOT A MODELLING LIMIT. Section
+  ## 12.3.3 p.51: "Only enabled endpoints are allocated space in the shared
+  ## buffer memory storage, disabled endpoints have zero bytes." FIFOEN clear
+  ## therefore answers `sgNoBuffer` for the same reason a slot past this model's
+  ## buffers does - there is nothing behind it to describe.
+  ##
+  ## AN ISOCHRONOUS ENDPOINT IS `sgUnnameable` AND NOT A SIZE OUT OF THE OTHER
+  ## COLUMN. Table 16's isochronous sizes run to 1023 bytes and this model
+  ## carries no isochronous buffer, so every figure that column offers is one no
+  ## buffer here would accept.
+  if m.isNil or slot < 0 or slot >= configSlotCount:
+    return (sgNoSlot, 0, 0)
+  if slot < controlSlotCount:
+    return (sgBuffer, controlFifoBytes, controlFifoBuffers)
+  if not slotHasBuffer(slot):
+    return (sgNoBuffer, 0, 0)
+  if not m.configWritten[slot]:
+    return (sgNoBuffer, 0, 0)
+  let configured = m.endpointConfig[slot]
+  if (configured and fifoEnableBit) == 0:
+    return (sgNoBuffer, 0, 0)
+  if (configured and ffoisoBit) != 0:
+    return (sgUnnameable, 0, 0)
+  let bytes = nonIsoBufferBytes(configured)
+  if bytes < 0:
+    return (sgUnnameable, 0, 0)
+  (sgBuffer, bytes, if (configured and dblbufBit) != 0: 2 else: 1)
 
 proc irqAsserted*(m: ISP1181): bool =
   if m.isNil: false else: m.asserted

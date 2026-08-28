@@ -221,14 +221,24 @@ non-isochronous packet twice and does not agree with itself:
 
 Two places reach 64 and one says 32. **No side is picked here**, and nothing in
 this repository asserts a bound of its own: `include/mcf5307.h` publishes
-`isp1181_slot_buffer`, which reports the buffer THIS MODEL carries for an
-endpoint, and a caller that needs a bound reads it from that answer rather than
-from a constant. §12.3.3, p.51 is what makes a buffer size a packet size at all
+`isp1181_slot_buffer`, which decodes the size out of the configuration byte the
+firmware wrote for that endpoint, and a caller that needs a bound reads it from
+that answer rather than from a constant. §12.3.3, p.51 is what makes a buffer size a packet size at all
 — *"The size of the buffer memory determines the maximum packet size that the
 hardware can support for a given endpoint"* — and Table 15, p.51 fixes endpoint
 0 at 64 bytes both directions while leaving endpoints 1 to 14 programmable. An
 OUT packet larger than the buffer is error code `1011`, *"overflow; the received
 packet was larger than the available buffer space"*, Table 132, p.118.
+
+**THREE MORE SENTENCES OF THE SAME DOCUMENT DECIDE WHAT THE GEOMETRY CALL
+ANSWERS WHERE `FFOSZ` DOES NOT.** Each was read from the pages named, and each
+removes an answer this model would otherwise have had to invent:
+
+| Where | What it says | What it decides |
+|---|---|---|
+| Table 15, p.51 | Endpoint 0 OUT and endpoint 0 IN are both *"64 (fixed)"* with *"Double buffering: no"*, against *"programmable"* and *"supported"* for endpoints 1 to 14 | The two control slots have a geometry whether or not the firmware wrote them, and it is not read out of their configuration byte |
+| §15.1.1, p.107 | The control endpoints *"have fixed configurations"* and are included in the initialization sequence *"configured with their default values (see Table 15)"* | A control slot's byte is a formality of the sequence, so reading a size out of it would read a value the part does not take one from |
+| §12.3.3, p.51 | *"Only enabled endpoints are allocated space in the shared buffer memory storage, disabled endpoints have zero bytes"* | FIFOEN clear is not a small buffer and not an error; it is no buffer, which is the same answer a slot this model carries no buffer memory for gives |
 
 **Whichever reading is right, a resolution would still not be a fact about the
 ISP1181B.** This is an ISP1362 document, and the section below on the inherited
@@ -265,7 +275,7 @@ those three apart is what this file is for.**
 |---|---|
 | The three bytes above | **MEASURED** from firmware behaviour. |
 | `EPDIR` is bit 6 | **ASSERTED BY THIS MODEL.** `epdirBit = 0x40` in `src/isp1181/isp1181.nim`. `tests/t_isp1181.nim` drives both outcomes on one handle and `tests/t_isp1181_command_set.nim` reaches the same decode from the command side, and **moving `epdirBit` to any of the other seven bits turns the suite red** — measured by moving it to each of them in turn, not argued. **WHAT THAT PINS IS THE BIT POSITION THIS MODEL READS, AND NOTHING ELSE.** No test in this repository loads a firmware image; every configuration byte a test writes is the test's own. A part that carried the direction somewhere else would be modelled wrongly and the suite would stay green. That is weaker than pinning the firmware and stronger than the row below, where nothing constrains the value at all. |
-| `DBLBUF` is bit 5; `FFOSZ` `0001` is 16 bytes and `0011` is 64 bytes | **DECODED ONLY.** Nothing in this model reads either field out of `endpointConfig` — `fifoShape` is a constant — so no test can go red on them. Read from ISP1362 Rev. 06 Table 110/111 (p.107) and Table 16 (p.52), and INHERITED in exactly the sense every other ISP1362 value here is. `FFOISO` is 0 in all three bytes, so Table 16's non-isochronous column is the one that applies. **TWO ISP1362 DOCUMENTS AGREE ON BOTH**, which is stated below; two agreeing ISP1362 documents are still not an ISP1181B document. |
+| `DBLBUF` is bit 5; `FFOSZ` `0001` is 16 bytes and `0011` is 64 bytes | **ASSERTED BY THIS MODEL**, as of the geometry read-back. `slotBufferGeometry` in `src/isp1181/isp1181.nim` decodes both fields out of `endpointConfig`, and `tests/t_isp1181_stub.nim` drives every non-isochronous `FFOSZ` code and both `DBLBUF` states, so moving either field turns the suite red. **WHAT THAT PINS IS THE DECODE THIS MODEL USES, AND NOTHING ELSE** — the limit stated for `EPDIR` above applies here word for word. Read from ISP1362 Rev. 06 Table 110/111 (p.107) and Table 16 (p.52), and INHERITED in exactly the sense every other ISP1362 value here is. `FFOISO` is 0 in all three bytes, so Table 16's non-isochronous column is the one that applies. **TWO ISP1362 DOCUMENTS AGREE ON BOTH**, which is stated below; two agreeing ISP1362 documents are still not an ISP1181B document. |
 
 **`fifoShape` AGREES WITH ALL THREE BYTES, AND THE AGREEMENT IS CONSISTENT
 RATHER THAN PINNED.**
@@ -277,11 +287,17 @@ RATHER THAN PINNED.**
 | 3 | `0x83` | 0 | `0011` | 64 bytes, single | `(64, 1)` |
 
 So the receive endpoint genuinely does hold ONE 64-byte buffer, and that row was
-right for a reason nobody had checked. **The agreement is an observation made
-once, by hand, in this file.** Nothing reads a configuration byte back into
-`fifoShape`, so an image that configured different sizes would leave the table
-untouched and nothing would report it. That is the same gap the section above
-already names, and it is carried below as `Unverified` rather than closed here.
+right for a reason nobody had checked.
+
+**WHAT THE TABLE IS FOR HAS SINCE MOVED, AND HALF THE GAP IS CLOSED.**
+`isp1181_slot_buffer` no longer publishes `fifoShape`; `slotBufferGeometry`
+decodes `endpointConfig`, so an image that configured different sizes is now
+REPORTED as itself rather than as this table. What `fifoShape` still decides is
+the buffer memory allocated at reset — the `Fifo` a packet is actually offered
+to — and that allocation still does not follow a configuration write. So the
+remaining gap is narrower and it is a different one: the REPORT and the
+ENFORCEMENT could disagree for an image these rows do not describe. It is
+carried below as `Unverified` in that narrower form.
 
 **A SECOND ISP1362 DOCUMENT GIVES THE SAME FIELDS, AND THE FIRMWARE FOLLOWS ITS
 RECIPE FOR IN AND DEPARTS FROM IT FOR OUT.** `AN10008-01`, Table 12-5 and Figure
@@ -598,8 +614,8 @@ ISA_A accepts. Their pin is in `docs/toolchain.md`.
 | The CFPRM revision every header means is 3 | Two headers name Rev. 3 and the rest name the manual alone; re-read one value per citing module against Rev. 3 |
 | A read of `0x50+n` is the route by which the emulated firmware clears an endpoint interrupt, so its service routine terminates | Run the firmware against this model in the consuming emulator and observe whether the per-endpoint handler issues `0x50` to `0x54`. A handler that does not would spin, and the route would have to move |
 | The interrupt-register bit layout the emulated firmware obeys is the one ISP1362 Rev. 06 Table 143 (p.121) gives | Read the interrupt-register table in the ISP1181B data sheet. The two sources already disagree on bits 1 and 2, which are unassigned for that reason. `AN10008-01` §11.6.2 p.63 also puts suspend at bit 2, which is a second ISP1362 document and not a second part |
-| Every row of `fifoShape` is the size and buffering scheme the emulated firmware configures. All three of endpoints 1 to 3 AGREE with the configuration bytes recorded above, but the agreement is CONSISTENT and not PINNED: nothing reads `endpointConfig` back into `fifoShape`, so a firmware image configuring different sizes would leave the table standing and report nothing | Derive `fifoShape` from the configuration writes, or add a registered check that decodes each observed byte and asserts it against the corresponding row, so a disagreeing image turns the suite red. Endpoints 0 OUT and 0 IN are not covered by the three bytes at all and would need their own observation |
-| `DBLBUF` is bit 5, and `FFOSZ` `0001` and `0011` select 16 and 64 bytes for a non-isochronous endpoint | Read from ISP1362 Rev. 06 Table 110/111 (p.107) and Table 16 (p.52), and INHERITED exactly as every other ISP1362 value here is. Unlike `EPDIR` at bit 6, neither field is read by this model, so no test constrains it. Read the DcEndpointConfiguration bit map and the buffer-memory size table in an ISP1181B or ISP1181 data sheet |
+| The buffer a packet MEETS follows the size the firmware configures. `isp1181_slot_buffer` now decodes `endpointConfig`, so what the model REPORTS follows the configuration; the `Fifo` a packet is offered to is still allocated at reset from `fifoShape`, and only the measured image makes the two agree. An image that configured a size `fifoShape` does not carry would be reported as it configured itself while the buffer went on enforcing the older figure | Allocate the `Fifo` from the configuration write, as §15.1.1 p.107 describes the part doing — its Remark says a configuration change that affects the allocation makes every buffer's contents invalid, so discarding them on the write is the part's own behaviour. Until then the agreement is driven for ONE byte only: `tests/t_isp1181_stub.nim` writes `0x83` to slot 4, asks for the size, and hands the device a packet of exactly that size and one byte more |
+| `DBLBUF` is bit 5, `FFOISO` is bit 4, and `FFOSZ` selects 8, 16, 32 and 64 bytes for `0000` to `0011` on a non-isochronous endpoint | Read from ISP1362 Rev. 06 Table 110/111 (p.107) and Table 16 (p.52), and INHERITED exactly as every other ISP1362 value here is. All three fields are now READ by `slotBufferGeometry` and driven by `tests/t_isp1181_stub.nim`, so **what is pinned is the position and the decode this model uses**, exactly as the `EPDIR` row above is pinned and with the same limit: no test here loads a firmware image, so a part that carried these fields elsewhere would be modelled wrongly and the suite would stay green. Read the DcEndpointConfiguration bit map and the buffer-memory size table in an ISP1181B or ISP1181 data sheet |
 | The buffer-memory sizes and buffering schemes the firmware writes into slots 0 to 3 | The boot run named above resolves slots 4 to 15 and says nothing about the first four, which the model accepts silently. Record the operand byte of each accepted `0x20` to `0x23` and decode it against Table 110/111 |
 | SETUPT is taken away by the Clear Buffer command that empties the control OUT buffer. INFERRED from Table 127's wording — bit 2 describes buffer content and, unlike bit 3, carries no read-to-clear sentence | Read the `DcEndpointStatus` description in an ISP1181B or ISP1181 data sheet. Failing that, run the emulated firmware against this model and observe whether its control handler re-reads `0x50` after `0x70` and finds bit 2 low. `AN10008-01` p.73 says `0x50` clears the INTERRUPT bit and is silent on bit 2, which is corroboration of the inference and not proof of it |
 
