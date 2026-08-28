@@ -608,8 +608,15 @@ proc transmit*(m: ISP1181; endpoint: int): bool =
            "installed no transmit callback; the packet is kept")
     return false
   # A ZERO-LENGTH PACKET IS REFUSED HERE AND NOT INDEXED. `addr packet[0]` on
-  # an empty `seq` reads out of bounds, and `-d:release` removes the check that
-  # would have said so. The buffer can hold one: `Fifo.accept` takes a
+  # an empty `seq` is out of bounds. MEASURED, by removing this guard and
+  # running the suite under the library's own flags: `--mm:arc --panics:on
+  # -d:release` DOES keep the bounds check, and the run aborts with
+  # `IndexDefect`. That is the outcome, not a silent wrong pointer - and an
+  # abort is what `portWrite` above refuses for a nil handle, for the same
+  # reason: the caller is a plugin's host and an abort destroys a session that
+  # has nothing to do with this model. A build with `-d:danger` would not check
+  # at all and would read the memory. The buffer can hold one: `Fifo.accept`
+  # takes a
   # zero-length packet, `deliver` reaches it on an endpoint configured OUT, and
   # endpoints 1 to 3 have ONE buffer, so a later EPDIR write turns that same
   # buffer IN and `transmit` finds it. The refusal says the same thing

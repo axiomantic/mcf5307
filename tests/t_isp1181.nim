@@ -1351,8 +1351,11 @@ check(interlockScope == wantInterlockScope,
 # takes a packet of zero bytes, `deliver` reaches it on an endpoint configured
 # OUT, and endpoints 1 to 3 carry ONE buffer, so the EPDIR write that follows
 # turns that same buffer IN and `transmit` finds the empty packet in it. The
-# transmit used to take `addr packet[0]` of it, which reads out of bounds, and
-# `-d:release` removes the check that would have said so.
+# transmit used to take `addr packet[0]` of it, which is out of bounds. Removing
+# the guard and running this suite under the library's own flags aborts it with
+# `IndexDefect` before it can print a total - measured, not argued - and an
+# abort inside a plugin's host is the outcome `portWrite` refuses for a nil
+# handle. Under `-d:danger` there would be no check and no abort.
 #
 # THE PACKET IS KEPT AND THE REFUSAL IS THE ASSERTION. A model that dropped it
 # would leave the firmware with a buffer that emptied itself and a transfer that
