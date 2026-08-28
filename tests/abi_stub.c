@@ -238,6 +238,20 @@ int isp1181_config_slot(const isp1181_ctx* ctx, size_t slot, uint8_t* value)
     return -1;
 }
 
+/* -1 for `isp1181_config_slot`'s reason: of the three answers the contract
+ * names it is the one that claims least, and it is the one that leaves both
+ * out-parameters untouched. A benign 1 here would hand a linked caller a
+ * packet size out of a file that models nothing. */
+int isp1181_slot_buffer(const isp1181_ctx* ctx, size_t slot,
+                        size_t* max_packet_bytes, size_t* buffer_count)
+{
+    (void)ctx;
+    (void)slot;
+    (void)max_packet_bytes;
+    (void)buffer_count;
+    return -1;
+}
+
 size_t isp1181_report(const isp1181_ctx* ctx, char* dst, size_t capacity)
 {
     (void)ctx;

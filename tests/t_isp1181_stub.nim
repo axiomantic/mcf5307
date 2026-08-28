@@ -1054,6 +1054,152 @@ check(configRefusal == wantConfigRefusal,
         "is inside the range",
       $configRefusal, $wantConfigRefusal)
 
+# ---------------------------------------------------------------------------
+# THE BUFFER-GEOMETRY DOOR. What an endpoint will accept, asked rather than
+# assumed. gearmulator's board carried its own `64` because there was no call
+# to make; the cases below are what make that copy removable.
+
+const sizeSentinel = csize_t(0xDEAD)
+  ## A FIGURE NO LEGAL ANSWER CAN BE. ISP1362 Rev. 06 Table 16 p.52 gives the
+  ## non-isochronous sizes as 8, 16, 32 and 64 and reserves the rest, and no
+  ## buffer count in this model is anywhere near it. It is what proves an
+  ## answer of 0 or -1 left both out-parameters alone: a call that stored a
+  ## plausible 64 there would be handing a producer a size nothing backs, which
+  ## is the whole defect this door closes.
+
+proc slotBufferAt(handle: ISP1181Ctx;
+                  slot: int): tuple[rc: int, bytes: uint, buffers: uint] =
+  var seenBytes = sizeSentinel
+  var seenBuffers = sizeSentinel
+  let rc = isp1181_slot_buffer(handle, csize_t(slot), addr seenBytes,
+                               addr seenBuffers)
+  (rc: int(rc), bytes: uint(seenBytes), buffers: uint(seenBuffers))
+
+# THE ANSWER IS PER ENDPOINT AND NOT ONE NUMBER FOR THE DEVICE. Slot 0 is
+# endpoint 0 OUT and slot 2 is endpoint 1, and this model gives them DIFFERENT
+# geometry: 64 bytes single-buffered against 16 bytes double-buffered. A door
+# that answered a single global maximum would pass every other case here and
+# fail this one, and a consumer built on it would have moved the assumption up
+# one level rather than removed it. Both expectations are hand-written literals
+# read off `fifoShape`, never a second call of the procedure under test.
+type BufferShapes = tuple[ep0Out: tuple[rc: int, bytes: uint, buffers: uint],
+                          ep1: tuple[rc: int, bytes: uint, buffers: uint]]
+
+proc driveBufferShapes(): BufferShapes =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  result.ep0Out = handle.slotBufferAt(0)
+  result.ep1 = handle.slotBufferAt(2)
+  isp1181_destroy(handle)
+
+let bufferShapes = driveBufferShapes()
+let wantBufferShapes: BufferShapes = (
+  ep0Out: (rc: 1, bytes: 64'u, buffers: 1'u),
+  ep1: (rc: 1, bytes: 16'u, buffers: 2'u))
+check(bufferShapes == wantBufferShapes and
+      bufferShapes.ep0Out.bytes != bufferShapes.ep1.bytes,
+      "buffer geometry: each endpoint answers ITS OWN size and depth - " &
+        "endpoint 0 OUT is 64 bytes single-buffered and endpoint 1 is 16 " &
+        "bytes double-buffered - so no single device-wide maximum can " &
+        "satisfy this",
+      $bufferShapes, $wantBufferShapes)
+
+# A SLOT WITH NO BUFFER IN THIS MODEL IS 0, AND 0 IS NOT A SIZE OF ZERO. Slot 5
+# is a real configuration slot - the firmware writes it below and
+# `isp1181_config_slot` answers 1 for it - and this model carries no buffer
+# behind it. There is no geometry to report, and both a 0 and a plausible 64
+# would be inventions a producer would size its packets to.
+type NoBuffer = tuple[configRc: int, bufferRc: int, bytes: uint, buffers: uint]
+
+proc driveNoBuffer(): NoBuffer =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  handle.writeConfigSlot(5, 0xC3'u8)
+  let config = handle.configSlotAt(5)
+  let buffer = handle.slotBufferAt(5)
+  isp1181_destroy(handle)
+  (configRc: config.rc, bufferRc: buffer.rc, bytes: buffer.bytes,
+   buffers: buffer.buffers)
+
+let noBuffer = driveNoBuffer()
+let wantNoBuffer: NoBuffer = (configRc: 1, bufferRc: 0,
+                              bytes: uint(sizeSentinel),
+                              buffers: uint(sizeSentinel))
+check(noBuffer == wantNoBuffer,
+      "buffer geometry: a slot the firmware configured that this model " &
+        "carries no buffer for answers 0 and leaves both of the caller's " &
+        "figures alone, so no invented size reaches a producer",
+      $noBuffer, $wantNoBuffer)
+
+# THE THREE STATES STAY APART, AND NEITHER CALL ALONE KEEPS THEM APART. The
+# pairs below are the table `include/mcf5307.h` prints beside this call, driven
+# rather than quoted. Slot 0 is written and buffered, slot 5 is written with no
+# buffer here, and slot 4 is never written and IS buffered - so `config_slot`
+# alone cannot separate the first from the second and `slot_buffer` alone
+# cannot separate the first from the third. Only the pair does, and this case
+# also states that the three pairs are pairwise different.
+type ThreeStates = tuple[configuredBuffered: tuple[cfg: int, buf: int],
+                         configuredUnbuffered: tuple[cfg: int, buf: int],
+                         neverWritten: tuple[cfg: int, buf: int]]
+
+proc driveThreeStates(): ThreeStates =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  handle.writeConfigSlot(0, 0x83'u8)
+  handle.writeConfigSlot(5, 0xC3'u8)
+  # Slot 4 is deliberately left alone - it is endpoint 3, the last buffer this
+  # model carries, so it is buffered AND never written.
+  result.configuredBuffered = (cfg: handle.configSlotAt(0).rc,
+                               buf: handle.slotBufferAt(0).rc)
+  result.configuredUnbuffered = (cfg: handle.configSlotAt(5).rc,
+                                 buf: handle.slotBufferAt(5).rc)
+  result.neverWritten = (cfg: handle.configSlotAt(4).rc,
+                         buf: handle.slotBufferAt(4).rc)
+  isp1181_destroy(handle)
+
+let threeStates = driveThreeStates()
+let wantThreeStates: ThreeStates = (configuredBuffered: (cfg: 1, buf: 1),
+                                    configuredUnbuffered: (cfg: 1, buf: 0),
+                                    neverWritten: (cfg: 0, buf: 1))
+check(threeStates == wantThreeStates and
+      threeStates.configuredBuffered != threeStates.configuredUnbuffered and
+      threeStates.configuredBuffered != threeStates.neverWritten and
+      threeStates.configuredUnbuffered != threeStates.neverWritten,
+      "buffer geometry: configured-and-buffered, configured-with-no-buffer " &
+        "and never-written are three DIFFERENT pairs of answers, and neither " &
+        "call on its own separates all three",
+      $threeStates, $wantThreeStates)
+
+# THE THIRD ANSWER, AND THE NIL POINTERS. A slot past the sixteenth and a nil
+# handle are not "no buffer" - they are questions about a slot that does not
+# exist, and folding them into 0 would report a real unbuffered endpoint and a
+# typo with one word. The nil-pointer call is here because the contract says
+# either pointer may be nil and the return is still the answer.
+type BufferRefusal = tuple[pastEnd: int, pastEndBytes: uint,
+                           nilRc: int, nilBytes: uint, nilPointers: int]
+
+proc driveBufferRefusal(): BufferRefusal =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  let past = handle.slotBufferAt(configSlotCount)
+  let bothNil = int(isp1181_slot_buffer(handle, csize_t(0), nil, nil))
+  isp1181_destroy(handle)
+  let refused = nilCtx.slotBufferAt(0)
+  (pastEnd: past.rc, pastEndBytes: past.bytes, nilRc: refused.rc,
+   nilBytes: refused.bytes, nilPointers: bothNil)
+
+let bufferRefusal = driveBufferRefusal()
+let wantBufferRefusal: BufferRefusal = (pastEnd: -1,
+                                        pastEndBytes: uint(sizeSentinel),
+                                        nilRc: -1,
+                                        nilBytes: uint(sizeSentinel),
+                                        nilPointers: 1)
+check(bufferRefusal == wantBufferRefusal,
+      "buffer geometry: a slot past the sixteenth and a nil handle answer " &
+        "-1 and leave the caller's figures alone, and a call with both " &
+        "pointers nil still returns the answer",
+      $bufferRefusal, $wantBufferRefusal)
+
 # The report sizes itself the way a log line does: a return that was the size
 # COPIED would let a caller read a report that ends early and looks whole. The
 # sentinel past the capacity proves nothing was written beyond what the call

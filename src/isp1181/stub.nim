@@ -283,6 +283,44 @@ proc isp1181_config_slot*(ctx: ISP1181Ctx; slot: csize_t;
     value[] = configSlotValue(ctx.model, int(slot))
   1
 
+proc isp1181_slot_buffer*(ctx: ISP1181Ctx; slot: csize_t;
+                          max_packet_bytes: ptr csize_t;
+                          buffer_count: ptr csize_t): cint
+    {.exportc: "isp1181_slot_buffer", cdecl, dynlib.} =
+  ## THE ENDPOINT'S BUFFER GEOMETRY, SO THAT A PRODUCER CAN ASK INSTEAD OF
+  ## ASSUMING. `include/mcf5307.h` states the contract and the reason at
+  ## length. In short: gearmulator's board held its own `64` because there was
+  ## no call to make, and a differently configured endpoint would have broken
+  ## it silently in the direction that resurrects the size refusals.
+  ##
+  ## THREE ANSWERS, `isp1181_config_slot`'s CONVENTION AND NOT A SECOND ONE:
+  ## 1 is a slot this model buffers, 0 is a slot it does not, and -1 is no such
+  ## slot or no handle.
+  ##
+  ## IT DOES NOT ANSWER "WAS THE SLOT WRITTEN" AND THAT IS DELIBERATE.
+  ## `isp1181_config_slot` already answers it, and a second symbol answering it
+  ## too would be a second copy of one fact that nothing holds together - which
+  ## is the exact defect the duplicated `64` was. The third state the report
+  ## distinguishes is reached by asking both calls, and the header says so.
+  ##
+  ## BOTH OUT-PARAMETERS ARE WRITTEN IF AND ONLY IF THIS RETURNS 1, for the
+  ## reason `isp1181_config_slot` leaves `value` alone: a stored figure on an
+  ## answer of 0 is a size a caller who skipped the return would split packets
+  ## to, and there is no buffer behind it to make that size true. Either
+  ## pointer may be nil and the return is still the answer.
+  if ctx.isNil or ctx.model.isNil:
+    return -1
+  if slot >= csize_t(configSlotCount):
+    return -1
+  if not slotHasBuffer(int(slot)):
+    return 0
+  let shape = slotBufferGeometry(int(slot))
+  if not max_packet_bytes.isNil:
+    max_packet_bytes[] = csize_t(shape.maxPacketBytes)
+  if not buffer_count.isNil:
+    buffer_count[] = csize_t(shape.buffers)
+  1
+
 proc isp1181_report*(ctx: ISP1181Ctx; dst: ptr cchar;
                      capacity: csize_t): csize_t
     {.exportc: "isp1181_report", cdecl, dynlib.} =
