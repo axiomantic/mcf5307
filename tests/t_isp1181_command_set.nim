@@ -9,7 +9,14 @@
 ## and `ccNotImplemented` are decisions this project took. `ccIllegal` is a
 ## byte the authority NUMBERS AND FORBIDS. `ccUnspecified` is a byte no source
 ## on this machine describes at all, and it did not go away when the six
-## data-flow commands were numbered - 111 bytes are still in it.
+## data-flow commands were numbered.
+##
+## THE SIZE OF THAT CLASS IS NOT WRITTEN HERE, AND THAT IS THE POINT. It used
+## to be, and the number went stale the first time the classification moved: a
+## figure in a comment is read by nobody and checked by nothing, so it drifts
+## silently and then misleads with the authority of a measurement. The figure
+## lives in `wantPartition` below, where the run compares it against a live
+## sweep of all 256 bytes and goes red the moment it is wrong.
 ##
 ## THE DATA-FLOW OPCODES ARE INHERITED. They are typed here from Table 109 of
 ## the ISP1362 data sheet, Rev. 06, which states that it integrates the
@@ -64,7 +71,7 @@ const
 # design document spells out. The six commands those documents name WITHOUT an
 # opcode are not here and cannot be: an opcode chosen by this suite would be
 # asserting its own guess.
-const implementedOpcodes: array[53, uint8] = [
+const implementedOpcodes: array[59, uint8] = [
   0xF6'u8,                                    # reset
   0xBA'u8, 0xBB'u8,                           # hardware configuration
   0xB8'u8, 0xB9'u8,                           # mode
@@ -84,6 +91,19 @@ const implementedOpcodes: array[53, uint8] = [
   0xC2'u8, 0xC3'u8,                           # interrupt enable
   0xF4'u8,                                    # acknowledge setup
   0x01'u8,                            # control IN buffer write
+  # THE IN HALF OF ENDPOINTS 1 TO 3. ISP1362 Rev. 06 Table 109 p.105-106
+  # numbers Write endpoint n buffer `02` to `0F` and Validate endpoint n buffer
+  # `62` to `6F` for n = 1 to 14, and annotates both destinations "(IN
+  # endpoints only)". THAT ANNOTATION IS NOT PART OF THE CODE MAP: section
+  # 15.2.1 p.114 states the wrong-direction access as BEHAVIOUR - "There is no
+  # protection against ... writing into an OUT buffer" - and note [4] p.106
+  # gives validating an OUT endpoint buffer as unpredictable. So the opcode is
+  # implemented for every endpoint this model buffers, and the DIRECTION is a
+  # run-time precondition the model refuses by name. These six are in
+  # `speaksOnFreshHandle` below, because a fresh handle has EPDIR = 0 for all
+  # sixteen slots and every one of them then addresses the wrong direction.
+  0x02'u8, 0x03'u8, 0x04'u8,          # endpoint 1 to 3 buffer write
+  0x62'u8, 0x63'u8, 0x64'u8,          # endpoint 1 to 3 buffer validate
   0x10'u8,                            # control OUT buffer read
   0x12'u8,                            # endpoint 1 buffer read
   0x13'u8,                            # endpoint 2 buffer read
@@ -115,13 +135,10 @@ const implementedOpcodes: array[53, uint8] = [
 # opcode the authority does not number falls to the unspecified class below,
 # which answers benignly and logs. The gap is only expensive on the
 # IMPLEMENTED side.
-const notImplemented: array[89, tuple[opcode: uint8, name: string]] = [
+const notImplemented: array[83, tuple[opcode: uint8, name: string]] = [
   (0xF0'u8, "DMA"), (0xF1'u8, "DMA"), (0xF2'u8, "DMA"), (0xF3'u8, "DMA"),
   (0xB5'u8, "chip identifier"),
   (0xB4'u8, "frame number"),
-  (0x02'u8, "endpoint 1 buffer write"),
-  (0x03'u8, "endpoint 2 buffer write"),
-  (0x04'u8, "endpoint 3 buffer write"),
   (0x05'u8, "endpoint 4 buffer write"),
   (0x06'u8, "endpoint 5 buffer write"),
   (0x07'u8, "endpoint 6 buffer write"),
@@ -166,9 +183,6 @@ const notImplemented: array[89, tuple[opcode: uint8, name: string]] = [
   (0x5D'u8, "endpoint 12 status"),
   (0x5E'u8, "endpoint 13 status"),
   (0x5F'u8, "endpoint 14 status"),
-  (0x62'u8, "endpoint 1 buffer validate"),
-  (0x63'u8, "endpoint 2 buffer validate"),
-  (0x64'u8, "endpoint 3 buffer validate"),
   (0x65'u8, "endpoint 4 buffer validate"),
   (0x66'u8, "endpoint 5 buffer validate"),
   (0x67'u8, "endpoint 6 buffer validate"),
@@ -222,9 +236,52 @@ const illegalCommands: array[4, tuple[opcode: uint8, name: string,
 # a validate with no buffer write staged for it is a firmware fault the model
 # reports. It is listed here WITH ITS LINE rather than exempted, so the
 # exception is asserted and not merely skipped.
-const speaksOnFreshHandle: array[1, tuple[opcode: uint8, want: string]] = [
+const speaksOnFreshHandle: array[7, tuple[opcode: uint8, want: string]] = [
   (0x61'u8, "isp1181: a validate for endpoint 0 IN found no buffer write " &
-            "staged for it; nothing is validated")]
+            "staged for it; nothing is validated"),
+  # THE SIX IN-FAMILY CODES FOR ENDPOINTS 1 TO 3 SPEAK ON A FRESH HANDLE AND
+  # THE REASON IS THE HANDLE AND NOT THE CODE. Table 110 p.107 gives every bit
+  # of DcEndpointConfiguration a reset value of 0, so EPDIR reads OUT for all
+  # sixteen slots until the firmware writes one, and an IN command then
+  # addresses a direction the endpoint is not configured for. The same six
+  # codes on a handle whose endpoint IS configured IN write nothing, which
+  # `tests/t_isp1181.nim` drives.
+  (0x02'u8, "isp1181: command 0x02 (endpoint 1 buffer write) addresses the " &
+            "IN buffer of endpoint 1, and EPDIR is 0 in its " &
+            "DcEndpointConfiguration - the endpoint is configured " &
+            "OUT; the authority documents this access as " &
+            "unprotected and its result as unpredictable, so " &
+            "nothing is done"),
+  (0x03'u8, "isp1181: command 0x03 (endpoint 2 buffer write) addresses the " &
+            "IN buffer of endpoint 2, and EPDIR is 0 in its " &
+            "DcEndpointConfiguration - the endpoint is configured " &
+            "OUT; the authority documents this access as " &
+            "unprotected and its result as unpredictable, so " &
+            "nothing is done"),
+  (0x04'u8, "isp1181: command 0x04 (endpoint 3 buffer write) addresses the " &
+            "IN buffer of endpoint 3, and EPDIR is 0 in its " &
+            "DcEndpointConfiguration - the endpoint is configured " &
+            "OUT; the authority documents this access as " &
+            "unprotected and its result as unpredictable, so " &
+            "nothing is done"),
+  (0x62'u8, "isp1181: command 0x62 (endpoint 1 buffer validate) addresses the " &
+            "IN buffer of endpoint 1, and EPDIR is 0 in its " &
+            "DcEndpointConfiguration - the endpoint is configured " &
+            "OUT; the authority documents this access as " &
+            "unprotected and its result as unpredictable, so " &
+            "nothing is done"),
+  (0x63'u8, "isp1181: command 0x63 (endpoint 2 buffer validate) addresses the " &
+            "IN buffer of endpoint 2, and EPDIR is 0 in its " &
+            "DcEndpointConfiguration - the endpoint is configured " &
+            "OUT; the authority documents this access as " &
+            "unprotected and its result as unpredictable, so " &
+            "nothing is done"),
+  (0x64'u8, "isp1181: command 0x64 (endpoint 3 buffer validate) addresses the " &
+            "IN buffer of endpoint 3, and EPDIR is 0 in its " &
+            "DcEndpointConfiguration - the endpoint is configured " &
+            "OUT; the authority documents this access as " &
+            "unprotected and its result as unpredictable, so " &
+            "nothing is done")]
 
 var hostToken = 0xC0FFEE
 
@@ -326,7 +383,7 @@ for row in notImplemented:
             ") is not implemented; the read answers 0x00"))
 
 let refused = driveRefused(notImplementedRows)
-const wantRefused: Refused = (firstBad: "", driven: 89)
+const wantRefused: Refused = (firstBad: "", driven: 83)
 check(refused == wantRefused,
       "not implemented: every command answers benignly and logs one line",
       $refused, $wantRefused)
@@ -389,10 +446,11 @@ check(illegalDriven == wantIllegal,
 # THE ONE ACCEPTED COMMAND THAT SPEAKS. It is driven here with its line
 # asserted, so block 1's exemption costs no coverage.
 let speaking = driveRefused(@speaksOnFreshHandle)
-const wantSpeaking: Refused = (firstBad: "", driven: 1)
+const wantSpeaking: Refused = (firstBad: "", driven: 7)
 check(speaking == wantSpeaking,
-      "accepted-and-speaking: a validate with nothing staged is accepted, " &
-        "recorded as pending and reports the fault",
+      "accepted-and-speaking: a validate with nothing staged and the six " &
+        "IN-family codes on an unconfigured endpoint are accepted, recorded " &
+        "as pending and report their own fault",
       $speaking, $wantSpeaking)
 
 # THE THREE CLASSES PARTITION THE BYTE. Without this the three sweeps above
@@ -407,14 +465,21 @@ let partition: Partition = (implemented: accepted.driven +
                             total: accepted.driven + speaking.driven +
                                    refused.driven + illegalDriven.driven +
                                    unspecified.driven)
-# THE TWO FIGURES THAT MOVED, AND THE ONE REASON BOTH MOVED FOR. The eleven
-# codes `0x25` to `0x2F` write the DcEndpointConfiguration register of a slot
-# this model carries no buffer for, and ISP1362 Rev. 06 section 15.1.1 p.107
-# states that the part allocates buffer memory only "after all 16 endpoints
-# have been configured in sequence". A slot the model refused would make a step
-# the authority requires look like a step the part cannot take, so the eleven
-# moved from the refused class to the implemented one and nothing else moved.
-const wantPartition: Partition = (implemented: 53, refused: 89, illegal: 4,
+# THE TWO FIGURES THAT MOVED, AND THE ONE REASON BOTH MOVED FOR. `0x02` to
+# `0x04` and `0x62` to `0x64` are Write and Validate endpoint n buffer for the
+# three endpoints beyond endpoint 0 that this model carries buffers for. They
+# were refused while the model had no IN path on those endpoints; it has one
+# now, and the DIRECTION those buffers face is checked when the command runs
+# rather than when it is classified. Six moved from the refused class to the
+# implemented one and nothing else moved.
+#
+# THE EARLIER MOVE IS STILL RECORDED. The eleven codes `0x25` to `0x2F` write
+# the DcEndpointConfiguration register of a slot this model carries no buffer
+# for, and ISP1362 Rev. 06 section 15.1.1 p.107 states that the part allocates
+# buffer memory only "after all 16 endpoints have been configured in sequence".
+# A slot the model refused would make a step the authority requires look like a
+# step the part cannot take, so those eleven moved the same way.
+const wantPartition: Partition = (implemented: 59, refused: 83, illegal: 4,
                                   unspecified: 110, total: 256)
 check(partition == wantPartition,
       "partition: the four classes cover all 256 opcodes and none twice",

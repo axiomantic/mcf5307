@@ -3325,7 +3325,19 @@ mcf5307_check_case_sites("t_isp1181"
 # `0x20` to `0x2F` with an operand each, twice: once with FIFOEN clear on the
 # eleven slots this model carries no buffer for, which must write no line, and
 # once with FIFOEN set on those slots, which must write one line per slot.
-mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 33)
+# MOVED 33 -> 36 WITH THE IN PATH ON ENDPOINTS 1 TO 3. The three added cases
+# are: `0x03` then `0x63` staging a packet on endpoint 2 and handing it to the
+# host through that endpoint and not endpoint 0; the direction guard refusing
+# by name in both directions on one handle, with the matching commands in the
+# same run as the known positive; and the set-up interlock stopping the control
+# IN validate while leaving endpoint 2's alone, which ISP1362 Rev. 06 section
+# 12.3.6 p.53 scopes to "the control IN and OUT endpoints".
+# MOVED 36 -> 37 WITH THE ZERO-LENGTH TRANSMIT. The added case drives the one
+# route that puts a zero-length packet in an IN-facing buffer - a delivery to an
+# endpoint configured OUT, then the EPDIR write that turns its single buffer
+# round - and asserts that the transmit refuses by name instead of taking the
+# address of an element that is not there.
+mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 37)
 
 ]==])
 

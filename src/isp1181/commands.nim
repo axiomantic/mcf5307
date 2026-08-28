@@ -94,22 +94,12 @@ type Family = object
     ## complete the sequence the same section requires of the firmware. A
     ## refusal there is therefore a statement about the part that the authority
     ## contradicts, and not a gap this model may report.
-  inOnly: bool
-    ## THE FAMILY ADDRESSES AN IN BUFFER. This model gives endpoint 0 an OUT
-    ## buffer and an IN buffer and gives endpoints 1 to 3 ONE buffer each, whose
-    ## direction the EPDIR bit of DcEndpointConfiguration selects at run time.
-    ## An IN-only family is implemented for the control endpoint and NOT for the
-    ## rest: whether one of those buffers faces IN is a property of the
-    ## configuration the firmware wrote, and a CLASSIFICATION is a property of
-    ## the opcode alone, so the class cannot depend on it. They are
-    ## `ccNotImplemented` and not `ccImplemented`, and the model's own refusal
-    ## names the configured direction when the firmware drives one.
 
 const families: array[8, Family] = [
   Family(controlOut: -1, controlIn: 0x01, endpointBase: 0x02,
          noun: "buffer write", illegalOpcode: 0x00,
          illegalName: "write control OUT buffer",
-         illegalDetail: "the endpoint is read-only", inOnly: true),
+         illegalDetail: "the endpoint is read-only"),
   Family(controlOut: 0x10, controlIn: -1, endpointBase: 0x12,
          noun: "buffer read", illegalOpcode: 0x11,
          illegalName: "read control IN buffer",
@@ -121,8 +111,7 @@ const families: array[8, Family] = [
   Family(controlOut: -1, controlIn: 0x61, endpointBase: 0x62,
          noun: "buffer validate", illegalOpcode: 0x60,
          illegalName: "validate control OUT buffer",
-         illegalDetail: "validating an OUT buffer is unpredictable",
-         inOnly: true),
+         illegalDetail: "validating an OUT buffer is unpredictable"),
   Family(controlOut: 0x70, controlIn: -1, endpointBase: 0x72,
          noun: "buffer clear", illegalOpcode: 0x71,
          illegalName: "clear control IN buffer",
@@ -143,6 +132,31 @@ proc classifyFamily(opcode: int): (bool, Command) =
   ## The data-flow families of Table 109. `false` means no family claims the
   ## byte, which is NOT the same as the byte being unspecified: the caller
   ## still has the register families and the general commands to try.
+  ##
+  ## A CLASS ANSWERS "IS THERE A BUFFER BEHIND THIS OPCODE", AND NEVER "WHICH
+  ## WAY IS IT FACING". The two questions were entangled here while the IN
+  ## families were refused for endpoints 1 to 3, and disentangling them is what
+  ## let those families be implemented. A class is a property of the opcode, and
+  ## `modelEndpoints` - the buffer memory this model carries - is a property of
+  ## the opcode too, so the class may depend on it. EPDIR is not: it is a bit
+  ## the firmware writes and rewrites at run time, and a classification that
+  ## moved with it would answer a different thing at two instants.
+  ##
+  ## THE AUTHORITY PUTS THE DIRECTION IN THE SAME PLACE. ISP1362 Rev. 06
+  ## Table 109 p.105-106 numbers `02` to `0F` and `62` to `6F` for endpoints 1
+  ## to 14 with no configuration attached to the CODE, and annotates the
+  ## destination "(IN endpoints only)". What happens when the direction is wrong
+  ## is stated as BEHAVIOUR and not as a missing code: section 15.2.1 p.114
+  ## remarks that "There is no protection against ... writing into an OUT buffer
+  ## or reading from an IN buffer. Any of these actions can cause an incorrect
+  ## operation", and Table 109 note [4] p.106 gives validating an OUT endpoint
+  ## buffer as "unpredictable behavior". So the direction is a RUN-TIME
+  ## PRECONDITION of the command, and `src/isp1181/isp1181.nim` refuses it there
+  ## by name.
+  ##
+  ## `ccIllegal` IS STILL RESERVED FOR THE BYTES THE AUTHORITY PARENTHESISES -
+  ## `00`, `11`, `60` and `71`. Those are forbidden by the CODE, whatever any
+  ## register says, and none of `02` to `0F` or `62` to `6F` is parenthesised.
   for family in families:
     if family.illegalOpcode == opcode:
       return (true, Command(class: ccIllegal, name: family.illegalName,
@@ -156,7 +170,7 @@ proc classifyFamily(opcode: int): (bool, Command) =
     if opcode >= family.endpointBase and opcode < family.endpointBase + 14:
       let endpoint = opcode - family.endpointBase + 1
       let name = "endpoint " & $endpoint & " " & family.noun
-      if family.allEndpoints or (endpoint < modelEndpoints and not family.inOnly):
+      if family.allEndpoints or endpoint < modelEndpoints:
         return (true, Command(class: ccImplemented, name: name))
       return (true, Command(class: ccNotImplemented, name: name))
   (false, Command(class: ccUnspecified, name: ""))

@@ -450,6 +450,33 @@ proc clearInterrupt*(m: ISP1181; mask: uint32) =
   m.interruptRegister = m.interruptRegister and not mask
   m.updateIrq()
 
+proc refusalCause(m: ISP1181; index: int; length: int): string =
+  ## THE TWO CAUSES A `Fifo` REFUSAL HAS, EACH NAMED IN WORDS. `Fifo.accept`
+  ## returns one `false` for a buffer that is FULL and for a packet that is
+  ## LARGER THAN THE BUFFER, and those are different findings: a full buffer is
+  ## ordinary flow control that a drain fixes, and an oversized packet is a
+  ## fault in whatever produced it that no amount of draining fixes.
+  ##
+  ## THEY USED TO SHARE ONE SENTENCE AND WERE SEPARATED ONLY BY THE FIGURES IN
+  ## IT. A reader then had to know the buffer's capacity and its depth from
+  ## `fifoShape` before the line meant anything, so the line could be read
+  ## correctly only by someone who did not need it. The figures are KEPT and the
+  ## cause is now said as well.
+  ##
+  ## IT IS CALLED AFTER THE REFUSAL AND READS THE STATE THE REFUSAL LEFT. A
+  ## refused `accept` changes nothing, so the occupancy here is the occupancy
+  ## the packet met.
+  if m.fifos[index].isFull:
+    "isp1181: " & fifoNames[index] & " refused a packet of " & $length &
+      " bytes because its buffer is FULL; it holds " &
+      $m.fifos[index].pending & " of " & $m.fifos[index].buffers &
+      " and nothing has taken the packet already there"
+  else:
+    "isp1181: " & fifoNames[index] & " refused a packet of " & $length &
+      " bytes because the buffer is " & $m.fifos[index].capacity &
+      " bytes LONG; it holds " & $m.fifos[index].pending & " of " &
+      $m.fifos[index].buffers
+
 proc deliver*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
   ## A packet from the host. `false` is the NAK.
   if m.isNil:
@@ -471,9 +498,7 @@ proc deliver*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
            "packet is dropped")
     return false
   if not m.fifos[index].accept(data):
-    m.note("isp1181: " & fifoNames[index] & " refused a packet of " &
-           $data.len & " bytes; the buffer holds " &
-           $m.fifos[index].pending & " of " & $m.fifos[index].buffers)
+    m.note(m.refusalCause(index, data.len))
     return false
   m.raiseInterrupt(1'u32 shl interruptBitOfFifo[index])
   true
@@ -567,10 +592,7 @@ proc queueIn*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
            "packet carries; nothing is queued")
     return false
   if not m.fifos[index].accept(data):
-    m.note("isp1181: " & fifoNames[index] &
-           " refused a packet of " & $data.len & " bytes; the buffer holds " &
-           $m.fifos[index].pending & " of " &
-           $m.fifos[index].buffers)
+    m.note(m.refusalCause(index, data.len))
     return false
   true
 
@@ -610,6 +632,20 @@ proc transmit*(m: ISP1181; endpoint: int): bool =
     m.note("isp1181: " & fifoNames[index] & " holds a packet and the host " &
            "installed no transmit callback; the packet is kept")
     return false
+  # A ZERO-LENGTH PACKET IS REFUSED HERE AND NOT INDEXED. `addr packet[0]` on
+  # an empty `seq` reads out of bounds, and `-d:release` removes the check that
+  # would have said so. The buffer can hold one: `Fifo.accept` takes a
+  # zero-length packet, `deliver` reaches it on an endpoint configured OUT, and
+  # endpoints 1 to 3 have ONE buffer, so a later EPDIR write turns that same
+  # buffer IN and `transmit` finds it. The refusal says the same thing
+  # `queueIn` says about a zero-length IN packet, and for the same reason: no
+  # source on this machine states what one carries, so the model declines to
+  # invent a pointer for it.
+  if m.fifos[index].peekPacket().packet.len == 0:
+    m.note("isp1181: " & fifoNames[index] & " holds a packet of zero bytes " &
+           "and no source on this machine states what a zero-length IN " &
+           "packet carries; the host is not called and the packet is kept")
+    return false
   var packet = m.fifos[index].take()
   m.tx(m.user, cint(endpoint), addr packet[0], csize_t(packet.len))
   m.raiseInterrupt(1'u32 shl interruptBitOfFifo[index])
@@ -629,11 +665,13 @@ proc transmit*(m: ISP1181; endpoint: int): bool =
 
 const
   bufferWriteControlIn = 0x01'u8
+  bufferWriteEndpointBase = 0x02'u8
   bufferReadControlOut = 0x10'u8
   bufferReadEndpointBase = 0x12'u8
   stallControlOut = 0x40'u8
   statusControlOut = 0x50'u8
   validateControlIn = 0x61'u8
+  validateEndpointBase = 0x62'u8
   clearControlOut = 0x70'u8
   clearEndpointBase = 0x72'u8
   unstallControlOut = 0x80'u8
@@ -641,15 +679,29 @@ const
     ## The authority puts the packet length in the first two bytes of the
     ## endpoint buffer, LOWER BYTE FIRST.
 
-proc outFifoOf(m: ISP1181; opcode, controlBase, endpointBase: uint8): int =
-  ## The OUT buffer a data-flow opcode names, or -1. `controlBase` is the
-  ## control OUT form and `endpointBase` is endpoint 1's.
+proc endpointOfOpcode(opcode, controlBase, endpointBase: uint8): int =
+  ## The ENDPOINT NUMBER a data-flow opcode names, or -1 when this model
+  ## carries no buffer for it. `controlBase` is the family's control form and
+  ## `endpointBase` is endpoint 1's.
+  ##
+  ## IT ANSWERS AN ENDPOINT AND NOT A BUFFER, AND THAT IS THE WHOLE REASON IT
+  ## REPLACED A PROCEDURE THAT ANSWERED A BUFFER. Endpoint 0 has TWO buffers,
+  ## and which one a family means is a property of the family: `0x10` and `0x70`
+  ## address its OUT buffer, `0x01` and `0x61` its IN buffer. A decode that
+  ## returned a buffer had to pick one, so it could serve only the OUT half.
   if opcode == controlBase:
-    return outFifoOfEndpoint[0]
+    return 0
   let endpoint = int(opcode) - int(endpointBase) + 1
   if endpoint >= 1 and endpoint < outFifoOfEndpoint.len:
-    return outFifoOfEndpoint[endpoint]
+    return endpoint
   -1
+
+proc bufferOfEndpoint(endpoint: int; facing: BufferDirection): int =
+  ## The buffer an endpoint presents in one direction. Endpoints 1 to 3 carry
+  ## ONE buffer and both tables name it; endpoint 0 carries two and they differ.
+  case facing
+  of bdOut: outFifoOfEndpoint[endpoint]
+  of bdIn: inBufferOfEndpoint[endpoint]
 
 proc refusedName(pending: int): string =
   ## The name a refusal report gives the command it refused. `ccUnspecified`
@@ -676,6 +728,45 @@ proc beginRefused(m: ISP1181; opcode: uint8) =
   m.transfer = tfRefused
   m.width = 0
   m.index = 0
+
+proc directionRefused(m: ISP1181; opcode: uint8; name: string; endpoint: int;
+                      index: int; needs: BufferDirection): bool =
+  ## THE DIRECTION IS A RUN-TIME PRECONDITION OF THE COMMAND AND IT REFUSES OUT
+  ## LOUD. A single-buffered endpoint faces the way EPDIR points it, so a Write
+  ## or Validate aimed at an endpoint the firmware configured OUT - or a Read or
+  ## Clear aimed at one it configured IN - is addressing a buffer that is not
+  ## there in that direction.
+  ##
+  ## THE AUTHORITY SAYS WHAT THE PART DOES, AND IT IS NOT SOMETHING THIS MODEL
+  ## MAY IMITATE. ISP1362 Rev. 06 section 15.2.1 p.114 remarks that "There is no
+  ## protection against writing or reading past a buffer's boundary, against
+  ## writing into an OUT buffer or reading from an IN buffer. Any of these
+  ## actions can cause an incorrect operation", and Table 109 notes [4] and [5]
+  ## pp.106 give validating an OUT endpoint buffer and clearing an IN endpoint
+  ## buffer as "unpredictable behavior". A model that carried out the access
+  ## anyway would be inventing one of the outcomes the document declines to
+  ## name; a model that did nothing and said nothing would report the firmware's
+  ## mistake as a success. So it refuses, and the line names the endpoint, the
+  ## direction the command needs and the direction the register holds.
+  ##
+  ## THE CONTROL ENDPOINT CANNOT REACH THIS. `directionOfBuffer` gives buffers 0
+  ## and 1 fixed directions, which section 15.1.1 p.107 states control endpoints
+  ## have, so `0x01`, `0x10`, `0x61` and `0x70` always match what they need. The
+  ## check is run for them anyway rather than being skipped by a list: an
+  ## exemption that is never exercised is an exemption nothing keeps honest.
+  if m.directionOfBuffer(index) == needs:
+    return false
+  let want = (if needs == bdIn: "IN" else: "OUT")
+  let held = (if needs == bdIn: "OUT" else: "IN")
+  let bit = (if needs == bdIn: "0" else: "1")
+  m.note("isp1181: command 0x" & toHex(opcode) & " (" & name &
+         ") addresses the " & want & " buffer of endpoint " & $endpoint &
+         ", and EPDIR is " & bit & " in its DcEndpointConfiguration - the " &
+         "endpoint is configured " & held & "; the authority documents this " &
+         "access as unprotected and its result as unpredictable, so nothing " &
+         "is done")
+  m.beginRefused(opcode)
+  true
 
 proc noteInterlock(m: ISP1181; opcode: uint8; name: string) =
   ## THE INTERLOCK REFUSES OUT LOUD. A Validate or Clear that did nothing and
@@ -749,8 +840,13 @@ proc beginBufferWrite(m: ISP1181; opcode: uint8; index: int) =
   m.width = lengthPrefixBytes + m.fifos[index].capacity
   m.index = 0
 
-proc commitValidate(m: ISP1181; index: int) =
+proc commitValidate(m: ISP1181; endpoint: int; index: int) =
   ## Validate: the staged bytes become a packet the host can collect.
+  ##
+  ## THE ENDPOINT IS A PARAMETER AND WAS ONCE THE LITERAL `0`. While the only
+  ## caller was the control IN form the literal was correct and indistinguishable
+  ## from the bug it became the moment endpoints 1 to 3 got the same pair of
+  ## commands: every validate would have queued on endpoint 0.
   if m.stageFifo != index:
     m.note("isp1181: a validate for " & fifoNames[index] &
            " found no buffer write staged for it; nothing is validated")
@@ -777,7 +873,7 @@ proc commitValidate(m: ISP1181; index: int) =
            $declared & " byte" & (if declared == 1: "" else: "s") & " and " &
            $payload.len & " followed; nothing is validated")
     return
-  discard m.queueIn(0, payload)
+  discard m.queueIn(endpoint, payload)
 
 proc beginTransfer(m: ISP1181; opcode: uint8; kind: Transfer; width: int;
                    value: uint32) =
@@ -819,14 +915,26 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
   # Table 109; the head block and `commands.nim` both state that the ISP1181B
   # document itself was not read.
   block dataFlow:
-    let readIndex = m.outFifoOf(opcode, bufferReadControlOut,
-                                bufferReadEndpointBase)
-    if readIndex >= 0:
+    # THE FOUR ENDPOINT-ADDRESSING FAMILIES EACH DECODE AN ENDPOINT, CHECK THE
+    # DIRECTION THAT ENDPOINT'S BUFFER FACES, AND THEN ACT. The order is the
+    # same in all four and `directionRefused` states what the check is for.
+    let readEndpoint = endpointOfOpcode(opcode, bufferReadControlOut,
+                                        bufferReadEndpointBase)
+    if readEndpoint >= 0:
+      let readIndex = bufferOfEndpoint(readEndpoint, bdOut)
+      if m.directionRefused(opcode, command.name, readEndpoint, readIndex,
+                            bdOut):
+        return
       m.beginBufferRead(opcode, readIndex)
       return
 
-    let clearIndex = m.outFifoOf(opcode, clearControlOut, clearEndpointBase)
-    if clearIndex >= 0:
+    let clearEndpoint = endpointOfOpcode(opcode, clearControlOut,
+                                         clearEndpointBase)
+    if clearEndpoint >= 0:
+      let clearIndex = bufferOfEndpoint(clearEndpoint, bdOut)
+      if m.directionRefused(opcode, command.name, clearEndpoint, clearIndex,
+                            bdOut):
+        return
       if clearIndex == outFifoOfEndpoint0 and m.setupUnacknowledged:
         m.noteInterlock(opcode, command.name)
         return
@@ -845,20 +953,36 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
       m.beginTransfer(opcode, tfNone, 0, 0)
       return
 
-    if opcode == bufferWriteControlIn:
-      m.beginBufferWrite(opcode, inFifoOfEndpoint0)
-      return
-    if opcode == validateControlIn:
-      if m.setupUnacknowledged:
-        m.noteInterlock(opcode, command.name)
+    let writeEndpoint = endpointOfOpcode(opcode, bufferWriteControlIn,
+                                         bufferWriteEndpointBase)
+    if writeEndpoint >= 0:
+      let writeIndex = bufferOfEndpoint(writeEndpoint, bdIn)
+      if m.directionRefused(opcode, command.name, writeEndpoint, writeIndex,
+                            bdIn):
         return
-      m.commitValidate(inFifoOfEndpoint0)
-      m.beginTransfer(opcode, tfNone, 0, 0)
+      m.beginBufferWrite(opcode, writeIndex)
       return
 
-    # THE IN HALF FOR ENDPOINTS 1 TO 3 NEVER REACHES HERE. `commands.nim`
-    # classifies it `ccNotImplemented`, because this model carries no IN buffer
-    # on those endpoints, and the class arm above has already refused it.
+    let validateEndpoint = endpointOfOpcode(opcode, validateControlIn,
+                                            validateEndpointBase)
+    if validateEndpoint >= 0:
+      let validateIndex = bufferOfEndpoint(validateEndpoint, bdIn)
+      if m.directionRefused(opcode, command.name, validateEndpoint,
+                            validateIndex, bdIn):
+        return
+      # THE INTERLOCK IS THE CONTROL ENDPOINT'S ALONE AND IS NOW SCOPED TO IT.
+      # ISP1362 Rev. 06 section 12.3.6 p.53 disables Validate Buffer and Clear
+      # Buffer "for the control IN and OUT endpoints" on the arrival of a set-up
+      # packet, and names no other endpoint. While `0x61` was the only validate
+      # this model implemented, an unscoped test of the flag was the same thing
+      # as a scoped one; with `0x62` to `0x64` implemented it would stop
+      # endpoints 1 to 3 for a reason that belongs to endpoint 0.
+      if validateIndex == inFifoOfEndpoint0 and m.setupUnacknowledged:
+        m.noteInterlock(opcode, command.name)
+        return
+      m.commitValidate(validateEndpoint, validateIndex)
+      m.beginTransfer(opcode, tfNone, 0, 0)
+      return
 
   block stallFamily:
     for (base, want) in [(stallControlOut, true), (unstallControlOut, false)]:

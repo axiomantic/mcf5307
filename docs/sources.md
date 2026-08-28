@@ -420,6 +420,48 @@ reported where it occurs: a slot at or above `fifoCount` whose operand sets
 FIFOEN — Table 110/111 p.107, bit 7 — is buffer memory the firmware asked for
 and this model does not have, and it writes one line saying so.
 
+**The IN half of endpoints 1 to 3 is implemented, and the DIRECTION is a
+run-time precondition rather than a class.** Write endpoint n buffer (`02` to
+`0F`) and Validate endpoint n buffer (`62` to `6F`) were `ccNotImplemented` for
+endpoints 1 to 3 while the class was made to carry the direction: a single
+buffer faces the way EPDIR points it, EPDIR is a bit the firmware rewrites at
+run time, and a classification that moved with it would answer differently at
+two instants. Three readings settle where the direction belongs, and all three
+are INHERITED on the terms this file states throughout:
+
+| Where | What it says |
+|---|---|
+| Table 109, pp.105-106 | The codes are numbered for endpoints 1 to 14 with no configuration attached to the CODE. The direction appears in the DESTINATION column as an annotation - "buffer memory endpoint 1 to 14 (IN endpoints only)" - and not as a separate or withheld opcode. |
+| §15.2.1 Remark, p.114 | *"There is no protection against writing or reading past a buffer's boundary, against writing into an OUT buffer or reading from an IN buffer. Any of these actions can cause an incorrect operation."* |
+| Table 109 notes [4] and [5], p.106 | *"Validating an OUT endpoint buffer causes unpredictable behavior of the peripheral controller."* and *"Clearing an IN endpoint buffer causes unpredictable behavior of the peripheral controller."* |
+
+So the part does NOT refuse a wrong-direction access; it performs it and
+corrupts. **That is an outcome this model may not imitate**, because carrying it
+out would mean inventing one of the results the document declines to name, and
+doing nothing silently would report the firmware's mistake as a success. The
+model therefore refuses at the command, and the line names the endpoint, the
+direction the command needs and the direction the register holds. The same
+guard runs on the OUT half - Read and Clear endpoint n buffer - because the two
+notes above are symmetric; the control endpoints pass it always, since §15.1.1
+p.107 gives them fixed configurations.
+
+**`ccIllegal` is unchanged and still means a byte the authority
+parenthesises** - `00`, `11`, `60`, `71`. Those are forbidden by the CODE
+whatever any register says. None of `02` to `0F` or `62` to `6F` is
+parenthesised, which is the distinction that keeps the two findings apart.
+
+**What this does NOT settle: the zero-length IN packet.** The emulated
+firmware's `0x03` carries a two-byte length prefix of `00 00` and no payload,
+so the packet it validates on endpoint 2 is ZERO BYTES long, and `queueIn`
+still refuses it by name. ISP1362 Rev. 06 §15.1.2 p.107 does contemplate the
+firmware "sending an empty packet to the host" after a Write Device Address
+command, which is evidence that an empty IN packet is a thing the part
+transmits; it is NOT a statement of what the endpoint buffer holds for one, nor
+of what `isp1181_in_token`'s callback should receive for a packet with no first
+byte. **That decision is open** and is recorded here rather than taken. Until it
+is taken, `transmit` refuses a zero-length packet by name instead of taking the
+address of an element that is not there.
+
 **A refused command abandons the transfer in progress, and that is READ.**
 Rev. 06 p.14 describes the command as "the index of a register" whose purpose is
 "to inform the ISP1362 about the register that will be accessed at the data
