@@ -10,7 +10,11 @@
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code.
 
+import std/envvars
+import std/syncio
+
 import ./isp1181
+import ./report
 # The one-time runtime latch. `isp1181_create` reads it for the reason
 # `mcf5307/cpu.nim` gives at its own `create`.
 import mcf5307/latch
@@ -64,13 +68,68 @@ proc isp1181_create*(user: pointer; irq: Isp1181IrqFn;
   result.frameNumber = 0'u16
   result.model = newISP1181(user, irq, tx)
 
+const reportEnvVar* = "MCF5307_ISP1181_REPORT"
+  ## The variable that names a file to append the teardown report to.
+  ##
+  ## WHY A VARIABLE AND NOT A CALL. The consumer whose account matters is
+  ## gearmulator's `g2Lib`, which links this library and never asked for a
+  ## report. Getting the model's account out of it used to mean editing that
+  ## repository - a patch applied and reverted by hand on every run, in a
+  ## checkout other authors are editing at the same time. A variable is the one
+  ## trigger that needs no edit at all: an EXISTING binary emits the account.
+  ##
+  ## UNSET OR EMPTY MEANS NOTHING HAPPENS. Not an empty file, not a default
+  ## path, not a line on stderr. `tests/t_isp1181_stub.nim` holds that as a
+  ## registered case, because a trigger that changed behaviour when it was not
+  ## asked for would be a worse defect than the friction it removes.
+  ##
+  ## IT APPENDS. One process may create and destroy several handles, and a
+  ## truncating open would leave only the last account - which is exactly the
+  ## silent loss this whole door exists to prevent. `isp1181/report` fences
+  ## each report so a reader can tell them apart and can see one that stopped
+  ## early.
+
+proc writeTeardownReport(m: ISP1181) =
+  ## Append the model's account to the file `reportEnvVar` names, or say on
+  ## stderr why it could not.
+  ##
+  ## THE FAILURE IS LOUD. A dump that silently did nothing when the path was
+  ## unwritable would be indistinguishable from a run that had nothing to say,
+  ## and this hook exists precisely because an unreadable account and an empty
+  ## one had looked alike.
+  ##
+  ## NOTHING HERE MAY ESCAPE INTO C. `isp1181_destroy` is `cdecl` and its
+  ## caller has no handler, so every raise is caught and reported here.
+  let destination = getEnv(reportEnvVar)
+  if destination.len == 0:
+    return
+  var handle: File
+  if not open(handle, destination, fmAppend):
+    stderr.write("isp1181: " & reportEnvVar & " names \"" & destination &
+                 "\" and it could not be opened for append; no report was " &
+                 "written\n")
+    return
+  try:
+    handle.write(reportText(m))
+  except CatchableError as err:
+    stderr.write("isp1181: the report could not be written to \"" &
+                 destination & "\": " & err.msg & "\n")
+  finally:
+    handle.close()
+
 proc isp1181_destroy*(ctx: ISP1181Ctx)
     {.exportc: "isp1181_destroy", cdecl, dynlib.} =
   ## Release the SELECTED backend. Under `--mm:arc` the handle itself is
   ## reclaimed when the owning reference is dropped, so the stub has nothing to
   ## release and the full model has its object.
+  ##
+  ## THE TEARDOWN REPORT IS WRITTEN FIRST AND IT IS NOT GATED ON THE BACKEND,
+  ## for the reason the log door below gives in full: the account is what the
+  ## model SAID, and a handle moved back to the stub still holds it.
   if ctx.isNil:
     return
+  if not ctx.model.isNil:
+    writeTeardownReport(ctx.model)
   case ctx.backend
   of Stub:
     discard
@@ -214,6 +273,64 @@ proc isp1181_log_line*(ctx: ISP1181Ctx; index: csize_t; dst: ptr cchar;
       copyMem(dst, unsafeAddr line[0], room)
     cast[ptr UncheckedArray[cchar]](dst)[room] = cchar(0)
   csize_t(line.len + 1)
+
+proc isp1181_config_slots*(): csize_t
+    {.exportc: "isp1181_config_slots", cdecl, dynlib.} =
+  ## How many DcEndpointConfiguration slots `isp1181_config_slot` accepts.
+  ##
+  ## IT IS A FUNCTION AND NOT A MACRO IN THE HEADER. A macro is a second copy
+  ## of the number that no build step compares against this one, and it would
+  ## go stale in silence on the day the model's slot count moved.
+  csize_t(configSlotCount)
+
+proc isp1181_config_slot*(ctx: ISP1181Ctx; slot: csize_t;
+                          value: ptr uint8): cint
+    {.exportc: "isp1181_config_slot", cdecl, dynlib.} =
+  ## THREE ANSWERS AND NOT TWO. `include/mcf5307.h` states the contract:
+  ## 1 is a slot the firmware wrote, 0 is a slot it never wrote, and -1 is no
+  ## such slot or no handle. A slot never written and a slot written with
+  ## `0x00` hold the same byte, so a call that returned only the byte would
+  ## answer both with `0x00` and a reader could not tell a configuration the
+  ## firmware chose from one it never sent.
+  ##
+  ## `value` IS WRITTEN IF AND ONLY IF THIS RETURNS 1. On the other two answers
+  ## there is no configuration byte to report, and storing the reset value
+  ## there would hand a caller who skipped the return a plausible byte the
+  ## firmware never wrote.
+  if ctx.isNil or ctx.model.isNil:
+    return -1
+  if slot >= csize_t(configSlotCount):
+    return -1
+  if not configSlotWritten(ctx.model, int(slot)):
+    return 0
+  if not value.isNil:
+    value[] = configSlotValue(ctx.model, int(slot))
+  1
+
+proc isp1181_report*(ctx: ISP1181Ctx; dst: ptr cchar;
+                     capacity: csize_t): csize_t
+    {.exportc: "isp1181_report", cdecl, dynlib.} =
+  ## The whole account as one NUL-terminated block of text: the counters, the
+  ## truncation verdict in words, every configuration slot, and every retained
+  ## line with its place in the sequence.
+  ##
+  ## THE RETURN IS THE SIZE THE TEXT NEEDS AND NOT THE SIZE THAT WAS COPIED,
+  ## which is `isp1181_log_line`'s convention and is here for its reason: a
+  ## return greater than `capacity` is a report the caller's buffer could not
+  ## hold, and a caller that reads the buffer without comparing has an account
+  ## that ends early and looks whole.
+  ##
+  ## A NIL HANDLE ANSWERS 0 AND WRITES NOTHING, which is the one case with no
+  ## model to report on.
+  if ctx.isNil or ctx.model.isNil:
+    return 0
+  let text = reportText(ctx.model)
+  if not dst.isNil and capacity > 0:
+    let room = min(text.len, int(capacity) - 1)
+    if room > 0:
+      copyMem(dst, unsafeAddr text[0], room)
+    cast[ptr UncheckedArray[cchar]](dst)[room] = cchar(0)
+  csize_t(text.len + 1)
 
 const
   backendStubValue = 0'i32

@@ -1391,6 +1391,112 @@ check(emptyIn == wantEmptyIn,
         "and never indexed",
       $emptyIn, $wantEmptyIn)
 
+# ---------------------------------------------------------------------------
+# BLOCK 12. THE CONFIGURATION RECORD, AND THE TWO FACTS ONE BYTE COULD NOT
+# CARRY.
+#
+# Every DcEndpointConfiguration byte resets to `0x00` and `0x00` is also a byte
+# the firmware may write. So a reader of `endpointConfig` alone answers "the
+# firmware never reached this slot" and "the firmware disabled this slot" with
+# the same value, and those are different facts about the firmware. The case
+# below is written so that IT CANNOT PASS ON THE BYTE: the two slots hold the
+# SAME byte and the case turns entirely on the other half of the record.
+type ConfigRecord = tuple[writtenZero: bool, valueZero: uint8,
+                          untouched: bool, valueUntouched: uint8]
+
+proc driveConfigRecord(): ConfigRecord =
+  let m = fresh()
+  m.writeVia(0x23'u8, [0x00'u8])
+  (writtenZero: m.configSlotWritten(3), valueZero: m.configSlotValue(3),
+   untouched: m.configSlotWritten(4), valueUntouched: m.configSlotValue(4))
+
+let configRecord = driveConfigRecord()
+let wantConfigRecord: ConfigRecord = (writtenZero: true, valueZero: 0x00'u8,
+                                      untouched: false,
+                                      valueUntouched: 0x00'u8)
+check(configRecord == wantConfigRecord and
+      configRecord.valueZero == configRecord.valueUntouched,
+      "configuration: a slot the firmware wrote 0x00 into and a slot it " &
+        "never reached hold the SAME byte and are told apart anyway",
+      $configRecord, $wantConfigRecord)
+
+# A RESET TAKES THE WRITTEN FLAG WITH THE BYTE. `clearState` puts every
+# configuration byte back to `0x00`, and a record that kept claiming the slot
+# was written would describe a configuration that no longer exists - the byte
+# and the claim would disagree, and the claim is the one nothing else checks.
+type ConfigAfterReset = tuple[before: bool, after: bool, value: uint8,
+                              ordinalAfter: int]
+
+proc driveConfigAfterReset(): ConfigAfterReset =
+  let m = fresh()
+  m.writeVia(0x23'u8, [0xC1'u8])
+  let before = m.configSlotWritten(3)
+  m.portWrite(commandPort, 0xF6'u8)
+  (before: before, after: m.configSlotWritten(3), value: m.configSlotValue(3),
+   ordinalAfter: m.configSlotOrdinal(3))
+
+let configAfterReset = driveConfigAfterReset()
+let wantConfigAfterReset: ConfigAfterReset = (before: true, after: false,
+                                              value: 0x00'u8, ordinalAfter: 0)
+check(configAfterReset == wantConfigAfterReset,
+      "configuration: a reset clears the record of the write as well as the " &
+        "byte, so no slot claims a configuration the device no longer holds",
+      $configAfterReset, $wantConfigAfterReset)
+
+# THE SEQUENCE NUMBERS PLACE A SILENT WRITE BETWEEN TWO LOGGED ONES, and that
+# is the whole reason they exist. An ACCEPTED configuration write leaves a
+# register byte and NO log line; a command the model cannot honour leaves a log
+# line. Neither record on its own says which came first, so a firmware trace
+# that mixes them could not be ordered at all - which is exactly the question
+# `0x03` and `0x63` against slots `0x20` to `0x24` left open.
+#
+# THE DRIVE IS CHOSEN SO THAT THE MIDDLE EVENT IS INVISIBLE IN THE LOG. Slot
+# `0x23` writes no line. If the ordinals were derived from the log the middle
+# write could not appear between the two lines at all, and the case would fail.
+type EventOrder = tuple[cfg5: int, line0: int, cfg3: int, cfg6: int,
+                        line1: int, lines: int]
+
+proc driveEventOrder(): EventOrder =
+  let m = fresh()
+  m.writeVia(0x25'u8, [0x80'u8])   # slot 5, FIFOEN set: a write AND a line.
+  m.writeVia(0x23'u8, [0xC1'u8])   # slot 3: a write and NO line.
+  m.writeVia(0x26'u8, [0x80'u8])   # slot 6, FIFOEN set: a write AND a line.
+  (cfg5: m.configSlotOrdinal(5), line0: m.logOrdinal(0),
+   cfg3: m.configSlotOrdinal(3), cfg6: m.configSlotOrdinal(6),
+   line1: m.logOrdinal(1), lines: m.logRetained)
+
+let eventOrder = driveEventOrder()
+let wantEventOrder: EventOrder = (cfg5: 1, line0: 2, cfg3: 3, cfg6: 4,
+                                  line1: 5, lines: 2)
+check(eventOrder == wantEventOrder and
+      eventOrder.line0 < eventOrder.cfg3 and eventOrder.cfg3 < eventOrder.line1,
+      "configuration: an accepted slot write that logs nothing still takes " &
+        "its place in the sequence, so a silent write can be ordered " &
+        "against the lines on either side of it",
+      $eventOrder, $wantEventOrder)
+
+# THE RANGE CHECK ANSWERS FALSE AND ZERO AND DOES NOT REACH THE ARRAY. A slot
+# argument out of range is the caller's error, and the model's answer to it is
+# the same as its answer for a slot inside the range that was never written -
+# `isp1181_config_slot` is where a C caller gets the third answer.
+type ConfigRange = tuple[lowW: bool, lowV: uint8, highW: bool, highV: uint8,
+                         lastW: bool]
+
+proc driveConfigRange(): ConfigRange =
+  let m = fresh()
+  m.writeVia(0x2F'u8, [0x00'u8])
+  (lowW: m.configSlotWritten(-1), lowV: m.configSlotValue(-1),
+   highW: m.configSlotWritten(configSlotCount), highV:
+     m.configSlotValue(configSlotCount), lastW: m.configSlotWritten(15))
+
+let configRange = driveConfigRange()
+let wantConfigRange: ConfigRange = (lowW: false, lowV: 0x00'u8, highW: false,
+                                    highV: 0x00'u8, lastW: true)
+check(configRange == wantConfigRange,
+      "configuration: a slot index outside the sixteen answers false and " &
+        "zero rather than indexing the array, and slot 15 is inside",
+      $configRange, $wantConfigRange)
+
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT.
 const declaredCaseSites = declaredSites
 const declaredOffGreenPathSites = offGreenPathSites

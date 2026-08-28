@@ -225,6 +225,30 @@ size_t isp1181_log_line(const isp1181_ctx* ctx, size_t index, char* dst,
     return (size_t)0;
 }
 
+size_t isp1181_config_slots(void)
+{
+    return (size_t)0;
+}
+
+/* -1 is the fixed benign value here for the reason the file head gives: of the
+ * three answers the contract names it is the one that claims least, and it is
+ * the one that leaves `value` untouched. */
+int isp1181_config_slot(const isp1181_ctx* ctx, size_t slot, uint8_t* value)
+{
+    (void)ctx;
+    (void)slot;
+    (void)value;
+    return -1;
+}
+
+size_t isp1181_report(const isp1181_ctx* ctx, char* dst, size_t capacity)
+{
+    (void)ctx;
+    (void)dst;
+    (void)capacity;
+    return (size_t)0;
+}
+
 size_t isp1181_state_size(void)
 {
     return (size_t)0;

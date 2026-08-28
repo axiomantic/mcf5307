@@ -11,10 +11,13 @@
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code.
 
+import std/envvars
+import std/os
 import std/strutils
 
 import isp1181/stub
-from isp1181/isp1181 import logCapacity
+from isp1181/isp1181 import logCapacity, configSlotCount
+from isp1181/report import reportBegins, reportEnds
 
 var failures: seq[string]
 import ./case_sites
@@ -956,6 +959,307 @@ check(overflow == wantOverflow,
       "log: the account stops retaining at its bound and does not stop " &
         "counting, so a reader learns how many lines it cannot see",
       $overflow, $wantOverflow)
+
+# ---------------------------------------------------------------------------
+# THE CONFIGURATION DOOR AND THE REPORT DOOR.
+#
+# The three calls below are what a consumer reads the model's account through
+# WITHOUT editing its own source. Before they existed the only route was a loop
+# over `isp1181_log_line`, the endpoint configuration had no route at all, and
+# the one consumer that needed both got them by an out-of-tree patch applied
+# and reverted by hand on every run.
+
+const configSentinel = 0xA5'u8
+  ## A byte NO CASE BELOW WRITES INTO A SLOT. It is what proves that
+  ## `isp1181_config_slot` left `value` alone: a call that stored the reset
+  ## value would replace it with `0x00`, and `0x00` is exactly the plausible
+  ## wrong answer the three-way return exists to prevent.
+
+proc configSlotAt(handle: ISP1181Ctx; slot: int): tuple[rc: int, value: uint8] =
+  var seen = configSentinel
+  let rc = isp1181_config_slot(handle, csize_t(slot), addr seen)
+  (rc: int(rc), value: seen)
+
+proc writeConfigSlot(handle: ISP1181Ctx; slot: int; value: uint8) =
+  isp1181_write(handle, commandPort, uint8(0x20 + slot))
+  isp1181_write(handle, dataPort, value)
+
+proc readReport(handle: ISP1181Ctx): string =
+  ## The two-call form, sized from the call's own answer.
+  let needed = isp1181_report(handle, nil, csize_t(0))
+  if needed == 0:
+    return ""
+  var buffer = newString(int(needed))
+  let again = isp1181_report(handle, cast[ptr cchar](addr buffer[0]),
+                             csize_t(buffer.len))
+  if again != needed:
+    return "SIZE-MOVED"
+  buffer.setLen(int(needed) - 1)
+  buffer
+
+# THE SLOT COUNT IS A CALL AND NOT A MACRO, so nothing can hold a second copy
+# of it that goes stale. This case is what holds the published figure against
+# the model's own.
+check(int(isp1181_config_slots()) == 16 and
+      int(isp1181_config_slots()) == configSlotCount,
+      "configuration: the published slot count is sixteen and is the model's " &
+        "own figure rather than a second copy of it",
+      $int(isp1181_config_slots()), $configSlotCount)
+
+# THE THREE ANSWERS, AND THE ONE THE BYTE COULD NOT GIVE. Slot 3 is written
+# with `0x00` and slot 4 is left alone. BOTH REGISTERS NOW HOLD `0x00`, so a
+# door that reported only the byte would answer both the same way. The return
+# separates them, and the sentinel proves `value` was not touched on the slot
+# that was never written.
+type ConfigDoor = tuple[writtenRc: int, writtenValue: uint8,
+                        untouchedRc: int, untouchedValue: uint8,
+                        epdirRc: int, epdirValue: uint8]
+
+proc driveConfigDoor(): ConfigDoor =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  handle.writeConfigSlot(3, 0x00'u8)
+  handle.writeConfigSlot(2, 0xC1'u8)
+  let written = handle.configSlotAt(3)
+  let untouched = handle.configSlotAt(4)
+  let epdir = handle.configSlotAt(2)
+  isp1181_destroy(handle)
+  (writtenRc: written.rc, writtenValue: written.value,
+   untouchedRc: untouched.rc, untouchedValue: untouched.value,
+   epdirRc: epdir.rc, epdirValue: epdir.value)
+
+let configDoor = driveConfigDoor()
+# `0xC1` is FIFOEN, EPDIR and FFOSZ = 1. EPDIR is bit 6, mask `0x40`, ISP1362
+# Rev. 06 Table 110 and Table 111 p.107, and only that bit is read here.
+let wantConfigDoor: ConfigDoor = (writtenRc: 1, writtenValue: 0x00'u8,
+                                  untouchedRc: 0,
+                                  untouchedValue: configSentinel,
+                                  epdirRc: 1, epdirValue: 0xC1'u8)
+check(configDoor == wantConfigDoor and
+      (configDoor.epdirValue and 0x40'u8) != 0'u8 and
+      (configDoor.writtenValue and 0x40'u8) == 0'u8,
+      "configuration: a slot written with 0x00 answers 1 and a slot never " &
+        "written answers 0 and leaves the caller's byte alone, and EPDIR " &
+        "reads out of the raw byte",
+      $configDoor, $wantConfigDoor)
+
+# THE THIRD ANSWER. No such slot and no handle are neither "written" nor "not
+# written" - they are questions about a slot that does not exist, and folding
+# them into 0 would report a real slot the firmware never reached and a typo
+# with one word.
+type ConfigRefusal = tuple[pastEnd: int, pastEndValue: uint8,
+                           nilRc: int, nilValue: uint8, lastRc: int]
+
+proc driveConfigRefusal(): ConfigRefusal =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  handle.writeConfigSlot(15, 0x00'u8)
+  let past = handle.configSlotAt(configSlotCount)
+  let last = handle.configSlotAt(15)
+  isp1181_destroy(handle)
+  let refused = nilCtx.configSlotAt(0)
+  (pastEnd: past.rc, pastEndValue: past.value, nilRc: refused.rc,
+   nilValue: refused.value, lastRc: last.rc)
+
+let configRefusal = driveConfigRefusal()
+let wantConfigRefusal: ConfigRefusal = (pastEnd: -1,
+                                        pastEndValue: configSentinel,
+                                        nilRc: -1, nilValue: configSentinel,
+                                        lastRc: 1)
+check(configRefusal == wantConfigRefusal,
+      "configuration: a slot past the sixteenth and a nil handle answer -1 " &
+        "and leave the caller's byte alone, and the sixteenth slot itself " &
+        "is inside the range",
+      $configRefusal, $wantConfigRefusal)
+
+# THE REPORT SIZES ITSELF THE WAY A LOG LINE DOES, and for the same reason: a
+# return that was the size COPIED would let a caller read a report that ends
+# early and looks whole. The sentinel past the capacity is what proves nothing
+# was written beyond what the call was given.
+type ReportSize = tuple[needed: uint, short: uint, kept: string, tail: char,
+                        nilHandle: uint]
+
+proc driveReportSize(): ReportSize =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  result.needed = uint(isp1181_report(handle, nil, csize_t(0)))
+  const capacity = 8
+  var buffer = newString(capacity + 1)
+  for i in 0 .. capacity:
+    buffer[i] = '#'
+  result.short = uint(isp1181_report(handle, cast[ptr cchar](addr buffer[0]),
+                                     csize_t(capacity)))
+  result.kept = buffer[0 ..< capacity - 1]
+  result.tail = buffer[capacity]
+  isp1181_destroy(handle)
+  result.nilHandle = uint(isp1181_report(nilCtx, nil, csize_t(0)))
+
+let reportSize = driveReportSize()
+let wantReportSize: ReportSize = (needed: reportSize.needed, short: reportSize.needed,
+                                  kept: "isp1181", tail: '#', nilHandle: 0'u)
+check(reportSize == wantReportSize and reportSize.needed > 8'u,
+      "report: a buffer too small for the report still gets the SIZE THE " &
+        "REPORT NEEDS back, nothing is written past the capacity, and a nil " &
+        "handle answers 0",
+      $reportSize, $wantReportSize)
+
+# WHAT THE REPORT SAYS ABOUT A CONFIGURATION. Slot 2 is written with EPDIR set,
+# slot 3 with `0x00`, and slot 4 is left alone. THE THREE SENTENCES ARE THREE
+# DIFFERENT SENTENCES, and the last of them names no byte at all.
+type ReportConfig = tuple[fenced: bool, complete: bool, epdirIn: bool,
+                          writtenZero: bool, neverWritten: bool,
+                          slotLines: int]
+
+proc driveReportConfig(): ReportConfig =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  handle.writeConfigSlot(2, 0xC1'u8)
+  handle.writeConfigSlot(3, 0x00'u8)
+  let text = handle.readReport()
+  isp1181_destroy(handle)
+  var slots = 0
+  for line in text.splitLines():
+    if line.startsWith("isp1181: config slot "):
+      inc slots
+  (fenced: text.startsWith(reportBegins) and
+     text.strip(leading = false).endsWith(reportEnds),
+   complete: text.contains("isp1181: log COMPLETE"),
+   epdirIn: text.contains(
+     "config slot 2 command 0x22 endpoint 1 buffer 2: written 0xC1 EPDIR=1 IN"),
+   writtenZero: text.contains(
+     "config slot 3 command 0x23 endpoint 2 buffer 3: written 0x00 EPDIR=0 OUT"),
+   neverWritten: text.contains(
+     "config slot 4 command 0x24 endpoint 3 buffer 4: NEVER WRITTEN"),
+   slotLines: slots)
+
+let reportConfig = driveReportConfig()
+let wantReportConfig: ReportConfig = (fenced: true, complete: true,
+                                      epdirIn: true, writtenZero: true,
+                                      neverWritten: true, slotLines: 16)
+check(reportConfig == wantReportConfig,
+      "report: every one of the sixteen slots is named, a written byte is " &
+        "reported with EPDIR decoded, and a slot the firmware never reached " &
+        "is reported as never written and carries no byte",
+      $reportConfig, $wantReportConfig)
+
+# TRUNCATION IS VISIBLE IN THE REPORT AND NOT ONLY IN THE ARITHMETIC. The drive
+# is the same one `driveOverflow` uses: one refusal past the retention bound.
+# The report has to carry the three figures AND say in words that lines are
+# missing, because a reader who never subtracts is exactly the reader this
+# whole account was built for. AND THE FIRST LINE RETAINED IS THE FIRST LINE
+# WRITTEN: a ring would have dropped it and kept the tail.
+type ReportTruncation = tuple[counters: bool, truncated: bool,
+                              saysFirst: bool, complete: bool,
+                              firstLine: bool, lineCount: int]
+
+proc driveReportTruncation(): ReportTruncation =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  var packet = packetBytes
+  for _ in 0 .. logCapacity:
+    discard isp1181_rx(handle, cint(4), addr packet[0], csize_t(packet.len))
+  let text = handle.readReport()
+  isp1181_destroy(handle)
+  var lines = 0
+  for line in text.splitLines():
+    if line.startsWith("isp1181: log["):
+      inc lines
+  (counters: text.contains("isp1181: log written=" & $(logCapacity + 1) &
+     " retained=" & $logCapacity & " dropped=1"),
+   truncated: text.contains("isp1181: log TRUNCATED - 1 lines"),
+   saysFirst: text.contains("retained are the FIRST the model wrote and not " &
+     "the last"),
+   complete: text.contains("isp1181: log COMPLETE"),
+   firstLine: text.contains("isp1181: log[0] event 1: " & logWalk.firstLine),
+   lineCount: lines)
+
+let reportTruncation = driveReportTruncation()
+let wantReportTruncation: ReportTruncation = (counters: true, truncated: true,
+                                              saysFirst: true, complete: false,
+                                              firstLine: true,
+                                              lineCount: logCapacity)
+check(reportTruncation == wantReportTruncation,
+      "report: an account that lost lines carries all three counters, says " &
+        "in words that it is truncated and that the lines it kept are the " &
+        "FIRST ones, and never says it is complete",
+      $reportTruncation, $wantReportTruncation)
+
+# ---------------------------------------------------------------------------
+# THE TEARDOWN HOOK, AND THE CONTROL THAT SAYS IT COSTS NOTHING WHEN IT IS NOT
+# ASKED FOR.
+#
+# THE TWO DRIVES BELOW ARE THE SAME DRIVE. The only difference between them is
+# whether `MCF5307_ISP1181_REPORT` is set, and every observable of the handle
+# is captured and compared across the pair. A trigger that changed what the
+# model did when it was not asked for would be a worse defect than the friction
+# it removes, so the unset case is measured and not assumed.
+
+const teardownPath = "mcf5307-isp1181-teardown-report.txt"
+
+type Teardown = tuple[report: string, written: uint, retained: uint,
+                      irq: int, tx: int]
+
+proc driveForTeardown(): Teardown =
+  ## The drive. It is called twice and it does not read the environment.
+  let irqBefore = irqCalls
+  let txBefore = txCalls
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  handle.writeConfigSlot(2, 0xC1'u8)
+  var packet = packetBytes
+  discard isp1181_rx(handle, cint(4), addr packet[0], csize_t(packet.len))
+  result = (report: handle.readReport(),
+            written: uint(isp1181_log_written(handle)),
+            retained: uint(isp1181_log_retained(handle)),
+            irq: irqCalls - irqBefore, tx: txCalls - txBefore)
+  isp1181_destroy(handle)
+
+type TeardownWalk = tuple[unsetSame: bool, unsetWroteNothing: bool,
+                          setWroteReport: bool, appended: int,
+                          emptyWroteNothing: bool]
+
+proc driveTeardown(): TeardownWalk =
+  let dir = getTempDir()
+  let target = dir / teardownPath
+  removeFile(target)
+
+  # UNSET. Nothing may be created anywhere and the drive must be unchanged.
+  delEnv(reportEnvVar)
+  let quiet = driveForTeardown()
+  result.unsetWroteNothing = not fileExists(target)
+
+  # EMPTY IS THE SAME AS UNSET. An empty value is a variable the caller cleared,
+  # not a request for a report at a path spelled "".
+  putEnv(reportEnvVar, "")
+  discard driveForTeardown()
+  result.emptyWroteNothing = not fileExists(target)
+
+  # SET. Two handles are destroyed, and the file has to hold BOTH accounts:
+  # a truncating open would leave only the second, which is the silent loss
+  # this door exists to prevent.
+  putEnv(reportEnvVar, target)
+  let loud = driveForTeardown()
+  discard driveForTeardown()
+  delEnv(reportEnvVar)
+
+  result.unsetSame = quiet == loud
+  if fileExists(target):
+    let body = readFile(target)
+    result.setWroteReport = body.contains(loud.report)
+    for line in body.splitLines():
+      if line == reportBegins:
+        inc result.appended
+    removeFile(target)
+
+let teardown = driveTeardown()
+let wantTeardown: TeardownWalk = (unsetSame: true, unsetWroteNothing: true,
+                                  setWroteReport: true, appended: 2,
+                                  emptyWroteNothing: true)
+check(teardown == wantTeardown,
+      "teardown: the variable unset and the variable empty both leave the " &
+        "run byte-for-byte as it was and create no file, and the variable " &
+        "set appends the whole report once per destroyed handle",
+      $teardown, $wantTeardown)
 
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this program reports
 # what its text declares and what its run adjudicated, and the registered

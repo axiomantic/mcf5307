@@ -3041,7 +3041,7 @@ mcf5307_check_case_sites("t_isp1181_stub" "@MCF5307_ISP1181_STUB_SOURCE@"
 # that cannot be confused with a line, the truncation a caller can see because
 # the call returns the size the line NEEDS, and the overflow that keeps
 # counting after it stops retaining.
-mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 34)
+mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 41)
 
 ]==])
 
@@ -3337,7 +3337,7 @@ mcf5307_check_case_sites("t_isp1181"
 # endpoint configured OUT, then the EPDIR write that turns its single buffer
 # round - and asserts that the transmit refuses by name instead of taking the
 # address of an element that is not there.
-mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 37)
+mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 41)
 
 ]==])
 
