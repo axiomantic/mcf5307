@@ -211,13 +211,38 @@ type
       ## Every line `note` was ever asked to write, whether or not `log` kept
       ## it. A retained log alone answers "what did the model say" with no way
       ## to ask "and was that all of it".
+    configWritten: array[configSlotCount, bool]
+      ## Whether the firmware has written the slot beside it SINCE THE LAST
+      ## RESET. `endpointConfig` alone cannot say: its reset value is `0x00`
+      ## and `0x00` is also a byte the firmware may write, so a reader of the
+      ## register file cannot tell a slot the firmware configured OUT with
+      ## every feature disabled from a slot the firmware never reached. THOSE
+      ## ARE DIFFERENT FACTS and one answer for both is the defect this model
+      ## exists to expose, so the second half is kept here.
+    configOrdinal: array[configSlotCount, int]
+      ## The event number of the write that set the slot, or 0 when the slot
+      ## was never written. See `events`.
+    logOrdinal: seq[int]
+      ## The event number of each RETAINED line, indexed as `log` is.
+    events: int
+      ## A monotonic count of the recorded events - each line `note` wrote and
+      ## each configuration slot the firmware set - in the order they happened.
+      ##
+      ## IT EXISTS TO ORDER TWO RECORDS AGAINST EACH OTHER. An accepted
+      ## configuration write leaves a register byte and no log line, and a
+      ## refused command leaves a log line and no register byte, so neither
+      ## record alone can say which came first. Stamping both from one counter
+      ## is what makes the sequence readable; it adds no line and drops none.
+      ##
+      ## IT SURVIVES `clearState` for the reason `written` does: a reset clears
+      ## the device, not the account of what the device was asked to do.
 
 const
   benignValue* = 0x00'u8
     ## The byte the model answers when it has nothing true to say. It is zero
     ## because the register the firmware reads most often is the interrupt
     ## register, whose zero means no interrupt is pending.
-  epdirBit = 0x40'u8
+  epdirBit* = 0x40'u8
     ## EPDIR in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 places it at
     ## bit 6 of the byte `0x20+n` writes, and Table 111 gives its meaning:
     ## "This bit defines the endpoint direction (0 = OUT, 1 = IN)". The same
@@ -331,9 +356,11 @@ const logCapacity* = 4096
   ## `written` is what makes the loss readable rather than silent.
 
 proc note(m: ISP1181; line: string) =
+  inc m.events
   inc m.written
   if m.log.len < logCapacity:
     m.log.add(line)
+    m.logOrdinal.add(m.events)
 
 proc updateIrq(m: ISP1181) =
   ## The line is level-triggered and active-low at the pin; the board owns the
@@ -359,6 +386,8 @@ proc clearState(m: ISP1181) =
   m.interruptRegister = 0
   for i in 0 ..< m.endpointConfig.len:
     m.endpointConfig[i] = 0
+    m.configWritten[i] = false
+    m.configOrdinal[i] = 0
   m.selected = 0
   m.stage = @[]
   m.stageFifo = -1
@@ -402,6 +431,35 @@ proc logLine*(m: ISP1181; index: int): string =
   ## site in this file writes an empty line, so the empty string is
   ## unambiguous here.
   if m.isNil or index < 0 or index >= m.log.len: "" else: m.log[index]
+
+proc logOrdinal*(m: ISP1181; index: int): int =
+  ## The event number of the retained line at `index`, or 0 when there is no
+  ## such line. Event numbers start at 1, so 0 is unambiguous.
+  if m.isNil or index < 0 or index >= m.logOrdinal.len: 0 else: m.logOrdinal[index]
+
+proc configSlotWritten*(m: ISP1181; slot: int): bool =
+  ## Whether the firmware has written this configuration slot since the last
+  ## reset. A slot that was never written and a slot written with `0x00` READ
+  ## THE SAME out of `configSlotValue`, and this is the call that tells them
+  ## apart. A slot outside the range answers false, which is the same answer a
+  ## slot inside it and never written gives - the range check belongs to the
+  ## caller, and `isp1181_config_slot` is where a C caller gets it as a third
+  ## answer rather than a second.
+  if m.isNil or slot < 0 or slot >= configSlotCount: false
+  else: m.configWritten[slot]
+
+proc configSlotValue*(m: ISP1181; slot: int): uint8 =
+  ## The raw DcEndpointConfiguration byte the slot holds. IT IS ONLY A
+  ## CONFIGURATION WHEN `configSlotWritten` SAYS SO; otherwise it is the reset
+  ## value and describes nothing the firmware did.
+  if m.isNil or slot < 0 or slot >= configSlotCount: 0'u8
+  else: m.endpointConfig[slot]
+
+proc configSlotOrdinal*(m: ISP1181; slot: int): int =
+  ## The event number of the write that set the slot, or 0 when it was never
+  ## written.
+  if m.isNil or slot < 0 or slot >= configSlotCount: 0
+  else: m.configOrdinal[slot]
 
 proc irqAsserted*(m: ISP1181): bool =
   if m.isNil: false else: m.asserted
@@ -1034,6 +1092,13 @@ proc commitOperand(m: ISP1181) =
         m.pending - int(epConfigBase) < m.endpointConfig.len:
       let slot = m.pending - int(epConfigBase)
       m.endpointConfig[slot] = uint8(m.latch)
+      # THE SLOT IS NOW WRITTEN AND THE BYTE ALONE COULD NOT SAY SO. The
+      # accepted write leaves no log line - that is what makes the register
+      # file the only record of it - so the record has to carry its own
+      # "this happened" and its own place in the sequence.
+      m.configWritten[slot] = true
+      inc m.events
+      m.configOrdinal[slot] = m.events
       # A slot the firmware enables and this model has no buffer memory for is
       # the part of the configuration the model cannot honour; a slot the
       # firmware disables is honoured exactly by having no buffer, and writes

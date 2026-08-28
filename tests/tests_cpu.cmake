@@ -2961,7 +2961,7 @@ mcf5307_check_case_sites("t_isp1181_stub" "@MCF5307_ISP1181_STUB_SOURCE@"
 # iteration, so this figure counts properties and not addresses. A sweep that
 # stopped iterating is caught by the iteration count inside the case's own
 # expected value, which is why the two guards do not overlap here.
-mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 34)
+mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 41)
 
 ]==])
 
@@ -3228,7 +3228,7 @@ mcf5307_check_case_sites("t_isp1181"
 # on the same bytes, SETUPT's survival of a status read and its removal by the
 # clear, the Validate/Clear interlock in both states, and the flush-and-unstall
 # the arrival performs.
-mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 37)
+mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 41)
 
 ]==])
 
