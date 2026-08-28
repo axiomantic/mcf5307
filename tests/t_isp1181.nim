@@ -308,13 +308,15 @@ check(boundary == wantBoundary,
       "fifos: a packet of exactly the buffer's size fits and one byte more does not",
       $boundary, $wantBoundary)
 
-# The two refusals are told apart by the figures the line carries. A full
-# buffer is ordinary flow control and an oversized packet is a fault in
-# whatever produced it, and a reader separates them by the packet's size and
-# the buffer's occupancy rather than by two different sentences. The full-buffer
-# refusal is driven on endpoint 3, which holds ONE packet. A buffer too many
-# would accept the second packet, so the refusal is the assertion and the count
-# is not.
+# THE TWO REFUSALS EACH SAY WHICH ONE THEY ARE, IN WORDS AND IN FIGURES. A full
+# buffer is ordinary flow control and an oversized packet is a fault in whatever
+# produced it. They shared one sentence until 2026-08-28 and were separated only
+# by the packet's size against the buffer's occupancy, so the line could be read
+# only by a reader who already knew `fifoShape` - which is the reader who does
+# not need the line. The figures are still asserted here; the CAUSE is asserted
+# with them. The full-buffer refusal is driven on endpoint 3, which holds ONE
+# packet. A buffer too many would accept the second packet, so the refusal is
+# the assertion and the count is not.
 type Refusals = tuple[full: seq[string], oversize: seq[string]]
 
 proc refusalLines(): Refusals =
@@ -331,12 +333,14 @@ proc refusalLines(): Refusals =
 
 let refusals = refusalLines()
 let wantRefusals: Refusals = (
-    full: @["isp1181: endpoint 3 refused a packet of 2 bytes; the buffer " &
-            "holds 1 of 1"],
-    oversize: @["isp1181: endpoint 1 refused a packet of 17 bytes; the " &
-                "buffer holds 0 of 2"])
+    full: @["isp1181: endpoint 3 refused a packet of 2 bytes because its " &
+            "buffer is FULL; it holds 1 of 1 and nothing has taken the " &
+            "packet already there"],
+    oversize: @["isp1181: endpoint 1 refused a packet of 17 bytes because " &
+                "the buffer is 16 bytes LONG; it holds 0 of 2"])
 check(refusals == wantRefusals,
-      "fifos: a full buffer and an oversized packet are separated by the figures",
+      "fifos: a full buffer and an oversized packet each name their own " &
+        "cause, and carry the figures too",
       $refusals, $wantRefusals)
 
 # A delivery to an endpoint this model does not carry is dropped and said so.
@@ -504,8 +508,9 @@ let wantRefused: Refused = (
     second: false, afterSecond: @[0x00'u8, 0x00'u8, 0x00'u8, 0x00'u8],
     fourth: false, afterFourth: @[0x00'u8, 0x00'u8, 0x00'u8, 0x00'u8],
     asserted: false,
-    log: @["isp1181: endpoint 3 refused a packet of 1 bytes; the buffer " &
-           "holds 1 of 1",
+    log: @["isp1181: endpoint 3 refused a packet of 1 bytes because its " &
+           "buffer is FULL; it holds 1 of 1 and nothing has taken the " &
+           "packet already there",
            "isp1181: a packet reached endpoint 4, which this model does not " &
            "implement; the packet is dropped"])
 check(refused == wantRefused,
@@ -1203,6 +1208,177 @@ check(configSequence == wantConfigSequence,
       "configuration: the sixteen-slot sequence is taken whole, and only a " &
         "slot this model cannot buffer AND the firmware enables writes a line",
       $configSequence, $wantConfigSequence)
+
+# ---------------------------------------------------------------------------
+# THE IN PATH ON AN ENDPOINT THAT IS NOT ENDPOINT 0. `0x03` then `0x63` is the
+# sequence the emulated firmware drives and the model refused whole until
+# 2026-08-28: ISP1362 Rev. 06 Table 109 p.105-106 numbers Write endpoint n
+# buffer `02` to `0F` and Validate endpoint n buffer `62` to `6F` for n = 1 to
+# 14, and this model implements them for the endpoints it carries buffers for.
+#
+# THE PACKET IS FOLLOWED ALL THE WAY OUT, and each step is asserted apart from
+# the next. A model that queued at the WRITE would make the validate a no-op; a
+# model that queued on endpoint 0 whatever the opcode said would still transmit
+# something, so the endpoint the host callback reports is asserted and not only
+# the bytes. `0xC1` is FIFOEN, EPDIR and FFOSZ = 1; only bit 6 is read here.
+type InPath = tuple[pendingAfterWrite: int, pendingAfterValidate: int,
+                    sent: bool, seen: TxRecord, log: seq[string]]
+
+proc driveEndpointInPath(): InPath =
+  txSeen = (calls: 0, endpoint: -1, bytes: @[], length: -1)
+  let m = recording()
+  m.writeVia(0x23'u8, [0xC1'u8])
+  m.writeVia(0x03'u8, [0x03'u8, 0x00'u8, 0x11'u8, 0x22'u8, 0x33'u8])
+  let afterWrite = fifoAt(m, 3).pending
+  m.portWrite(commandPort, 0x63'u8)
+  let afterValidate = fifoAt(m, 3).pending
+  let sent = m.transmit(2)
+  (pendingAfterWrite: afterWrite, pendingAfterValidate: afterValidate,
+   sent: sent, seen: txSeen, log: m.logLines)
+
+let inPath = driveEndpointInPath()
+let wantInPath: InPath = (
+    pendingAfterWrite: 0, pendingAfterValidate: 1, sent: true,
+    seen: (calls: 1, endpoint: 2, bytes: @[0x11'u8, 0x22'u8, 0x33'u8],
+           length: 3),
+    log: @[])
+check(inPath == wantInPath,
+      "data flow: write and validate on endpoint 2 stage a packet, commit " &
+        "it to THAT endpoint's buffer and hand it to the host",
+      $inPath, $wantInPath)
+
+# THE DIRECTION GUARD REFUSES IN BOTH DIRECTIONS, ON ONE HANDLE, AND THE TWO
+# ENDPOINTS DIFFER IN ONE BIT. `0xC1 xor 0x81` is `0x40`, which is EPDIR alone.
+# Endpoint 1 is configured IN and is driven with the OUT commands `0x12` and
+# `0x72`; endpoint 2 is configured OUT and is driven with the IN commands `0x03`
+# and `0x63`. ISP1362 Rev. 06 section 15.2.1 p.114 states that
+# the part has no protection here, and Table 109 notes [4] and [5] p.106 give
+# the validate and clear forms as unpredictable, so the model refuses rather
+# than picking one of the outcomes the document declines to name.
+#
+# THE KNOWN POSITIVE IS IN THE SAME RUN: each endpoint is also driven with the
+# command that MATCHES its direction, and none of those four is refused. A run
+# in which every command refused would satisfy the refusal half alone.
+#
+# ONE OF THE FOUR SPEAKS AND ITS LINE IS ASSERTED RATHER THAN COUNTED, AND THE
+# LINE IT SPEAKS PROVES BOTH HALVES. `0x02` and `0x62` both address endpoint 1,
+# which IS configured IN, so the guard lets both through; `0x02` then stages
+# nothing because no operand byte follows it, and `0x62` reports a staged buffer
+# that is shorter than the two-byte length prefix. That report names a buffer
+# write it FOUND, so it is evidence that `0x02` reached `beginBufferWrite` and
+# not merely that it was silent. A count of lines cannot tell "passed the guard
+# and reported a staging fault" from "was refused by the guard".
+type Guard = tuple[log: seq[string], matching: seq[string]]
+
+proc driveDirectionGuard(): Guard =
+  let m = fresh()
+  m.writeVia(0x22'u8, [0xC1'u8])          # endpoint 1: EPDIR = 1, IN
+  m.writeVia(0x23'u8, [0x81'u8])          # endpoint 2: EPDIR = 0, OUT
+  let before = m.logLines.len
+  for opcode in [0x12'u8, 0x72'u8, 0x03'u8, 0x63'u8]:
+    m.portWrite(commandPort, opcode)
+  let refusals = m.logLines[before .. ^1]
+  let mark = m.logLines.len
+  for opcode in [0x02'u8, 0x62'u8, 0x13'u8, 0x73'u8]:
+    m.portWrite(commandPort, opcode)
+  (log: refusals, matching: m.logLines[mark .. ^1])
+
+let guard = driveDirectionGuard()
+let wantGuard: Guard = (
+    log: @["isp1181: command 0x12 (endpoint 1 buffer read) addresses the OUT " &
+           "buffer of endpoint 1, and EPDIR is 1 in its " &
+           "DcEndpointConfiguration - the endpoint is configured IN; the " &
+           "authority documents this access as unprotected and its result as " &
+           "unpredictable, so nothing is done",
+           "isp1181: command 0x72 (endpoint 1 buffer clear) addresses the " &
+           "OUT buffer of endpoint 1, and EPDIR is 1 in its " &
+           "DcEndpointConfiguration - the endpoint is configured IN; the " &
+           "authority documents this access as unprotected and its result as " &
+           "unpredictable, so nothing is done",
+           "isp1181: command 0x03 (endpoint 2 buffer write) addresses the IN " &
+           "buffer of endpoint 2, and EPDIR is 0 in its " &
+           "DcEndpointConfiguration - the endpoint is configured OUT; the " &
+           "authority documents this access as unprotected and its result as " &
+           "unpredictable, so nothing is done",
+           "isp1181: command 0x63 (endpoint 2 buffer validate) addresses the " &
+           "IN buffer of endpoint 2, and EPDIR is 0 in its " &
+           "DcEndpointConfiguration - the endpoint is configured OUT; the " &
+           "authority documents this access as unprotected and its result as " &
+           "unpredictable, so nothing is done"],
+    matching: @["isp1181: a validate for endpoint 1 found 0 staged bytes " &
+                "and the length prefix alone is 2; nothing is validated"])
+check(guard == wantGuard,
+      "EPDIR: a buffer command aimed at the direction an endpoint is not " &
+        "configured for is refused by name, and the matching command is not",
+      $guard, $wantGuard)
+
+# THE SET-UP INTERLOCK BELONGS TO THE CONTROL ENDPOINTS AND TO NO OTHER.
+# ISP1362 Rev. 06 section 12.3.6 p.53 disables Validate Buffer and Clear Buffer
+# "for the control IN and OUT endpoints" until `0xF4` acknowledges the set-up
+# packet, and names no other endpoint. The two halves run on ONE handle in ONE
+# set-up state, so the difference between them is the endpoint and nothing else.
+type Interlock2 = tuple[controlLog: seq[string], endpointPending: int,
+                        endpointLog: seq[string]]
+
+proc driveInterlockScope(): Interlock2 =
+  let m = fresh()
+  m.writeVia(0x23'u8, [0xC1'u8])
+  discard m.deliverSetup([0x80'u8, 0x06'u8, 0x00'u8, 0x01'u8,
+                          0x00'u8, 0x00'u8, 0x40'u8, 0x00'u8])
+  let before = m.logLines.len
+  m.writeVia(0x01'u8, [0x01'u8, 0x00'u8, 0x5A'u8])
+  m.portWrite(commandPort, 0x61'u8)
+  let controlLog = m.logLines[before .. ^1]
+  let mark = m.logLines.len
+  m.writeVia(0x03'u8, [0x01'u8, 0x00'u8, 0xA5'u8])
+  m.portWrite(commandPort, 0x63'u8)
+  (controlLog: controlLog, endpointPending: fifoAt(m, 3).pending,
+   endpointLog: m.logLines[mark .. ^1])
+
+let interlockScope = driveInterlockScope()
+let wantInterlockScope: Interlock2 = (
+    controlLog: @["isp1181: command 0x61 (control IN buffer validate) is " &
+                  "disabled until the set-up packet is acknowledged with " &
+                  "0xF4; nothing is done"],
+    endpointPending: 1, endpointLog: @[])
+check(interlockScope == wantInterlockScope,
+      "set-up interlock: an unacknowledged set-up packet stops the control " &
+        "IN validate and leaves endpoint 2's alone",
+      $interlockScope, $wantInterlockScope)
+
+# A BUFFER HOLDING A ZERO-LENGTH PACKET IS NOT HANDED TO THE HOST, AND THE
+# ROUTE THAT PUTS ONE THERE IS DRIVEN RATHER THAN DESCRIBED. `Fifo.accept`
+# takes a packet of zero bytes, `deliver` reaches it on an endpoint configured
+# OUT, and endpoints 1 to 3 carry ONE buffer, so the EPDIR write that follows
+# turns that same buffer IN and `transmit` finds the empty packet in it. The
+# transmit used to take `addr packet[0]` of it, which reads out of bounds, and
+# `-d:release` removes the check that would have said so.
+#
+# THE PACKET IS KEPT AND THE REFUSAL IS THE ASSERTION. A model that dropped it
+# would leave the firmware with a buffer that emptied itself and a transfer that
+# never happened, which is what the nil-callback case above refuses too.
+type EmptyIn = tuple[delivered: bool, sent: bool, stillThere: int,
+                     calls: int, log: seq[string]]
+
+proc driveEmptyIn(): EmptyIn =
+  txSeen = (calls: 0, endpoint: -1, bytes: @[], length: -1)
+  let m = recording()
+  let delivered = m.deliver(2, newSeq[uint8](0))
+  m.writeVia(0x23'u8, [0xC1'u8])
+  let sent = m.transmit(2)
+  (delivered: delivered, sent: sent, stillThere: fifoAt(m, 3).pending,
+   calls: txSeen.calls, log: m.logLines)
+
+let emptyIn = driveEmptyIn()
+let wantEmptyIn: EmptyIn = (
+    delivered: true, sent: false, stillThere: 1, calls: 0,
+    log: @["isp1181: endpoint 2 holds a packet of zero bytes and no source " &
+           "on this machine states what a zero-length IN packet carries; " &
+           "the host is not called and the packet is kept"])
+check(emptyIn == wantEmptyIn,
+      "transmit: a buffer holding a zero-length packet is refused by name " &
+        "and never indexed",
+      $emptyIn, $wantEmptyIn)
 
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT.
 const declaredCaseSites = declaredSites
