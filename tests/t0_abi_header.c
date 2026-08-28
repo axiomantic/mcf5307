@@ -83,8 +83,8 @@ int main(void)
     void (*const p11)(isp1181_ctx*) = &isp1181_destroy;
     uint8_t (*const p12)(isp1181_ctx*, uint32_t) = &isp1181_read;
     void (*const p13)(isp1181_ctx*, uint32_t, uint8_t) = &isp1181_write;
-    void (*const p14)(isp1181_ctx*, int, const uint8_t*,
-                      size_t) = &isp1181_rx;
+    int (*const p14)(isp1181_ctx*, int, const uint8_t*,
+                     size_t) = &isp1181_rx;
     void (*const p15)(isp1181_ctx*, uint32_t) = &isp1181_tick;
     size_t (*const p16)(void) = &isp1181_state_size;
     void (*const p17)(const isp1181_ctx*, void*) = &isp1181_state_save;

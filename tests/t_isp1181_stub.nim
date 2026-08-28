@@ -14,6 +14,7 @@
 import std/strutils
 
 import isp1181/stub
+from isp1181/isp1181 import logCapacity
 
 var failures: seq[string]
 import ./case_sites
@@ -184,9 +185,9 @@ let nilCtxProbe: ISP1181Ctx = nil
 var rxCalls = 0
 for endpoint in endpoints:
   for length in lengths:
-    isp1181_rx(ctx, cint(endpoint), addr payload[0], csize_t(length))
+    discard isp1181_rx(ctx, cint(endpoint), addr payload[0], csize_t(length))
     inc rxCalls
-isp1181_rx(ctx, cint(0), nil, csize_t(0))
+discard isp1181_rx(ctx, cint(0), nil, csize_t(0))
 inc rxCalls
 
 type RxOutcome = tuple[calls: int, window: Sweep]
@@ -254,7 +255,7 @@ check(isp1181_read(nilCtx, commandPort) == benignRead,
       "0x" & toHex(benignRead))
 
 isp1181_write(nilCtx, commandPort, 0xF6'u8)
-isp1181_rx(nilCtx, cint(1), addr payload[0], csize_t(64))
+discard isp1181_rx(nilCtx, cint(1), addr payload[0], csize_t(64))
 isp1181_destroy(nilCtx)
 
 type NilOutcome = tuple[value: uint8, irq: int, tx: int]
@@ -468,9 +469,9 @@ proc driveRx(select: ISP1181Backend): string =
   setBackend(handle, select)
   # A CALLER WITH NOTHING TO DELIVER MUST NOT OCCUPY A BUFFER, and endpoint 0
   # OUT is SINGLE-buffered.
-  isp1181_rx(handle, cint(0), nil, csize_t(0))
+  discard isp1181_rx(handle, cint(0), nil, csize_t(0))
   var packet = packetBytes
-  isp1181_rx(handle, cint(0), addr packet[0], csize_t(packet.len))
+  discard isp1181_rx(handle, cint(0), addr packet[0], csize_t(packet.len))
   let seen = peekEndpoint0(handle)
   isp1181_destroy(handle)
   "0x" & toHex(seen)
@@ -490,7 +491,7 @@ proc driveDestroy(select: ISP1181Backend): DestroyWalk =
   let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
   setBackend(handle, select)
   var packet = packetBytes
-  isp1181_rx(handle, cint(0), addr packet[0], csize_t(packet.len))
+  discard isp1181_rx(handle, cint(0), addr packet[0], csize_t(packet.len))
   let before = peekEndpoint0(handle)
   isp1181_destroy(handle)
   let after = peekEndpoint0(handle)
@@ -574,7 +575,7 @@ proc driveCSelect(): CSelect =
   let accepted = isp1181_set_backend(handle, cint(backendFullModelValue))
   let afterSet = $backend(handle)
   var packet = packetBytes
-  isp1181_rx(handle, cint(0), addr packet[0], csize_t(packet.len))
+  discard isp1181_rx(handle, cint(0), addr packet[0], csize_t(packet.len))
   let seen = peekEndpoint0(handle)
   isp1181_destroy(handle)
   (atCreate: atCreate, accepted: accepted, afterSet: afterSet,
@@ -773,9 +774,9 @@ proc driveLine(): Line =
   isp1181_write(handle, commandPort, writeInterruptEnable)
   for value in [0x07'u8, 0x1F'u8, 0x00'u8, 0x00'u8]:
     isp1181_write(handle, dataPort, value)
-  isp1181_rx(handle, cint(0), addr payload[0], csize_t(1))
+  discard isp1181_rx(handle, cint(0), addr payload[0], csize_t(1))
   result.trace = lineTrace
-  isp1181_rx(handle, cint(4), addr payload[0], csize_t(1))
+  discard isp1181_rx(handle, cint(4), addr payload[0], csize_t(1))
   result.refusedTrace = lineTrace
   isp1181_write(handle, commandPort, readControlOutStatus)
   discard isp1181_read(handle, dataPort)
@@ -796,6 +797,165 @@ check(line == wantLine,
       "irq: a delivery through isp1181_rx reaches the C caller's callback, " &
         "a refused one does not, and a status read drops the line",
       $line, $wantLine)
+
+# ---------------------------------------------------------------------------
+# THE MODEL'S OWN ACCOUNT, READ THROUGH THE C DOOR.
+#
+# `isp1181_rx` used to be `void`, so a caller handing bytes to a device that
+# refused every one of them saw exactly what a caller whose bytes were accepted
+# saw. These cases drive an ACCEPTANCE and a REFUSAL through the same entry
+# point on the same handle and assert that the two are told apart at the ABI -
+# in the return, and in the log the return points at.
+
+type RxAnswer = tuple[accepted: cint, refused: cint, stub: cint, nilHandle: cint]
+
+proc driveRxAnswer(): RxAnswer =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  var packet = packetBytes
+  # Endpoint 0 OUT is single-buffered and empty here, so it takes the packet.
+  # Endpoint 4 is one this model does not carry, so it cannot.
+  result.accepted = isp1181_rx(handle, cint(0), addr packet[0],
+                               csize_t(packet.len))
+  result.refused = isp1181_rx(handle, cint(4), addr packet[0],
+                              csize_t(packet.len))
+  isp1181_destroy(handle)
+  let stubHandle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  result.stub = isp1181_rx(stubHandle, cint(0), addr packet[0],
+                           csize_t(packet.len))
+  isp1181_destroy(stubHandle)
+  result.nilHandle = isp1181_rx(nilCtx, cint(0), addr packet[0],
+                                csize_t(packet.len))
+
+let rxAnswer = driveRxAnswer()
+const wantRxAnswer: RxAnswer = (accepted: cint(1), refused: cint(0),
+                                stub: cint(0), nilHandle: cint(0))
+check(rxAnswer == wantRxAnswer,
+      "log: isp1181_rx answers 1 for a packet a buffer holds and 0 for one " &
+        "the device dropped, on the model, on the stub and on a nil handle",
+      $rxAnswer, $wantRxAnswer)
+
+proc readLogLine(handle: ISP1181Ctx; index: int): string =
+  ## Sizes the buffer from the call's own answer and then fills it, which is
+  ## the two-call form `include/mcf5307.h` describes.
+  let needed = isp1181_log_line(handle, csize_t(index), nil, csize_t(0))
+  if needed == 0:
+    return ""
+  var buffer = newString(int(needed))
+  let again = isp1181_log_line(handle, csize_t(index), cast[ptr cchar](addr buffer[0]),
+                               csize_t(buffer.len))
+  if again != needed:
+    return "SIZE-MOVED"
+  buffer.setLen(int(needed) - 1)
+  buffer
+
+type LogWalk = tuple[writtenBefore: uint, writtenAfter: uint,
+                     retainedAfter: uint, firstLine: string,
+                     pastEnd: uint, shortestLine: uint]
+
+proc driveLog(): LogWalk =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  var packet = packetBytes
+  result.writtenBefore = uint(isp1181_log_written(handle))
+  discard isp1181_rx(handle, cint(0), addr packet[0], csize_t(packet.len))
+  discard isp1181_rx(handle, cint(4), addr packet[0], csize_t(packet.len))
+  result.writtenAfter = uint(isp1181_log_written(handle))
+  result.retainedAfter = uint(isp1181_log_retained(handle))
+  result.firstLine = readLogLine(handle, 0)
+  result.pastEnd = uint(isp1181_log_line(handle, csize_t(result.retainedAfter),
+                                         nil, csize_t(0)))
+  # NO RETAINED LINE IS EMPTY, so the smallest answer for a real line is 2 and
+  # the 0 above is unambiguous. This is the property the header states.
+  var shortest = high(uint)
+  for i in 0 ..< int(result.retainedAfter):
+    let needed = uint(isp1181_log_line(handle, csize_t(i), nil, csize_t(0)))
+    if needed < shortest:
+      shortest = needed
+  result.shortestLine = shortest
+  isp1181_destroy(handle)
+
+let logWalk = driveLog()
+let wantLogWalk: LogWalk = (
+    writtenBefore: 0'u, writtenAfter: 1'u, retainedAfter: 1'u,
+    firstLine: "isp1181: a packet reached endpoint 4, which this model does " &
+      "not implement; the packet is dropped",
+    pastEnd: 0'u, shortestLine: 2'u)
+check(logWalk.writtenBefore == wantLogWalk.writtenBefore and
+      logWalk.writtenAfter == wantLogWalk.writtenAfter and
+      logWalk.retainedAfter == wantLogWalk.retainedAfter and
+      logWalk.firstLine == wantLogWalk.firstLine and
+      logWalk.pastEnd == wantLogWalk.pastEnd and
+      logWalk.shortestLine >= wantLogWalk.shortestLine,
+      "log: the accepted delivery writes no line, the refused one writes the " &
+        "line that names endpoint 4, an index past the end answers 0, and no " &
+        "retained line is empty",
+      $logWalk, $wantLogWalk)
+
+type Truncation = tuple[needed: uint, short: uint, kept: string, tail: char]
+
+proc driveTruncation(): Truncation =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  var packet = packetBytes
+  discard isp1181_rx(handle, cint(4), addr packet[0], csize_t(packet.len))
+  result.needed = uint(isp1181_log_line(handle, csize_t(0), nil, csize_t(0)))
+  # A BUFFER THAT CANNOT HOLD THE LINE. The sentinel byte past the capacity is
+  # what proves the call wrote nothing beyond what it was given: a copy that
+  # overran would replace it.
+  const capacity = 8
+  var buffer = newString(capacity + 1)
+  for i in 0 .. capacity:
+    buffer[i] = '#'
+  result.short = uint(isp1181_log_line(handle, csize_t(0),
+                                       cast[ptr cchar](addr buffer[0]),
+                                       csize_t(capacity)))
+  result.kept = buffer[0 ..< capacity - 1]
+  result.tail = buffer[capacity]
+  isp1181_destroy(handle)
+
+let truncation = driveTruncation()
+let wantTruncation: Truncation = (needed: uint(logWalk.firstLine.len + 1),
+                                  short: uint(logWalk.firstLine.len + 1),
+                                  kept: "isp1181", tail: '#')
+check(truncation == wantTruncation and truncation.short > 8'u,
+      "log: a buffer too small for the line still gets the SIZE THE LINE " &
+        "NEEDS back, so the truncation is visible, and nothing is written " &
+        "past the capacity",
+      $truncation, $wantTruncation)
+
+# THE OVERFLOW IS REPORTABLE, WHICH IS THE WHOLE REASON THE TWO COUNTS ARE TWO
+# CALLS. The loop drives one refusal past the retention bound and asserts that
+# `written` kept counting while `retained` stopped: their difference is exactly
+# the number of lines the reader cannot see, and a single count could not say
+# it.
+type Overflow = tuple[written: uint, retained: uint, dropped: uint,
+                      lastRetained: uint, firstDropped: uint]
+
+proc driveOverflow(): Overflow =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  var packet = packetBytes
+  for _ in 0 .. logCapacity:
+    discard isp1181_rx(handle, cint(4), addr packet[0], csize_t(packet.len))
+  result.written = uint(isp1181_log_written(handle))
+  result.retained = uint(isp1181_log_retained(handle))
+  result.dropped = result.written - result.retained
+  result.lastRetained = uint(isp1181_log_line(handle,
+      csize_t(result.retained - 1), nil, csize_t(0)))
+  result.firstDropped = uint(isp1181_log_line(handle, csize_t(result.retained),
+      nil, csize_t(0)))
+  isp1181_destroy(handle)
+
+let overflow = driveOverflow()
+let wantOverflow: Overflow = (written: uint(logCapacity) + 1,
+                              retained: uint(logCapacity), dropped: 1'u,
+                              lastRetained: uint(logWalk.firstLine.len + 1),
+                              firstDropped: 0'u)
+check(overflow == wantOverflow,
+      "log: the account stops retaining at its bound and does not stop " &
+        "counting, so a reader learns how many lines it cannot see",
+      $overflow, $wantOverflow)
 
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this program reports
 # what its text declares and what its run adjudicated, and the registered

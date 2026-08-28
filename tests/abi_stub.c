@@ -165,13 +165,14 @@ void isp1181_write(isp1181_ctx* ctx, uint32_t addr, uint8_t value)
     (void)value;
 }
 
-void isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
-                size_t len)
+int isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
+               size_t len)
 {
     (void)ctx;
     (void)endpoint;
     (void)data;
     (void)len;
+    return 0;
 }
 
 int isp1181_setup(isp1181_ctx* ctx, const uint8_t* data, size_t len)
@@ -200,6 +201,28 @@ void isp1181_tick(isp1181_ctx* ctx, uint32_t sof_frames)
 {
     (void)ctx;
     (void)sof_frames;
+}
+
+size_t isp1181_log_written(const isp1181_ctx* ctx)
+{
+    (void)ctx;
+    return (size_t)0;
+}
+
+size_t isp1181_log_retained(const isp1181_ctx* ctx)
+{
+    (void)ctx;
+    return (size_t)0;
+}
+
+size_t isp1181_log_line(const isp1181_ctx* ctx, size_t index, char* dst,
+                        size_t capacity)
+{
+    (void)ctx;
+    (void)index;
+    (void)dst;
+    (void)capacity;
+    return (size_t)0;
 }
 
 size_t isp1181_state_size(void)

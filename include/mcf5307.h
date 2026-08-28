@@ -32,6 +32,30 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* A STATUS A CALLER DISCARDS IS A STATUS THAT WAS NEVER PUBLISHED.
+ *
+ * Several calls here answer "the device refused" with a value and nothing
+ * else: no out-parameter, no errno, no state a later call reveals. A caller
+ * that drops that value proceeds EXACTLY as a caller whose call succeeded,
+ * which is the silent failure this library exists to make impossible. There
+ * is no portable way to force a C caller to read a return, so the enforcement
+ * is a COMPILER DIAGNOSTIC at the call site, on every toolchain that has one.
+ *
+ * The C++17 and C23 spelling is `[[nodiscard]]`; gcc and clang carry
+ * `warn_unused_result` under every older standard, and this header is parsed
+ * as C11 by `cmake/Nim.cmake` step 4a. A toolchain with neither gets an empty
+ * macro and the same declarations it would have had. */
+#if defined(__cplusplus) && __cplusplus >= 201703L
+#  define MCF5307_MUST_USE [[nodiscard]]
+#elif !defined(__cplusplus) && defined(__STDC_VERSION__) && \
+      __STDC_VERSION__ >= 202311L
+#  define MCF5307_MUST_USE [[nodiscard]]
+#elif defined(__GNUC__) || defined(__clang__)
+#  define MCF5307_MUST_USE __attribute__((warn_unused_result))
+#else
+#  define MCF5307_MUST_USE
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -321,8 +345,22 @@ isp1181_ctx* isp1181_create(void* user, isp1181_irq_fn irq, isp1181_tx_fn tx);
 void isp1181_destroy(isp1181_ctx* ctx);
 uint8_t isp1181_read(isp1181_ctx* ctx, uint32_t addr);
 void isp1181_write(isp1181_ctx* ctx, uint32_t addr, uint8_t value);
-void isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
-                size_t len);
+/* A packet from the host, which on the bus is an OUT token and its data.
+ *
+ * Returns 1 when an OUT buffer HOLDS the packet and 0 otherwise. A 0 IS THE
+ * NAK AND IT IS NOT AN ERROR CODE, and the device answers it for a nil handle,
+ * for a nil pointer, for a zero length, when the stub backend is selected,
+ * for an endpoint this model does not implement, for an endpoint whose single
+ * buffer EPDIR points IN so that it has no OUT buffer at all, and when the
+ * buffer is already full. THE PACKET IS GONE IN EVERY ONE OF THOSE CASES - a
+ * refusal here is a dropped packet and not a deferred one, which is what tells
+ * this return from `isp1181_in_token`'s.
+ *
+ * WHICH of them it was is in the log, one line per refusal, read through
+ * `isp1181_log_written`, `isp1181_log_retained` and `isp1181_log_line`. */
+MCF5307_MUST_USE
+int isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
+               size_t len);
 
 /* A SET-UP packet from the host, which on the bus is a SETUP token followed
  * by its data stage. It is a SEPARATE ENTRY POINT from `isp1181_rx` and not a
@@ -387,6 +425,50 @@ int isp1181_set_backend(isp1181_ctx* ctx, int backend);
  * 96 quanta, and the board calls this with `sof_frames` = 1 once for each
  * virtual millisecond. */
 void isp1181_tick(isp1181_ctx* ctx, uint32_t sof_frames);
+
+/* ------------------------------------------- what the device model recorded
+ *
+ * THE MODEL WRITES A LINE EVERY TIME IT CANNOT ANSWER TRUTHFULLY: a command
+ * it does not implement, a packet it dropped, an endpoint it has no buffer
+ * for, a register it would have had to wrap. Those lines are the difference
+ * between "the device took the bytes" and "the device threw them away", and
+ * before these three calls existed the model wrote them where no caller could
+ * reach them - so the two outcomes looked alike from C, which is the exact
+ * defect this device model was built to expose in firmware.
+ *
+ * THE ACCOUNT IS BOUNDED AND SAYS SO. The model retains a fixed number of
+ * lines and keeps counting past it. `isp1181_log_written` is every line it
+ * ever wrote and `isp1181_log_retained` is how many are still readable; their
+ * DIFFERENCE is the number that were dropped, and it is the only figure that
+ * reports them. A reader that consults only one of the two cannot tell a
+ * complete account from a truncated one. The lines retained are the FIRST
+ * ones: a refusal early in a run is what explains everything downstream of it,
+ * and a ring buffer would be holding the downstream and have lost the cause.
+ *
+ * NEITHER COUNT EVER DECREASES for a live handle, and no call here changes
+ * any device state. Both answer 0 for a nil handle. */
+MCF5307_MUST_USE size_t isp1181_log_written(const isp1181_ctx* ctx);
+MCF5307_MUST_USE size_t isp1181_log_retained(const isp1181_ctx* ctx);
+
+/* Copies retained line `index` into `dst` and NUL-terminates it.
+ *
+ * RETURNS THE SIZE THE LINE NEEDS, IN BYTES, INCLUDING THE TERMINATOR - not
+ * the size that was copied. A return GREATER THAN `capacity` is a line the
+ * caller's buffer could not hold, and a caller that reads the buffer without
+ * comparing has a line that ends early and looks whole. That is the second way
+ * this account could have lied by omission, and comparing the return against
+ * `capacity` is what closes it.
+ *
+ * RETURNS 0 WHEN THERE IS NO SUCH RETAINED LINE - a nil handle, or an `index`
+ * at or past `isp1181_log_retained`. A return of 0 is never a line, because
+ * the model writes no empty one and the smallest answer for a real line is
+ * therefore 2.
+ *
+ * `dst` MAY BE NULL, or `capacity` may be 0, and then nothing is copied and
+ * the size is still returned. That is how a caller sizes a buffer before it
+ * allocates one. Nothing is written to `dst` past `capacity` bytes. */
+MCF5307_MUST_USE size_t isp1181_log_line(const isp1181_ctx* ctx, size_t index,
+                                         char* dst, size_t capacity);
 
 size_t isp1181_state_size(void);
 void isp1181_state_save(const isp1181_ctx* ctx, void* dst);

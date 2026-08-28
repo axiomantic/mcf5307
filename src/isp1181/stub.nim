@@ -99,22 +99,32 @@ proc isp1181_write*(ctx: ISP1181Ctx; address: uint32; value: uint8)
     portWrite(ctx.model, address, value)
 
 proc isp1181_rx*(ctx: ISP1181Ctx; endpoint: cint; data: ptr uint8;
-                 length: csize_t)
+                 length: csize_t): cint
     {.exportc: "isp1181_rx", cdecl, dynlib.} =
   ## A NIL POINTER OR A ZERO LENGTH DELIVERS NOTHING AT ALL AND IS NOT AN EMPTY
   ## PACKET. The buffers accept a zero-byte packet and it OCCUPIES A SLOT, so
   ## reading a caller with no buffer as a caller offering an empty packet would
   ## fill a single-buffered endpoint and NAK the next real packet.
+  ##
+  ## THE ANSWER IS THE POINT. `deliver` refuses a packet for four separate
+  ## reasons and says which one in the log, and this entry point used to
+  ## discard that answer - so a caller handing bytes to a device that took none
+  ## of them saw exactly what a caller handing bytes to a device that took all
+  ## of them saw. `include/mcf5307.h` states the contract; 1 means an OUT
+  ## buffer holds the packet.
   if ctx.isNil:
-    return
+    return 0
   case ctx.backend
-  of Stub:
-    discard
+  of Stub: 0
   of FullModel:
     if data.isNil or length == 0:
-      return
-    discard deliver(ctx.model, int(endpoint),
-        toOpenArray(cast[ptr UncheckedArray[uint8]](data), 0, int(length) - 1))
+      0
+    elif deliver(ctx.model, int(endpoint),
+        toOpenArray(cast[ptr UncheckedArray[uint8]](data), 0,
+                    int(length) - 1)):
+      1
+    else:
+      0
 
 proc isp1181_setup*(ctx: ISP1181Ctx; data: ptr uint8;
                     length: csize_t): cint
@@ -156,6 +166,54 @@ proc isp1181_in_token*(ctx: ISP1181Ctx; endpoint: cint): cint
   case ctx.backend
   of Stub: 0
   of FullModel: (if transmit(ctx.model, int(endpoint)): 1 else: 0)
+
+# ---------------------------------------------------------------------------
+# The model's own account of what it did, and the door a C caller reads it
+# through.
+#
+# THE ACCOUNT IS NOT GATED ON THE BACKEND, and every other entry point in this
+# file is. The log is what the model SAID, not a register the device answers
+# from: a handle that spent a run on the full model and was moved back to the
+# stub still holds that account, and casing on the current backend would hide
+# exactly the record this door exists to carry. The stub writes no line of its
+# own, so a handle that never left the stub reads zero here without help.
+#
+# `written` AND `retained` ARE TWO CALLS AND NOT ONE. Their difference is the
+# number of lines the reader cannot see. A single "count" would be whichever of
+# the two the implementation happened to return, and a reader could not tell a
+# complete account from a truncated one - which is the failure this whole door
+# was added to close.
+
+proc isp1181_log_written*(ctx: ISP1181Ctx): csize_t
+    {.exportc: "isp1181_log_written", cdecl, dynlib.} =
+  if ctx.isNil or ctx.model.isNil:
+    return 0
+  csize_t(logWritten(ctx.model))
+
+proc isp1181_log_retained*(ctx: ISP1181Ctx): csize_t
+    {.exportc: "isp1181_log_retained", cdecl, dynlib.} =
+  if ctx.isNil or ctx.model.isNil:
+    return 0
+  csize_t(logRetained(ctx.model))
+
+proc isp1181_log_line*(ctx: ISP1181Ctx; index: csize_t; dst: ptr cchar;
+                       capacity: csize_t): csize_t
+    {.exportc: "isp1181_log_line", cdecl, dynlib.} =
+  ## THE RETURN IS THE SIZE THE LINE NEEDS AND NOT THE SIZE THAT WAS COPIED.
+  ## `include/mcf5307.h` states the contract: a return greater than `capacity`
+  ## is a line the caller's buffer could not hold, which is the second way this
+  ## door could have lied by omission, and 0 is no such retained line.
+  if ctx.isNil or ctx.model.isNil:
+    return 0
+  let line = logLine(ctx.model, int(index))
+  if line.len == 0:
+    return 0
+  if not dst.isNil and capacity > 0:
+    let room = min(line.len, int(capacity) - 1)
+    if room > 0:
+      copyMem(dst, unsafeAddr line[0], room)
+    cast[ptr UncheckedArray[cchar]](dst)[room] = cchar(0)
+  csize_t(line.len + 1)
 
 const
   backendStubValue = 0'i32
