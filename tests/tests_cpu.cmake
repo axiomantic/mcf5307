@@ -3046,7 +3046,15 @@ mcf5307_check_case_sites("t_isp1181_stub" "@MCF5307_ISP1181_STUB_SOURCE@"
 # this model carries no buffer for that answers 0 without inventing a size, the
 # three states kept apart by the PAIR of answers that neither call separates
 # alone, and the refusals with the nil-pointer form.
-mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 45)
+# MOVED 45 -> 51 WITH THE GEOMETRY READ-BACK. The six added cases are the one
+# slot that answers two different sizes for two different configuration bytes,
+# the four non-isochronous FFOSZ codes driven row by row, the never-written slot
+# that answers no geometry rather than the 8 bytes its reset bits decode to, the
+# reserved code and the isochronous endpoint that are both refused with -1, the
+# disabled endpoint that has no buffer beside a control slot the same byte
+# cannot move, and the packet of exactly the reported size that is accepted
+# where one byte more is refused.
+mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 51)
 
 ]==])
 

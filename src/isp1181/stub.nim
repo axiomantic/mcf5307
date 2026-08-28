@@ -318,8 +318,18 @@ proc isp1181_slot_buffer*(ctx: ISP1181Ctx; slot: csize_t;
   ## it silently in the direction that resurrects the size refusals.
   ##
   ## THREE ANSWERS, `isp1181_config_slot`'s CONVENTION AND NOT A SECOND ONE:
-  ## 1 is a slot this model buffers, 0 is a slot it does not, and -1 is no such
-  ## slot or no handle.
+  ## 1 is a slot with a buffer whose size this model can name, 0 is a slot with
+  ## no buffer behind it, and -1 is a question with no answer.
+  ##
+  ## -1 CARRIES A SECOND CAUSE AND NOT A FOURTH RETURN VALUE. A configuration
+  ## that names no size this model can report - a reserved `FFOSZ` code, or an
+  ## isochronous endpoint - is a buffer whose geometry cannot be stated, and
+  ## every OTHER answer would state one. It cannot be 1, which promises two
+  ## figures; it cannot be 0, which says the endpoint has no buffer memory when
+  ## the firmware has just allocated it. So it joins -1, whose meaning was
+  ## already "there is no answer to give", and the caller separates the two
+  ## causes by the pair - a slot inside `isp1181_config_slots` on a live handle
+  ## can only be the configuration one. `include/mcf5307.h` prints the table.
   ##
   ## IT DOES NOT ANSWER "WAS THE SLOT WRITTEN" AND THAT IS DELIBERATE.
   ## `isp1181_config_slot` already answers it, and a second symbol answering it
@@ -336,14 +346,18 @@ proc isp1181_slot_buffer*(ctx: ISP1181Ctx; slot: csize_t;
     return -1
   if slot >= csize_t(configSlotCount):
     return -1
-  if not slotHasBuffer(int(slot)):
+  let shape = slotBufferGeometry(ctx.model, int(slot))
+  case shape.kind
+  of sgNoSlot, sgUnnameable:
+    return -1
+  of sgNoBuffer:
     return 0
-  let shape = slotBufferGeometry(int(slot))
-  if not max_packet_bytes.isNil:
-    max_packet_bytes[] = csize_t(shape.maxPacketBytes)
-  if not buffer_count.isNil:
-    buffer_count[] = csize_t(shape.buffers)
-  1
+  of sgBuffer:
+    if not max_packet_bytes.isNil:
+      max_packet_bytes[] = csize_t(shape.maxPacketBytes)
+    if not buffer_count.isNil:
+      buffer_count[] = csize_t(shape.buffers)
+    1
 
 proc isp1181_report*(ctx: ISP1181Ctx; dst: ptr cchar;
                      capacity: csize_t): csize_t

@@ -16,7 +16,7 @@ import std/os
 import std/strutils
 
 import isp1181/stub
-from isp1181/isp1181 import logCapacity, configSlotCount
+from isp1181/isp1181 import logCapacity, configSlotCount, fifoEnableBit
 from isp1181/report import reportBegins, reportEnds
 
 var failures: seq[string]
@@ -1094,18 +1094,21 @@ proc slotBufferAt(handle: ISP1181Ctx;
   (rc: int(rc), bytes: uint(seenBytes), buffers: uint(seenBuffers))
 
 # THE ANSWER IS PER ENDPOINT AND NOT ONE NUMBER FOR THE DEVICE. Slot 0 is
-# endpoint 0 OUT and slot 2 is endpoint 1, and this model gives them DIFFERENT
-# geometry: 64 bytes single-buffered against 16 bytes double-buffered. A door
-# that answered a single global maximum would pass every other case here and
-# fail this one, and a consumer built on it would have moved the assumption up
-# one level rather than removed it. Both expectations are hand-written literals
-# read off `fifoShape`, never a second call of the procedure under test.
+# endpoint 0 OUT, whose 64 bytes ISP1362 Rev. 06 Table 15 p.51 fixes, and slot 2
+# is endpoint 1, configured here with the byte the G2 firmware writes - `0xE1`,
+# whose `FFOSZ` is `0001` for 16 bytes and whose `DBLBUF` is set. They differ in
+# both figures. A door that answered a single global maximum would pass every
+# other case here and fail this one, and a consumer built on it would have moved
+# the assumption up one level rather than removed it. Both expectations are
+# hand-written literals decoded from Table 15 and Table 16 p.52, never a second
+# call of the procedure under test.
 type BufferShapes = tuple[ep0Out: tuple[rc: int, bytes: uint, buffers: uint],
                           ep1: tuple[rc: int, bytes: uint, buffers: uint]]
 
 proc driveBufferShapes(): BufferShapes =
   let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
   setBackend(handle, FullModel)
+  handle.writeConfigSlot(2, 0xE1'u8)
   result.ep0Out = handle.slotBufferAt(0)
   result.ep1 = handle.slotBufferAt(2)
   isp1181_destroy(handle)
@@ -1117,10 +1120,64 @@ let wantBufferShapes: BufferShapes = (
 check(bufferShapes == wantBufferShapes and
       bufferShapes.ep0Out.bytes != bufferShapes.ep1.bytes,
       "buffer geometry: each endpoint answers ITS OWN size and depth - " &
-        "endpoint 0 OUT is 64 bytes single-buffered and endpoint 1 is 16 " &
-        "bytes double-buffered - so no single device-wide maximum can " &
-        "satisfy this",
+        "endpoint 0 OUT is 64 bytes single-buffered and endpoint 1 configured " &
+        "with 0xE1 is 16 bytes double-buffered - so no single device-wide " &
+        "maximum can satisfy this",
       $bufferShapes, $wantBufferShapes)
+
+# THE SIZE IS READ OUT OF THE CONFIGURATION BYTE AND IS NOT A CONSTANT, AND
+# THIS IS THE CASE THAT SAYS SO. Slot 3 is endpoint 2, the slot whose reset
+# buffer allocation in this model is 64 bytes and two deep and whose measured
+# firmware byte selects exactly that. Configure it INSTEAD with `0x81` -
+# FIFOEN set, `DBLBUF` clear, `FFOSZ` = `0001` - and ISP1362 Rev. 06 Table 16
+# p.52 makes the answer 16 bytes one deep. A call that still published the
+# allocation table would answer 64 and 2 here and pass every other case in this
+# file, so this pair of figures is the whole evidence that the read-back
+# happened.
+type ConfiguredSize = tuple[asWritten: tuple[rc: int, bytes: uint,
+                                             buffers: uint],
+                            afterRewrite: tuple[rc: int, bytes: uint,
+                                                buffers: uint]]
+
+proc driveConfiguredSize(): ConfiguredSize =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  handle.writeConfigSlot(3, 0xE3'u8)
+  result.asWritten = handle.slotBufferAt(3)
+  handle.writeConfigSlot(3, 0x81'u8)
+  result.afterRewrite = handle.slotBufferAt(3)
+  isp1181_destroy(handle)
+
+let configuredSize = driveConfiguredSize()
+let wantConfiguredSize: ConfiguredSize = (
+  asWritten: (rc: 1, bytes: 64'u, buffers: 2'u),
+  afterRewrite: (rc: 1, bytes: 16'u, buffers: 1'u))
+check(configuredSize == wantConfiguredSize,
+      "buffer geometry: one slot answers 64 bytes two deep for 0xE3 and 16 " &
+        "bytes one deep for 0x81, so the size and the depth are DECODED from " &
+        "the configuration byte and not published from a table",
+      $configuredSize, $wantConfiguredSize)
+
+# THE FOUR NON-ISOCHRONOUS CODES, EACH DRIVEN. Table 16 p.52 gives `0000` to
+# `0011` as 8, 16, 32 and 64 bytes, and a decode that got one row wrong would
+# still satisfy the case above. The sweep aggregates into one case; the length
+# of the answer is part of the expected value, so a table that stopped iterating
+# is red here rather than silently shorter.
+proc driveSizeCodes(): seq[uint] =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  for code in 0'u8 .. 3'u8:
+    handle.writeConfigSlot(4, fifoEnableBit or code)
+    result.add(handle.slotBufferAt(4).bytes)
+  isp1181_destroy(handle)
+
+let sizeCodes = driveSizeCodes()
+let wantSizeCodes = @[8'u, 16'u, 32'u, 64'u]
+check(sizeCodes == wantSizeCodes,
+      "buffer geometry: FFOSZ 0000, 0001, 0010 and 0011 answer 8, 16, 32 and " &
+        "64 bytes, which is Table 16's non-isochronous column driven row by " &
+        "row rather than spot-checked at one value",
+      $sizeCodes, $wantSizeCodes)
 
 # A SLOT WITH NO BUFFER IN THIS MODEL IS 0, AND 0 IS NOT A SIZE OF ZERO. Slot 5
 # is a real configuration slot - the firmware writes it below and
@@ -1149,12 +1206,144 @@ check(noBuffer == wantNoBuffer,
         "figures alone, so no invented size reaches a producer",
       $noBuffer, $wantNoBuffer)
 
+# A SLOT THE FIRMWARE NEVER WROTE MUST NOT ANSWER 8 BYTES, AND 8 IS WHAT ITS
+# BITS SAY. Table 110 p.107 resets the whole byte to 0 and Table 16 p.52 reads
+# `FFOSZ` = `0000` as 8 bytes, so a decode that skipped the "was it written"
+# question would answer a legal, plausible, smallest size for an endpoint the
+# firmware never configured - and a producer would split every frame to it and
+# see no error. Slot 4 is endpoint 3, a slot this model DOES carry buffer memory
+# for, so nothing but the write record separates the two answers below.
+type NeverWritten = tuple[before: tuple[rc: int, bytes: uint, buffers: uint],
+                          after: tuple[rc: int, bytes: uint, buffers: uint],
+                          configBefore: int]
+
+proc driveNeverWritten(): NeverWritten =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  result.before = handle.slotBufferAt(4)
+  result.configBefore = handle.configSlotAt(4).rc
+  handle.writeConfigSlot(4, 0x83'u8)
+  result.after = handle.slotBufferAt(4)
+  isp1181_destroy(handle)
+
+let neverWritten = driveNeverWritten()
+let wantNeverWritten: NeverWritten = (
+  before: (rc: 0, bytes: uint(sizeSentinel), buffers: uint(sizeSentinel)),
+  after: (rc: 1, bytes: 64'u, buffers: 1'u),
+  configBefore: 0)
+check(neverWritten == wantNeverWritten and neverWritten.before.bytes != 8'u,
+      "buffer geometry: a buffered slot the firmware never wrote answers 0 " &
+        "and NOT the 8 bytes its reset FFOSZ decodes to, and the same slot " &
+        "answers 64 bytes one deep once 0x83 is written to it",
+      $neverWritten, $wantNeverWritten)
+
+# A CONFIGURATION THAT NAMES NO SIZE IS REFUSED, AND THE REFUSAL IS -1. Table 16
+# p.52 marks `0100` to `1111` reserved in the non-isochronous column, and gives
+# the isochronous column sizes reaching 1023 bytes that no buffer in this model
+# carries. Neither is a size to report. -1 is the answer because 1 promises two
+# figures that do not exist and 0 would say the endpoint has no buffer memory at
+# the moment the firmware allocated some; the caller separates this -1 from the
+# out-of-range one by the slot being in range and configured, which is what the
+# third figure in each row records.
+type Unnameable = tuple[reserved: tuple[rc: int, bytes: uint, cfg: int],
+                        isochronous: tuple[rc: int, bytes: uint, cfg: int]]
+
+proc driveUnnameable(): Unnameable =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  handle.writeConfigSlot(3, 0x84'u8)
+  let onReserved = handle.slotBufferAt(3)
+  result.reserved = (rc: onReserved.rc, bytes: onReserved.bytes,
+                     cfg: handle.configSlotAt(3).rc)
+  handle.writeConfigSlot(4, 0x93'u8)
+  let onIso = handle.slotBufferAt(4)
+  result.isochronous = (rc: onIso.rc, bytes: onIso.bytes,
+                        cfg: handle.configSlotAt(4).rc)
+  isp1181_destroy(handle)
+
+let unnameable = driveUnnameable()
+let wantUnnameable: Unnameable = (
+  reserved: (rc: -1, bytes: uint(sizeSentinel), cfg: 1),
+  isochronous: (rc: -1, bytes: uint(sizeSentinel), cfg: 1))
+check(unnameable == wantUnnameable,
+      "buffer geometry: a reserved FFOSZ code and an isochronous endpoint " &
+        "both answer -1 on a slot that is in range and configured, and " &
+        "neither leaves a size behind, so no reserved code becomes a default",
+      $unnameable, $wantUnnameable)
+
+# A DISABLED ENDPOINT HAS NO BUFFER, AND THE AUTHORITY SAYS SO IN WORDS.
+# Section 12.3.3 p.51: "Only enabled endpoints are allocated space in the shared
+# buffer memory storage, disabled endpoints have zero bytes." So `0x03` - FIFOEN
+# clear, `FFOSZ` = `0011` - is a slot the firmware configured with a size field
+# that means nothing, and the answer is 0 rather than the 64 that field would
+# decode to. The control slot beside it is the contrast: Table 15 p.51 fixes
+# endpoint 0 at 64 bytes, so the same disabling byte leaves it unmoved.
+type Disabled = tuple[endpoint: tuple[rc: int, bytes: uint], cfg: int,
+                      control: tuple[rc: int, bytes: uint, buffers: uint]]
+
+proc driveDisabled(): Disabled =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  handle.writeConfigSlot(4, 0x03'u8)
+  let off = handle.slotBufferAt(4)
+  result.endpoint = (rc: off.rc, bytes: off.bytes)
+  result.cfg = handle.configSlotAt(4).rc
+  handle.writeConfigSlot(1, 0x03'u8)
+  result.control = handle.slotBufferAt(1)
+  isp1181_destroy(handle)
+
+let disabled = driveDisabled()
+let wantDisabled: Disabled = (endpoint: (rc: 0, bytes: uint(sizeSentinel)),
+                              cfg: 1,
+                              control: (rc: 1, bytes: 64'u, buffers: 1'u))
+check(disabled == wantDisabled,
+      "buffer geometry: FIFOEN clear answers 0 for endpoint 3 rather than " &
+        "the 64 its FFOSZ field still spells, while control IN under the " &
+        "same byte holds the 64 bytes Table 15 fixes for it",
+      $disabled, $wantDisabled)
+
+# THE REPORTED SIZE IS THE SIZE THE BUFFER ENFORCES, FOR THE IMAGE THIS MODEL
+# WAS MEASURED AGAINST. The figure this call reports is decoded from the
+# configuration byte; the buffer a packet actually meets is allocated at reset
+# from a separate table, and the two are different mechanisms that happen to
+# agree for the measured firmware. `docs/sources.md` records that agreement as
+# an observation made by hand, and this case is what makes it fail loudly
+# instead: slot 4 gets `0x83`, the byte the G2 firmware writes for endpoint 3,
+# the call is asked for the size, and the answer is then handed to the device as
+# a packet of exactly that many bytes and as one byte more. Accepted then
+# refused is the only pair of outcomes that means the reported figure IS the
+# boundary.
+type SizeIsEnforced = tuple[reported: uint, atSize: int, overSize: int]
+
+proc driveSizeIsEnforced(): SizeIsEnforced =
+  let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
+  setBackend(handle, FullModel)
+  handle.writeConfigSlot(4, 0x83'u8)
+  let shape = handle.slotBufferAt(4)
+  result.reported = shape.bytes
+  var atSize = newSeq[uint8](int(shape.bytes))
+  result.atSize = int(isp1181_rx(handle, cint(3), addr atSize[0],
+                                 csize_t(atSize.len)))
+  var overSize = newSeq[uint8](int(shape.bytes) + 1)
+  result.overSize = int(isp1181_rx(handle, cint(3), addr overSize[0],
+                                   csize_t(overSize.len)))
+  isp1181_destroy(handle)
+
+let sizeIsEnforced = driveSizeIsEnforced()
+let wantSizeIsEnforced: SizeIsEnforced = (reported: 64'u, atSize: 1,
+                                          overSize: 0)
+check(sizeIsEnforced == wantSizeIsEnforced,
+      "buffer geometry: a packet of exactly the reported size is accepted " &
+        "and one byte more is refused, so the figure this call decodes out " &
+        "of the configuration byte is the boundary the buffer enforces",
+      $sizeIsEnforced, $wantSizeIsEnforced)
+
 # THE THREE STATES STAY APART, AND NEITHER CALL ALONE KEEPS THEM APART. The
 # pairs below are the table `include/mcf5307.h` prints beside this call, driven
-# rather than quoted. Slot 0 is written and buffered, slot 5 is written with no
-# buffer here, and slot 4 is never written and IS buffered - so `config_slot`
+# rather than quoted. Slot 0 is written and its geometry is known, slot 5 is
+# written with no buffer here, and slot 4 is never written - so `config_slot`
 # alone cannot separate the first from the second and `slot_buffer` alone
-# cannot separate the first from the third. Only the pair does, and this case
+# cannot separate the second from the third. Only the pair does, and this case
 # also states that the three pairs are pairwise different.
 type ThreeStates = tuple[configuredBuffered: tuple[cfg: int, buf: int],
                          configuredUnbuffered: tuple[cfg: int, buf: int],
@@ -1165,8 +1354,9 @@ proc driveThreeStates(): ThreeStates =
   setBackend(handle, FullModel)
   handle.writeConfigSlot(0, 0x83'u8)
   handle.writeConfigSlot(5, 0xC3'u8)
-  # Slot 4 is deliberately left alone - it is endpoint 3, the last buffer this
-  # model carries, so it is buffered AND never written.
+  # Slot 4 is deliberately left alone - it is endpoint 3, a slot this model
+  # carries buffer memory for, so only the write record makes it different from
+  # the configured-and-buffered row.
   result.configuredBuffered = (cfg: handle.configSlotAt(0).rc,
                                buf: handle.slotBufferAt(0).rc)
   result.configuredUnbuffered = (cfg: handle.configSlotAt(5).rc,
@@ -1178,7 +1368,7 @@ proc driveThreeStates(): ThreeStates =
 let threeStates = driveThreeStates()
 let wantThreeStates: ThreeStates = (configuredBuffered: (cfg: 1, buf: 1),
                                     configuredUnbuffered: (cfg: 1, buf: 0),
-                                    neverWritten: (cfg: 0, buf: 1))
+                                    neverWritten: (cfg: 0, buf: 0))
 check(threeStates == wantThreeStates and
       threeStates.configuredBuffered != threeStates.configuredUnbuffered and
       threeStates.configuredBuffered != threeStates.neverWritten and
