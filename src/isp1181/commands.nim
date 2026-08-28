@@ -83,6 +83,17 @@ type Family = object
   illegalOpcode: int   ## the parenthesised byte, or -1 when the family has none
   illegalName: string
   illegalDetail: string
+  allEndpoints: bool
+    ## THE FAMILY IS IMPLEMENTED FOR EVERY ENDPOINT THE AUTHORITY NUMBERS AND
+    ## NOT ONLY FOR THE ONES THIS MODEL BUFFERS. It is true for the family
+    ## whose target is a REGISTER the part carries for all sixteen slots and
+    ## false for one whose target is BUFFER MEMORY. ISP1362 Rev. 06 section
+    ## 15.1.1 p.107 states that the buffer memory "takes place only after all
+    ## 16 endpoints have been configured in sequence (from endpoint 0 OUT to
+    ## endpoint 14)", so a device that refused one of those slots could not
+    ## complete the sequence the same section requires of the firmware. A
+    ## refusal there is therefore a statement about the part that the authority
+    ## contradicts, and not a gap this model may report.
   inOnly: bool
     ## THE FAMILY ADDRESSES AN IN BUFFER. This model gives endpoint 0 an OUT
     ## buffer and an IN buffer and gives endpoints 1 to 3 ONE buffer each, whose
@@ -126,7 +137,7 @@ const families: array[8, Family] = [
   # from a part that only claims to INTEGRATE the ISP1181B.
   Family(controlOut: 0x20, controlIn: 0x21, endpointBase: 0x22,
          noun: "configuration", illegalOpcode: -1, illegalName: "",
-         illegalDetail: "")]
+         illegalDetail: "", allEndpoints: true)]
 
 proc classifyFamily(opcode: int): (bool, Command) =
   ## The data-flow families of Table 109. `false` means no family claims the
@@ -145,7 +156,7 @@ proc classifyFamily(opcode: int): (bool, Command) =
     if opcode >= family.endpointBase and opcode < family.endpointBase + 14:
       let endpoint = opcode - family.endpointBase + 1
       let name = "endpoint " & $endpoint & " " & family.noun
-      if endpoint < modelEndpoints and not family.inOnly:
+      if family.allEndpoints or (endpoint < modelEndpoints and not family.inOnly):
         return (true, Command(class: ccImplemented, name: name))
       return (true, Command(class: ccNotImplemented, name: name))
   (false, Command(class: ccUnspecified, name: ""))

@@ -292,15 +292,33 @@ by any evidence here.
 Both documents are about the ISP1362; the ISP1181B data sheet is still the one
 owed, and the `Unverified` row below is unchanged.
 
-**A tension the same page raises, and which nothing settles.** §15.1.1 states
-that buffer memory allocation "takes place only after all 16 endpoints have been
+**A tension the same page raised, now settled by a run.** §15.1.1 states that
+buffer memory allocation "takes place only after all 16 endpoints have been
 configured in sequence", that control endpoints "must be included in the
 initialization sequence", and that allocation "starts when endpoint 14 has been
-configured". The recorder observed **three** writes. Either the firmware makes
-more that the recorder did not capture, or it makes only these three and the
-part it drives does not impose §15.1.1's sequence — and this repository cannot
-tell which. **No count of the firmware's configuration writes is asserted here**;
-only the three bytes above, each of which was seen.
+configured". An earlier recorder observed **three** writes, and this file
+recorded that it could not tell whether the firmware made more or whether the
+part imposed no such sequence.
+
+**It makes more.** With the model refusing `0x25` to `0x2F` and writing a line
+per refusal, a boot of the Clavia firmware in the consuming emulator produced
+one line for each of `0x25`, `0x26`, `0x27`, `0x28`, `0x29`, `0x2A`, `0x2B`,
+`0x2C`, `0x2D`, `0x2E` and `0x2F`, in that order, each followed by exactly one
+operand byte. That is **eleven** writes covering endpoints 4 to 14, and the
+first of them arrived while `0x24` was still the pending command, so `0x24` was
+written too. The firmware follows §15.1.1's sequence; the earlier recorder saw
+part of it.
+
+**What the same run says about the eleven slots' contents.** With all sixteen
+slots accepted, the model writes a line for a slot at or above `fifoCount` whose
+operand sets FIFOEN, and the boot produced **no such line**. Every one of slots
+5 to 15 is therefore configured with FIFOEN clear: the firmware includes them in
+the sequence the document requires and enables none of them. That is consistent
+with the interrupt enable `0x00001F07`, which arms five endpoint bits, and it is
+an observation about THIS image and not a property of the part.
+
+**Slots 0 to 3 are not covered by this run.** They are accepted silently, so the
+log says nothing about whether they were written or with what.
 
 ## The unnamed authority
 
@@ -390,6 +408,29 @@ a repair:
   buffers are in. The older reading passed `k` through an endpoint-to-buffer
   table, so `0x21` - endpoint 0's IN buffer - selected endpoint 1's buffer
   instead, and every slot from 1 upward named a neighbour.
+
+**All sixteen slots are now accepted, and the ground is the same section.**
+§15.1.1 makes buffer-memory allocation conditional on "all 16 endpoints" being
+configured in sequence, so a model that refused one of the sixteen would report
+a step the document REQUIRES of the firmware as a step the part cannot take.
+The DcEndpointConfiguration register is accepted and recorded for every slot;
+`fifoCount` is unchanged, and the data-flow families still refuse an endpoint
+this model carries no buffer for, by name. The remaining gap is narrower and is
+reported where it occurs: a slot at or above `fifoCount` whose operand sets
+FIFOEN — Table 110/111 p.107, bit 7 — is buffer memory the firmware asked for
+and this model does not have, and it writes one line saying so.
+
+**A refused command abandons the transfer in progress, and that is READ.**
+Rev. 06 p.14 describes the command as "the index of a register" whose purpose is
+"to inform the ISP1362 about the register that will be accessed at the data
+phase", and §15 p.104 gives the command phase as an unconditional interpretation
+of the lower byte of the bus as a command code. Neither sentence admits a path
+by which an earlier command survives a later command-port write. This was
+previously recorded in `src/isp1181/isp1181.nim` as a SEQUENCING CHOICE the
+authority did not settle, with the opposite behaviour; the two sentences settle
+it, and the module head now cites them instead. **This is inherited on the same
+terms as every other ISP1362 value here** — the ISP1181B data sheet is still the
+document owed.
 
 **The direction decode always followed the DOCUMENT's ordering**, because a
 decode on the other ordering would read a neighbouring endpoint's byte and the
@@ -491,7 +532,7 @@ ISA_A accepts. Their pin is in `docs/toolchain.md`.
 | The interrupt-register bit layout the emulated firmware obeys is the one ISP1362 Rev. 06 Table 143 (p.121) gives | Read the interrupt-register table in the ISP1181B data sheet. The two sources already disagree on bits 1 and 2, which are unassigned for that reason. `AN10008-01` §11.6.2 p.63 also puts suspend at bit 2, which is a second ISP1362 document and not a second part |
 | Every row of `fifoShape` is the size and buffering scheme the emulated firmware configures. All three of endpoints 1 to 3 AGREE with the configuration bytes recorded above, but the agreement is CONSISTENT and not PINNED: nothing reads `endpointConfig` back into `fifoShape`, so a firmware image configuring different sizes would leave the table standing and report nothing | Derive `fifoShape` from the configuration writes, or add a registered check that decodes each observed byte and asserts it against the corresponding row, so a disagreeing image turns the suite red. Endpoints 0 OUT and 0 IN are not covered by the three bytes at all and would need their own observation |
 | `DBLBUF` is bit 5, and `FFOSZ` `0001` and `0011` select 16 and 64 bytes for a non-isochronous endpoint | Read from ISP1362 Rev. 06 Table 110/111 (p.107) and Table 16 (p.52), and INHERITED exactly as every other ISP1362 value here is. Unlike `EPDIR` at bit 6, neither field is read by this model, so no test constrains it. Read the DcEndpointConfiguration bit map and the buffer-memory size table in an ISP1181B or ISP1181 data sheet |
-| The firmware makes only the three endpoint-configuration writes recorded above | §15.1.1 says allocation begins only after all sixteen slots are configured in sequence, which three writes do not satisfy. Re-run the recorder over a full boot and count every `0x20`-`0x2F` command it sees. **No count is asserted in this file until that is done** |
+| The buffer-memory sizes and buffering schemes the firmware writes into slots 0 to 3 | The boot run named above resolves slots 4 to 15 and says nothing about the first four, which the model accepts silently. Record the operand byte of each accepted `0x20` to `0x23` and decode it against Table 110/111 |
 | SETUPT is taken away by the Clear Buffer command that empties the control OUT buffer. INFERRED from Table 127's wording — bit 2 describes buffer content and, unlike bit 3, carries no read-to-clear sentence | Read the `DcEndpointStatus` description in an ISP1181B or ISP1181 data sheet. Failing that, run the emulated firmware against this model and observe whether its control handler re-reads `0x50` after `0x70` and finds bit 2 low. `AN10008-01` p.73 says `0x50` clears the INTERRUPT bit and is silent on bit 2, which is corroboration of the inference and not proof of it |
 
 ## Related

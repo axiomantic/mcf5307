@@ -64,13 +64,21 @@ const
 # design document spells out. The six commands those documents name WITHOUT an
 # opcode are not here and cannot be: an opcode chosen by this suite would be
 # asserting its own guess.
-const implementedOpcodes: array[42, uint8] = [
+const implementedOpcodes: array[53, uint8] = [
   0xF6'u8,                                    # reset
   0xBA'u8, 0xBB'u8,                           # hardware configuration
   0xB8'u8, 0xB9'u8,                           # mode
   0xB6'u8, 0xB7'u8,                           # device address
   0x20'u8, 0x21'u8,                           # control configuration, OUT then IN
   0x22'u8, 0x23'u8, 0x24'u8,                  # endpoint 1 to 3 configuration
+  # ENDPOINTS 4 TO 14 CONFIGURE A REGISTER AND NOT A BUFFER. ISP1362
+  # Rev. 06 section 15.1.1 p.107 requires all sixteen slots to be written
+  # in sequence before the part allocates buffer memory, so the register
+  # exists for every slot and the model records every slot. The buffers
+  # behind slots 5 to 15 are still absent, and the data-flow families
+  # below still refuse them by name.
+  0x25'u8, 0x26'u8, 0x27'u8, 0x28'u8, 0x29'u8, 0x2A'u8, 0x2B'u8,
+  0x2C'u8, 0x2D'u8, 0x2E'u8, 0x2F'u8,        # endpoint 4 to 14 configuration
   0xD2'u8,                                    # peek
   0xC0'u8,                                    # interrupt register
   0xC2'u8, 0xC3'u8,                           # interrupt enable
@@ -107,21 +115,10 @@ const implementedOpcodes: array[42, uint8] = [
 # opcode the authority does not number falls to the unspecified class below,
 # which answers benignly and logs. The gap is only expensive on the
 # IMPLEMENTED side.
-const notImplemented: array[100, tuple[opcode: uint8, name: string]] = [
+const notImplemented: array[89, tuple[opcode: uint8, name: string]] = [
   (0xF0'u8, "DMA"), (0xF1'u8, "DMA"), (0xF2'u8, "DMA"), (0xF3'u8, "DMA"),
   (0xB5'u8, "chip identifier"),
   (0xB4'u8, "frame number"),
-  (0x25'u8, "endpoint 4 configuration"),
-  (0x26'u8, "endpoint 5 configuration"),
-  (0x27'u8, "endpoint 6 configuration"),
-  (0x28'u8, "endpoint 7 configuration"),
-  (0x29'u8, "endpoint 8 configuration"),
-  (0x2A'u8, "endpoint 9 configuration"),
-  (0x2B'u8, "endpoint 10 configuration"),
-  (0x2C'u8, "endpoint 11 configuration"),
-  (0x2D'u8, "endpoint 12 configuration"),
-  (0x2E'u8, "endpoint 13 configuration"),
-  (0x2F'u8, "endpoint 14 configuration"),
   (0x02'u8, "endpoint 1 buffer write"),
   (0x03'u8, "endpoint 2 buffer write"),
   (0x04'u8, "endpoint 3 buffer write"),
@@ -269,7 +266,7 @@ proc driveImplemented(): Accepted =
     elif m.logLines.len != 0:
       result.firstBad = "0x" & toHex(opcode) & " logged: " & m.logLines[0]
 
-const wantAccepted: Accepted = (firstBad: "", driven: 41)
+const wantAccepted: Accepted = (firstBad: "", driven: 52)
 
 let accepted = driveImplemented()
 check(accepted == wantAccepted,
@@ -308,8 +305,16 @@ proc driveRefused(rows: openArray[tuple[opcode: uint8, want: string]]): Refused 
     elif m.portRead(commandPort) != benign:
       result.firstBad = "0x" & toHex(row.opcode) & " command port answered 0x" &
         toHex(m.portRead(commandPort))
-    elif m.lastCommand != -1:
-      result.firstBad = "0x" & toHex(row.opcode) & " became the pending command"
+    elif m.lastCommand != int(row.opcode):
+      # THE COMMAND PHASE LATCHES WHETHER OR NOT THE DECODE ACCEPTS. ISP1362
+      # Rev. 06 p.14 calls the command "the index of a register" and section 15
+      # p.104 gives the command phase as an unconditional interpretation of the
+      # bus, so a byte that reached the command port IS the pending command and
+      # a model that left the previous one there would charge the next operand
+      # byte to it.
+      result.firstBad = "0x" & toHex(row.opcode) &
+        " did not become the pending command; the pending command is " &
+        $m.lastCommand
 
 # THE COMMAND'S NAME IS PART OF THE ASSERTED LINE. A log that named only the
 # opcode would leave a reader with a number and no way to tell a refused DMA
@@ -321,7 +326,7 @@ for row in notImplemented:
             ") is not implemented; the read answers 0x00"))
 
 let refused = driveRefused(notImplementedRows)
-const wantRefused: Refused = (firstBad: "", driven: 100)
+const wantRefused: Refused = (firstBad: "", driven: 89)
 check(refused == wantRefused,
       "not implemented: every command answers benignly and logs one line",
       $refused, $wantRefused)
@@ -384,8 +389,7 @@ check(illegalDriven == wantIllegal,
 # THE ONE ACCEPTED COMMAND THAT SPEAKS. It is driven here with its line
 # asserted, so block 1's exemption costs no coverage.
 let speaking = driveRefused(@speaksOnFreshHandle)
-const wantSpeaking: Refused = (firstBad: "0x61 became the pending command",
-                               driven: 1)
+const wantSpeaking: Refused = (firstBad: "", driven: 1)
 check(speaking == wantSpeaking,
       "accepted-and-speaking: a validate with nothing staged is accepted, " &
         "recorded as pending and reports the fault",
@@ -403,13 +407,14 @@ let partition: Partition = (implemented: accepted.driven +
                             total: accepted.driven + speaking.driven +
                                    refused.driven + illegalDriven.driven +
                                    unspecified.driven)
-# THE TWO FIGURES THAT MOVED, AND THE ONE REASON BOTH MOVED FOR. Renumbering
-# the endpoint-configuration family onto section 15.1.1's slot ordering makes
-# `0x24` endpoint 3's configuration, which this model carries a buffer for, so
-# it joins the implemented class; and it makes `0x2F` endpoint 14's, which the
-# authority numbers, so it leaves the unspecified class. `refused` is unchanged
-# because the family gave up one member and took one back.
-const wantPartition: Partition = (implemented: 42, refused: 100, illegal: 4,
+# THE TWO FIGURES THAT MOVED, AND THE ONE REASON BOTH MOVED FOR. The eleven
+# codes `0x25` to `0x2F` write the DcEndpointConfiguration register of a slot
+# this model carries no buffer for, and ISP1362 Rev. 06 section 15.1.1 p.107
+# states that the part allocates buffer memory only "after all 16 endpoints
+# have been configured in sequence". A slot the model refused would make a step
+# the authority requires look like a step the part cannot take, so the eleven
+# moved from the refused class to the implemented one and nothing else moved.
+const wantPartition: Partition = (implemented: 53, refused: 89, illegal: 4,
                                   unspecified: 110, total: 256)
 check(partition == wantPartition,
       "partition: the four classes cover all 256 opcodes and none twice",
@@ -934,8 +939,16 @@ proc configurationLoudness(): Loudness =
       result.unaccounted.add(slot)
 
 let loudness = configurationLoudness()
-const wantLoudness: Loudness = (accepted: @[0, 1, 2, 3, 4],
-                                loud: @[5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+# EVERY SLOT IS ACCEPTED AND `loud` IS EMPTY, WHICH IS THE AUTHORITY'S OWN
+# SHAPE. ISP1362 Rev. 06 section 15.1.1 p.107 states that buffer-memory
+# allocation "takes place only after all 16 endpoints have been configured in
+# sequence", so a slot the part refused would break a sequence the same section
+# requires. The `loud` branch is kept rather than deleted: it is what the check
+# reports if a slot ever stops being accepted, and an empty expectation is the
+# assertion that none does.
+const wantLoudness: Loudness = (accepted: @[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                                            11, 12, 13, 14, 15],
+                                loud: @[],
                                 unaccounted: @[])
 check(loudness == wantLoudness,
       "configuration: every slot is accepted or names itself in one line, " &

@@ -130,12 +130,21 @@ check(reissued == wantReissued,
       "state machine: a re-issued command builds its operand from zero",
       $reissued, $wantReissued)
 
-# A REFUSED COMMAND IS INERT AND NOT HALF-ACCEPTED. Both refusing classes are
-# driven into the middle of a live transfer: the command the documents name and
-# do not implement, and the byte no document numbers at all. The transfer has
-# to complete across both of them, and the two have to say DIFFERENT things - a
-# reader who meets the second has found a gap in the specification rather than
-# a decision somebody took, and a single shared line would hide which one it is.
+# A REFUSED COMMAND ABANDONS THE TRANSFER IN PROGRESS. Both refusing classes
+# are driven into the middle of a live two-byte register write: the command the
+# documents name and do not implement, and the byte no document numbers at all.
+# The transfer must NOT complete across them. ISP1362 Rev. 06 p.14 calls the
+# command "the index of a register" that informs the part which register the
+# data phase reaches, and section 15 p.104 makes the command phase an
+# unconditional read of the bus as a command code, so the operand byte written
+# after the refusals belongs to the LAST command written and that command is
+# `0x9C`. A model that charged it to `0xBA` would complete a register write the
+# firmware never finished, and would report every following byte against the
+# wrong command.
+#
+# THE TWO REFUSALS STILL SAY DIFFERENT THINGS - a reader who meets the second
+# has found a gap in the specification rather than a decision somebody took,
+# and a single shared line would hide which one it is.
 type Inert = tuple[hw: seq[uint8], log: seq[string]]
 
 proc refusalMidTransfer(): Inert =
@@ -148,13 +157,16 @@ proc refusalMidTransfer(): Inert =
   result = (hw: m.readVia(0xBB'u8, 2), log: m.logLines)
 
 let inert = refusalMidTransfer()
-let wantInert: Inert = (hw: @[0x00'u8, 0x23'u8],
+let wantInert: Inert = (hw: @[0x00'u8, 0x00'u8],
     log: @["isp1181: command 0xB5 (chip identifier) is not implemented; the " &
            "read answers 0x00",
            "isp1181: command 0x9C is not in the specified command set; the " &
-           "read answers 0x00"])
+           "read answers 0x00",
+           "isp1181: command 0x9C (not in the specified command set) was " &
+           "refused and takes no operand; the byte is discarded"])
 check(inert == wantInert,
-      "state machine: a refused command disturbs no transfer and names its class",
+      "state machine: a refused command abandons the transfer and the operand " &
+        "that follows is charged to the refusal",
       $inert, $wantInert)
 
 # A COMMAND THAT TAKES NO OPERAND LEAVES THE DATA PORT WITH NOTHING TO CARRY,
@@ -243,10 +255,13 @@ check(mapping == wantMapping,
       "fifos: each endpoint's packet lands in its own buffer and none in EP0 IN",
       $mapping, $wantMapping)
 
-# A REFUSED ENDPOINT-CONFIGURATION COMMAND MOVES NO SELECTION. The selector and
-# the refusal share an opcode family, so a model that selected before it
-# classified would take the endpoint number out of a command it had just
-# refused - and the number is outside the range the model carries buffers for.
+# A CONFIGURATION SLOT WITH NO BUFFER BEHIND IT IS SELECTED AND SAYS SO. Every
+# one of section 15.1.1's sixteen slots is accepted, and eleven of them
+# configure buffer memory this model does not carry, so the selection a peek
+# reads can now name a slot with no FIFO. `0x25` selects slot 5 after `0x22`
+# selected slot 2, which holds a delivered byte: a model that indexed its FIFO
+# array by the slot would read out of bounds, and one that quietly kept the
+# previous selection would answer `0xA1` and call it endpoint 4's.
 type Selection = tuple[peeked: uint8, log: seq[string]]
 
 proc refusedSelection(): Selection =
@@ -259,11 +274,12 @@ proc refusedSelection(): Selection =
   result = (peeked: m.portRead(dataPort), log: m.logLines)
 
 let selection = refusedSelection()
-let wantSelection: Selection = (peeked: 0xA1'u8,
-    log: @["isp1181: command 0x25 (endpoint 4 configuration) is not " &
-           "implemented; the read answers 0x00"])
+let wantSelection: Selection = (peeked: benign,
+    log: @["isp1181: peek follows the configuration of slot 5, which this " &
+           "model carries no buffer for; the read answers 0x00"])
 check(selection == wantSelection,
-      "fifos: a refused endpoint-configuration command leaves the selection alone",
+      "fifos: a peek after the configuration of a slot with no buffer names " &
+        "the slot and answers benignly",
       $selection, $wantSelection)
 
 # THE BUFFER'S OWN SIZE IS ACCEPTED AND ONE BYTE MORE IS NOT. A refusal at the
@@ -614,9 +630,10 @@ check(softctCase == wantSoftct,
 # read that answered zero in silence is the one outcome that would let the
 # firmware take the benign value for an answer.
 #
-# THE COMMAND LEFT PENDING IS THE ONE ACCEPTED BEFORE THE REFUSAL, and that is
-# the two-sided form of inertness: the refused byte does not become the pending
-# command, and it does not take away the command that was.
+# THE COMMAND LEFT PENDING IS THE REFUSED ONE, and that is the two-sided form
+# of the repair: the refusal takes the command port's latch, and the data-port
+# read that follows is reported against the byte the firmware actually wrote
+# rather than against a command it had finished with.
 type Negative = tuple[refusal: seq[string], value: uint8, port: uint8,
                       last: int, afterRead: seq[string], hw: seq[uint8],
                       mode: seq[uint8], interrupt: seq[uint8],
@@ -645,11 +662,11 @@ let negative = unimplementedCommand()
 let wantNegative: Negative = (
     refusal: @["isp1181: command 0xB5 (chip identifier) is not implemented; " &
                "the read answers 0x00"],
-    value: benign, port: benign, last: 0xB8,
+    value: benign, port: benign, last: 0xB5,
     afterRead: @["isp1181: command 0xB5 (chip identifier) is not " &
                  "implemented; the read answers 0x00",
-                 "isp1181: a data port read arrived with no command pending; " &
-                 "the read answers 0x00"],
+                 "isp1181: command 0xB5 (chip identifier) was refused; the " &
+                 "read answers 0x00"],
     hw: @[0x00'u8, 0x23'u8], mode: @[0x01'u8],
     interrupt: @[0x04'u8, 0x08'u8, 0x00'u8, 0x00'u8],
     pending: @[0, 0, 0, 1, 0])
@@ -917,27 +934,27 @@ proc driveReadOutControl(): ReadOutControl =
   (readBack: readBack, log: m.logLines[before .. ^1])
 
 let readOutControl = driveReadOutControl()
-# THE TRAILING LINES ARE THE DOCUMENTED SEQUENCING CHOICE AND NOT NOISE. The
-# module head states that a command this model REFUSES leaves a transfer
-# already in progress LIVE, so the six reads after the refused `0x16` are
-# served by the exhausted `0x10` that preceded it. Asserting them here pins
-# that choice at the one place a reader meets its consequence.
+# EVERY TRAILING LINE NAMES THE REFUSED COMMAND AND NOT THE ONE BEFORE IT. The
+# refused `0x16` takes the command port's latch, so the six reads that follow
+# are reported against `0x16`. A model that left `0x10` pending would answer the
+# same six benign bytes and tell a reader that an exhausted control-OUT read was
+# being over-read, which names the wrong endpoint and the wrong fault.
 let wantReadOutControl: ReadOutControl = (
     readBack: @[benign, benign, benign, benign, benign, benign],
     log: @["isp1181: command 0x16 (endpoint 5 buffer read) is not " &
            "implemented; the read answers 0x00",
-           "isp1181: command 0x10 (control OUT buffer read) yields 6 bytes " &
-           "and a 7th was read; the read answers 0x00",
-           "isp1181: command 0x10 (control OUT buffer read) yields 6 bytes " &
-           "and a 8th was read; the read answers 0x00",
-           "isp1181: command 0x10 (control OUT buffer read) yields 6 bytes " &
-           "and a 9th was read; the read answers 0x00",
-           "isp1181: command 0x10 (control OUT buffer read) yields 6 bytes " &
-           "and a 10th was read; the read answers 0x00",
-           "isp1181: command 0x10 (control OUT buffer read) yields 6 bytes " &
-           "and a 11th was read; the read answers 0x00",
-           "isp1181: command 0x10 (control OUT buffer read) yields 6 bytes " &
-           "and a 12th was read; the read answers 0x00"])
+           "isp1181: command 0x16 (endpoint 5 buffer read) was refused; the " &
+           "read answers 0x00",
+           "isp1181: command 0x16 (endpoint 5 buffer read) was refused; the " &
+           "read answers 0x00",
+           "isp1181: command 0x16 (endpoint 5 buffer read) was refused; the " &
+           "read answers 0x00",
+           "isp1181: command 0x16 (endpoint 5 buffer read) was refused; the " &
+           "read answers 0x00",
+           "isp1181: command 0x16 (endpoint 5 buffer read) was refused; the " &
+           "read answers 0x00",
+           "isp1181: command 0x16 (endpoint 5 buffer read) was refused; the " &
+           "read answers 0x00"])
 check(readOutControl == wantReadOutControl,
       "data flow: a read buffer command for an endpoint outside this model " &
         "is refused on the same handle that just answered one",
@@ -1155,6 +1172,45 @@ check(setupArrival == wantSetupArrival,
       "set-up: the arrival flushes the control IN buffer and unstalls both " &
         "control endpoints",
       $setupArrival, $wantSetupArrival)
+
+# THE WHOLE INITIALIZATION SEQUENCE IS DRIVEN, IN THE ORDER THE AUTHORITY PUTS
+# IT IN. ISP1362 Rev. 06 section 15.1.1 p.107 states that buffer memory is
+# allocated "only after all 16 endpoints have been configured in sequence (from
+# endpoint 0 OUT to endpoint 14)", so the firmware writes `0x20` to `0x2F` with
+# one operand byte each and the model must take all sixteen. What it cannot take
+# is the BUFFER behind a slot it carries no FIFO for, and the pair below
+# separates the two halves: the same sixteen writes are driven twice, differing
+# only in FIFOEN - bit 7, ISP1362 Rev. 06 Table 110 and Table 111 p.107 - on the
+# eleven slots with no buffer.
+#
+# THE DISABLED PASS IS THE NEGATIVE CONTROL AND IT COMES FROM THE SAME
+# POPULATION. A model that wrote a line for every unbuffered slot regardless of
+# the byte would satisfy the enabled pass on its own.
+type ConfigSequence = tuple[quiet: seq[string], loud: seq[string]]
+
+proc driveConfigSequence(): ConfigSequence =
+  for enabled in [false, true]:
+    let m = fresh()
+    for slot in 0 .. 15:
+      # Slots 0 to 4 are the ones this model buffers and are enabled in both
+      # passes, so neither pass is a sweep over a uniformly disabled register.
+      let byte = (if slot < 5 or enabled: 0x80'u8 else: 0x00'u8)
+      m.writeVia(uint8(0x20 + slot), [byte])
+    if enabled:
+      result.loud = m.logLines
+    else:
+      result.quiet = m.logLines
+
+let configSequence = driveConfigSequence()
+var wantConfigSequence: ConfigSequence = (quiet: @[], loud: @[])
+for slot in 5 .. 15:
+  wantConfigSequence.loud.add("isp1181: configuration slot " & $slot &
+      " was enabled with 0x80 and this model carries no buffer for it; the " &
+      "register is recorded and no buffer memory is allocated")
+check(configSequence == wantConfigSequence,
+      "configuration: the sixteen-slot sequence is taken whole, and only a " &
+        "slot this model cannot buffer AND the firmware enables writes a line",
+      $configSequence, $wantConfigSequence)
 
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT.
 const declaredCaseSites = declaredSites
