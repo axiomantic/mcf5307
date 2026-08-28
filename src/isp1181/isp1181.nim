@@ -481,6 +481,41 @@ proc configSlotOrdinal*(m: ISP1181; slot: int): int =
   if m.isNil or slot < 0 or slot >= configSlotCount: 0
   else: m.configOrdinal[slot]
 
+proc slotHasBuffer*(slot: int): bool =
+  ## Whether THIS MODEL carries a buffer behind the configuration slot. The
+  ## part has `configSlotCount` slots and this model has `fifoCount` buffers,
+  ## and the two are different numbers on purpose - see both consts above. A
+  ## slot at or above `fifoCount` has a register byte and no buffer, so it has
+  ## no geometry, and inventing one for it is the thing this proc exists to
+  ## make unnecessary.
+  slot >= 0 and slot < fifoCount
+
+proc slotBufferGeometry*(slot: int): tuple[maxPacketBytes: int, buffers: int] =
+  ## The buffer behind the slot, as bytes and as depth. IT IS ONLY DEFINED
+  ## WHERE `slotHasBuffer` SAYS SO and the caller checks that first; there is
+  ## no in-band answer here, because every integer this could return for a slot
+  ## with no buffer would be a size some consumer would then split packets to.
+  ##
+  ## THE BYTES ARE A MAXIMUM PACKET SIZE AND NOT AN INCIDENTAL FIGURE. ISP1362
+  ## Rev. 06 section 12.3.3 p.51 states it directly - "The size of the buffer
+  ## memory determines the maximum packet size that the hardware can support
+  ## for a given endpoint" - and `Fifo.accept` in `isp1181/fifo` refuses a
+  ## longer packet whole, which is the same rule enforced rather than described.
+  ##
+  ## IT READS `fifoShape`, WHICH IS A FIRMWARE CONFIGURATION. `fifoShape` says
+  ## at length that its rows are properties of the measured image and not of
+  ## the part, and that a model reading `endpointConfig` back into them is the
+  ## durable repair. This proc is the door, not that repair: it publishes
+  ## whatever `fifoShape` holds, so the repair changes what comes out of it and
+  ## does not change its shape.
+  ##
+  ## THE FIELDS ARE RENAMED ON THE WAY OUT AND NOT PASSED THROUGH. `fifoShape`
+  ## calls the first figure `capacity`, which is what it is to the buffer;
+  ## `maxPacketBytes` is what the same figure is to a producer, and section
+  ## 12.3.3 is the sentence that makes them one number. Naming it for the
+  ## caller's question is what stops the caller renaming it again on arrival.
+  (maxPacketBytes: fifoShape[slot].capacity, buffers: fifoShape[slot].buffers)
+
 proc irqAsserted*(m: ISP1181): bool =
   if m.isNil: false else: m.asserted
 

@@ -208,6 +208,32 @@ is run. **Where the values came from is no longer a supposition** — the sectio
 below records the three configuration bytes the firmware writes, read out of the
 booted machine.
 
+## The bulk and interrupt packet bound: the authority contradicts itself
+
+**UNRESOLVED, AND DELIBERATELY LEFT SO.** ISP1362 Rev. 06 states the maximum
+non-isochronous packet twice and does not agree with itself:
+
+| Where | What it says |
+|---|---|
+| Table 109, p.105 | The buffer read and write commands carry *"interrupt/bulk: N ≤ 64 bytes"*, for both `02` to `0F` (write endpoint n buffer) and `12` to `1F` (read endpoint n buffer). Control OUT and control IN are *"N ≤ 64 bytes"* on the same page. |
+| Table 110 with Table 111, p.107, and Table 16, p.52 | `FFOSZ[3:0]` selects the size, and `0011` is **64 bytes** for a non-isochronous endpoint. The four legal non-isochronous codes are `0000`/8, `0001`/16, `0010`/32 and `0011`/64; `0100` to `1111` are **reserved**. |
+| §15.2.1, p.113 | The same bound written as *"bulk/interrupt endpoint: N ≤ 32"*. |
+
+Two places reach 64 and one says 32. **No side is picked here**, and nothing in
+this repository asserts a bound of its own: `include/mcf5307.h` publishes
+`isp1181_slot_buffer`, which reports the buffer THIS MODEL carries for an
+endpoint, and a caller that needs a bound reads it from that answer rather than
+from a constant. §12.3.3, p.51 is what makes a buffer size a packet size at all
+— *"The size of the buffer memory determines the maximum packet size that the
+hardware can support for a given endpoint"* — and Table 15, p.51 fixes endpoint
+0 at 64 bytes both directions while leaving endpoints 1 to 14 programmable. An
+OUT packet larger than the buffer is error code `1011`, *"overflow; the received
+packet was larger than the available buffer space"*, Table 132, p.118.
+
+**Whichever reading is right, a resolution would still not be a fact about the
+ISP1181B.** This is an ISP1362 document, and the section below on the inherited
+command map applies here exactly as it applies to Table 109's opcodes.
+
 ## The endpoint directions the firmware configures
 
 **MEASURED, in the consuming emulator, from the firmware's OWN endpoint-

@@ -3041,7 +3041,12 @@ mcf5307_check_case_sites("t_isp1181_stub" "@MCF5307_ISP1181_STUB_SOURCE@"
 # that cannot be confused with a line, the truncation a caller can see because
 # the call returns the size the line NEEDS, and the overflow that keeps
 # counting after it stops retaining.
-mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 41)
+# MOVED 41 -> 45 WITH THE BUFFER-GEOMETRY DOOR. The four added cases are the
+# per-endpoint geometry that no single device-wide maximum satisfies, the slot
+# this model carries no buffer for that answers 0 without inventing a size, the
+# three states kept apart by the PAIR of answers that neither call separates
+# alone, and the refusals with the nil-pointer form.
+mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 45)
 
 ]==])
 
