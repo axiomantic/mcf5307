@@ -175,6 +175,15 @@ type
     stageFifo: int               ## Where a validate would commit `stage`.
     readBuf: seq[uint8]          ## The bytes a buffer-read command offers.
     log: seq[string]
+      ## The lines the model RETAINS. It stops at `logCapacity`, and the count
+      ## of lines the model WROTE is kept apart in `written` so that a reader
+      ## can subtract and learn how many it cannot see.
+    written: int
+      ## Every line `note` was ever asked to write, whether or not `log` kept
+      ## it. IT IS THE HALF THAT CANNOT BE LOST. A retained log alone answers
+      ## "what did the model say" with no way to ask "and was that all of it",
+      ## and a truncated account that reads as a complete one is the one
+      ## outcome this file refuses everywhere else.
 
 const
   benignValue* = 0x00'u8
@@ -276,8 +285,22 @@ proc fifoName*(index: int): string = fifoNames[index]
 proc isCommandPort*(address: uint32): bool =
   (address and commandSelect) != 0
 
+const logCapacity* = 4096
+  ## How many log lines the model RETAINS. The bound exists because `note` is
+  ## reachable from a bus access: a firmware that hits a refusing site inside
+  ## its own loop writes a line per iteration, and an unbounded log then grows
+  ## with the run rather than with the number of distinct things that went
+  ## wrong.
+  ##
+  ## THE LINES KEPT ARE THE FIRST ONES AND NOT THE LAST. A ring would hold the
+  ## end of a run and lose the first refusal, and the first refusal is the one
+  ## that says what the firmware was denied before everything downstream of it
+  ## went wrong. `written` is what makes the loss readable rather than silent.
+
 proc note(m: ISP1181; line: string) =
-  m.log.add(line)
+  inc m.written
+  if m.log.len < logCapacity:
+    m.log.add(line)
 
 proc updateIrq(m: ISP1181) =
   ## The line is level-triggered and active-low at the pin; the board owns the
@@ -331,6 +354,22 @@ proc lastCommand*(m: ISP1181): int =
 
 proc logLines*(m: ISP1181): seq[string] =
   if m.isNil: @[] else: m.log
+
+proc logWritten*(m: ISP1181): int =
+  ## Every line the model ever wrote. `logWritten - logRetained` is exactly the
+  ## number a reader cannot see, and it is the only figure that says so.
+  if m.isNil: 0 else: m.written
+
+proc logRetained*(m: ISP1181): int =
+  ## The lines still readable through `logLine`.
+  if m.isNil: 0 else: m.log.len
+
+proc logLine*(m: ISP1181; index: int): string =
+  ## The retained line at `index`, or the empty string when there is none. NO
+  ## SITE IN THIS FILE WRITES AN EMPTY LINE, so the empty string is unambiguous
+  ## here; `tests/t_isp1181_stub.nim` is what holds that property at the C
+  ## door rather than this sentence.
+  if m.isNil or index < 0 or index >= m.log.len: "" else: m.log[index]
 
 proc irqAsserted*(m: ISP1181): bool =
   if m.isNil: false else: m.asserted
