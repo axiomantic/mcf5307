@@ -3214,7 +3214,26 @@ mcf5307_check_case_sites("t_isp1181"
 # driven-count inside the expected value, so a sweep that stopped iterating
 # fails on that count rather than on this figure. What this figure catches is
 # a whole case removed.
-mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 32)
+# MOVED 19 -> 23 WITH THE DATA-FLOW COMMANDS. The four added cases are BLOCK 6:
+# the read-out-and-clear round trip through the ports, its refused-endpoint
+# control on the same handle, the write-then-validate IN path, and the four
+# codes the authority parenthesises as illegal.
+# THE EPDIR DECODE IS TWO OF THE CASES THIS FIGURE COVERS, one per direction:
+# a queue and a transmit on an endpoint configured IN against one configured
+# OUT, and a host delivery refused on an endpoint configured IN against one
+# configured OUT. The bit governs both halves of a single buffer, so a figure
+# that covered only the transmit half would let the receive half go untested.
+# MOVED 28 -> 32 WITH THE SET-UP PACKET. The four added cases are BLOCK 7:
+# the one-bit pair that separates a set-up packet from an ordinary OUT packet
+# on the same bytes, SETUPT's survival of a status read and its removal by the
+# clear, the Validate/Clear interlock in both states, and the flush-and-unstall
+# the arrival performs.
+# MOVED 32 -> 33 WITH THE SIXTEEN-SLOT CONFIGURATION SEQUENCE. The one added
+# case drives ISP1362 Rev. 06 section 15.1.1's whole initialization sequence,
+# `0x20` to `0x2F` with an operand each, twice: once with FIFOEN clear on the
+# eleven slots this model carries no buffer for, which must write no line, and
+# once with FIFOEN set on those slots, which must write one line per slot.
+mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 33)
 
 ]==])
 
