@@ -167,6 +167,10 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * as well: the state is terminal. One line of diagnosis goes to standard error
  * the first time it happens.
  *
+ * This path must never abort. A library has no business killing its host: a
+ * plugin that aborts takes the digital audio workstation with it, and the
+ * user loses unsaved work that has nothing to do with this core.
+ *
  * What happens to a caller that ignores this status, which C permits and no
  * attribute can prevent. `mcf5307_create` and `isp1181_create` ask the same
  * latch themselves, and both return null once it is abandoned. Every remaining
