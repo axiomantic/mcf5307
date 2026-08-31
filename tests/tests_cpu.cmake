@@ -4313,11 +4313,9 @@ add_test(NAME t0_no_local_paths
 # ---------------------------------------------------------------------------
 # Put every test this list registered behind the build gate.
 #
-# THIS CALL BELONGS AT THE END OF THE LIST and nowhere else: it reads the
+# This call belongs at the end of the list and nowhere else: it reads the
 # directory's `TESTS` property, so it sees exactly the tests registered above
-# it. A later task that appends a test above this line is covered without
-# editing anything; one that appends BELOW it is not, which is the reason this
-# is the last line of the file.
+# it.
 #
 # It is a no-op unless this project is top level. See `cmake/BuildGate.cmake`.
 mcf5307_require_current_build()

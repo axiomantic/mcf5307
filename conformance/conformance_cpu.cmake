@@ -89,7 +89,7 @@ add_test(NAME mcf5307_conformance_all
 #
 # The gate is registered in the root list, not here, because it is a property
 # of the whole build tree; this call is the `conformance/` side of it and it
-# owns nothing but this directory's own tests. Without it the five conformance
+# owns nothing but this directory's own tests. Without it the conformance
 # tests are exactly the ones the reproduction showed reporting Passed over a
 # `conformance/runner.cpp` that no longer compiles.
 #

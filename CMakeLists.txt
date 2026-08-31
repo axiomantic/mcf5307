@@ -91,11 +91,8 @@ include(cmake/Nim.cmake)
 # The build gate. It registers `t0_build_is_current` -- at top level only --
 # and defines `mcf5307_require_current_build()`, which each registration list
 # calls at its own end to put its own tests behind that gate. It is included
-# BEFORE the test directories because the function must exist when their lists
-# are read, and AFTER `enable_testing()` because it registers a test.
-#
-# THE ONE TEST REGISTERED OUTSIDE A `*_cpu.cmake` LIST, and the file says at
-# length why a whole-tree gate cannot live in a per-task list.
+# before the test directories because the function must exist when their lists
+# are read, and after `enable_testing()` because it registers a test.
 include(cmake/BuildGate.cmake)
 
 # `tests/` is entered in every tree and `conformance/` only at top level.

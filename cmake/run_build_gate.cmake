@@ -1,26 +1,24 @@
 # The body of the `t0_build_is_current` test. `cmake/BuildGate.cmake`
 # registers the test that runs this file with `cmake -P`.
 #
-# IT BUILDS THE TREE IT IS RUN IN AND FAILS WHEN THE BUILD FAILS. That is the
-# whole mechanism. A ctest run whose executables were left over from an earlier
+# It builds the tree it is run in and fails when the build fails. A ctest run whose executables were left over from an earlier
 # successful build reports Passed about source that no longer compiles, and
 # nothing in the run says so; measured twice in this repository on one day,
 # once as `37/37 green` with the build exiting 2, and once as `t0_abi_smoke
-# Passed` with the build exiting 2. Making the build a REGISTERED TEST puts the
+# Passed` with the build exiting 2. Making the build a registered test puts the
 # build's exit status on the same path as every other verdict, so a caller who
 # reads only ctest's summary still sees it.
 #
-# THE COMMAND IS THE ONE `.github/workflows/ci.yml` ALREADY RUNS in its
+# The command is the one `.github/workflows/ci.yml` already runs in its
 # `Configure and build` step -- `cmake --build <dir> --parallel`, no
-# keep-going. That is deliberate and not a coincidence: this gate can then
-# never be redder than CI's own build step, so it introduces no new way for the
+# keep-going. This gate can then never be redder than CI's own build step, so it introduces no new way for the
 # tree to fail. Keep-going belongs in the BUILD presets, whose job is to build
 # as much as they can so a failure is reported per target; it does not belong
 # here, whose job is to answer one question with one bit.
 #
 # `RESULT_VARIABLE` reads the child's own exit status. There is no pipe in this
 # file for the same reason the defect exists at all: `$?` after a pipe reports
-# the LAST command's status, and a build failure read through a pipe reads
+# the last command's status, and a build failure read through a pipe reads
 # exactly like a success.
 
 if(NOT DEFINED MCF5307_BUILD_DIR)
@@ -36,7 +34,7 @@ if(NOT IS_DIRECTORY "${MCF5307_BUILD_DIR}")
         "is not a directory.")
 endif()
 
-# The output is NOT captured. It streams to ctest, so the compiler diagnostics
+# The output is not captured. It streams to ctest, so the compiler diagnostics
 # appear above the banner below and the reader sees which file failed. Both
 # test presets carry `--output-on-failure`, so a failing gate prints them.
 execute_process(
@@ -45,7 +43,7 @@ execute_process(
 
 if(NOT mcf5307_build_rc STREQUAL "0")
     # The banner is printed in NOTICE mode and the abort carries one line.
-    # `message(FATAL_ERROR)` REFLOWS and re-indents its text, which turns a
+    # `message(FATAL_ERROR)` reflows and re-indents its text, which turns a
     # banner into ragged prose; NOTICE mode prints what is written.
     message([[
 ================================================================
