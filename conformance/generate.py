@@ -207,39 +207,36 @@ MEM_SEED_BYTES = (0x02, 0x5A, 0x3C, 0xC1)
 MEM_GUARD = 0x0BADC0DE   # the longword after a longword memory destination
 
 # ---------------------------------------------------------------------------
-# THE ADDRESSING MODES THIS CORPUS DID NOT REACH, AND THE SEEDS THAT SEPARATE
-# A CORRECT EVALUATOR FROM A WRONG ONE.
+# The addressing modes this corpus reaches, and the seeds that separate a
+# correct evaluator from a wrong one.
 #
-# Before these cases, NO case in any group used `(xxx).W`, `(xxx).L`,
-# `(d16,PC)` or `(d8,PC,Xn)`. Three groups shipped green over a third of
-# `eaAddr`, and all three defects that lived there were found by accident.
-# Every case below therefore does two things: it reaches the mode at all, and
-# it PINS THE EXACT ADDRESS, so that an evaluator which reaches a NEIGHBOURING
-# address answers differently.
+# Every case below does two things: it reaches the mode at all, and it pins the
+# exact address, so that an evaluator which reaches a neighbouring address
+# answers differently.
 #
-# THE TWO WINDOWS ARE THE MECHANISM. `EA_WINDOW` is seeded at the address the
+# The two windows are the mechanism. `EA_WINDOW` is seeded at the address the
 # instruction names and `EA_DECOY_WINDOW` at the address a defective evaluator
 # reaches. Every byte of each differs from every byte of the other, and neither
 # window is symmetric, so a byte read, a longword read and a longword read two
 # bytes off all give three different answers:
 #
-#   EA_WINDOW       byte at +0 = 0x80 (bit 7 SET), long at +0 = 0x80112233,
+#   EA_WINDOW       byte at +0 = 0x80 (bit 7 set), long at +0 = 0x80112233,
 #                   long at +2 = 0x22334455
-#   EA_DECOY_WINDOW byte at +0 = 0x0b (bit 7 CLEAR), long at +0 = MEM_GUARD
+#   EA_DECOY_WINDOW byte at +0 = 0x0b (bit 7 clear), long at +0 = MEM_GUARD
 #
 # The bit-7 disagreement is what the BTST cases read and what puts N in the
-# MOVE and ADD cases' status words, so the destination AND the condition codes
+# MOVE and ADD cases' status words, so the destination and the condition codes
 # both separate the readings.
 EA_WINDOW = (0x80, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77)
 EA_DECOY_WINDOW = (0x0B, 0xAD, 0xC0, 0xDE, 0x1F, 0x2E, 0x3D, 0x4C)
 
-# THE ABSOLUTE-LONG ADDRESS, AND THE ADDRESS ITS TWO HALVES SWAPPED.
+# The absolute-long address, and the address its two halves swapped.
 #
-# `(xxx).L` carries its address in TWO extension words. MCF5307 User's Manual
+# `(xxx).L` carries its address in two extension words. MCF5307 User's Manual
 # section 3.7.2, "Organization of Integer Data Formats in Memory", page 3-19:
 # "The address N of a longword data item corresponds to the address of the high
-# order word. The lower order word is located at address N + 2." The FIRST
-# extension word is therefore the HIGH half. `m68k-elf-as -mcpu=5307` agrees:
+# order word. The lower order word is located at address N + 2." The first
+# extension word is therefore the high half. `m68k-elf-as -mcpu=5307` agrees:
 # `btst %d1,0x00030004` assembles to `0339 0003 0004`.
 #
 # `ABS_L_ADDR` and `ABS_L_SWAPPED` are each other's halves exchanged, both are
@@ -249,65 +246,64 @@ EA_DECOY_WINDOW = (0x0B, 0xAD, 0xC0, 0xDE, 0x1F, 0x2E, 0x3D, 0x4C)
 ABS_L_ADDR = 0x00030004
 ABS_L_SWAPPED = 0x00040003
 
-# THE ABSOLUTE-SHORT ADDRESS. `(xxx).W` carries ONE extension word,
+# The absolute-short address. `(xxx).W` carries one extension word,
 # sign-extended. Every case that uses it also names `pc`, so a core that read
 # two words for it - the `(xxx).L` shape - fails on the program counter even
 # when the operand value happens to survive.
 #
-# THE SIGN EXTENSION ITSELF IS NOT PINNED HERE and cannot be: a negative
+# The sign extension itself is not pinned here and cannot be: a negative
 # `(xxx).W` addresses 0xFFFF8000 upward, the runner's board is 1 MiB, and a
 # case whose operand access reports `busUnmapped` traps and fails on the run
 # state rather than on the address. See the uncertainty note in
 # `src/mcf5307/machine.nim`.
 ABS_W_ADDR = MEM_BASE
 
-# WHERE THE ENCODING IS PLACED. The runner defaults to this, and every
-# PC-RELATIVE case NAMES IT in `initial.regs` anyway, so the operand addresses
+# Where the encoding is placed. The runner defaults to this, and every
+# PC-relative case names it in `initial.regs` anyway, so the operand addresses
 # those cases assert are derived from a value the case states rather than from
 # a constant inside the runner.
 EXEC_BASE = 0x10000
 
-# THE PC-RELATIVE BASE IS THE ADDRESS *OF* THE DISPLACEMENT WORD, not the
+# The PC-relative base is the address *of* the displacement word, not the
 # address after it. Every instruction below puts its opcode at `EXEC_BASE` and
 # its displacement word at `EXEC_BASE + 2`, so the operand is at
 # `EXEC_BASE + 2 + PC_DISP`.
 #
-# THE MANUAL DOES NOT STATE THIS - it gives `(d16,PC)` a row in Table 3-5 and
+# The manual does not state this - it gives `(d16,PC)` a row in Table 3-5 and
 # no effective-address equation anywhere - so the authority is the pinned
 # assembler. Measured: `btst %d1,(target,%pc)` with the opcode at 0 assembles
 # to `033a 0004` and the linker places `target` at 6, and
 # `m68k-elf-objdump -m m68k:5307` prints `btst %d1,%pc@(6 <target>)`. Base
 # plus 4 is 6, so the base is 2 - the address of the displacement word.
 #
-# A CORE THAT TOOK THE BASE AFTER THE WORD IS EXACTLY TWO BYTES HIGH, which is
+# A core that took the base after the word is exactly two bytes high, which is
 # why `EA_WINDOW` is eight bytes and no two of them are equal: the byte the
 # instruction names and the byte two along are different, and so are the
 # longwords starting at each.
 PC_DISP = 0x1E
 PC_OPERAND = EXEC_BASE + 2 + PC_DISP
 
-# THE INDEX REGISTER'S WIDTH, AND THE ONE VALUE THAT CAN SEE IT.
+# The index register's width, and the one value that can see it.
 #
-# An indexed extension word selects a WORD or a LONG index. The pinned
-# assembler puts that select at BIT 11: `btst %d1,(4,%pc,%d2)` assembles to
-# `033b 2804`, whose extension word `2804` has bit 11 SET and bit 8 CLEAR, and
-# `m68k-elf-objdump -m m68k:5307` prints `%pc@(0x6,%d2:l)` - `:l`, a LONG
+# An indexed extension word selects a word or a long index. The pinned
+# assembler puts that select at bit 11: `btst %d1,(4,%pc,%d2)` assembles to
+# `033b 2804`, whose extension word `2804` has bit 11 set and bit 8 clear, and
+# `m68k-elf-objdump -m m68k:5307` prints `%pc@(0x6,%d2:l)` - `:l`, a long
 # index. Bit 8 is the brief-format marker and is always zero; a core that read
-# the select there answers WORD for every instruction the assembler emits.
+# the select there answers word for every instruction the assembler emits.
 #
-# A SMALL POSITIVE INDEX CANNOT TELL THE TWO READINGS APART, which is why the
-# existing `tests/t_logic.nim` case used one and was explicitly agnostic.
+# A small positive index cannot tell the two readings apart.
 # `INDEX_VALUE` is the value that can: its low word is 0xfff0, which
 # sign-extends to -16, while the whole longword is +65520. The two readings
 # therefore land 65536 bytes apart, both inside the runner's 1 MiB board, and
 # each case seeds `EA_WINDOW` at one and `EA_DECOY_WINDOW` at the other.
 #
-# THE MANUAL DOES NOT PRINT THE EXTENSION WORD'S LAYOUT - there is no
+# The manual does not print the extension word's layout - there is no
 # brief-format figure anywhere in it - so the assembler is the authority for
-# the bit position. What the manual DOES say is section 3.5.2, "Address Error
+# the bit position. What the manual does say is section 3.5.2, "Address Error
 # Exception", page 3-15: "Any attempted use of a word-sized index register
 # (Xi.w) ... generates an address error". `m68k-elf-as -mcpu=5307` agrees and
-# REJECTS `btst %d1,(4,%pc,%d2.w)`, so on this part the select is always LONG
+# rejects `btst %d1,(4,%pc,%d2.w)`, so on this part the select is always long
 # and a core reading bit 8 is wrong for every legal encoding.
 INDEX_D8 = 4
 INDEX_VALUE = 0x0000FFF0
@@ -332,39 +328,40 @@ def lw(addr, value):
 
 
 # ---------------------------------------------------------------------------
-# CPU-10's own seeds: the stack, the branch targets and the vector table.
+# The control group's own seeds: the stack, the branch targets and the vector
+# table.
 #
-# THE STACK MUST BE INSIDE THE RUNNER'S BOARD AND THE DEFAULT IS NOT.
+# The stack must be inside the runner's board and the default is not.
 # `conformance/runner.cpp` resets A7 to 0x400000 and its board is 1 MiB, so a
 # push through the default pointer is silently dropped by `MemBoard::write` and
 # a pop reads back zero. Every case below that touches the stack - BSR, JSR,
-# RTS, RTE, TRAP - therefore NAMES `a7`, and names it inside the board.
+# RTS, RTE, TRAP - therefore names `a7`, and names it inside the board.
 #
 # `CTRL_STACK` is longword-aligned so that the TRAP cases which vary A7's low
-# two bits can do so by ADDING to it, and every one of them still writes its
+# two bits can do so by adding to it, and every one of them still writes its
 # frame at the same 0-modulo-4 address. Table 3-2 of the MCF5307 User's Manual
 # (page 3-14) is the rule those cases assert; see the TRAP block below.
 CTRL_STACK = 0x3000
 
-# THE GUARD LONGWORD AT THE INCOMING A7. A push writes BELOW the pointer, so
-# the longword AT it must come back untouched; each case pairs this with a
+# The guard longword at the incoming A7. A push writes below the pointer, so
+# the longword at it must come back untouched; each case pairs this with a
 # second guard below whatever it wrote. Seeding and asserting both makes "the
 # core wrote four bytes, at this address, and nowhere else" an assertion rather
 # than an assumption. `MEM_GUARD` is the same 0x0BADC0DE the earlier groups use.
 CTRL_GUARD_AT = CTRL_STACK              # at the incoming A7
 
-# THE BRANCH AND CALL TARGETS. Both are inside the board, neither is symmetric,
+# The branch and call targets. Both are inside the board, neither is symmetric,
 # and neither shares a byte with the other, so a program counter that landed on
 # the wrong one is a different value in every byte.
 CTRL_TARGET = 0x00054320
 CTRL_TARGET_2 = 0x00098760
 
-# THE EXCEPTION VECTOR TABLE. MCF5307 User's Manual Table 3-1, "Exception
+# The exception vector table. MCF5307 User's Manual Table 3-1, "Exception
 # Vector Assignments", page 3-13: `TRAP #0-15` are vector numbers 32 to 47 at
 # vector offsets $080 to $0BC, and the vector offset is 4 x vector_number. The
 # table is based at the vector base register, whose reset value is zero
 # (Table 3-1's own offsets, and the VBR reset value $00000000 in the memory
-# map), and the core has no VBR register yet - CPU-11 adds MOVEC. So the
+# map), and the core has no VBR register yet. So the
 # vector longword of `trap #n` is at 4 * (32 + n) and these two cases seed
 # exactly that.
 TRAP_VECTOR_0 = 4 * 32                  # $080
@@ -388,23 +385,23 @@ def frame_fv(fmt, vector, sr):
 
 
 # ---------------------------------------------------------------------------
-# THE CONDITIONAL BRANCH TABLE, AND WHY ITS CASES CANNOT ALL START FROM
+# The conditional branch table, and why its cases cannot all start from
 # `SR_DIRTY`.
 #
 # Every other case in this corpus starts from `SR_DIRTY` so that a flag the
-# instruction must CLEAR is separable from a flag it never wrote. A `Bcc`
-# writes NO flag, and the incoming status register is its INPUT: it is the
+# instruction must clear is separable from a flag it never wrote. A `Bcc`
+# writes no flag, and the incoming status register is its input: it is the
 # whole of what decides whether the branch is taken. One fixed incoming word
 # would exercise one truth value of each condition and leave the other
 # unreached.
 #
-# So each condition below carries TWO condition-code words - one on which it is
-# TRUE and one on which it is FALSE - and the pair is chosen to differ in the
-# flags THAT condition reads. `X` is set in both halves of every pair, because
+# So each condition below carries two condition-code words - one on which it is
+# true and one on which it is false - and the pair is chosen to differ in the
+# flags that condition reads. `X` is set in both halves of every pair, because
 # no condition reads it and its arrival unchanged is the "Bcc touches no flag"
 # assertion this group can make.
 #
-# THIS TABLE SAMPLES THE CONDITION TABLE; IT DOES NOT PIN IT. Two conditions
+# This table samples the condition table; it does not pin it. Two conditions
 # that agree on both words of a pair are not separated by that pair, and the
 # corpus cannot afford the six condition-code words it takes to separate all
 # sixteen. `tests/t_control.nim` runs the FULL 16 conditions x 16 condition-code
@@ -1868,7 +1865,7 @@ CASES = {
 
         # -------------------------------------------------------- (xxx).W
         #
-        # AN ABSOLUTE-SHORT MEMORY DESTINATION. `eaMemoryAlterable` admits
+        # An absolute-short memory destination. `eaMemoryAlterable` admits
         # `(xxx).W`, and the `Dn op <ea> -> <ea>` direction of OR is the path
         # that writes one. The guard longword after it is asserted unchanged,
         # so a store that was too wide fails.
@@ -1893,8 +1890,8 @@ CASES = {
 
         # -------------------------------------------------------- (xxx).L
         #
-        # BOTH DIRECTIONS OF AND REACH THE ABSOLUTE MODES and they are separate
-        # code paths: the `<ea>,Dn` direction READS through `eaRead` and the
+        # Both directions of AND reach the absolute modes and they are separate
+        # code paths: the `<ea>,Dn` direction reads through `eaRead` and the
         # `Dn,<ea>` direction resolves a writable reference through
         # `eaResolve`. Each path gets its own case, and each names the swapped
         # address and asserts that window untouched.
@@ -1943,9 +1940,9 @@ CASES = {
                 "mem": (mem_bytes(ABS_L_ADDR, EA_WINDOW)
                         + mem_bytes(ABS_L_SWAPPED, EA_DECOY_WINDOW)),
             },
-            # The operand is ONE BYTE: 0x80 at ABS_L_ADDR, whose bit 7 is SET,
+            # The operand is one byte: 0x80 at ABS_L_ADDR, whose bit 7 is set,
             # so Z clears. The byte at the swapped address is 0x0b, whose bit 7
-            # is CLEAR, so the other reading sets Z instead.
+            # is clear, so the other reading sets Z instead.
             "expected": {
                 "regs": {"d1": 7, "pc": EXEC_BASE + 6,
                          "sr": SR_DIRTY & ~CCR_Z},
@@ -1956,13 +1953,11 @@ CASES = {
 
         # ------------------------------------------------------- (d16,PC)
         #
-        # A DYNAMIC BTST IS THE ONE OPERATION IN THIS GROUP WHOSE MASK ADMITS A
-        # PC-RELATIVE OPERAND - it reads and never writes. Bit 7 of the byte at
-        # `PC_OPERAND` is SET and bit 7 of the byte two along is CLEAR, so Z
+        # A dynamic BTST is the one operation in this group whose mask admits a
+        # PC-relative operand - it reads and never writes. Bit 7 of the byte at
+        # `PC_OPERAND` is set and bit 7 of the byte two along is clear, so Z
         # comes out the opposite way under the two readings of the base.
-        # `tests/t_logic.nim` executes the same instruction and, until this
-        # commit, deliberately seeded both candidate addresses alike so that it
-        # would not pin the base; it now pins it.
+        # `tests/t_logic.nim` executes the same instruction and pins it too.
         {
             "name": "btst_b_pc_disp",
             "mnemonic": "btst",
@@ -1997,7 +1992,7 @@ CASES = {
             },
         },
         {
-            # THE SAME EXTENSION WORD ON AN ADDRESS-REGISTER BASE. `eaAnIndex`
+            # The same extension word on an address-register base. `eaAnIndex`
             # and `ea7PCIndex` share `indexOperand`, so the width rule is one
             # line of code serving two addressing modes; a case that covered
             # only the PC form would leave the other half of that line
@@ -2021,34 +2016,34 @@ CASES = {
         },
     ],
 
-    # ------------------------------------------------------------------ CPU-10
-    # THE CONDITION-CODE RULES OF THIS GROUP, AND WHERE EACH COMES FROM.
+    # -----------------------------------------------------------------------
+    # The condition-code rules of this group, and where each comes from.
     #
     #   NOP, BRA, BSR, Bcc, JMP, JSR, Scc
-    #       NO CONDITION CODE AT ALL. MCF5307 User's Manual Table 3-7,
+    #       No condition code at all. MCF5307 User's Manual Table 3-7,
     #       "Instruction Set Summary", pages 3-23 and 3-25, gives each of these
-    #       an OPERATION column that names the program counter, the stack
-    #       pointer or the destination and NO flag. Every one of these cases
+    #       an operation column that names the program counter, the stack
+    #       pointer or the destination and no flag. Every one of these cases
     #       therefore expects its incoming status word back byte for byte.
     #
     #   TST
     #       "Set Integer Condition Codes" (Table 3-7, page 3-25) at the operand
-    #       size. N and Z from the operand, V and C cleared, X UNTOUCHED -
-    #       section 3.2.1.5, page 3-8, defines V as an ARITHMETIC overflow, C as
+    #       size. N and Z from the operand, V and C cleared, X untouched -
+    #       section 3.2.1.5, page 3-8, defines V as an arithmetic overflow, C as
     #       a carry out of an addition or a borrow in a subtraction, and TST
     #       performs neither. That is `setNzClearVc`, the rule MOVE already has.
     #
     #   CMP, CMPA, CMPI
     #       "Destination - Source" (Table 3-7, page 3-23) with the result
-    #       DISCARDED. N, Z, V and C come from that subtraction and X IS NOT
-    #       WRITTEN. The X rule is uncertainty 2 in `control.nim`'s header: the
+    #       discarded. N, Z, V and C come from that subtraction and X is not
+    #       written. The X rule is uncertainty 2 in `control.nim`'s header: the
     #       same section 3.2.1.5 says X takes C's value "for arithmetic
     #       operations", which read literally would have a comparison write it.
     #       These cases assert X unchanged, so a reader who reverses that
     #       reading must change them.
     #
     #   RTE
-    #       The status register is RELOADED from the frame, not computed. Every
+    #       The status register is reloaded from the frame, not computed. Every
     #       RTE case below therefore starts from a DIFFERENT word than the one
     #       it expects, so "the core reloaded it" is separable from "the core
     #       left it alone".
@@ -2088,7 +2083,7 @@ CASES = {
         },
 
         # -------------------------------------------------------------- BRA
-        # BOTH DIRECTIONS OF BOTH FORMS. A displacement is SIGNED, and a core
+        # Both directions of both forms. A displacement is signed, and a core
         # that zero-extended it passes every forward case and fails both
         # backward ones. `bra.b .-6` is `60f8` and `bra.w .-0x4000` is
         # `6000 bffe`, each assembled by `m68k-elf-as -mcpu=5307`.
@@ -2124,8 +2119,8 @@ CASES = {
         },
 
         # -------------------------------------------------------------- BSR
-        # THE RETURN ADDRESS IS THE ADDRESS AFTER THE WHOLE INSTRUCTION, AND
-        # THE TWO FORMS ARE DIFFERENT LENGTHS. Table 3-7, page 3-23, gives BSR
+        # The return address is the address after the whole instruction, and
+        # the two forms are different lengths. Table 3-7, page 3-23, gives BSR
         # as "SP - 4 -> SP; PC -> (SP); PC + dn -> PC". The byte form pushes
         # opcode + 2 and the word form pushes opcode + 4; a core that pushed
         # the branch BASE - which is opcode + 2 for both - passes the byte case
@@ -2167,14 +2162,14 @@ CASES = {
     ] + bcc_cases() + [
 
         # -------------------------------------------------------------- Scc
-        # THE DESTINATION IS ONE BYTE OF A DATA REGISTER AND NOTHING WIDER.
-        # Table 3-7, page 3-25, gives `Scc Dx` an OPERAND SIZE of 8 and the
+        # The destination is one byte of a data register and nothing wider.
+        # Table 3-7, page 3-25, gives `Scc Dx` an operand size of 8 and the
         # operation "If Condition True, Then 1's -> Destination; Else 0's ->
         # Destination". `DIRTY_D` is 0x12345678 and every byte of it differs,
         # so a core that wrote the whole register lands on 0xFFFFFFFF or 0 and
         # a core that wrote the wrong byte lane lands somewhere else again.
         #
-        # THE OPERAND IS A DATA REGISTER AND NOTHING ELSE. Table 3-12, "One
+        # The operand is a data register and nothing else. Table 3-12, "One
         # Operand Instruction Execution Times", page 3-27: the `scc Dx` row
         # carries `1(0/0)` under `Rn` and A DASH under `(An)`, `(An)+`, `-(An)`,
         # `(d16,An)`, `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`. The `clr.b` rows
@@ -2244,7 +2239,7 @@ CASES = {
         },
 
         # -------------------------------------------------------------- TST
-        # ALL THREE SIZES EXIST HERE AND THE MANUAL PRINTS ALL THREE. Table
+        # All three sizes exist here and the manual prints all three. Table
         # 3-12, page 3-27, carries a `tst.b`, a `tst.w` AND a `tst.l` row, each
         # timed under every one of `Rn`, `(An)`, `(An)+`, `-(An)`, `(d16,An)`,
         # `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx` - no dash anywhere in the three
@@ -2252,7 +2247,7 @@ CASES = {
         # word forms the rest of the core traps, and `m68k-elf-as -mcpu=5307`
         # agrees: it accepts `tst.b %d0`, `tst.w %d0` and `tst.l #5`.
         #
-        # EACH SIZED CASE ANSWERS THE OPPOSITE WAY AT THE OTHER SIZES. The seed
+        # Each sized case answers the opposite way at the other sizes. The seed
         # is chosen so that the flag the case asserts changes if the operand is
         # read one size wider or narrower, which is what makes these cases a
         # test of the SIZE and not only of the flags.
@@ -2275,7 +2270,7 @@ CASES = {
                                   "sr": SR_BASE | CCR_X | CCR_N}},
         },
         {
-            # THE OPERAND IS ZERO AND THAT IS THE POINT. Every other case in
+            # The operand is zero and that is the point. Every other case in
             # this corpus seeds its destination non-zero; TST has no
             # destination, and the value it reads is the whole of its input.
             "name": "tst_l_zero_sets_z",
@@ -2286,7 +2281,7 @@ CASES = {
                                   "sr": SR_BASE | CCR_X | CCR_Z}},
         },
         {
-            # 0x1234FFFF IS NEGATIVE AS A WORD AND POSITIVE AS A LONGWORD.
+            # 0x1234FFFF is negative as a word and positive as a longword.
             "name": "tst_w_negative_low_word",
             "mnemonic": "tst.w",
             "instruction": "tst.w %d0",
@@ -2296,7 +2291,7 @@ CASES = {
                                   "sr": SR_BASE | CCR_X | CCR_N}},
         },
         {
-            # 0x12340000 IS ZERO AS A WORD AND NON-ZERO AS A LONGWORD.
+            # 0x12340000 is zero as a word and non-zero as a longword.
             "name": "tst_w_zero_low_word",
             "mnemonic": "tst.w",
             "instruction": "tst.w %d0",
@@ -2306,7 +2301,7 @@ CASES = {
                                   "sr": SR_BASE | CCR_X | CCR_Z}},
         },
         {
-            # 0x12345680 IS NEGATIVE AS A BYTE AND POSITIVE AS A WORD.
+            # 0x12345680 is negative as a byte and positive as a word.
             "name": "tst_b_negative_low_byte",
             "mnemonic": "tst.b",
             "instruction": "tst.b %d0",
@@ -2326,9 +2321,9 @@ CASES = {
                                   "sr": SR_BASE | CCR_X | CCR_Z}},
         },
         {
-            # AN ADDRESS REGISTER IS A LEGAL `tst.l` OPERAND AND NOT A LEGAL
+            # An address register is a legal `tst.l` operand and not a legal
             # `tst.b` ONE. `m68k-elf-as -mcpu=5307` accepts `tst.l %a0` and
-            # `tst.w %a0` and REJECTS `tst.b %a0`; the byte half is a trap case
+            # `tst.w %a0` and rejects `tst.b %a0`; the byte half is a trap case
             # and lives in `tests/t_control.nim`.
             "name": "tst_l_address_register",
             "mnemonic": "tst.l",
@@ -2339,7 +2334,7 @@ CASES = {
                                   "sr": SR_BASE | CCR_X}},
         },
         {
-            # TST READS AND WRITES NOTHING. All four seeded bytes are asserted
+            # TST reads and writes nothing. All four seeded bytes are asserted
             # unchanged, so a core that wrote its result back fails here.
             "name": "tst_l_memory_reads_and_does_not_write",
             "mnemonic": "tst.l",
@@ -2355,7 +2350,7 @@ CASES = {
             },
         },
         {
-            # THE POSTINCREMENT IS BY THE OPERAND SIZE, WHICH IS ONE BYTE HERE.
+            # The postincrement is by the operand size, which is one byte here.
             # A core that advanced by four lands on `MEM_BASE + 4`.
             "name": "tst_b_postincrement_advances_by_one",
             "mnemonic": "tst.b",
@@ -2371,7 +2366,7 @@ CASES = {
             },
         },
         {
-            # AN IMMEDIATE OPERAND IS TIMED IN TABLE 3-12 - `tst.l` reads
+            # An immediate operand is timed in Table 3-12 - `tst.l` reads
             # `1(0/0)` under `#xxx` - and `m68k-elf-as -mcpu=5307` emits
             # `4abc 0000 0005` for it. The program counter is what proves the
             # core consumed TWO extension words and not one.
@@ -2384,9 +2379,9 @@ CASES = {
         },
 
         # -------------------------------------------------------------- CMP
-        # `cmp.l %d0,%d1` IS `d1 - d0`, AND THE ORDER IS MEASURED. The word is
-        # `b280` = `1011 001 010 000 000`: bits 11..9 are the DESTINATION data
-        # register (d1) and the low six bits are the SOURCE effective address
+        # `cmp.l %d0,%d1` is `d1 - d0`, and the order is measured. The word is
+        # `b280` = `1011 001 010 000 000`: bits 11..9 are the destination data
+        # register (d1) and the low six bits are the source effective address
         # (d0). Table 3-7, page 3-23, gives the operation as "Destination -
         # Source". A core that subtracted the other way round gets the sign and
         # the carry of `cmp_l_source_greater` backwards.

@@ -1,85 +1,39 @@
-## `t_control` - control flow and comparison. Task CPU-10 owns this file.
-## Design section 6.1.
+## `t_control` - control flow and comparison.
 ##
-## THE THREE DOCUMENTS THIS FILE CITES ARE OUTSIDE THIS REPOSITORY, so each is
-## named in full here, as `tests/t_logic.nim` also names them in full.
+## The MCF5307 User's Manual is the document every table and page cited below
+## refers to: Motorola, "MCF5307 ColdFire Integrated Microprocessor User's
+## Manual", order number MCF5307UM/AD, (c) 1998. It is not in this repository
+## and may not be copied into it, which is why every citation below names its
+## table, page and row instead of quoting.
 ##
-##   DESIGN SECTION 6.1 is section 6 "The MCF5307 Core and the Board Model",
-##   subsection 6.1 "The core", of the NMG2 emulator DESIGN DOCUMENT
-##   (`2026-08-04-nmg2-emulator-design.md`, in the nord-modular-emulator plan
-##   set). Opened and checked: it is the section that makes the legality mask a
-##   MANDATORY property of this core - "Each opcode carries its own legality
-##   mask. An illegal mode traps."
+## Why this file exists beside `mcf5307_conformance_control`. That corpus is
+## positive cases: encodings this part has, run against an expected state. A
+## positive corpus cannot see a wrongly-claimed encoding, because a stolen
+## encoding produces a passing execution of a different instruction. Two
+## shapes have shipped that way - a decoder arm claiming another opcode's
+## encoding, and an operand the mask admitted and the executor refused - and
+## neither reached a corpus case.
 ##
-##   AGENTS.MD SECTION 11 is section 11 "External resources" of the
-##   nord-modular-emulator project's `AGENTS.md`, which names the two Motorola
-##   documents this group takes its semantics from and gives a download
-##   location for each.
-##
-##   THE MCF5307 USER'S MANUAL is the document every table and page cited below
-##   refers to. Its full identity, so that a reader can be sure of holding the
-##   same edition: Motorola, "MCF5307 ColdFire Integrated Microprocessor User's
-##   Manual", order number MCF5307UM/AD, (c) 1998 - the order number is printed
-##   at the top right of the cover and the title is the title page. IT IS NOT
-##   IN THIS REPOSITORY, it may not be copied into it, and a reader who has
-##   only this tree must obtain it separately from the location AGENTS.md
-##   section 11 gives. That is why every citation below names its table, page
-##   and row instead of quoting.
-##
-##   THE COLDFIRE FAMILY PROGRAMMER'S REFERENCE MANUAL IS NOT on this
-##   machine and the network is closed; it is what would settle the four
-##   uncertainties `src/mcf5307/control.nim`'s header declares.
-##
-##   CPU-10'S PLAN ROW is the CPU-10 row of section 11.3 "The instruction set"
-##   of the NMG2 emulator IMPLEMENTATION PLAN
-##   (`2026-08-04-nmg2-emulator-impl.md`). Opened and checked: its Check line
-##   is `mcf5307_conformance_control`, it lists the fourteen opcodes this group
-##   covers, and it states in bold that "A `Bcc` with an 8-bit displacement of
-##   `0xFF` means a 32-bit displacement, which is ISA_B and illegal on this
-##   part. It must trap."
-##
-## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_control`. That corpus is 82
-## POSITIVE cases: encodings this part has, run against an expected state. A
-## positive corpus CANNOT SEE a wrongly-claimed encoding, because a stolen
-## encoding produces a PASSING EXECUTION OF A DIFFERENT INSTRUCTION. CPU-9
-## shipped exactly that - its decoder claimed line 1011 opmode 111, which is
-## CMPA.L, as an EOR, and `cmpa.l %d0,%a1` executed as `EOR.L D1,D0` while the
-## corpus stayed at 41 of 41 - and it shipped a second defect of a different
-## shape beside it, an operand the mask admitted and the executor refused,
-## which the corpus could not see either because it never offered that
-## operand. `tests/t_logic.nim`'s header records both.
-##
-## THIS GROUP ARRIVED WITH ONE OF ITS OWN AND THE MEASUREMENT IS HERE. Before
-## this task, `decode.nim`'s ADDQ and SUBQ arms matched on `word and 0xF100`
-## alone and therefore claimed EVERY `0101 cccc 11 <ea>` word - 1024 words, of
-## which 128 are `Scc Dn`, three are TRAPF and NONE are DBcc, because DBcc is
-## not an instruction on this part - as an ADDQ or a SUBQ whose size field
-## was the illegal `11`. Measured on a sweep of all 65536 words against the
-## decoder of commit a124077: of those 1024 words, 512 came back `opAddq` and
-## 512 `opSubq`, and NOT ONE came back unclaimed. The corpus could not see it:
-## `alu.nim` traps a size of zero, so every one of those words trapped, and a
-## trap is what an unimplemented opcode looks like. The repair is the
-## `sizeField(word) != 0` guard those two arms now carry - the same guard CLR,
-## NEG, NEGX and NOT already carried for the same reason - and
+## An example this group carries: `decode.nim`'s ADDQ and SUBQ arms once
+## matched on `word and 0xF100` alone and claimed every `0101 cccc 11 <ea>`
+## word - 1024 words, of which 128 are `Scc Dn`, three are TRAPF and none are
+## DBcc - as an ADDQ or a SUBQ whose size field was the illegal `11`. Every
+## one of them trapped, because `alu.nim` traps a size of zero, and a trap is
+## what an unimplemented opcode looks like. The repair is the
+## `sizeField(word) != 0` guard those two arms now carry, and
 ## `scc_is_not_an_addq` below is what holds it.
 ##
-## EVERY CASE ASSERTS A COMPLETE TUPLE, never one field, exactly as `t_alu`,
-## `t_move` and `t_logic` do. A case that must TRAP asserts every register it
-## must not have disturbed together with `fault`, `halted` and the cycle
-## return, so "it trapped" is separable from "it executed and wrote nothing".
+## Every case asserts a complete tuple, never one field. A case that must trap
+## asserts every register it must not have disturbed together with `fault`,
+## `halted` and the cycle return, so "it trapped" is separable from "it
+## executed and wrote nothing".
 ##
-## THE CONDITION MATRIX IS EXHAUSTIVE AND THE CORPUS IS A SAMPLE. Sixteen
+## The condition matrix is exhaustive and the corpus is a sample. Sixteen
 ## conditions over sixteen condition-code words is 256 executions per opcode,
 ## which no corpus can carry; it is one loop here. Each condition's answer over
-## all sixteen words is folded into ONE 16-bit vector and compared against a
-## LITERAL constant, so the expected value is a number a reader can check
+## all sixteen words is folded into one 16-bit vector and compared against a
+## literal constant, so the expected value is a number a reader can check
 ## rather than a second copy of the implementation's own expression.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
-## semantics, the condition-code rules and the encodings are facts about
-## Motorola silicon; they are taken from the ColdFire Family Programmer's
-## Reference Manual and the MCF5307 User's Manual (AGENTS.md section 11) and
-## from this project's own measurements with the pinned cross assembler.
 
 import std/strutils
 
@@ -144,10 +98,9 @@ proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
   discard
 
 # ---------------------------------------------------------------------------
-# The runner. It is `t_logic`'s and `t_alu`'s, for the reason those files give:
-# a pass here has to be a pass of the SHIPPED path - `mcf5307_reset`,
-# `mcf5307_set_reg`, `mcf5307_exec`, `mcf5307_get_reg` - and not of an internal
-# helper reached around the back.
+# The runner. It is `t_logic`'s and `t_alu`'s: a pass here has to be a pass of
+# the shipped path - `mcf5307_reset`, `mcf5307_set_reg`, `mcf5307_exec`,
+# `mcf5307_get_reg` - and not of an internal helper reached around the back.
 
 const
   execBase = 0x100'u32     ## where the instruction words are placed
@@ -157,15 +110,15 @@ const
   dirtyA = 0x0BADC0DE'u32  ## the address-register seed the corpus uses
   guard = 0x0BADC0DE'u32
   writableOperand = 0x400'u32
-    ## AN ADDRESS INSIDE THE BOARD, for the trap cases whose refused operand
-    ## would otherwise be a WRITE THE BOARD REFUSES ANYWAY. It is clear of the
+    ## An address inside the board, for the trap cases whose refused operand
+    ## would otherwise be a write the board refuses anyway. It is clear of the
     ## encoding at `execBase` and below `stackBase`. See the note on the two
     ## Scc rows in block 6 for the measurement that put it here.
   zero8: array[8, uint32] = [0'u32, 0, 0, 0, 0, 0, 0, 0]
 
 type Outcome = object
   cycles: uint32
-    ## `mcf5307_exec(ctx, 1)`'s RETURN, WHICH IS NOT A CYCLE COUNT despite the
+    ## `mcf5307_exec(ctx, 1)`'s return, which is not a cycle count despite the
     ## name. `mcf5307_exec` saturates at its budget and every instruction in
     ## this group costs 2 for the fetch plus at least one more, so the value is
     ## 1 for an instruction that ran and 0 for one that trapped. The
@@ -199,7 +152,7 @@ proc runIns(words: openArray[uint16];
     discard mcf5307_set_reg(ctx, cint(i), d[i])
   for i in 0 .. 6:
     discard mcf5307_set_reg(ctx, cint(8 + i), a[i])
-  # The status register is set LAST: `mcf5307_reset` writes it, so an earlier
+  # The status register is set last: `mcf5307_reset` writes it, so an earlier
   # write would be overwritten and every case that asserts an untouched
   # condition code would silently run with a clear one.
   discard mcf5307_set_reg(ctx, 16, sr)
@@ -225,7 +178,7 @@ proc expectTrap(o: Outcome; d0, a0, a7, sr: uint32; label: string) =
   ## reach. It must halt with `fault`, return no cycles, and leave the register
   ## file and the status register exactly as it found them.
   ##
-  ## EVERY CALLER SEEDS `d0`, `a0` AND `sr` NON-ZERO. A trap case whose
+  ## Every caller seeds `d0`, `a0` and `sr` non-zero. A trap case whose
   ## registers start at zero asserts `0 == 0` and would pass against a core
   ## that wrote a zero into them.
   let got = (d0: o.d[0], a0: o.a[0], a7: o.a[7], sr: o.sr,
@@ -253,14 +206,14 @@ const trapD: array[8, uint32] = [dirtyD, 0, 0, 0, 0, 0, 0, 0]
 const trapA: array[8, uint32] = [dirtyA, 0, 0, 0, 0, 0, 0, 0]
 
 # ---------------------------------------------------------------------------
-# THE CONDITION TABLE, WRITTEN OUT AS SIXTEEN LITERAL VECTORS.
+# The condition table, written out as sixteen literal vectors.
 #
 # Bit k of each vector is the condition's answer when the condition-code bits
 # hold the value k - C at bit 0, V at bit 1, Z at bit 2, N at bit 3, which is
 # the layout section 3.2.1.5 of the MCF5307 User's Manual prints on page 3-8
 # and the layout `machine.nim`'s `ccrC` .. `ccrX` name.
 #
-# THESE ARE LITERALS AND NOT A SECOND COPY OF THE IMPLEMENTATION'S EXPRESSION.
+# These are literals and not a second copy of the implementation's expression.
 # A test that re-derived `(not C) and (not Z)` beside the core's own
 # `(not C) and (not Z)` asserts that one transcription equals the other and
 # would agree with the core about a rule they had both got wrong. A vector is a
@@ -268,16 +221,17 @@ const trapA: array[8, uint32] = [dirtyA, 0, 0, 0, 0, 0, 0, 0]
 # - exactly those with C clear and Z clear - and a reader can check that by
 # hand.
 #
-# WHAT THE MANUAL ON THIS MACHINE DOES AND DOES NOT SETTLE. It gives the
-# CONDITION-CODE BITS (section 3.2.1.5, page 3-8) and it names the wildcard
+# What the manual settles and what it does not. It gives the
+# condition-code bits (section 3.2.1.5, page 3-8) and it names the wildcard
 # `cc` as "Logical Condition (example: NE for not equal)" in Table 3-6, whose
-# `cc` row is on page 3-21 where the table begins - and it prints NO table of
-# the sixteen conditions and their tests anywhere. The four-bit ENCODING of each is measured rather than assumed:
+# `cc` row is on page 3-21 where the table begins - and it prints no table of
+# the sixteen conditions and their tests anywhere. The four-bit encoding of
+# each is measured:
 # every mnemonic below was assembled by `m68k-elf-as -mcpu=5307`, which put
 # `bhi` at 0x62, `bls` at 0x63, `bcc` at 0x64, `bcs` at 0x65, `bne` at 0x66,
 # `beq` at 0x67, `bvc` at 0x68, `bvs` at 0x69, `bpl` at 0x6a, `bmi` at 0x6b,
 # `bge` at 0x6c, `blt` at 0x6d, `bgt` at 0x6e and `ble` at 0x6f, and `st` at
-# 0x50c0 and `sf` at 0x51c0. The BOOLEAN TEST of each is the M68000 Family
+# 0x50c0 and `sf` at 0x51c0. The boolean test of each is the M68000 family
 # definition and it is uncertainty 1 in `control.nim`'s header.
 const conditionVectors: array[16, uint16] = [
   0xFFFF'u16,   #  0  T    always
@@ -303,17 +257,17 @@ const conditionNames: array[16, string] = [
   "vc", "vs", "pl", "mi", "ge", "lt", "gt", "le"]
 
 # ---------------------------------------------------------------------------
-# BLOCK 1. THE SIXTEEN CONDITIONS, THROUGH `Bcc`.
+# Block 1. The sixteen conditions, through `Bcc`.
 #
 # `0110 cccc dddddddd` with a displacement of 8: taken lands at
 # `execBase + 2 + 8` and not taken at `execBase + 2`. The two are different
 # addresses, so the program counter alone answers "was it taken".
 #
-# CONDITIONS 0 AND 1 ARE `BRA` AND `BSR` AND BOTH ARE ALWAYS TAKEN. They occupy
+# Conditions 0 and 1 are `BRA` and `BSR` and both are always taken. They occupy
 # the slots a naive reading would give to the always-true and always-false
 # conditions, and `0x0000` for slot 1 would be exactly what a core that treated
 # `BSR` as `Bf` produced. Their expected vector is `0xffff` in both, which is
-# `conditionVectors[0]` for the first and NOT `conditionVectors[1]` for the
+# `conditionVectors[0]` for the first and not `conditionVectors[1]` for the
 # second - the one place in this file where the branch table and the Scc table
 # deliberately disagree.
 
@@ -344,16 +298,16 @@ block:
       "0x" & taken.toHex(4), "0x" & want.toHex(4))
 
 # ---------------------------------------------------------------------------
-# BLOCK 2. THE SIXTEEN CONDITIONS, THROUGH `Scc`.
+# Block 2. The sixteen conditions, through `Scc`.
 #
-# `0101 cccc 11 000 rrr` writes ones or zeros into the LOW BYTE of Dn - Table
-# 3-7, page 3-25, gives `Scc Dx` an OPERAND SIZE of 8 - so the register is
-# seeded with `DIRTY_D` and the answer is read off its low byte. A core that
+# `0101 cccc 11 000 rrr` writes ones or zeros into the low byte of Dn - Table
+# 3-7, page 3-25, gives `Scc Dx` an operand size of 8 - so the register is
+# seeded with `dirtyD` and the answer is read off its low byte. A core that
 # wrote the whole register lands on 0xffffffff or 0 and fails the value half of
 # every row.
 #
-# BOTH TABLES ARE RUN THROUGH THE SAME SIXTEEN VECTORS ON PURPOSE. `Bcc` and
-# `Scc` must read ONE condition evaluator; two copies of it that disagreed on
+# Both tables are run through the same sixteen vectors on purpose. `Bcc` and
+# `Scc` must read one condition evaluator; two copies of it that disagreed on
 # one condition would show as one differing vector here and nowhere else.
 
 const sccFalseD0 = dirtyD and not 0xFF'u32
@@ -382,12 +336,12 @@ block:
       $got, $want)
 
 # ---------------------------------------------------------------------------
-# BLOCK 3. WHAT THIS GROUP CLAIMS, WORD BY WORD.
+# Block 3. What this group claims, word by word.
 #
 # Every word below was emitted by `m68k-elf-as -mcpu=5307` for the instruction
 # named beside it. A decoder that failed to claim one of them would send a real
-# instruction to the illegal arm; a decoder that claimed a word from the NEXT
-# block would take an encoding away from the task that owns it.
+# instruction to the illegal arm; a decoder that claimed a word from the next
+# block would take an encoding away from whatever owns it.
 
 block:
   expectDecode(0x6006'u16, opBra, "bra.b .+8 (6006) decodes as BRA")
@@ -413,15 +367,15 @@ block:
   expectDecode(0x4E71'u16, opNop, "nop (4e71) is still a NOP and not a TRAP")
 
 # ---------------------------------------------------------------------------
-# BLOCK 4. WHAT THIS GROUP MUST NOT CLAIM.
+# Block 4. What this group must not claim.
 #
 # A wrongly-claimed encoding produces a passing execution of a different
 # instruction, which no positive corpus can see. Each word below is a real
-# 68000 or 68020 instruction that this part does not have, or an encoding a
-# LATER task owns, and each must come back as an unrecognised word.
+# 68000 or 68020 instruction that this part does not have, or an encoding
+# something else owns, and each must come back as an unrecognised word.
 
 block:
-  # `4ac0 | <ea>` IS TAS AND NOT A `TST` WHOSE SIZE FIELD IS 11. Measured:
+  # `4ac0 | <ea>` is TAS and not a `TST` whose size field is 11. Measured:
   # `4ad0` decodes as `tas %a0@` on `m68k-elf-objdump -m m68k:68020` and as
   # `.short 0x4ad0` on `-m m68k:5307`. Manual section 3.9, page 3-21, lists the
   # removed instructions and Table 3-12 has no `tas` row at all. If `TST` were
@@ -430,8 +384,8 @@ block:
   expectDecode(0x4AD0'u16, opIllegal, "tas (%a0) (4ad0) is not a TST")
   expectDecode(0x4AC0'u16, opIllegal, "tas %d0 (4ac0) is not a TST")
 
-  # THE OTHER INHABITANTS OF `0100 1110 01xx xxxx`. TRAP is `4e4x` and the
-  # neighbours are other instructions or other tasks' work.
+  # The other inhabitants of `0100 1110 01xx xxxx`. TRAP is `4e4x` and the
+  # neighbours are other instructions.
   expectDecode(0x4E70'u16, opIllegal, "reset (4e70) is not this group's")
   expectDecode(0x4E72'u16, opIllegal, "stop #imm (4e72) is not this group's")
   expectDecode(0x4E74'u16, opIllegal, "rtd #imm (4e74) is not this group's")
@@ -439,19 +393,19 @@ block:
   expectDecode(0x4E77'u16, opIllegal, "rtr (4e77) is not this group's")
   expectDecode(0x4E7A'u16, opIllegal, "movec (4e7a) is CPU-11's, not TRAP's")
 
-  # `0cc0 | <ea>` IS THE 68020 `CMP2`/`CHK2` AND NOT A `CMPI` OF SIZE 11.
+  # `0cc0 | <ea>` is the 68020 `CMP2`/`CHK2` and not a `CMPI` of size 11.
   expectDecode(0x0CC0'u16, opIllegal, "cmp2/chk2 (0cc0) is not a CMPI")
 
-  # LINE 1011 OPMODES 100 TO 110 ARE STILL EOR'S. Without these three, a
+  # Line 1011 opmodes 100 to 110 are still EOR's. Without these three, a
   # predicate that claimed the whole of line 1011 for CMP would report the
   # rows above as passes and EOR would be gone.
   expectDecode(0xB380'u16, opEor, "eor.l %d1,%d0 (b380) is still an EOR")
   expectDecode(0xB300'u16, opEor, "the byte EOR opmode (b300) is still an EOR")
   expectDecode(0xB340'u16, opEor, "the word EOR opmode (b340) is still an EOR")
 
-  # THE ADDQ AND SUBQ REGRESSION GUARD, AND THE DEFECT IT HOLDS. See this
-  # file's header: those two arms claimed the whole `0101 cccc 11 <ea>`
-  # encoding space before this task - 1024 words, of which 128 are `Scc Dn`,
+  # The ADDQ and SUBQ regression guard, and the defect it holds. See this
+  # file's header: those two arms once claimed the whole `0101 cccc 11 <ea>`
+  # encoding space - 1024 words, of which 128 are `Scc Dn`,
   # three are TRAPF and none are DBcc. `50c0` must be an Scc and `5040`,
   # `5080` and `5180` must still be what they were.
   expectDecode(0x50C0'u16, opScc, "scc_is_not_an_addq: 50c0 is an Scc")
@@ -460,29 +414,27 @@ block:
   expectDecode(0x5080'u16, opAddq, "addq.l #8,%d0 (5080) is still an ADDQ")
   expectDecode(0x5180'u16, opSubq, "subq.l #8,%d0 (5180) is still a SUBQ")
 
-  # THREE WORDS INSIDE `0101 cccc 11 <ea>` ARE TRAPF AND NOT Scc, AND TRAPF IS
-  # NOT THIS TASK'S. Measured with the pinned assembler under `-mcpu=5307`:
+  # Three words inside `0101 cccc 11 <ea>` are TRAPF and not Scc, and TRAPF is
+  # not implemented. Measured with the pinned assembler under `-mcpu=5307`:
   # `trapf` assembles to `51fc`, `trapf.w #1` to `51fa 0001` and `trapf.l #1`
   # to `51fb 0000 0001`. Table 3-7, page 3-25, carries the row
   # `TRAPF | none/#<data> | none,16,32 | PC+2->PC; PC+4->PC; PC+6->PC`, and
   # Table 3-14, page 3-29, gives `trapf`, `trapf.w` and `trapf.l` a row each.
   #
-  # IT IS EXACTLY THREE WORDS AND NOT A CONDITION FAMILY. The same assembler
-  # REJECTS `trapt`, `trapeq`, `trapne` and `traphi` under `-mcpu=5307` -
+  # It is exactly three words and not a condition family. The same assembler
+  # rejects `trapt`, `trapeq`, `trapne` and `traphi` under `-mcpu=5307` -
   # "invalid instruction for this architecture; needs 68020 ... cpu32" - so
   # only condition 0001 has the three forms and no `TRAPcc` exists here.
   #
-  # THEY MUST FALL THROUGH TO `opIllegal` and stay unclaimed for whichever
-  # task owns TRAPF, exactly as CPU-9 left line-B opmodes 0, 1, 2, 3 and 7
-  # unclaimed for this one. Claiming them as an Scc would execute a TRAPF as
-  # a byte write into a data register.
+  # They must fall through to `opIllegal` and stay unclaimed. Claiming them as
+  # an Scc would execute a TRAPF as a byte write into a data register.
   expectDecode(0x51FA'u16, opIllegal, "trapf_is_not_an_scc: trapf.w (51fa)")
   expectDecode(0x51FB'u16, opIllegal, "trapf_is_not_an_scc: trapf.l (51fb)")
   expectDecode(0x51FC'u16, opIllegal, "trapf_is_not_an_scc: trapf (51fc)")
 
-  # THE CONTROLS THAT KEEP THE EXCLUSION THREE WORDS WIDE. Without them the
+  # The controls that keep the exclusion three words wide. Without them the
   # arm could collapse entirely, or take the whole of condition 0001, and the
-  # three rows above would still pass. `51c0` is `sf %d0` - the SAME condition
+  # three rows above would still pass. `51c0` is `sf %d0` - the same condition
   # as the three TRAPF words - and `51f9` and `51fd` are its immediate
   # neighbours on either side of them.
   expectDecode(0x51C0'u16, opScc, "trapf_is_not_an_scc: sf %d0 (51c0) is Scc")
@@ -490,25 +442,25 @@ block:
   expectDecode(0x51FD'u16, opScc, "trapf_is_not_an_scc: 51fd is still an Scc")
 
 # ---------------------------------------------------------------------------
-# BLOCK 5. THE 32-BIT DISPLACEMENT. THE PLAN ROW'S BOLD SENTENCE.
+# Block 5. The 32-bit displacement.
 #
-# `Bcc <label>`, `BRA <label>` and `BSR <label>` carry an OPERAND SIZE of
-# "8,16" in Table 3-7, page 3-23, AND NO THIRD VALUE. An 8-bit displacement of
+# `Bcc <label>`, `BRA <label>` and `BSR <label>` carry an operand size of
+# "8,16" in Table 3-7, page 3-23, and no third value. An 8-bit displacement of
 # 0xff is the marker for a 32-bit displacement, which is ISA_B, and this part
 # does not have it.
 #
-# THE PINNED ASSEMBLER AGREES AND ITS DISASSEMBLER DOES NOT, and both
-# measurements are named here because the second is the kind of laxity this
-# project has been caught by before. `m68k-elf-as` REJECTS `bra.l`, `beq.l` and
-# `bsr.l` under `-mcpu=5307` and ACCEPTS all three under `-m68020`, where
+# The pinned assembler agrees and its disassembler does not, and both
+# measurements are named here because the second is a laxity that reads like
+# evidence. `m68k-elf-as` rejects `bra.l`, `beq.l` and
+# `bsr.l` under `-mcpu=5307` and accepts all three under `-m68020`, where
 # `bra.l` assembles to `60ff 0000 0008` - so 0xff is the 32-bit marker and the
 # ColdFire tables refuse it. `m68k-elf-objdump -m m68k:5307` nevertheless
-# prints `60ff` as `bras 1`, an ordinary byte branch of -1 to an ODD address,
+# prints `60ff` as `bras 1`, an ordinary byte branch of -1 to an odd address,
 # while `-m m68k:68020` prints the same bytes as `bral`. That is the
 # disassembler declining to model the marker, exactly as it decodes `4690` as
 # `notl %d0` (see `logic.nim`), and it is not evidence about the part.
 #
-# A DISPLACEMENT OF 0x00 IS THE OTHER MARKER AND IT IS THE 16-BIT FORM, which
+# A displacement of 0x00 is the other marker and it is the 16-bit form, which
 # the positive corpus exercises in both directions. Only 0xff traps.
 
 block:
@@ -525,7 +477,7 @@ block:
     dirtyD, dirtyA, stackBase, allDirty,
     "bsr with an 8-bit displacement of 0xff traps: 32-bit is ISA_B")
 
-  # THE POSITIVE CONTROLS. A core that trapped EVERY branch would pass the
+  # The positive controls. A core that trapped every branch would pass the
   # three rows above. 0xfe is the largest displacement the byte form has and
   # 0x00 is the 16-bit marker; both must run.
   block:
@@ -545,29 +497,28 @@ block:
       $got, $want)
 
 # ---------------------------------------------------------------------------
-# BLOCK 6. ONE ILLEGAL OPERAND PER OPCODE.
+# Block 6. One illegal operand per opcode.
 #
-# CPU-6's plan row requires a trap for at least one illegal mode of every
-# implemented opcode, and its mechanism is the per-opcode legality mask. The
-# encodings below are built from a MEASURED base word by replacing the low six
-# bits, which is the effective-address field - the method `tests/t_logic.nim`
-# established and cross-checked. `jmp (%a0)` is `4ed0`, so `jmp %d0` is
+# Every implemented opcode must trap at least one illegal mode, and the
+# mechanism is the per-opcode legality mask. The encodings below are built
+# from a measured base word by replacing the low six bits, which is the
+# effective-address field. `jmp (%a0)` is `4ed0`, so `jmp %d0` is
 # `4ed0 and not 0x3f` or `00` = `4ec0`, and `m68k-elf-objdump` decodes `4ec0`
-# as an instruction on NEITHER `-m m68k:5307` nor `-m m68k:68020`.
+# as an instruction on neither `-m m68k:5307` nor `-m m68k:68020`.
 
 block:
-  # Scc TAKES A DATA REGISTER AND NOTHING ELSE. Table 3-12, page 3-27: the
+  # Scc takes a data register and nothing else. Table 3-12, page 3-27: the
   # `scc Dx` row is timed under `Rn` alone and dashed under all seven other
   # columns. `m68k-elf-as -mcpu=5307` rejects `scc (%a0)`, `scc %a0` and
   # `scc 0x1234.w`.
   #
-  # `51c8` IS THE 68000 `DBcc` SLOT AND IT IS THE ONE THE FIRMWARE EVIDENCE
-  # NAMES. `0101 cccc 11 001 rrr` is `DBcc Dn,<label>` ON A 68000 AND NO
-  # INSTRUCTION AT ALL ON THIS PART: section 3.9, which begins on page 3-21,
+  # `51c8` is the 68000 `DBcc` slot. `0101 cccc 11 001 rrr` is
+  # `DBcc Dn,<label>` on a 68000 and no
+  # instruction at all on this part: section 3.9, which begins on page 3-21,
   # lists "decrement and branch" among the removed instructions, no table in
   # the manual carries a DBcc row, and `m68k-elf-as -mcpu=5307` rejects
   # `dbra %d0,.` and `dbf %d0,.`.
-  # `m68k-elf-objdump -m m68k:5307` PRINTS `51c8` AS `sf %d0` - it ignores the
+  # `m68k-elf-objdump -m m68k:5307` prints `51c8` as `sf %d0` - it ignores the
   # mode field entirely - while `-m m68k:68020` reads the same two words as
   # `dbf %d0,...`; the disassembler is wrong on both counts and the mask is
   # what refuses the word.
@@ -576,24 +527,11 @@ block:
     dirtyD, dirtyA, stackBase, allDirty,
     "dbf %d0 (51c8) traps: DBcc is not an instruction on this part")
 
-  # THESE TWO NAME AN ADDRESS THE BOARD ANSWERS, AND THAT IS THE WHOLE POINT.
-  # A trap case whose operand is OUTSIDE the board traps whatever the mask
+  # These two name an address the board answers, and that is the whole point.
+  # A trap case whose operand is outside the board traps whatever the mask
   # says, because the write reports `busUnmapped` and the bus fault arrives
-  # first. MEASURED: with `a0` at `DIRTY_A` (0x0badc0de) and the absolute
-  # address at 0x1234, both of them past the end of this 0x1000-byte board,
-  # the mutation "`eaLegalityFor(opScc)` returns the data-alterable mask" -
-  # which admits `(%a0)` and `(xxx).W` - left BOTH of these rows GREEN and
-  # only the two `checkMask` rows in block 9 went red. `writableOperand` is
-  # inside the board and clear of the encoding, so the mask is now the only
-  # thing that can refuse the write, and under that mutation both rows fail.
-  #
-  # THAT MEASUREMENT DESCRIBES A SUPERSEDED OPERAND CONFIGURATION AND IS NOT
-  # RE-MEASURED, because the addresses it names are no longer what these rows
-  # drive and reproducing it means RECONSTRUCTING the configuration rather than
-  # reading a number; only the mutation's blast radius is re-read, 2026-08-12,
-  # and the `opScc`/`opCmpi` arm of `eaLegalityFor` set to the data-alterable
-  # mask now reds THIRTEEN cases - `t_ea_masks` 6 and `t_control` 7 - among them
-  # block (19) of `tests/t_ea_masks.nim`, which reds on this mutation too.
+  # first. `writableOperand` is inside the board and clear of the encoding, so
+  # the mask is the only thing that can refuse the write.
   expectTrap(runIns([0x54D0'u16],
                     d = trapD,
                     a = [writableOperand, 0, 0, 0, 0, 0, 0, 0],
@@ -605,7 +543,7 @@ block:
     dirtyD, dirtyA, stackBase, allDirty,
     "seq (xxx).w (57f8) traps: an Scc destination is a data register")
 
-  # JMP AND JSR TAKE CONTROL ADDRESSING. Table 3-15, page 3-30, dashes `Rn`,
+  # JMP and JSR take control addressing. Table 3-15, page 3-30, dashes `Rn`,
   # `(An)+`, `-(An)` and `#xxx` for both.
   expectTrap(runIns([0x4EC0'u16], d = trapD, a = trapA, sr = allDirty),
     dirtyD, dirtyA, stackBase, allDirty,
@@ -630,10 +568,10 @@ block:
     dirtyD, dirtyA, stackBase, allDirty,
     "jsr (%a0)+ (4e98) traps: postincrement is not a control operand")
 
-  # TST TAKES EVERY MODE - Table 3-12, page 3-27, has no dash in any of its
-  # three rows - EXCEPT that a BYTE operand may not be an address register.
-  # `m68k-elf-as -mcpu=5307` accepts `tst.w %a0` and `tst.l %a0` and REJECTS
-  # `tst.b %a0`. That is a rule about the SIZE and not about the mask, so the
+  # TST takes every mode - Table 3-12, page 3-27, has no dash in any of its
+  # three rows - except that a byte operand may not be an address register.
+  # `m68k-elf-as -mcpu=5307` accepts `tst.w %a0` and `tst.l %a0` and rejects
+  # `tst.b %a0`. That is a rule about the size and not about the mask, so the
   # word half below is the control that keeps it from becoming one.
   expectTrap(runIns([0x4A08'u16], d = trapD, a = trapA, sr = allDirty),
     dirtyD, dirtyA, stackBase, allDirty,
@@ -641,19 +579,19 @@ block:
   block:
     let o = runIns([0x4A48'u16], d = trapD, a = trapA, sr = allDirty)
     let got = (a0: o.a[0], sr: o.sr, fault: o.fault)
-    # `DIRTY_A`'s low word is 0xc0de, whose bit 15 is SET, so the word form
-    # answers N. As a LONGWORD 0x0badc0de is positive, so a core that ignored
+    # `dirtyA`'s low word is 0xc0de, whose bit 15 is set, so the word form
+    # answers N. As a longword 0x0badc0de is positive, so a core that ignored
     # the size field answers the opposite here.
     let want = (a0: dirtyA, sr: srBase or ccrX or ccrN, fault: false)
     check(got == want, "tst.w %a0 (4a48) runs: the word form reaches An",
       $got, $want)
 
-  # CMP, CMPA AND CMPI ARE 32-BIT AND THERE IS NO OTHER SIZE. Table 3-7, page
-  # 3-23, gives all three an OPERAND SIZE column of `32` alone, and
+  # CMP, CMPA and CMPI are 32-bit and there is no other size. Table 3-7, page
+  # 3-23, gives all three an operand size column of `32` alone, and
   # `m68k-elf-as -mcpu=5307` rejects `cmp.b`, `cmp.w`, `cmpa.w`, `cmpi.b` and
   # `cmpi.w`.
   #
-  # `b2c0` IS CMPA.W AND THE DISASSEMBLER SETTLES IT. `m68k-elf-objdump
+  # `b2c0` is CMPA.W and the disassembler settles it. `m68k-elf-objdump
   # -m m68k:68020` prints `b2c0` as `cmpaw %d0,%a1`; `-m m68k:5307` prints
   # `.short 0xb2c0`. That is the word form of CMPA, and it is refused here.
   expectTrap(runIns([0xB200'u16], d = trapD, a = trapA, sr = allDirty),
@@ -674,7 +612,7 @@ block:
     dirtyD, dirtyA, stackBase, allDirty,
     "cmpi.w #5,%d0 (0c40) traps: CMPI on this part is 32-bit")
 
-  # THE CMPI DESTINATION IS A DATA REGISTER AND NOTHING ELSE. Table 3-13, page
+  # The CMPI destination is a data register and nothing else. Table 3-13, page
   # 3-28: the `cmpi.l #imm,Dx` row is timed under `Rn` alone. `m68k-elf-as
   # -mcpu=5307` rejects `cmpi.l #5,(%a0)` and `cmpi.l #5,%a0`.
   expectTrap(runIns([0x0C90'u16, 0x0000'u16, 0x0005'u16], d = trapD,
@@ -687,19 +625,19 @@ block:
     "cmpi.l #5,%a0 (0c88) traps: the destination is a data register")
 
 # ---------------------------------------------------------------------------
-# BLOCK 7. THE `RTE` FORMAT FIELD.
+# Block 7. The `RTE` format field.
 #
 # MCF5307 User's Manual section 3.5.7, "RTE and Format Error Exceptions", page
 # 3-16: "any attempted execution of an RTE where the format is not equal to
 # {4,5,6,7} generates a format error". The four legal values are exactly the
 # four rows of Table 3-2 on page 3-14.
 #
-# THIS CORE TRAPS RATHER THAN TAKING THE FORMAT-ERROR VECTOR, AND THAT IS
-# UNCERTAINTY 4 IN `control.nim`'s HEADER. Vector 14 is a real exception on
-# silicon and the exception model is CPU-14's; a trap is this core's one
-# observable for "refused", the same channel every illegal size and operand
-# uses. What is asserted here is the DISCRIMINATION - that 3 is refused and 4
-# is not - and not the shape of the refusal.
+# This core traps rather than taking the format-error vector, and that is
+# uncertainty 4 in `control.nim`'s header. Vector 14 is a real exception on
+# silicon; a trap is this core's one observable for "refused", the same channel
+# every illegal size and operand uses. What is asserted here is the
+# discrimination - that 3 is refused and 4 is not - and not the shape of the
+# refusal.
 
 block:
   let frame = @[(stackBase, 0x30802703'u32), (stackBase + 4'u32, 0x00000400'u32)]
@@ -708,7 +646,7 @@ block:
     dirtyD, dirtyA, stackBase, allDirty,
     "rte with a format field of 3 traps: only 4, 5, 6 and 7 are frames")
 
-  # THE POSITIVE CONTROL. A core that trapped every RTE would pass the row
+  # The positive control. A core that trapped every RTE would pass the row
   # above. Format 4 restores SR, PC and A7 = SP + 4 + 4.
   block:
     let good = @[(stackBase, 0x40802703'u32),
@@ -722,14 +660,14 @@ block:
       $got, $want)
 
 # ---------------------------------------------------------------------------
-# BLOCK 8. THE OPERANDS THE CORPUS CANNOT OFFER.
+# Block 8. The operands the corpus cannot offer.
 #
 # The corpus assembles its cases, so it can only hold forms the assembler
-# EMITS. Two forms of this group are legal on the part and unreachable that
+# emits. Two forms of this group are legal on the part and unreachable that
 # way, and both are executed here instead.
 
 block:
-  # `cmp.l #imm,Dx` IN THE LINE-1011 IMMEDIATE FORM. Table 3-13, page 3-28,
+  # `cmp.l #imm,Dx` in the line-1011 immediate form. Table 3-13, page 3-28,
   # gives the `cmp.l <ea>,Rx` row a time of `1(0/0)` under `#xxx`, so the form
   # exists - but `m68k-elf-as -mcpu=5307` assembles `cmp.l #5,%d1` as the CMPI
   # encoding `0c81 0000 0005` and never emits `b2bc`. The word here is built
@@ -748,8 +686,8 @@ block:
 block:
   # `jmp (d8,PC,Xi)`. The assembler emits it - `4efb 2804` for
   # `jmp (4,%pc,%d2)` - but the corpus has no case that needs it and the
-  # PC-relative INDEXED arm of `eaAddr` is reached by no other opcode in this
-  # group. The index is a LONGWORD: d2 here is 0x40, so the target is
+  # PC-relative indexed arm of `eaAddr` is reached by no other opcode in this
+  # group. The index is a longword: d2 here is 0x40, so the target is
   # execBase + 2 + 4 + 0x40.
   let o = runIns([0x4EFB'u16, 0x2804'u16],
                  d = [0'u32, 0, 0x40'u32, 0, 0, 0, 0, 0],
@@ -761,26 +699,24 @@ block:
     $got, $want)
 
 # ---------------------------------------------------------------------------
-# BLOCK 9. THE MASKS THEMSELVES.
+# Block 9. The masks themselves.
 #
 # The execution cases above reach one operand each. These rows read the table
 # directly, so a mode that no case executes is still stated. `eaJumpTarget` is
-# CONTROL ADDRESSING INCLUDING `(xxx).W`: Table 3-5, page 3-21, marks the
-# absolute short row CONTROL, and page 3-26 says the timing tables' `xxx.wl`
+# control addressing including `(xxx).W`: Table 3-5, page 3-21, marks the
+# absolute short row Control, and page 3-26 says the timing tables' `xxx.wl`
 # column "refers to both forms of absolute addressing".
 #
-# `(xxx).W` SEPARATES THIS CLASS FROM MOVEM'S AND ALWAYS DID. Measured,
-# `m68k-elf-as -mcpu=5307` ACCEPTS `lea 0x1234.w,%a0`, `pea 0x1234.w`,
-# `jmp 0x1234.w` and `jsr 0x1234.w` and REJECTS `movem.l %d0-%d1,0x1234.w`, so
-# MOVEM's rejection is right and LEA's and PEA's were not.
-#
-# WHAT HOLDS THE CLASS. `ea.nim` declares it as `eaControl7`, and
+# `(xxx).W` separates this class from MOVEM's. `m68k-elf-as -mcpu=5307`
+# accepts `lea 0x1234.w,%a0`, `pea 0x1234.w`,
+# `jmp 0x1234.w` and `jsr 0x1234.w` and rejects `movem.l %d0-%d1,0x1234.w`.
+# `ea.nim` declares the class as `eaControl7`, and
 # `eaJumpTarget` and `eaLeaPeaTarget` in `decode_types.nim` are its two
 # readers. MOVEM reads neither: it carries `{eaAnInd, eaAnDisp}`, because
-# `(xxx).W` is the one cell the control class gets right for MOVEM and folios
-# 4-50 and 4-51 dash `(d8,An,Xi)`, `(xxx).L`, `(d16,PC)` and `(d8,PC,Xi)` too.
+# folios 4-50 and 4-51 dash `(d8,An,Xi)`, `(xxx).L`, `(d16,PC)` and
+# `(d8,PC,Xi)` as well.
 #
-# THE TWELVE CELLS BELOW ARE THE MASK-LEVEL TABLE FOR `opJmp` AND `opJsr`.
+# The twelve cells below are the mask-level table for `opJmp` and `opJsr`.
 # They reach `eaIsLegalFor` directly, so a widening or a narrowing of
 # `eaControl7` or of `eaJumpTarget` reds here whichever side it falls on.
 
@@ -830,11 +766,11 @@ block:
       "tst mode 7 sub " & $(field and 7'u16) & " is illegal")
 
 # ---------------------------------------------------------------------------
-# BLOCK 10. THE STACK WRITES, READ BACK FROM THE BOARD.
+# Block 10. The stack writes, read back from the board.
 #
 # The corpus asserts these through its own board; they are repeated here
-# because `mem32` reads the SAME array the core wrote, and because a BSR whose
-# push went to the right address with the wrong VALUE is a different defect
+# because `mem32` reads the same array the core wrote, and because a BSR whose
+# push went to the right address with the wrong value is a different defect
 # from one that went to the wrong address.
 
 block:
@@ -852,15 +788,10 @@ block:
     $want)
 
 block:
-  # THE WORD FORM IS FOUR BYTES LONG AND THE BYTE FORM IS TWO, WHICH IS THE
-  # WHOLE REASON THIS ROW SITS BESIDE THE ONE ABOVE. Both branch to the same
-  # kind of place, and only this one separates "push the address after the
-  # instruction" from "push the branch base" - the two are the same value for
-  # the byte form. MEASURED: the mutation "`writeMem(ctx, ctx.sp, 4, base)`"
-  # left EVERY row this file then held green - all 161 of them, counted
-  # BEFORE this row existed - while the row above was the only BSR case here,
-  # and `bsr_w_pushes_return_address` in the corpus was the only thing that
-  # failed.
+  # The word form is four bytes long and the byte form is two, which is why
+  # this row sits beside the one above. Only this one separates "push the
+  # address after the instruction" from "push the branch base"; the two are
+  # the same value for the byte form.
   let o = runIns([0x6100'u16, 0x0040'u16],
                  a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase], sr = allDirty,
                  mem = @[(stackBase - 8'u32, guard), (stackBase, guard)])
@@ -875,7 +806,7 @@ block:
     $got, $want)
 
 block:
-  # `trap #0` TAKES VECTOR 32 AND WRITES A TWO-LONGWORD FRAME. Table 3-1, page
+  # `trap #0` takes vector 32 and writes a two-longword frame. Table 3-1, page
   # 3-13, and Figure 3-7, page 3-13. The vector longword is seeded at 4 * 32.
   let o = runIns([0x4E40'u16], d = trapD,
                  a = [dirtyA, 0, 0, 0, 0, 0, 0, stackBase], sr = allDirty,

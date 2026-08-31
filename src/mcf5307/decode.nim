@@ -85,15 +85,12 @@ proc decodeLogicLine(word: uint16; opBase: Operation): Decoded =
   ##
   ##   opmode 000 001 010   `<ea> op Dn -> Dn`, byte word long
   ##   opmode 100 101 110   `Dn op <ea> -> <ea>`, byte word long
-  ##   opmode 011 111       THE WORD MULTIPLY AND DIVIDE, WHICH THIS PART HAS.
+  ##   opmode 011 111       The word multiply and divide, which this part has.
   ##                        Line 1100 gives MULU.W (011) and MULS.W (111);
   ##                        line 1000 gives DIVU.W (011) and DIVS.W (111).
   ##
-  ## THE WORD MULTIPLY AND DIVIDE ARE REAL INSTRUCTIONS ON THIS PART AND AN
-  ## EARLIER REVISION OF THIS PROCEDURE RETURNED `opIllegal` FOR BOTH OPMODES.
-  ## The comment justifying that read "the WORD multiply and divide of the
-  ## 68000, which this part does not have". Two independent oracles contradict
-  ## it and no oracle supports it:
+  ## The word multiply and divide are real instructions on this part. Two
+  ## independent oracles say so:
   ##
   ##   - `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726) assembles
   ##     `mulu.w %d1,%d0` to `c0c1`, `muls.w %d1,%d0` to `c1c1`,
@@ -107,10 +104,10 @@ proc decodeLogicLine(word: uint16; opBase: Operation): Decoded =
   ##     MCF5307 User's Manual Table 3-13 p.3-28 times `mulu.w`, `muls.w`,
   ##     `divu.w` and `divs.w` across all eight effective-address columns.
   ##
-  ## THE SIZE IS 2 AND THAT IS WHAT THE EXECUTOR BRANCHES ON. The word form is
-  ## ONE word: Dx is bits 11..9 of this word and signedness is bits 8..6,
+  ## The size is 2 and that is what the executor branches on. The word form is
+  ## one word: Dx is bits 11..9 of this word and signedness is bits 8..6,
   ## where the long form takes both from a second word it fetches. An executor
-  ## that fetched an extension word here would consume the NEXT INSTRUCTION.
+  ## that fetched an extension word here would consume the next instruction.
   ##
   ## The byte and word opmodes are decoded and they carry their own size.
   ## They are not instructions on this part - `m68k-elf-as -mcpu=5307` rejects
@@ -128,7 +125,7 @@ proc decodeLogicLine(word: uint16; opBase: Operation): Decoded =
   ## rejects it.
   let opmode = (word shr 6) and 0x7'u16
   if opmode == 3'u16 or opmode == 7'u16:
-    # THE LINE SELECTS THE FAMILY AND THE OPMODE SELECTS THE SIGN. `opBase` is
+    # The line selects the family and the opmode selects the sign. `opBase` is
     # the only thing distinguishing the two lines here, exactly as it is for
     # the logic opmodes below.
     let signed = opmode == 7'u16
@@ -272,22 +269,20 @@ proc decodeWord*(word: uint16): Decoded =
     return Decoded(op: opLea, ea: decodeEa(word),
                    destReg: uint8((word shr 9) and 0x7'u16))
   elif (word and 0xFFF8'u16) == 0x4840'u16:
-    # SWAP Dn: the halves of a data register exchange. THIS TEST COMES BEFORE
-    # PEA AND THE ORDER IS LOAD-BEARING, exactly as EXT comes before MOVEM
-    # above and for the same reason. `0x4840 | <ea>` is PEA, and the eight
-    # words `4840`-`4847` are the sub-range whose mode field is 000 - a data
-    # register, which is not control addressing and so is no PEA operand at
-    # all. PEA's mask `word and 0xFFC0 == 0x4840` spans `4840`-`487f` and
-    # SWALLOWED all eight, and because `eaLegalityFor(opPea)` excludes `Dn`
-    # every `swap` then faulted as an illegal PEA operand instead of
-    # executing. Table 3-7, page 3-25, carries `SWAP | Dn | 16 | MSW of Dn
-    # <-> LSW of Dn`; Table 3-12, page 3-27, times `swap Dx` at 1(0/0) under
-    # `Rn`; section 3.9, page 3-21, does not list SWAP among the removed
-    # instructions; and `m68k-elf-as -mcpu=5307` emits `4840` for
-    # `swap %d0` and `4847` for `swap %d7`. The shipped G2 operating system
-    # uses it 339 times, the first at `0x3000066c`.
+    # SWAP Dn: the halves of a data register exchange. This test comes before
+    # PEA and the order is load-bearing, exactly as EXT comes before MOVEM
+    # above. `0x4840 | <ea>` is PEA, and the eight words `4840`-`4847` are the
+    # sub-range whose mode field is 000 - a data register, which is not control
+    # addressing and so is no PEA operand at all. PEA's mask
+    # `word and 0xFFC0 == 0x4840` spans `4840`-`487f`, and because
+    # `eaLegalityFor(opPea)` excludes `Dn` every `swap` reaching it faults as an
+    # illegal PEA operand instead of executing. Table 3-7, page 3-25, carries
+    # `SWAP | Dn | 16 | MSW of Dn <-> LSW of Dn`; Table 3-12, page 3-27, times
+    # `swap Dx` at 1(0/0) under `Rn`; section 3.9, page 3-21, does not list
+    # SWAP among the removed instructions; and `m68k-elf-as -mcpu=5307` emits
+    # `4840` for `swap %d0` and `4847` for `swap %d7`.
     #
-    # IF THIS ARM IS MOVED BELOW THE PEA ARM, OR ITS MASK WIDENED BACK TO
+    # If this arm is moved below the PEA arm, or its mask widened back to
     # `0xFFC0`, the `swap` cases in `tests/t_move.nim` go red.
     return Decoded(op: opSwap, ea: decodeEa(word), size: 4'u8,
                    destReg: uint8(word and 0x7'u16))
@@ -331,15 +326,11 @@ proc decodeWord*(word: uint16): Decoded =
     # seven encodes itself and zero would be a no-operation, so the encoding
     # spends that slot on the eighth value.
     #
-    # SIZE 11 IS NOT DECODED HERE, exactly as it is not for CLR, NEG, NEGX and
+    # Size 11 is not decoded here, exactly as it is not for CLR, NEG, NEGX and
     # NOT: `0101 cccc 11 <ea>` is the Scc space - 128 `Scc Dn` words, three
-    # TRAPF words and no DBcc at all - which CPU-10 owns, and claiming them as
-    # an ADDQ whose size is wrong would take 1024 encodings away from that
-    # task. IT DID. Measured on a sweep of all 65536 words against the decoder
-    # before this guard: of those 1024 words, 512 came back `opAddq` and 512
-    # `opSubq`, and NOT ONE came back unclaimed. Nothing
-    # saw it, because `alu.nim` traps a size of zero and a trap is what an
-    # opcode nobody has written yet looks like.
+    # TRAPF words and no DBcc at all - and claiming those words as an ADDQ
+    # whose size is wrong takes them away from Scc silently, because `alu.nim`
+    # traps a size of zero and a trap is what an unwritten opcode looks like.
     # `tests/t_control.nim` asserts `decodeWord(0x50c0).op == opScc` and keeps
     # `5040`, `5080` and `5180` as the ADDQ and SUBQ they were.
     let data = (word shr 9) and 0x7'u16
@@ -416,40 +407,32 @@ proc decodeWord*(word: uint16): Decoded =
   elif (word and 0xF000'u16) == 0xE000'u16:
     return decodeShift(word)
 
-  # ------------------------------------------------------------------ CPU-10
+  # ---------------------------------------------------------------------------
   # Control flow and comparison.
   #
-  # THIS BLOCK ADDS OPCODES AND NO IMPORT. `decode.nim`'s import list is still
-  # `{decode_types, ea}`, which is the shape `~/Desktop/avoiding-cycles.md`
-  # calls for and the shape CPU-8 and CPU-9 each preserved: a new group costs
-  # one executor module, one `import` in `cpu.nim` and one arm of the `case`
-  # there.
-  #
-  # WHERE THIS BLOCK SITS IN THE CHAIN MATTERS FOR EXACTLY ONE PAIR OF ARMS,
-  # AND THE FIX IS NOT THE ORDER. Scc is `0101 cccc 11 <ea>` and ADDQ and SUBQ
+  # Where this block sits in the chain matters for exactly one pair of arms,
+  # and the fix is not the order. Scc is `0101 cccc 11 <ea>` and ADDQ and SUBQ
   # are `0101 ddd s ss <ea>`; the two overlap wherever the size field is the
   # illegal `11`. Putting the Scc arm above them would work and would leave a
   # trap that a reordering could spring, so the ADDQ and SUBQ arms carry a
   # `sizeField(word) != 0` guard instead - the same guard CLR, NEG, NEGX and
-  # NOT already carried - and this arm is safe wherever it sits. See those
-  # arms for the measurement.
+  # NOT already carried - and this arm is safe wherever it sits.
   elif (word and 0xF000'u16) == 0x6000'u16:
     # `0110 cccc dddddddd`. Condition 0000 is BRA and 0001 is BSR; the other
     # fourteen are the conditional branches.
     #
-    # THE DISPLACEMENT FIELD CARRIES THE FORM AS WELL AS THE VALUE. A byte of
+    # The displacement field carries the form as well as the value. A byte of
     # 0x00 means "a 16-bit displacement follows"; a byte of 0xFF means "a
-    # 32-bit displacement follows", which is ISA_B and NOT ON THIS PART -
-    # Table 3-7, page 3-23, gives Bcc, BRA and BSR an OPERAND SIZE of "8,16"
-    # and no third value. The word is DECODED here and the executor traps it,
-    # which is the same channel every byte and word arithmetic form uses, and
-    # it says "this part has no 32-bit branch" where an unrecognised word
-    # would say "there is no such instruction".
+    # 32-bit displacement follows", which is ISA_B and not on this part -
+    # Table 3-7, page 3-23, gives Bcc, BRA and BSR an operand size of "8,16"
+    # and no third value. The word is decoded here and the executor traps it,
+    # so the core says "this part has no 32-bit branch" where an unrecognised
+    # word would say "there is no such instruction".
     #
-    # `size` CARRIES THE FORM so the executor need not re-derive it: 1 is the
-    # byte displacement, 2 the word displacement, and 4 the 32-bit form that
-    # must trap. `imm` IS NOT USED - a displacement is signed and 16 or 32
-    # bits wide, and `imm` is an unsigned byte.
+    # `size` carries the form: 1 is the byte displacement, 2 the word
+    # displacement, and 4 the 32-bit form that must trap. `imm` is not used - a
+    # displacement is signed and 16 or 32 bits wide, and `imm` is an unsigned
+    # byte.
     let cond = uint8((word shr 8) and 0xF'u16)
     let disp8 = word and 0xFF'u16
     let form = if disp8 == 0x00'u16: 2'u8
@@ -465,19 +448,18 @@ proc decodeWord*(word: uint16): Decoded =
     # The condition is bits 11..8 and the operand is the low six bits. The
     # operand size is 8 (Table 3-7, page 3-25).
     #
-    # WHAT THE 1024 WORDS OF THIS SPACE ACTUALLY ARE. Sixteen conditions times
-    # sixty-four effective-address values, and the split is measured, not
-    # assumed:
+    # What the 1024 words of this space are. Sixteen conditions times
+    # sixty-four effective-address values, and the split is measured:
     #
     #   128  Scc Dn - the EA field `000 rrr`, eight registers times sixteen
     #        conditions. `m68k-elf-as -mcpu=5307` assembles `st %d0` to `50c0`,
-    #        `sf %d0` to `51c0` and `shi %d0` to `52c0`, and REFUSES
-    #        `st (%a0)`; Table 3-7 gives Scc an OPERAND SYNTAX of `Dx` and
+    #        `sf %d0` to `51c0` and `shi %d0` to `52c0`, and refuses
+    #        `st (%a0)`; Table 3-7 gives Scc an operand syntax of `Dx` and
     #        Table 3-12, page 3-27, carries one `scc Dx` row and no memory
     #        column. This is the whole of what this arm may execute.
     #
-    #     0  DBcc. NOT 128, AND NOT A SLOT INSIDE Scc - THE INSTRUCTION IS NOT
-    #        ON THIS PART AT ALL. Section 3.9, page 3-21, lists "decrement and
+    #     0  DBcc. Not a slot inside Scc: the instruction is not on this part
+    #        at all. Section 3.9, page 3-21, lists "decrement and
     #        branch" among the instructions removed from the 68000 set, Table
     #        3-7 and Table 3-12 carry no row, and the pinned assembler rejects
     #        `dbf`, `dbra`, `dbt` and `dbne` under `-mcpu=5307`. The 128 words
@@ -487,32 +469,31 @@ proc decodeWord*(word: uint16): Decoded =
     #     3  TRAPF: `51fa`, `51fb` and `51fc`. Measured: `trapf` assembles to
     #        `51fc`, `trapf.w #1` to `51fa 0001` and `trapf.l #1` to
     #        `51fb 0000 0001`, and `trapt`, `trapeq`, `trapne` and `traphi` are
-    #        all REJECTED under `-mcpu=5307` - so it is three words in
-    #        condition 0001 and NOT a condition family. Table 3-7 gives the row
-    #        `TRAPF | none/#<data> | none,16,32`. THE EXCLUSION ABOVE IS WHAT
-    #        KEEPS THEM, and it is three literals rather than a mask because
+    #        all rejected under `-mcpu=5307` - so it is three words in
+    #        condition 0001 and not a condition family. Table 3-7 gives the row
+    #        `TRAPF | none/#<data> | none,16,32`. The exclusion above is what
+    #        keeps them, and it is three literals rather than a mask because
     #        three is what was measured.
     #
     #   893  Neither. No instruction on this part. They reach this arm as
     #        `opScc` and the `{Dn}` mask in `decode_types` refuses them at
     #        execution.
     #
-    # TRAPF IS NOT IMPLEMENTED HERE. It is not in this task's opcode list, and
-    # the three words are left unclaimed for whichever task owns them - the
-    # same thing CPU-9 did with line-B opmodes 0, 1, 2, 3 and 7. Deciding they
-    # were Scc would execute a TRAPF as a byte write into a data register.
+    # TRAPF is not implemented here, and the three words are left unclaimed.
+    # Deciding they were Scc would execute a TRAPF as a byte write into a data
+    # register.
     # `tests/t_control.nim` asserts all three as `opIllegal` and keeps `51c0`,
     # `51f9` and `51fd` as the Scc controls beside them.
     return Decoded(op: opScc, ea: decodeEa(word), size: 1'u8,
                    destReg: uint8((word shr 8) and 0xF'u16))
   elif (word and 0xFF00'u16) == 0x4A00'u16 and sizeField(word) != 0'u8:
     # TST.B/.W/.L <ea>. All three sizes exist here - Table 3-7, page 3-25,
-    # gives TST an OPERAND SIZE of "8,16,32", and Table 3-12, page 3-27,
+    # gives TST an operand size of "8,16,32", and Table 3-12, page 3-27,
     # carries a `tst.b`, a `tst.w` and a `tst.l` row - which makes TST the one
     # instruction in this group that keeps the byte and word forms the rest of
     # the core traps.
     #
-    # SIZE 11 IS NOT DECODED HERE. `0x4AC0 | <ea>` is TAS, which section 3.9
+    # Size 11 is not decoded here. `0x4AC0 | <ea>` is TAS, which section 3.9
     # on page 3-21 does not leave on this part and Table 3-12 gives no row.
     # Measured: `m68k-elf-objdump` decodes `4ad0` as `tas %a0@` on
     # `-m m68k:68020` and as `.short 0x4ad0` on `-m m68k:5307`.
@@ -527,36 +508,35 @@ proc decodeWord*(word: uint16): Decoded =
     return Decoded(op: opRte)
   elif (word and 0xFFF0'u16) == 0x4E40'u16:
     # TRAP #<vector>, the vector in the low four bits. `m68k-elf-as -mcpu=5307`
-    # emits `4e40` for `trap #0` and `4e4f` for `trap #15`, and it SILENTLY
-    # MASKS a larger operand - `trap #16` also assembles to `4e40` - so the
+    # emits `4e40` for `trap #0` and `4e4f` for `trap #15`, and it silently
+    # masks a larger operand - `trap #16` also assembles to `4e40` - so the
     # field is four bits wide and every one of its sixteen values is an
     # instruction.
     return Decoded(op: opTrap, destReg: uint8(word and 0xF'u16))
   elif (word and 0xFF00'u16) == 0x0C00'u16 and sizeField(word) != 0'u8:
     # CMPI.<sz> #imm,Dx. The immediate follows this word. The byte and word
-    # sizes are DECODED and carry their own size so the executor traps them
+    # sizes are decoded and carry their own size so the executor traps them
     # on the size, exactly as `decodeLogicLine` does for AND and OR; size 11 is
     # the 68020 `CMP2`/`CHK2` and is not claimed.
     return Decoded(op: opCmpi, ea: decodeEa(word), size: sizeField(word))
   elif (word and 0xF000'u16) == 0xB000'u16:
-    # Line 1011, the five opmodes CPU-9 left unclaimed. Its EOR arm above
+    # Line 1011, the five opmodes the EOR arm above leaves unclaimed. That arm
     # takes 100, 101 and 110, so by the time control reaches here the opmode
     # is 000, 001, 010, 011 or 111.
     #
     #   opmode 000 001 010   CMP.B / CMP.W / CMP.L  `<ea> compared with Dn`
-    #   opmode 011           CMPA.W - THE FORM THIS PART DOES NOT HAVE
+    #   opmode 011           CMPA.W - the form this part does not have
     #   opmode 111           CMPA.L
     #
-    # THE BYTE AND WORD FORMS ARE DECODED AND THEY CARRY THEIR OWN SIZE, and
+    # The byte and word forms are decoded and they carry their own size, and
     # so does CMPA.W. Table 3-7, page 3-23, gives CMP, CMPA and CMPI an
-    # OPERAND SIZE column of `32` ALONE, so all three of those encodings trap
+    # operand size column of `32` alone, so all three of those encodings trap
     # on the size in `control.nim`. Decoding them as unrecognised words
     # instead would report "no such instruction" for encodings that are a real
     # CMP and a real CMPA on a 68000, which says less about why the core
-    # refused - the same argument `decodeAddSub` makes for ADDA.W and
-    # `decodeLogicLine` makes for the byte and word AND.
+    # refused.
     #
-    # CMPA.W IS MEASURED AND NOT INFERRED. `m68k-elf-as -mcpu=5307` REJECTS
+    # CMPA.W is measured and not inferred. `m68k-elf-as -mcpu=5307` rejects
     # `cmpa.w %d0,%a1` and accepts it under `-m68000`; `m68k-elf-objdump`
     # prints `b2c0` as `cmpaw %d0,%a1` on `-m m68k:68020` and as
     # `.short 0xb2c0` on `-m m68k:5307`. That word is opmode 011 and it is the

@@ -620,27 +620,27 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # did not find, because a check that quietly does not run is the fault this
 # whole block exists to end.
 #
-# `-DMCF5307_ABI_GATE=OFF` configures such a host. IT DOES NOT TURN OFF ONE
-# CHECK. It skips all three parts of step 4a and all nine of step 4a's own
+# `-DMCF5307_ABI_GATE=OFF` configures such a host. It does not turn off one
+# check: it skips all three parts of step 4a and all nine of step 4a's own
 # controls, and the warning it prints enumerates them by name rather than
 # naming the visibility gate alone.
 #
-# THE WARNING IS NOT THE ENFORCEMENT. `message(WARNING)` fails neither `cmake`,
+# The warning is not the enforcement. `message(WARNING)` fails neither `cmake`,
 # nor `cmake --build`, nor `ctest`, and the switch is a `CACHE BOOL`, so a
 # build directory configured OFF once reads OFF back on every later configure
 # with nobody naming the switch again. The registered test `t0_abi_gate_on` is
 # what fails.
 #
-# AND WHAT THAT TEST READS IS THE RECORD THIS BRANCH WRITES, NOT ONLY THE
-# SWITCH. The switch is a declaration and the branch is the work, and the two
-# come apart: a tree can read `ON` out of its cache with this branch deleted,
-# and a parent list file that sets `MCF5307_ABI_GATE` as a NORMAL variable
-# shadows the cache entry from its second configure onward with no edit to this
-# repository at all. Both were measured. So the branch below leaves a token at
-# its END carrying what it measured and how many of its sites ran,
-# `tests/tests_cpu.cmake` consumes it on every configure, and the ABSENT RECORD
-# is the test's second way to red - the one that covers a tree whose switch
-# reads ON while the branch did not run.
+# What that test reads is the record this branch writes, not only the switch.
+# The switch is a declaration and the branch is the work, and the two come
+# apart: a tree can read `ON` out of its cache with this branch deleted, and a
+# parent list file that sets `MCF5307_ABI_GATE` as a normal variable shadows
+# the cache entry from its second configure onward with no edit to this
+# repository at all. So the branch below leaves a token at its end carrying
+# what it measured and how many of its sites ran, `tests/tests_cpu.cmake`
+# consumes it on every configure, and the absent record is the test's second
+# way to red - the one that covers a tree whose switch reads ON while the
+# branch did not run.
 #
 # The gate costs roughly half of this project's configure time, of which the
 # controls that exist only to fire the gate's own fatal branches are about an
@@ -648,7 +648,7 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # symbols nobody measured. To take a current figure, run `cmake` with
 # `--profiling-output=... --profiling-format=google-trace`.
 #
-# THE ENUMERATION OF WHAT OFF SKIPS IS WRITTEN ONCE, in the warning below. The
+# The enumeration of what OFF skips is written once, in the warning below. The
 # docstring here and the failure message of the registered test
 # `t0_abi_gate_on` point at it rather than restating it, because three copies
 # of one enumeration are three texts nothing holds in step, and the weaker copy
@@ -656,10 +656,10 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 set(MCF5307_ABI_GATE ON CACHE BOOL
     "Run step 4a. cmake/Nim.cmake enumerates what OFF skips")
 
-# The record step 4a leaves when it runs. `tests/tests_cpu.cmake` MOVES this
+# The record step 4a leaves when it runs. `tests/tests_cpu.cmake` moves this
 # file into the binary directory of the test that reads it, so the token is
 # consumed once per configure and a stale one cannot outlive the run that wrote
-# it. The removal here is unconditional and comes BEFORE the branch: a
+# it. The removal here is unconditional and comes before the branch: a
 # configure that aborts after step 4a but before the test directory is read
 # leaves a token nothing consumed, and without this line the next configure
 # could hand that leftover to the consumer as though its own run had produced
@@ -705,22 +705,22 @@ else()
 # The site counter.
 #
 # Each of step 4a's three parts and nine controls adds one to it where that
-# site FINISHES, and the record at the end of the branch carries the total. A
+# site finishes, and the record at the end of the branch carries the total. A
 # part or a control deleted from this file takes its increment with it, so the
 # record is short and `t0_abi_gate_on` reds. Without it the record's fields all
-# came from three readings and named no site, so nothing in it could tell three
-# parts from two. MEASURED 2026-08-12 against that form: part two deleted
-# alone, and control H deleted alone, each configured green and PASSED.
+# come from three readings and name no site, so nothing in it can tell three
+# parts from two - part two deleted alone, or control H deleted alone,
+# configures green and passes.
 #
-# WHAT IT PROVES IS THAT THE SITE EXECUTED, and not that the site measured
+# What it proves is that the site executed, and not that the site measured
 # anything. What proves the second is the `FATAL_ERROR` every increment sits
 # below - each site is placed after its own assertion, so a site that reached
 # its increment is a site whose assertion held.
 #
-# CONTROL A RUNS ON BOTH READS, so the total is THIRTEEN executions of twelve
+# Control A runs on both reads, so the total is thirteen executions of twelve
 # sites. The increments are written at the sites and never in one place at the
-# end: measured the same day, a counter hoisted to one `set()` before the
-# record passes every construction above, which is the defect wearing a number.
+# end: a counter hoisted to one `set()` before the record passes every
+# construction above, which is the defect wearing a number.
 set(MCF5307_ABI_GATE_SITES 0)
 
 # ---------------------------------------------------------------------------
@@ -1311,21 +1311,21 @@ set(MCF5307_ABI_INSTRUMENT
 
 # The section boundaries a linker script defines, not this project.
 #
-# PRE-EMPTIVE. Today it exempts nothing, measured: no name in it is in the
+# Pre-emptive: it exempts nothing today, because no name in it is in the
 # export set. GNU ld's `-shared` script `PROVIDE`s these, and `PROVIDE` is
-# CONDITIONAL - ld defines the name only when an input object holds an
+# conditional - ld defines the name only when an input object holds an
 # undefined reference to it. Nothing in the measurement link references one.
 # The day one does - a heap walker reading `_end`, a sanitizer or coverage
 # runtime, a future Nim allocator - the undeclared check would stop the
 # configure step and blame the contract for a name it can never carry.
 #
-# WHAT IT COSTS. An exemption removes a fault, and this one is silent on every
+# What it costs. An exemption removes a fault, and this one is silent on every
 # host where the names do not appear - which is every host today. It exempts
 # by name and not by origin, so a name this project exported itself as `end`,
 # `edata` or `etext` would pass here unreported. Every other exported name of
 # this project is `mcf5307_`-prefixed, and that is the whole of the margin.
 #
-# The comparison is against the PREFIX-STRIPPED set, so a Mach-O `_edata`
+# The comparison is against the prefix-stripped set, so a Mach-O `_edata`
 # would arrive as `edata`. Mach-O supplies none of these, so that path is
 # reasoned, not measured.
 set(MCF5307_ABI_LINKER_PROVIDED
@@ -2670,32 +2670,30 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part t
 # ---------------------------------------------------------------------------
 # The record.
 #
-# IT IS THE LAST LINE OF THE BRANCH. Every fault above this point is a
-# `FATAL_ERROR` that ends the configure run, so a token on disk proves NO FAULT
-# FIRED - and that is the whole of what the placement proves. It says nothing
-# about which sites EXIST, and a file with two parts or eight controls reaches
+# It is the last line of the branch. Every fault above this point is a
+# `FATAL_ERROR` that ends the configure run, so a token on disk proves no fault
+# fired - and that is the whole of what the placement proves. It says nothing
+# about which sites exist, and a file with two parts or eight controls reaches
 # this line just as quietly. `SITES` is the field that carries that.
 #
-# IT CARRIES WHAT THIS STEP MEASURED AND NOT A BARE TOUCH. The four counts come
+# It carries what this step measured and not a bare touch. The four counts come
 # from three separate readings - the published set read out of the contract
 # header, `nm` on the measurement shared object, `nm` on the link-partner stub
-# object - and the test holds them against each other: VISIBLE plus
-# UNIMPLEMENTED is the whole published set, and the stub defines externally
+# object - and the test holds them against each other: `VISIBLE` plus
+# `UNIMPLEMENTED` is the whole published set, and the stub defines externally
 # exactly that set. A branch that ran but measured an empty set writes zeroes,
 # and zeroes fail both.
 #
-# WHAT READS IT is the registered test `t0_abi_gate_on`, via the consume step
+# What reads it is the registered test `t0_abi_gate_on`, via the consume step
 # in `tests/tests_cpu.cmake`. The `file(REMOVE)` before the branch and that
 # move are the two halves of one mechanism; neither is useful alone.
 #
-# THE TEXT IS ALSO LEFT IN A VARIABLE, AND THAT IS NOT A CONVENIENCE. The
+# The text is also left in a variable, and that is not a convenience. The
 # consume step holds the token it finds against this variable before moving it,
-# which rejects a token this run's branch did not write - measured, a leftover
-# planted by hand was moved and PASSED before the comparison existed. What it
-# does NOT reject is `-D`, and the consume step records that measurement rather
-# than this one. The comparison is on the WHOLE record and the record is
-# written down once, here, so the two sites cannot drift into agreeing on a
-# shorter one.
+# which rejects a token this run's branch did not write. What it does not
+# reject is `-D`, and the consume step records that. The comparison is on the
+# whole record and the record is written down once, here, so the two sites
+# cannot drift into agreeing on a shorter one.
 set(MCF5307_ABI_GATE_RECORD
 "MCF5307_ABI_GATE_RAN
 CONTRACT=${MCF5307_ABI_CONTRACT_FILE}

@@ -1,68 +1,48 @@
 #!/bin/zsh
-# `reach.sh` - THE MUTATION REACH GATE. A developer tool, not a test.
+# `reach.sh` - the mutation reach gate. A developer tool, not a test.
 #
-# WHY THIS FILE IS IN THE REPOSITORY. Several comments in `tests/t_control.nim`
-# justify a test row with a sentence that begins "MEASURED:" - "this mutation
-# left both of these rows green", "this mutation left every row of this file
-# green and only the corpus case failed". A measurement whose apparatus lives
-# in somebody's scratch directory is not a measurement anyone else can check.
-# This file is that apparatus. Run it and the "MEASURED:" sentences become
-# falsifiable; delete it and they go back to being assertions.
-#
-# IT IS DELIBERATELY NOT WIRED INTO CTEST, and `tests/tests_cpu.cmake` does not
+# It is deliberately not wired into ctest, and `tests/tests_cpu.cmake` does not
 # mention it. It rewrites source files and runs a whole second CMake
-# configure-and-build for every mutation. A `ctest` case that mutates the
-# source tree it was built from has no business in a normal suite, and the run
-# takes minutes rather than the seconds the suite takes. It is run BY HAND,
-# when a test row's justification is being written or being doubted. The
-# precedent in this repository is `conformance/generate.py`: a tracked script
-# that a developer runs on purpose and that no test target invokes. This file
-# sits in `tests/` for the same reason that one sits in `conformance/` -
-# beside the thing it serves, which is the "MEASURED:" comments in
-# `tests/t_control.nim`.
+# configure-and-build for every mutation, so a run takes minutes rather than
+# the seconds the suite takes. It is run by hand, when a test row's
+# justification is being written or being doubted.
 #
 # ---------------------------------------------------------------------------
-# WHAT "REACHED" MEANS, AND THE LIMIT ON IT. READ THIS BEFORE TRUSTING A RESULT.
+# What "reached" means, and the limit on it. Read this before trusting a result.
 #
-#   REACHED means THE EDIT CHANGED THE GENERATED C. It does NOT mean the edit
-#   changed what the program DOES. The two are different claims and only the
-#   first one is measured here.
+#   REACHED means the edit changed the generated C. It does not mean the edit
+#   changed what the program does. The two are different claims and only the
+#   first one is measured here. A `case` arm split into two arms applying the
+#   same mask is a behavioural no-op whose generated C changes, so it reports
+#   REACHED and could not have failed any test.
 #
-#   The author of this harness hit the gap on the first try. An early attempt
-#   at the M07 mutation split one `case` arm into two arms without changing the
-#   mask either arm applied - a behavioural no-op. The generated C changed, so
-#   this check reported REACHED, and the mutation still could not have failed
-#   any test, because it did not alter behaviour.
-#
-#   THEREFORE: a mutation that reports REACHED and then leaves every suite
-#   green is NOT yet evidence of a coverage hole. It is evidence of one of two
-#   things, and a HUMAN has to say which:
-#       (a) the mutation is behaviourally vacuous - like the M07 case split -
-#           and the suites are right to stay green; or
+#   Therefore: a mutation that reports REACHED and then leaves every suite
+#   green is not yet evidence of a coverage hole. It is evidence of one of two
+#   things, and a human has to say which:
+#       (a) the mutation is behaviourally vacuous, and the suites are right to
+#           stay green; or
 #       (b) the mutation does change behaviour and nothing tests it, which is
 #           the coverage hole worth writing a row for.
 #   A green reach line is a floor, not a verdict.
 #
 # ---------------------------------------------------------------------------
-# THE DEFECT IN THE PREVIOUS HARNESS, AND WHY THE FIXED PATH IS LOAD-BEARING.
+# Why the fixed path is load-bearing.
 #
-#   The previous version md5'd `build/nimcache/@mmcf5307@s*.nim.c` from a
-#   mutant tree extracted to a NEW absolute path on every run and compared it
-#   against a reference built at a DIFFERENT absolute path. Nim derives part of
-#   its name mangling from the module's full path, so the hashes differed even
-#   for a tree with ZERO source changes. The "did not reach the build" branch
-#   was therefore DEAD CODE: the check could report REACHED and nothing else,
-#   which is the same as not checking.
+#   Nim derives part of its name mangling from the module's full path, so a
+#   mutant tree extracted to a new absolute path produces different generated
+#   C than a reference built at a different absolute path even with zero source
+#   changes. A harness that compares across two paths can report REACHED and
+#   nothing else, which is the same as not checking.
 #
-#   THE FIX IS THAT EVERY BUILD HAPPENS AT ONE FIXED ABSOLUTE PATH, `$W`.
-#   Reference and mutant are extracted to the same directory in turn. The path
-#   is then constant, so the only remaining thing that can change the generated
-#   C is the source. A zero-change run MUST produce byte-identical C.
+#   Every build therefore happens at one fixed absolute path, `$W`. Reference
+#   and mutant are extracted to the same directory in turn, so the only
+#   remaining thing that can change the generated C is the source. A
+#   zero-change run must produce byte-identical C.
 #
-#   DO NOT change `MCF5307_REACH_ROOT` between building the reference and
-#   running a mutation. That reintroduces exactly the confound above.
+#   Do not change `MCF5307_REACH_ROOT` between building the reference and
+#   running a mutation. That reintroduces exactly that confound.
 #
-#   The gate's whole value is that it CAN FAIL, so prove that it still can:
+#   The gate's whole value is that it can fail, so prove that it still can:
 #   `reach.sh selftest` runs three controls and checks all three verdicts.
 #       NULL          zero source changes  -> must report NOT REACHED
 #       COMMENT_ONLY  a comment changed    -> must report NOT REACHED
@@ -78,7 +58,7 @@
 #   reach.sh selftest                  ref + all three controls, with verdicts
 #
 #   FILE is repository-relative, e.g. `src/mcf5307/control.nim`. OLD must occur
-#   EXACTLY ONCE in it or the run aborts rather than mutate the wrong line.
+#   exactly once in it or the run aborts rather than mutate the wrong line.
 #
 #   Exit status of `run`:  0 = REACHED,  2 = NOT REACHED,  1 = harness error.
 #
@@ -178,14 +158,14 @@ PY
   diff $R/ref.control.c $W/build/nimcache/"@mmcf5307@scontrol.nim.c" \
     > $D/control.c.diff
   echo "  control.nim.c diff lines: $(wc -l < $D/control.c.diff)"
-  # REACHED only says the C changed. What follows says whether anything NOTICED.
+  # REACHED only says the C changed. What follows says whether anything noticed.
   cd $W && cmake --build build -j6 -- -k > $D/build.log 2>&1
   ctest --test-dir build --no-tests=error -R $SUITES -V > $D/ctest.log 2>&1
   echo "=== $NAME MEASUREMENT ==="
   grep -E "t_[a-z_]+: ([0-9]+ of )?[0-9]+ cases (failed|passed)" $D/ctest.log \
     | sed 's/^[0-9]*: //' | sort -u
   # The conformance runner prints "N cases, M failed" per group when it is
-  # clean and "N cases run, failures above" when it is not, so BOTH forms have
+  # clean and "N cases run, failures above" when it is not, so both forms have
   # to be matched or a failing conformance group reports as silence.
   grep -E "mcf5307_conformance_[a-z]+: [0-9]+ cases, [0-9]+ failed|runner: [0-9]+ cases" \
     $D/ctest.log | sed 's/^[0-9]*: //' | sort -u
@@ -197,7 +177,7 @@ null)
   $SELF run NULL_CONTROL x x ""
   ;;
 selftest)
-  # The three controls. Each one names the verdict it MUST produce, so a gate
+  # The three controls. Each one names the verdict it must produce, so a gate
   # that has stopped being able to fail is caught here rather than trusted.
   CMT_OLD='## `Scc Dx`: ones or zeros into the LOW BYTE of a data register.'
   CMT_NEW='## `Scc Dx`: ones or zeros into the low byte of a data register.'

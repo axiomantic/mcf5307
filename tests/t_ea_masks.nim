@@ -1,60 +1,22 @@
 ## `t_ea_masks` - the decoder and effective-address legality masks.
 ##
-## THE MEASUREMENT TRANSCRIPTS THAT ESTABLISH WHAT THIS FILE CATCHES ARE NOT
-## HERE. They live in section 24.7, "Execution measurement transcripts - the
-## CPU-6 `t_ea_masks` mutation record", of
-## `~/.local/spellbook/docs/Users-eek-Development-workspaces-nord-modular-emulator/plans/2026-08-04-nmg2-emulator-impl.md`,
-## each with its date and the exact mutation that produced it. That plan's
-## section 7.7 carries the standing rule they are filed under: a measurement's
-## transcript lives in a numbered plan section and never beside the claim it
-## supports. What is kept HERE is the manual citations, the stated limit of
-## each assertion, and what a reader of the CODE needs in order to change it.
+## The coverage domain is the legality table itself. `eaLegalityFor` spreads
+## its operations across the arms of one `case`, and every implemented opcode
+## must trap at least one illegal mode.
 ##
-## THE COVERAGE DOMAIN IS THE LEGALITY TABLE ITSELF, AND THAT IS THE WHOLE
-## POINT OF THE FILE. `eaLegalityFor` spreads its operations across SIXTEEN
-## `of` arms, and the `Check:` line of CPU-6 claims a trap for at least one
-## illegal mode for EACH implemented opcode.
-##
-## THAT ARM COUNT IS HAND-MAINTAINED AND NOTHING CHECKS IT. It read "fifteen"
-## until 2026-08-11, when the multiply-and-divide size split added the
-## sixteenth arm and no run went red. It is kept because it tells a reader how
-## large the table is, and it is LABELLED because this project has measured
-## eleven stale hand-written counts, three of them created inside fixes for
-## other stale counts. Nothing here can derive it: an `of` arm is a syntactic
-## property of another module with no runtime witness, and a count recovered
-## by reading that module's TEXT would go silently wrong rather than red the
-## first time the file grew a second `case` statement - which is the failure
-## this label exists to avoid repeating.
-##
-## THE OPERATION COUNT IS NOT HAND-MAINTAINED AND IS DELIBERATELY ABSENT FROM
-## THIS SENTENCE, which named FORTY-SEVEN of them until the same date. The
-## summary line at the foot of this file counts the domain in the run that
-## prints it, and the driver reds when an operation joins the domain without a
-## coverage entry, so the figure is available from a run and no copy of it is
-## kept here to go stale.
-##
-## THE MECHANISM OF THE MISS IS WORTH MORE THAN THE ARITHMETIC. When `SWAP`
-## was implemented, adding `opSwap` to `eaLegalityFor` did not turn this file
-## red, because a hand-maintained list makes a new opcode SILENTLY UNCOVERED
-## rather than LOUDLY MISSING. The driver below iterates `Operation` and
-## requires a coverage entry for every operation whose mask is non-empty, so
-## an operation added to the table with no entry makes the run RED in the wave
-## that added it. The reverse direction is checked too: an entry for an
-## operation whose mask has gone empty is a stale entry and is also RED.
-##
-## THE SKIP RULE, STATED ONCE. An operation is outside the domain WHEN AND
-## ONLY WHEN `eaLegalityFor` returns an EMPTY mask. That is the same test
+## The skip rule, stated once. An operation is outside the domain when and
+## only when `eaLegalityFor` returns an empty mask. That is the same test
 ## `eaIsLegalFor` already makes, and that proc's own doc comment in
-## `decode_types.nim` - "THE EMPTY MASK IS THE TEST" - says why a second
-## list of the same operations drifts.
+## `decode_types.nim` says why a second list of the same operations drifts.
+## Nothing here is skipped for being unreachable from the decoder: a skip
+## justified by reachability would have skipped `SWAP`, which the PEA mask was
+## hiding while `cpu.nim` carried the sentence "no arm produces `opSwap`".
 ##
-## NOTHING HERE IS SKIPPED FOR BEING UNREACHABLE FROM THE DECODER, AND THAT
-## RESTRICTION IS LOAD-BEARING RATHER THAN DECORATIVE. A skip justified by
-## reachability would have skipped `SWAP` - the defect this file exists to
-## catch, and the one that `decode.nim`'s PEA mask really was hiding while
-## `cpu.nim`'s `opExg, opTas, opNbcd` arm carried the sentence "no arm
-## produces `opSwap`". Reachability is not a skip criterion here at any
-## strength.
+## The driver iterates `Operation` and requires a coverage entry for every
+## operation whose mask is non-empty, so an operation added to the table with
+## no entry makes the run red in the wave that added it. The reverse direction
+## is checked too: an entry for an operation whose mask has gone empty is a
+## stale entry and is also red.
 ##
 ##   (4) The extension-word order of absolute long addressing, with its own
 ##       control. `(xxx).L` carries the high half of the address in the first
@@ -64,206 +26,151 @@
 ##       this file says which manual section that is and why the control is
 ##       there.
 ##
-## THE ILLEGAL MODE OF EACH ENTRY IS SOURCED FROM THE MANUAL AND NEVER FROM
-## `eaLegalityFor`, AND THAT IS WHAT KEEPS THE FILE FROM PROVING NOTHING. A
+## The illegal mode of each entry is sourced from the manual and never from
+## `eaLegalityFor`, and that is what keeps the file from proving nothing. A
 ## driver that asked `eaLegalityFor` which mode is outside the mask and then
 ## asserted `eaIsLegalFor` rejects it would be asserting the mask against
-## itself: it would pass against ANY mask, including a wrong one, and a
+## itself: it would pass against any mask, including a wrong one, and a
 ## widened mask would move the asserted mode with it. Every `illegal` field
-## below carries its own citation, so a mask that widens to admit THAT mode
-## turns the entry RED instead of moving it. A widening that admits some OTHER
-## mode is invisible TO THE ENTRY, and assertion (1) below carries that limit;
-## block (19) is what covers that direction for the whole domain, by holding
-## each mask against a literal rather than by naming one mode.
+## below carries its own citation, so a mask that widens to admit that mode
+## turns the entry red instead of moving it. A widening that admits some other
+## mode is invisible to the entry; block (19) covers that direction for the
+## whole domain, by holding each mask against a literal rather than by naming
+## one mode.
 ##
-## THE WORD "EVERY" IN THAT PARAGRAPH IS ASSERTION (11) AND NOT A PROMISE.
-## `why` is required by `cov`, so a row cannot omit a citation but can pass one
-## citing nothing; (11) requires each to name a manual table.
+## Four assertions per operation, and each one can fail.
 ##
-## FOUR ASSERTIONS PER OPERATION, AND EACH ONE CAN FAIL.
+##   (1) The predicate rejects the illegal mode. This catches a mask widened
+##       to admit the mode the entry cites, and nothing else: each entry names
+##       exactly one illegal mode, so a mask that widens somewhere else passes
+##       (1) unchanged.
 ##
-##   (1) THE PREDICATE REJECTS THE ILLEGAL MODE. This is the assertion that
-##       catches a mask WIDENED TO ADMIT THE MODE THE ENTRY CITES, and it
-##       catches that for every operation, the ones assertion (4) cannot
-##       attribute included.
-##
-##       IT CATCHES NO OTHER WIDENING. Each entry names exactly ONE illegal
-##       mode, so a mask that widens somewhere else passes (1) unchanged.
-##       This is the exact mirror of the narrowing blindness recorded further
-##       down, and it has the same single cause: one cited mode per entry.
-##       Both directions are measured; the plan section holds both. Block (19)
-##       is what closes both, and it closes them by not naming a mode at all.
-##
-##   (2) THE PREDICATE ACCEPTS A LEGAL MODE - the positive control. Without
+##   (2) The predicate accepts a legal mode - the positive control. Without
 ##       it, a mask that rejected everything would report (1) as a pass and
 ##       "the illegal mode is rejected" would not be separable from "the
 ##       opcode admits no mode at all".
 ##
-##   (3) THE EXECUTOR RUNS THE LEGAL MODE. It is the control for (4) and it
+##   (3) The executor runs the legal mode. It is the control for (4) and it
 ##       does two jobs: it proves the operand, size and family of the entry
 ##       are a combination the executor accepts, so that a fault in (4)
 ##       cannot be blamed on a mis-set size or a mis-routed family, and it
-##       proves the refusal in (4) is attributable to the EFFECTIVE ADDRESS,
+##       proves the refusal in (4) is attributable to the effective address,
 ##       which is the only field that differs between the two runs.
 ##
-##   (4) THE EXECUTOR REFUSES THE ILLEGAL MODE - the TRAP the `Check:` line
-##       names. The refusal is asserted as a WHOLE STATE and not as a flag:
-##       `fault` set, `halted` set, ZERO cycles returned, ZERO bus accesses,
-##       and every data register, address register, stack pointer, program
-##       counter and status-register bit unchanged. A refusal that ran part
-##       of the instruction first is not a refusal. THE ADDRESS HALF OF THAT
-##       IS REAL ONLY BECAUSE `aRegSeed` SEEDS THE ADDRESS REGISTERS
-##       DISTINCTLY: while all seven held `ramBase`, an operation that copied
-##       one address register into another before refusing passed.
+##   (4) The executor refuses the illegal mode. The refusal is asserted as a
+##       whole state and not as a flag: `fault` set, `halted` set, zero cycles
+##       returned, zero bus accesses, and every data register, address
+##       register, stack pointer, program counter and status-register bit
+##       unchanged. A refusal that ran part of the instruction first is not a
+##       refusal. The address half of that is real only because `aRegSeed`
+##       seeds the address registers distinctly: while all seven held
+##       `ramBase`, an operation that copied one address register into another
+##       before refusing passed.
 ##
-## TWO MORE RUN FOR THE TABLE 3-13 ENTRIES ALONE, one per axis of the citation,
-## and each holds a DECLARED value against an INDEPENDENT recording of the same
+## Two more run for the Table 3-13 entries alone, one per axis of the citation,
+## and each holds a declared value against an independent recording of the same
 ## fact rather than against the value itself. The numbering skips (5) and (6),
-## which are the two older assertions described further down; the numbers here
-## are the ones the code uses.
+## which are the two older assertions described further down.
 ##
-##   (7) THE PAGE. Derived from the operation's mnemonic through the table's own
-##       row ordering and compared against the page the entry declared. The
-##       block defining `Table313Page` below carries the argument.
+##   (7) The page. Derived from the operation's mnemonic through the table's
+##       own row ordering and compared against the page the entry declared.
+##       The block defining `Table313Page` below carries the argument. What it
+##       catches is a mis-declared page held against a fixed break: a lone
+##       mis-declaration is red, while a co-edit that moves the break constant
+##       and the declarations together goes green past (7), and (9) is what
+##       refuses that, at compile time.
 ##
-##   (8) THE `#xxx` COLUMN. Derived by running the entry twice with different
+##   (8) The `#xxx` column. Derived by running the entry twice with different
 ##       immediates and comparing the two outcomes, which is the operational
 ##       content of that column. `table313ImmOf` carries the argument, the two
 ##       measured directions, and the limit.
 ##
-## AND THREE COVER THE TABLE AND THE ENUMERATION RATHER THAN ANY ONE
-## OPERATION. Each replaces a sentence this header used to assert by hand.
+## And three cover the table and the enumeration rather than any one operation.
 ##
-##   (9) `table313LastRowOn328` HELD AGAINST `decode_types.nim`, which records
+##   (9) `table313LastRowOn328` held against `decode_types.nim`, which records
 ##       the same page break in its own `table313LastRowOnPage328`. A
-##       `static: doAssert`, so the co-edit of the constant and the
-##       declarations FAILS THE BUILD; assertion (7) alone was green for it.
+##       `static: doAssert`, so a co-edit of the constant and the declarations
+##       fails the build. It is not held against the declarations it validates
+##       - that would be the tautology - but against that third record.
 ##
-##  (10) EVERY `Operation` MEMBER NAME BEGINS WITH `op`, the property the
+##  (10) Every `Operation` member name begins with `op`, the property the
 ##       mnemonic derivation behind (7) rests on.
 ##
-##  (11) EVERY `coverage` ROW CITES A MANUAL TABLE for its `illegal` mode, which
-##       is the "every" the anti-tautology paragraph above rests on.
+##  (11) Every `coverage` row cites a manual table for its `illegal` mode,
+##       which is the "every" the anti-tautology paragraph above rests on.
+##       `why` is required by `cov`, so a row cannot omit a citation but can
+##       pass one citing nothing; (11) requires each to name a manual table.
 ##
-## WHAT ASSERTION (7) CATCHES IS A MIS-DECLARED PAGE HELD AGAINST A FIXED
-## BREAK, AND NOT A WRONG PAGE AS SUCH. It is held against
-## `table313LastRowOn328`, and the two directions measure differently: a LONE
-## mis-declaration is RED, while a CO-EDIT that moves the break constant and
-## the twelve declarations together goes green past assertion (7). Assertion
-## (9) is what refuses the co-edit, and it refuses it at COMPILE time rather
-## than as a case - so (7)'s twelve cases never run. Both directions are
-## transcribed in the plan section.
+## Assertion (4) is not equally strong for every operation, and the entries say
+## so. Some operations carry a mask whose complement the machine layer already
+## refuses. For those the executor does refuse the illegal operand, and the
+## refusal is real, but it cannot be attributed to the operation's own guard:
+## deleting the guard leaves a machine-layer fallback to fault in its place.
+## Those carry `discriminating: false`. The rest carry `discriminating: true`:
+## deleting the operation's guard makes the entry red.
 ##
-## THE BREAK CONSTANT IS ITSELF CHECKED, AND IT IS NOT CHECKED AGAINST THE
-## DECLARATIONS IT VALIDATES - that would be the tautology. Assertion (9)
-## holds it against a THIRD record, `decode_types.nim`'s own
-## `table313LastRowOnPage328`.
-##
-## ASSERTION (4) IS NOT EQUALLY STRONG FOR EVERY OPERATION, AND THE ENTRIES
-## SAY SO RATHER THAN LETTING THE COUNT IMPLY OTHERWISE. ELEVEN operations
-## carry a mask WHOSE COMPLEMENT THE MACHINE LAYER ALREADY REFUSES. For those
-## eleven the executor does refuse the illegal operand, and the refusal is
-## real, but it CANNOT be attributed to the operation's own guard: deleting
-## the guard leaves a machine-layer fallback to fault in its place. Those
-## eleven carry `discriminating: false`, and assertion (1) is what covers a
-## widening TO THE CITED MODE for them - only that one, at the strength
-## assertion (1) states above and not a step past it. The other 36 carry
-## `discriminating: true`: deleting the operation's guard makes the entry RED.
-##
-## THE 36 IS A MEASUREMENT AND NOT AN ESTIMATE - guards deleted and run, on the
-## date `guardMeasurementDate` below carries. The plan section holds the three
-## deletions, the evidence that each reached the compiled artifact, and the
-## correction that the widest of them covered 25 of the 27 family-module guards
-## rather than all 27.
-##
-## THE CRITERION IS THE COMPLEMENT OF THE MASK AND NOT A ROSTER OF OPCODE
-## NAMES, so a twelfth operation is recognized by reading `ea.nim` rather than
-## by remembering this paragraph. Two masks meet it, for two DIFFERENT reasons.
+## The criterion is the complement of the mask and not a roster of opcode
+## names, so a new such operation is recognized by reading `ea.nim` rather than
+## by remembering this paragraph. Two masks meet it, for two different reasons.
 ##
 ##   - MOVE, MOVEA, ADD, SUB, ADDA, SUBA, TST, CMP and CMPA carry
 ##     `eaAllModes`/`eaValid7`, which admits every addressing mode Table 3-5
-##     p.3-21 prints. The only encodings outside it are the RESERVED mode-7
+##     p.3-21 prints. The only encodings outside it are the reserved mode-7
 ##     ones, and `machine.nim`'s `eaAddr` and `eaRead` fault on those
 ##     independently of any mask.
 ##
 ##   - ADDQ and SUBQ carry `eaAllModes`/`eaAlterable7`, whose mode-7
 ##     half is `{ea7AbsW, ea7AbsL}`. `machine.nim`'s `eaResolve` accepts
-##     EXACTLY those two mode-7 encodings as a destination and faults on every
+##     exactly those two mode-7 encodings as a destination and faults on every
 ##     other one, so the complement of this mask and the set `eaResolve`
-##     refuses ARE THE SAME SET. `(d16,PC)` is therefore not an unlucky pick:
-##     NO choice of illegal operand makes these two entries discriminating,
+##     refuses are the same set. `(d16,PC)` is therefore not an unlucky pick:
+##     no choice of illegal operand makes these two entries discriminating,
 ##     and one chosen to look stronger would only hide that.
 ##
-## THE LATENT DEFECT THE ELEVEN LEAVE OPEN IS RECORDED HERE RATHER THAN
-## PAPERED OVER WITH A CASE THAT WOULD LOOK LIKE COVERAGE. Those eleven guards
-## are unprotected by anything the repository currently runs. It is not a live
-## defect - the machine layer refuses the same operands TODAY, so the two
-## behave alike. It is a LATENT one: the day a machine-layer fallback changes,
-## nothing here says so. Closing it needs a case whose illegal operand is a
-## mode the machine layer would otherwise execute happily, and by the criterion
-## above no such mode exists for these eleven masks.
+## Those non-discriminating guards are unprotected by anything the repository
+## runs. It is not a live defect - the machine layer refuses the same operands
+## today - but a latent one: the day a machine-layer fallback changes, nothing
+## here says so. Closing it needs a case whose illegal operand is a mode the
+## machine layer would otherwise execute happily, and by the criterion above no
+## such mode exists for these masks.
 ##
-## "UNPROTECTED BY ANYTHING THE REPOSITORY CURRENTLY RUNS" IS MEASURED FOR
-## FOUR OF THE ELEVEN AND UNCHECKED FOR THE OTHER SEVEN, and the sentence
-## above spans the repository while its evidence does not. Only two of the
-## guard-deletion runs went suite-wide, and they cover MOVE, MOVEA, ADDQ and
-## SUBQ. For ADD, SUB, ADDA, SUBA, TST, CMP and CMPA the claim rests on THIS
-## FILE alone: no suite-wide run with those seven guards deleted is recorded,
-## and none was made. UNCHECKED, and closing it is one deletion and one full
-## run rather than an argument.
+## A narrowed mask is invisible to every `coverage` entry. Each entry names
+## exactly one legal mode, so a mask narrowed to that single mode passes all
+## four assertions unchanged: (1) still rejects the cited illegal mode, (2)
+## still accepts the one legal mode the entry names, and (3) and (4) drive
+## those same two operands and nothing else. Most entries name `Dn`, so one
+## narrowing to `{eaDn}` is invisible here for all of those at once; the
+## control-addressing entries name `(An)`, and a narrowing to `{eaAnInd}` is
+## invisible for those. The discriminating flag is about assertion (4)'s
+## attribution and says nothing at all about narrowing.
 ##
-## A NARROWED MASK IS INVISIBLE TO EVERY `coverage` ENTRY, AND NOT ONLY TO THE
-## ELEVEN. Each entry names exactly ONE legal mode, so a mask NARROWED to
-## that single mode passes all four assertions unchanged: (1) still rejects the
-## cited illegal mode, (2) still accepts the one legal mode the entry names,
-## and (3) and (4) drive those same two operands and nothing else. Most entries
-## name `Dn`, so ONE narrowing to `{eaDn}` is invisible here for all of those at
-## once; the control-addressing entries name `(An)`, and a narrowing to
-## `{eaAnInd}` is invisible for those. Nothing about the eleven makes narrowing
-## worse for them than for the rest - the discriminating flag is about assertion
-## (4)'s ATTRIBUTION and says nothing at all about narrowing.
+## What covers the narrowing direction is block (19), and it is in this file.
+## It holds every operation-and-size mask against its literal value, so a
+## narrowing anywhere in the domain is red there whether or not anything
+## exercises the mode it removed. `t_move`, `t_alu`, `t_logic`, `t_control`
+## and the conformance corpus assert positive behaviour on legal modes and red
+## beside it where they happen to drive one; that mitigation is partial, and
+## which suite catches which narrowing is not obvious - `opMove` and `opMovea`
+## narrowed to `{eaDn}`/`{}` leaves this file green and `t_move` green and
+## turns `mcf5307_conformance_move` red, because `t_move` drives MOVE
+## register-to-register only.
 ##
-## WHAT COVERS THE NARROWING DIRECTION IS BLOCK (19), AND IT IS IN THIS FILE.
-## It holds every one of the 51 operation-and-size masks against its literal
-## value, so a narrowing anywhere in the domain is RED there whether or not
-## anything exercises the mode it removed. `t_move`, `t_alu`, `t_logic`,
-## `t_control` and the conformance corpus assert POSITIVE behaviour on legal
-## modes and red beside it where they happen to drive one. That mitigation AND
-## this file's own blocks (12), (13), (14) and (16) and `coverage` rows were the
-## whole of the coverage until block (19) existed, and between them they reached
-## 217 of the 338 cells - the complement of the 121 that block (19) measured as
-## reddening nothing else anywhere. AN EARLIER REVISION OF THIS SENTENCE GAVE
-## THE 217 TO THE EXTERNAL SUITES ALONE, which is not what the sweep measured:
-## part of it is reached only by the four blocks in this file.
+## The other two assertions the file has always carried are kept.
 ##
-## WHERE THAT MITIGATION FALLS IS NOT AN ARGUMENT ANY MORE. Every cell of every
-## mask in the domain has been deleted on its own and the whole suite run, so
-## the split between the cells something else exercises and the cells nothing
-## else exercises is a measurement rather than a guess. Block (19) carries it.
-## The one narrowing that predates that sweep is still worth its sentence,
-## because of WHICH suite caught it: `opMove` and `opMovea` narrowed to
-## `{eaDn}`/`{}` left THIS FILE green and `t_move` green and turned
-## `mcf5307_conformance_move` red - `t_move` drives MOVE register-to-register
-## only, so it asserts positive MOVE behaviour on the one mode that narrowing
-## keeps. The transcript is in the plan section.
+##   (5) The first non-zero cycle return, driven through the real ABI with a
+##       board that returns `MCF5307_BUS_OK` and a `NOP` for every fetch. A
+##       core that returns zero cycles cannot loop at all, so this separates
+##       "the decoder ran" from "the decoder is not wired in".
 ##
-## THE OTHER TWO ASSERTIONS THE FILE HAS ALWAYS CARRIED ARE KEPT.
-##
-##   (5) THE FIRST NON-ZERO CYCLE RETURN, moved here from CPU-3, driven
-##       through the real ABI with a board that returns `MCF5307_BUS_OK` and a
-##       `NOP` for every fetch. A core that returns zero cycles cannot loop at
-##       all, so this separates "the decoder ran" from "the decoder is not
-##       wired in".
-##
-##   (6) THE DECODER RECOGNIZES A REPRESENTATIVE WORD for each of a handful of
+##   (6) The decoder recognizes a representative word for each of a handful of
 ##       opcodes, so that the legality assertions are attached to a decoder
 ##       that runs and not only to a table.
 ##
-## AND ONE ASSERTION ABOUT THE TABLE ITSELF RATHER THAN ABOUT ANY OPERATION.
-## The enumeration takes the FIRST `coverage` row matching each operation, so a
-## SECOND row for an operation that already has one runs nothing and reports
-## nothing. The count of rows WRITTEN is therefore held against the count of
-## rows REACHED, a dead row is RED, and the red NAMES the rows that ran
+## And one assertion about the table itself rather than about any operation.
+## The enumeration takes the first `coverage` row matching each operation, so a
+## second row for an operation that already has one runs nothing and reports
+## nothing. The count of rows written is therefore held against the count of
+## rows reached, a dead row is red, and the red names the rows that ran
 ## nothing.
 ##
 ## There is no supervisor and user stack split on ISA_A; the context holds the
@@ -293,26 +200,25 @@ import mcf5307/machine
 var failures: seq[string]
 var passCount = 0
 
-## THE FIGURES THE SUMMARY LINE CARRIES, COUNTED WHILE THE ENUMERATION RUNS AND
-## NEVER WRITTEN DOWN. A hardcoded "36 of 47" would be the same defect the
-## header describes one level up: a stated number that goes stale silently.
-## These are incremented by the loop, so they describe THIS run.
+## The figures the summary line carries, counted while the enumeration runs
+## and never written down: a hardcoded figure goes stale silently. These are
+## incremented by the loop, so they describe this run.
 ##
-## THE DOMAIN AND THE COVERED SET ARE COUNTED SEPARATELY BECAUSE THEY COME
-## APART EXACTLY WHEN IT MATTERS. `opsInDomain` counts operations with a
+## The domain and the covered set are counted separately because they come
+## apart exactly when it matters. `opsInDomain` counts operations with a
 ## non-empty mask - the population the file claims to cover. `opsCovered`
 ## counts those an entry actually reached. They are equal in a green run and
 ## differ in a run where an operation gained a mask and no entry; collapsing
-## them into one counter made the summary report a SMALLER domain in precisely
-## that run.
+## them into one counter makes the summary report a smaller domain in
+## precisely that run.
 var opsInDomain = 0
 var opsCovered = 0
 var opsDiscriminating = 0
 
 const guardMeasurementDate = "2026-08-10"
-  ## The date of the guard-deletion measurement the plan section records. The
-  ## summary line carries it so the reader of a bare log can tell how old the
-  ## evidence behind `discriminating` is without opening the plan.
+  ## The date of the guard-deletion measurement behind `discriminating`. The
+  ## summary line carries it so a reader of a bare log can tell how old that
+  ## evidence is.
 
 proc check(cond: bool; label: string) =
   if cond:
@@ -359,7 +265,7 @@ block:
 
 # ---------------------------------------------------------------------------
 # The board the executor assertions run on. One flat byte array, big-endian,
-# the shape `t_move` and `t_alu` established. IT COUNTS ITS ACCESSES: a
+# the shape `t_move` and `t_alu` established. It counts its accesses: a
 # refusal that touched the bus before refusing is not a refusal, and the
 # count is what assertion (4) reads to say so.
 
@@ -408,41 +314,35 @@ const
     ## `mcf5307_reset` writes `ctx.sr = 0x2700'u32` - from the G2 reset
     ## vector's `move.w #$2700,%sr`. `runFamily` seeds every other
     ## register `pristine` reads, so this is its one copy of PRODUCTION state.
-    ## NOT imported from `cpu.nim`: one shared symbol would hide a wrong value.
+    ## Not imported from `cpu.nim`: one shared symbol would hide a wrong value.
 func aRegSeed(i: int): uint32 = ramBase + uint32(i) * aRegSeedStrideMustBeNonZero
 static:
   for i in 0 .. 7: doAssert dRegSeedMustBeNonZero + uint32(i) != 0'u32
   for i in 1 .. 6: doAssert aRegSeed(i) > aRegSeed(i - 1)
 
-## TABLE 3-13 SPANS TWO PAGES, SO THE PAGE IS A PARAMETER AND NOT A DEFAULT.
-## The table begins on p.3-28 and CONTINUES on p.3-29, and three of the twelve
-## rows cited below - `ori.l`, `subi.l` and `subx.l` - are on the continuation
-## page. Both pages were read RENDERED.
+## Table 3-13 spans two pages, so the page is a parameter and not a default.
+## The table begins on p.3-28 and continues on p.3-29, and three of the rows
+## cited below - `ori.l`, `subi.l` and `subx.l` - are on the continuation
+## page. Both pages were read rendered.
 ##
-## ONE SHARED CONSTANT CANNOT HOLD TWO PAGES, and `decode_types.nim` records
-## that this codebase already made the mistake once - "An earlier revision of
-## this line put all three on 3-28". Two constants would not close it either: a
-## thirteenth entry would pick one of them, and picking the wrong one is
+## One shared constant cannot hold two pages. Two constants would not close it
+## either: a further entry would pick one of them, and picking the wrong one is
 ## exactly as silent as before.
 ##
-## A REQUIRED PARAMETER IS WHAT CANNOT FLATTEN. The page is not defaultable,
-## so an entry cannot INHERIT a page it never stated; and `Table313Page` is an
+## A required parameter is what cannot flatten. The page is not defaultable,
+## so an entry cannot inherit a page it never stated; and `Table313Page` is an
 ## enum, so the only two spellings are the two pages the table actually spans
 ## and a typo is a compile error rather than a wrong citation.
 ##
-## BUT A REQUIRED PARAMETER MAKES THE CHOICE UNAVOIDABLE AND NOT CORRECT, WHICH
-## IS WHY ASSERTION (7) EXISTS. Its own objection to two constants - "a
-## thirteenth entry would pick one of them" - survives the parameter unaltered:
-## a thirteenth entry can write `p313Start` for a row that prints on 3-29 and
-## nothing in the parameter says so. That lone mis-declaration was measured
-## GREEN before (7) existed and is RED with (7) in place; the plan section
-## carries both runs. What (7) does NOT close is the CO-EDIT: move the break
-## constant and the declarations together and the two go green past each other,
-## which is assertion (9)'s subject.
+## But a required parameter makes the choice unavoidable and not correct, which
+## is why assertion (7) exists: an entry can write `p313Start` for a row that
+## prints on 3-29 and nothing in the parameter says so. What (7) does not close
+## is the co-edit: move the break constant and the declarations together and
+## the two go green past each other, which is assertion (9)'s subject.
 ##
-## SO THE PAGE IS DERIVED AND THE DECLARED ONE IS CHECKED AGAINST IT. The
-## derivation rests on a property of the table that was read from the RENDERED
-## p.3-28 and p.3-29 and NOT from `pdftotext` and NOT from the markdown
+## So the page is derived and the declared one is checked against it. The
+## derivation rests on a property of the table that was read from the rendered
+## p.3-28 and p.3-29 and not from `pdftotext` and not from the markdown
 ## conversion under `datasheets/MCF5307UM-md/`, whose Table 3-13 is known
 ## wrong:
 ##
@@ -524,15 +424,13 @@ func table313PageOf(op: Operation): Table313Page =
 ## that later needed the `#xxx` fact would have found the constant silent.
 ## Both facts are now SPELLED by every entry, and neither is defaultable.
 ##
-## SPELLING IT IS NOT CHECKING IT, AND ASSERTION (8) IS THE CHECK. IT IS
-## TWO-SIDED, which one mutation would not have shown: a check that answered
+## Spelling it is not checking it, and assertion (8) is the check. It is
+## two-sided, which one mutation would not have shown: a check that answered
 ## `imm313Timed` for everything would catch a timed row declared dashed and
-## nothing else. Both directions were mutated - a genuinely timed row declared
-## dashed, and a genuinely dashed row declared timed - and both are RED. The
-## plan section carries the two transcripts and the evidence that each reached
-## the compiled artifact.
+## nothing else. Both directions are red - a genuinely timed row declared
+## dashed, and a genuinely dashed row declared timed.
 ##
-## WHAT (8) DOES NOT DO IS READ THE MANUAL, and neither does (7). Each holds a
+## What (8) does not do is read the manual, and neither does (7). Each holds a
 ## declaration against one independent recording of the same fact;
 ## `table313ImmOf` states that limit and the shape of the executor error that
 ## would defeat it. `decode_types.nim` and `logic.nim` record the
@@ -689,11 +587,11 @@ let coverage: seq[Coverage] = @[
   # WRITTEN, so it cannot be PC-relative. An address register IS legal here,
   # which is why the class is alterable and not data alterable.
   #
-  # THESE TWO ARE NON-DISCRIMINATING FOR THE SECOND REASON THE HEADER GIVES.
+  # These two are non-discriminating for the second reason the header gives.
   # `execAddSubQ` reaches its destination through `eaResolve`, which accepts
   # `{ea7AbsW, ea7AbsL}` and faults on every other mode-7 encoding - the exact
-  # complement of `eaAlterable7`. Measured by deleting this operation's guard,
-  # which leaves the entry GREEN; the plan section carries the run.
+  # complement of `eaAlterable7`. Deleting this operation's guard leaves the
+  # entry green.
   cov(opAddq, famAlu, mDn, mPcDisp, whyPcNotAlterable,
       discriminating = false),
   cov(opSubq, famAlu, mDn, mPcDisp, whyPcNotAlterable,
@@ -895,9 +793,9 @@ proc runCoverage(c: Coverage) =
     " cycles=" & $bad.cycles & " busAccesses=" & $bad.accesses &
     " registersPristine=" & $pristine(bad))
 
-  # (7) THE DECLARED TABLE 3-13 PAGE, HELD AGAINST THE DERIVED ONE. This runs
+  # (7) The declared Table 3-13 page, held against the derived one. This runs
   # for the Table 3-13 entries alone; the block defining `Table313Page` carries
-  # the argument, including the measured green this assertion closes.
+  # the argument.
   if c.page313.isSome:
     let derived = table313PageOf(c.op)
     checkDetail(c.page313.get == derived,
@@ -905,7 +803,7 @@ proc runCoverage(c: Coverage) =
       "the entry declares p." & $c.page313.get &
       " and the mnemonic derives p." & $derived)
 
-  # (8) THE DECLARED `#xxx` COLUMN, HELD AGAINST THE ONE THE EXECUTOR SHOWS.
+  # (8) The declared `#xxx` column, held against the one the executor shows.
   # `table313ImmOf` carries the argument and the limit.
   if c.imm313.isSome:
     let derivedImm = table313ImmOf(c)
@@ -918,9 +816,9 @@ proc runCoverage(c: Coverage) =
       "a row the manual dashes; read the family module before editing it")
 
 # ---------------------------------------------------------------------------
-# (1) to (4) - and (7) where it applies - ENUMERATED OVER `Operation`. The loop
+# (1) to (4) - and (7) where it applies - enumerated over `Operation`. The loop
 # below, and not the table above, is what makes an opcode that gains a mask
-# LOUDLY MISSING.
+# loudly missing.
 
 block:
   var reached = newSeq[bool](coverage.len)
@@ -935,8 +833,8 @@ block:
       check(entry < 0,
         $op & ": carries an EMPTY legality mask and no stale coverage entry")
     else:
-      # THE DOMAIN IS COUNTED HERE AND NOT INSIDE `runCoverage`, BECAUSE THE
-      # RUN THAT MOST NEEDS THE FIGURE IS THE RUN WHERE AN ENTRY IS MISSING.
+      # The domain is counted here and not inside `runCoverage`, because the
+      # run that most needs the figure is the run where an entry is missing.
       # See the declaration of `opsInDomain` for why the two counters are
       # separate.
       inc opsInDomain
@@ -975,10 +873,9 @@ block:
   # red anywhere - the case count is printed and nothing asserts it, which is
   # the same silence this file was built to remove.
   #
-  # The citation STRING and the `page313` field are written by one call but are
+  # The citation string and the `page313` field are written by one call but are
   # two different values, so each is a witness for the other: a row citing
-  # Table 3-13 with no page, or a page on a row citing something else, is RED.
-  # Both directions are measured, and the plan section carries both.
+  # Table 3-13 with no page, or a page on a row citing something else, is red.
   # Both counts falling to ZERO is the remaining way out - twelve entries
   # rewritten to hand-built strings - so that is refused as well.
   #
@@ -998,10 +895,10 @@ block:
     " rows cite Table 3-13, " & $carriesPage & " carry a page and " &
     $carriesImm & " carry a `#xxx` column, and no figure may be zero")
 
-  # (10) EVERY `Operation` MEMBER NAME BEGINS WITH `op`. `table313PageOf`
-  # asserts this for the twelve members it is called with and CRASHES on a
+  # (10) Every `Operation` member name begins with `op`. `table313PageOf`
+  # asserts this for the members it is called with and crashes on a
   # member that breaks it - a crash rather than a case. Checking it for the
-  # WHOLE enumeration turns "a misnamed member would crash the derivation" from
+  # whole enumeration turns "a misnamed member would crash the derivation" from
   # a sentence about a hypothetical into a property of the enumeration as it
   # stands, and it costs one case rather than twelve.
   var misnamed: seq[string] = @[]
@@ -1012,10 +909,10 @@ block:
     "mnemonic derivation behind assertion (7) rests on",
     "these are not: " & $misnamed)
 
-  # (11) EVERY ROW'S `illegal` FIELD CARRIES A MANUAL CITATION. The header
-  # rests its whole anti-tautology argument on that, and it was a sentence
-  # rather than a check. `why` is a required parameter, so a row cannot omit
-  # it, but a row CAN pass a hand-written string that cites nothing; every
+  # (11) Every row's `illegal` field carries a manual citation. The header
+  # rests its anti-tautology argument on that. `why` is a required parameter,
+  # so a row cannot omit
+  # it, but a row can pass a hand-written string that cites nothing; every
   # citation this file uses names a manual table, so that is what is required.
   var uncited: seq[string] = @[]
   for c in coverage:
@@ -1025,35 +922,29 @@ block:
     "these do not: " & $uncited)
 
 # ---------------------------------------------------------------------------
-# (12) THE MULTIPLY AND DIVIDE CARRY TWO MASKS, ONE PER SIZE, AND THE FOUR
-# `coverage` ROWS ABOVE CANNOT SEE THE SPLIT. Those rows cite the `An` row of
-# Table 3-5, which is dashed at BOTH sizes, so widening or narrowing either
+# (12) The multiply and divide carry two masks, one per size, and the four
+# `coverage` rows above cannot see the split. Those rows cite the `An` row of
+# Table 3-5, which is dashed at both sizes, so widening or narrowing either
 # mask anywhere else leaves all four green. This block is the guard for the
 # split itself.
 #
-# WHAT COLLAPSING THE ARM ACTUALLY REDS IS A QUARTER OF THIS BLOCK, AND AN
-# EARLIER REVISION OF THIS COMMENT CLAIMED ALL OF IT. It read "each assertion
-# below goes RED on the single data-alterable mask the four operations shared
-# before it existed". Measured 2026-08-11: with the arm collapsed back to that
-# single mask, 24 of the 96 cell assertions below go RED and the other 72
-# PASS.
+# Collapsing the arm to one data-alterable mask reds a quarter of this block
+# and not all of it. What reds is the same six cells in each of the four
+# operations: the `.L` rejects half of `(d8,Ay,Xi)`, `(xxx).W` and `(xxx).L`,
+# and the `.W` accepts half of `(d16,PC)`, `(d8,PC,Xi)` and `#<data>`.
 #
-# THE 24 ARE THE SAME SIX IN EACH OF THE FOUR OPERATIONS: the `.L` REJECTS
-# half of `(d8,Ay,Xi)`, `(xxx).W` and `(xxx).L`, and the `.W` accepts half of
-# `(d16,PC)`, `(d8,PC,Xi)` and `#<data>`.
-#
-# THE OTHER 72 CANNOT SEE THE COLLAPSE, for one reason in two shapes. The ten
+# The rest cannot see the collapse, for one reason in two shapes. The ten
 # shared-mode assertions and the two `Ay` assertions of each operation name
-# cells where the collapsed mask AGREES with both real masks, and A MODE BOTH
-# MASKS SHARE IS NOT EVIDENCE ABOUT THE SPLIT. Within each of the six split
-# pairs the collapsed mask matches exactly ONE column - the three modes it
+# cells where the collapsed mask agrees with both real masks, and a mode both
+# masks share is not evidence about the split. Within each of the six split
+# pairs the collapsed mask matches exactly one column - the three modes it
 # holds satisfy the word half, the three it lacks satisfy the long half - so
 # one assertion of every pair reds and its partner passes. The four
 # size-less-overload assertions at the foot of the block stay green as well,
 # because both sides of that equality read whatever single mask the arm
 # returns.
 #
-# THE SOURCE IS THE CFPRM AND THE ASSEMBLER, AND THEY AGREE ON ALL 96 CELLS.
+# The source is the CFPRM and the assembler, and they agree on every cell.
 # The "Instruction Fields (Word)" addressing-mode table is on folios 4-32
 # (DIVS), 4-34 (DIVU), 4-55 (MULS) and 4-57 (MULU); the "Instruction Fields
 # (Longword)" one is on folios 4-32, 4-34, 4-56 (MULS) and 4-58 (MULU). The
@@ -1144,7 +1035,7 @@ block:
       $op & ": the size-less `eaLegalityFor` answers the LONGWORD mask")
 
 # ---------------------------------------------------------------------------
-# (13) MOVEM TAKES `(An)` AND `(d16,An)` AND NOTHING ELSE, AND THE `coverage`
+# (13) MOVEM takes `(An)` and `(d16,An)` and nothing else, and the `coverage`
 # ROW ABOVE CANNOT SEE THAT. That row cites `-(An)`, which is dashed on the
 # folios and outside the mask both before and after this narrowing, so it is
 # GREEN over a mask four cells too wide. Every entry names exactly ONE illegal
@@ -1153,47 +1044,19 @@ block:
 # would be dropped by the first-match lookup and red the reached-row count
 # instead of asserting anything.
 #
-# THE FOUR CELLS THIS BLOCK EXISTS FOR are `(d8,An,Xi)`, `(xxx).L`,
-# `(d16,PC)` and `(d8,PC,Xi)`. `eaLegalityFor`'s `opMovem` arm read
-# `EaLegality(modes: eaControlModes, ea7: eaControl7NoAbsW)` - a set retired on
-# 2026-08-11 and equal to today's `eaControl7 - {ea7AbsW}` - which admits all
-# four, while the arm's own comment cited Table 3-14 as timing MOVEM under
-# `(An)` and `(d16,An)` alone. The comment was right and the code was wrong.
+# The four cells this block exists for are `(d8,An,Xi)`, `(xxx).L`,
+# `(d16,PC)` and `(d8,PC,Xi)`. A control-class mask on `eaLegalityFor`'s
+# `opMovem` arm admits all four, while the arm's own comment cites Table 3-14
+# as timing MOVEM under `(An)` and `(d16,An)` alone.
 #
-# IT WAS NOT LATENT. Measured 2026-08-11 on the wide mask, before the
-# narrowing: `movem.l %d0-%d1,0x400.l` - hand-built as `48f9 0003 0000 0400` -
-# reached the executor and COMPLETED ITS STORE, leaving 0xAABBCCDD at 0x400
-# and 0x11223344 at 0x404 with `fault` false. `tests/t_move.nim` carries that
-# case at the execution level; this block carries the mask level.
+# That is not latent. On the wide mask `movem.l %d0-%d1,0x400.l` - hand-built
+# as `48f9 0003 0000 0400` - reaches the executor and completes its store,
+# leaving 0xAABBCCDD at 0x400 and 0x11223344 at 0x404 with `fault` false.
+# `tests/t_move.nim` carries that case at the execution level; this block
+# carries the mask level, and block (19)'s `opMovem` row holds the whole mask
+# against a literal.
 #
-# THE WIDE MASK REDS THREE `t_move` CASES AND NOT TWO. The sentence above
-# accounts for the `(xxx).L` pair only - the `fault` assertion and the
-# read-back of the two stored words - and an earlier revision of this record
-# left it there. Measured 2026-08-11 by restoring
-# `EaLegality(modes: eaControlModes, ea7: eaControl7 - {ea7AbsW})` on the
-# `opMovem` arm, configuring FRESH, rebuilding and running through `ctest`:
-# `t_move` prints
-# `3 of 34 cases failed` - `movem.l to (xxx).L traps`, `movem.l to (xxx).L
-# stores nothing before it traps` AND `movem.l to (d8,An,Xi) traps`, the last
-# of which the pair above omits. This file prints
-# `5 of <caseTotalMustMatchTranscripts> cases failed` - one per cell named
-# below, and one more for block (19)'s `opMovem` row, which holds the whole
-# mask against a literal and reds on any change to it. Nothing else in the
-# suite moves. RE-MEASURED 2026-08-12 with blocks (18) and (19) in place,
-# because (18) is itself a case that moved the denominator and (19) moved this
-# mutation's blast radius.
-#
-# THE DENOMINATOR IS A NAMED CONSTANT AND NOT A NUMBER. Neither copy of this
-# transcript spells the figure: both name `caseTotalMustMatchTranscripts`, the
-# constant exists once, and block (18) reds the run when it stops describing
-# it.
-#
-# THE REST OF THE TRANSCRIPT IS PROSE IN TWO PLACES - the `4`, the `3 of 34`
-# and every citation - because it is duplicated in the `opMovem` arm of
-# `src/mcf5307/decode_types.nim`. A change to either copy has to be made in
-# both, and nothing reds if only one is made.
-#
-# THE SOURCE IS THE CFPRM AND BOTH DIRECTIONS AGREE, read as RENDERED IMAGES
+# The source is the CFPRM and both directions agree, read as rendered images
 # (`pdftoppm -r 200`) and not from any OCR text:
 #
 #   folio 4-50, "Effective Address field ... for register-to-memory transfers,
@@ -1217,22 +1080,19 @@ block:
 #     `4ce8` as `moveml` and decodes `48f0`, `48f8`, `48f9`, `48fa`, `48fb`
 #     and their `4cxx` partners as `.short`.
 #
-# THE 68020 CROSS-CHECK SEPARATES EIGHT OF THOSE TEN AND NOT ALL TEN, AND AN
-# EARLIER REVISION OF THIS BLOCK CLAIMED ALL TEN. Measured 2026-08-11, each
-# encoding disassembled in a file of its own so no mis-decode could cascade:
+# The 68020 cross-check separates eight of those ten. Each encoding was
+# disassembled in a file of its own so no mis-decode could cascade:
 # `-m m68k:68020` renders `48f0`, `48f8`, `48f9`, `4cf0`, `4cf8`, `4cf9`,
 # `4cfa` and `4cfb` as a real `moveml`, and for those eight the ColdFire
-# `.short` is therefore a statement about the PART rather than about the
-# disassembler. `48fa` and `48fb` come back `.short` on the 68020 TOO. Both
-# STORE to a PC-relative destination, which is illegal on every 68k, so those
+# `.short` is a statement about the part rather than about the
+# disassembler. `48fa` and `48fb` come back `.short` on the 68020 too. Both
+# store to a PC-relative destination, which is illegal on every 68k, so those
 # two encodings are not a MOVEM on any target and the differential oracle is
-# silent about them. The asymmetry is the direction and nothing else: the
-# memory-to-register partners `4cfa` and `4cfb` READ from PC-relative, which
-# the 68020 permits, and they do discriminate.
-#
-# THE NARROWING IS NOT WEAKENED BY THAT CORRECTION. Eight encodings still
-# discriminate, and the two folios and the pinned assembler each answer all
-# ten on their own, so no cell in this block rests on the 68020 alone.
+# silent about them. The asymmetry is the direction: the memory-to-register
+# partners `4cfa` and `4cfb` read from PC-relative, which the 68020 permits,
+# and they do discriminate. The two folios and the pinned assembler each
+# answer all ten on their own, so no cell in this block rests on the 68020
+# alone.
 #
 # `(xxx).W` IS ASSERTED HERE AND WAS ALREADY RIGHT. It is in the block so that
 # a repair of the four cells cannot be written as a widening that admits it.
@@ -1277,23 +1137,20 @@ block:
       " (folios 4-50 and 4-51: a dash in both directions)")
 
 # ---------------------------------------------------------------------------
-# (14) THE `eaLeaPeaTarget` GUARD. The mask is BELIEVED CORRECT and that is not
-# why this block exists: an unguarded mask is a latent defect whatever its
-# current value, and this project has now measured three of them.
-#
-# MEASURED 2026-08-11, BEFORE THIS BLOCK EXISTED: widening `eaLeaPeaTarget` to
+# (14) The `eaLeaPeaTarget` guard. An unguarded mask is a latent defect
+# whatever its current value: without this block, widening `eaLeaPeaTarget` to
 # `modes: eaControlModes + {eaAnPost}` and `ea7: eaControl7 + {ea7Imm}` -
-# admitting `(An)+` and `#<data>` - left the ENTIRE suite green.
-# The `coverage` rows for `opLea` and `opPea` cite `Dn`, which stays outside
-# the widened mask, so assertion (1) could not see it.
+# admitting `(An)+` and `#<data>` - leaves the entire suite green, because the
+# `coverage` rows for `opLea` and `opPea` cite `Dn`, which stays outside the
+# widened mask, so assertion (1) cannot see it.
 #
-# THE SOURCE. `m68k-elf-as -mcpu=5307` REJECTS `lea (%a0)+,%a1`, `lea #4,%a1`,
+# The source. `m68k-elf-as -mcpu=5307` rejects `lea (%a0)+,%a1`, `lea #4,%a1`,
 # `pea (%a0)+` and `pea #4`, all four with "operands mismatch", and accepts
 # every mode named in the positive control below. MCF5307 User's Manual Table
 # 3-13 p.3-28 dashes the `lea | <ea>,Ax` row under `(An)+` and `#xxx`, and
 # Table 3-14 p.3-29 dashes the `pea | <ea>` row under the same two columns.
 #
-# THE POSITIVE CONTROL INCLUDES `(xxx).W`, which is the cell `eaLeaPeaTarget`
+# The positive control includes `(xxx).W`, which is the cell `eaLeaPeaTarget`
 # was created to admit and the one MOVEM must not have. A repair of block (13)
 # written by widening a shared constant reds there and here at once.
 
@@ -1326,133 +1183,54 @@ block:
         "`m68k-elf-as -mcpu=5307` answers \"operands mismatch\")")
 
 # ---------------------------------------------------------------------------
-# (15) THE `eaJumpTarget` CELL TABLE LIVES IN `tests/t_control.nim`, NOT HERE.
-# A block of twenty-four cases mirroring block (14) for `opJmp` and `opJsr`
-# stood here until 2026-08-11 and was DELETED as unable to detect anything.
-# `t_control.nim`'s twelve-row `eaIsLegalFor(opJmp/opJsr, ...)` table
-# enumerates the SAME twelve cells with the SAME verdicts through the SAME
-# predicate, so the two computed the same twenty-four booleans and no mutation
-# can separate them. Measured 2026-08-11, each mutation configured FRESH and
-# run through `ctest`, deleted block against `t_control`:
+# (15) The `eaJumpTarget` cell table lives in `tests/t_control.nim`, not here.
+# A block mirroring block (14) for `opJmp` and `opJsr` stood here and was
+# deleted as unable to detect anything: `t_control.nim`'s twelve-row
+# `eaIsLegalFor(opJmp/opJsr, ...)` table enumerates the same cells with the
+# same verdicts through the same predicate, so the two compute the same
+# booleans and no mutation can separate them.
 #
-#   eaJumpTarget + {eaAnPost}   `t_control` 4, deleted block 2
-#   eaJumpTarget + {eaAn}       `t_control` 3, deleted block 2
-#   eaControl7 - {ea7AbsW}      `t_control` 2, deleted block 2
-#   eaControl7 + {ea7Imm}       `t_control` 2, deleted block 2
-#
-# IN NO DIRECTION DID THE DELETED BLOCK RED ALONE. RE-MEASURED AFTER THE
-# DELETION: `t_control` reds 4, 3, 2 and 2 as above, unchanged.
-#
-# IN TWO OF THE FOUR - NOT THREE - `t_control` ALSO REDS AT THE EXECUTOR
-# LEVEL, WHICH THE DELETED BLOCK NEVER REACHED. Measured 2026-08-11 by
-# classifying every red `t_control` label as an `expectTrap` case or a
-# `checkMask` row:
-#
-#   eaJumpTarget + {eaAnPost}   4 red: 2 executor, 2 `checkMask`
-#   eaJumpTarget + {eaAn}       3 red: 1 executor, 2 `checkMask`
-#   eaControl7 - {ea7AbsW}      2 red: 0 executor, both `checkMask`
-#   eaControl7 + {ea7Imm}       2 red: 0 executor, both `checkMask`
-#
-# IN THE TWO `eaControl7` DIRECTIONS EVERY `t_control` RED IS A MASK ROW, AND
-# THE TWO DIRECTIONS DIFFER IN WHAT IS LEFT ELSEWHERE. Re-measured 2026-08-12
-# with block (19) in place and block (17) deleted. Under `- {ea7AbsW}` the
-# executor-level evidence lives in other files - `t_move`'s five `lea`/`pea
-# (xxx).W` cases and the `jmp_absolute_short` conformance case all red,
-# fourteen cases in all. Under `+ {ea7Imm}` NOTHING executes: the eight reds
-# are this file's two block-(14) cases, block (19)'s four rows for `opLea`,
-# `opPea`, `opJmp` and `opJsr`, and `t_control`'s two `#imm is illegal` rows,
-# every one of them a mask or value assertion. The CFPRM
-# provenance the block carried is on the `eaControl7` declaration in
-# `src/mcf5307/ea.nim`, beside the value it cites.
-#
-# WHY BLOCK (14) SURVIVES THE SAME ARGUMENT. LEA and PEA have no cell table
-# anywhere else, which is NOT the same as their being untested: the baseline
-# `ctest -V` transcript carries THIRTY-FOUR case labels naming LEA or PEA,
-# measured 2026-08-12 - 29 in this file (this block's eighteen, the `coverage`
-# rows' four assertions for each of `opLea` and `opPea`, block (6)'s
-# `decodes LEA (A0),A0`, and block (19)'s two rows) and 5 in `t_move`, which
-# EXECUTES `lea (xxx).W` and `pea (xxx).W` and reds all five under
-# `eaControl7 - {ea7AbsW}`.
-#
-# THE MUTATION THAT SHOWS IT IS `eaLeaPeaTarget` WIDENED ON ITS OWN to
-# `ea7: eaControl7 + {ea7Imm}`: measured 2026-08-12, 4 red in the ENTIRE suite -
-# this block's two `the mask REJECTS #<data>` cases and block (19)'s `opLea` and
-# `opPea` rows - and every other case green.
-#
-# BLOCK (19) DOES NOT MAKE THIS BLOCK THE SECOND DETECTOR BLOCK (15) WAS, AND
-# THE DIFFERENCE IS THE LAYER. Block (15) computed the SAME booleans through the
-# SAME predicate as `t_control`, so no mutation could separate them. Block (19)
-# compares `eaLegalityFor`'s ANSWER against a literal; this block asks
+# Block (14) is not the same case. LEA and PEA have no cell table anywhere
+# else, and block (19) does not replace it either: block (19) compares
+# `eaLegalityFor`'s answer against a literal, while this block asks
 # `eaIsLegalFor` about a cell, which runs `isEaLegal` on top of that answer.
-# Measured 2026-08-12 with `isEaLegal` made to answer true unconditionally: this
-# block reds 4 and block (19) reds 0. Neither is reachable only through the
-# other.
+# With `isEaLegal` made to answer true unconditionally, block (14) reds and
+# block (19) does not, so neither is reachable only through the other.
 #
-# WIDENING `eaControl7` ITSELF IS THE WRONG WITNESS FOR THAT CLAIM, because the
-# widening moves four operations at once: measured 2026-08-12 it reds EIGHT -
-# this block's two, block (19)'s four rows for `opLea`, `opPea`, `opJmp` and
-# `opJsr`, and `t_control`'s `jmp #imm is illegal` and `jsr #imm is illegal` -
-# so under it block (14) does not red alone. An earlier revision of this line
-# said FIVE: it counted block (17)'s `eaControl7` equality and no block-(19)
-# row, and was not re-measured when block (19) landed. Block (15) never red
-# alone in any direction.
+# The CFPRM provenance the deleted block carried is on the `eaControl7`
+# declaration in `src/mcf5307/ea.nim`, beside the value it cites.
 
 # ---------------------------------------------------------------------------
-# (16) THE ADDQ AND SUBQ MASK, ENUMERATED CELL BY CELL. THIS BLOCK CLOSES A
-# MEASURED BLIND SPOT AND THE DIRECTION IS NARROWING, which is the direction
-# this file has repeatedly been weakest in.
+# (16) The ADDQ and SUBQ mask, enumerated cell by cell. This block closes a
+# measured blind spot and the direction is narrowing, which is the direction
+# this file has repeatedly been weakest in: without this block and block (19),
+# `eaAlterable7 - {ea7AbsW}` leaves the entire suite green, and ADDQ and SUBQ
+# would trap on `addq.l #1,0x1234.w`, a form the pinned assembler emits. The
+# widening direction was already guarded.
 #
-# MEASURED 2026-08-12, EACH MUTATION RUN THROUGH THE WHOLE SUITE:
-#
-#   eaAlterable7 - {ea7AbsW}   4 red, and every one is a case added with this
-#                              block or with block (19): the two `the mask
-#                              accepts (xxx).W` rows below, and block (19)'s
-#                              `opAddq` and `opSubq` rows. BEFORE EITHER PAIR
-#                              existed this narrowing left the ENTIRE SUITE
-#                              GREEN - ADDQ and SUBQ would have trapped on
-#                              `addq.l #1,0x1234.w`, a form the pinned
-#                              assembler emits, and nothing would have said so.
-#   eaAlterable7 + {ea7PCDisp} 8 red, of which `t_alu` 2 were already there.
-#                              The WIDENING direction was already guarded.
-#
-# THAT ASYMMETRY IS THE POINT. The `coverage` rows for these two declare
+# That asymmetry is the point. The `coverage` rows for these two declare
 # `discriminating: false` because their cited illegal mode `(d16,PC)` is
 # refused by `eaResolve` as well - an argument about assertion (4) - and
 # assertion (1) does catch a widening onto that one cell. Neither reaches a
-# narrowing, because every `coverage` row names an ILLEGAL mode and a narrowing
-# removes a LEGAL one.
+# narrowing, because every `coverage` row names an illegal mode and a narrowing
+# removes a legal one.
 #
-# THE MODE SET IS NOT WHAT THIS BLOCK CLOSES, and saying so would overstate it.
+# The mode set is not what this block closes. ADDQ and SUBQ have no mode set of
+# their own: their arm names `eaAllModes`, which several operations share, and
+# `t_alu` reds when it is narrowed. It is the mode-7 half that had no coverage
+# in the narrowing direction.
 #
-# "THE MODE SET" HAS TWO READINGS HERE AND THEY GIVE DIFFERENT NUMBERS, because
-# ADDQ and SUBQ NO LONGER HAVE A MODE SET OF THEIR OWN: their arm names
-# `eaAllModes`, which ELEVEN operations share. Measured
-# 2026-08-12, each mutation configured FRESH and run through `ctest`:
+# The mode set is every mode and the restriction lives entirely in the mode-7
+# half: a set named for the manual's ALTERABLE class that excludes no mode is
+# not restricting anything, and only `eaAlterable7` is.
 #
-#   the ADDQ/SUBQ ARM ALONE - `eaAllModes - {eaAn}` written at that one site:
-#     6 red. `t_alu` 2 (`addq.l #1,a1 wraps and leaves the condition codes
-#     alone`, `the ADDQ mask admits An`), this block 2 and block (19) 2.
-#   the SHARED DECLARATION - `eaAn` deleted from `eaAllModes` in `ea.nim`:
-#     22 red. `t_alu` 3, `t_control` 3, this block 2, block (19) 11 and the
-#     conformance corpus 3. Those are the blast radius of ALL ELEVEN READERS
-#     and not better coverage of ADDQ and SUBQ; `ea.nim` names all eleven.
-#
-# EITHER READING LEAVES THE CONCLUSION STANDING. `t_alu` reds under both, so
-# the mode half had executor-level coverage already and it is the mode-7 half
-# that had none in the narrowing direction.
-#
-# THE MODE SET IS EVERY MODE AND THE RESTRICTION LIVES ENTIRELY IN THE MODE-7
-# HALF. That is the whole content of the naming defect this block accompanies:
-# a set named for the manual's ALTERABLE class that excludes no mode is not
-# restricting anything, and only `eaAlterable7` is.
-#
-# THE ASSEMBLER TRANSCRIPT BEHIND THESE TWELVE CELLS, AND THE CFPRM
-# `Alterable` COLUMN THAT DISAGREES WITH IT ON TWO OF THEM, ARE RECORDED ONCE -
+# The assembler transcript behind these twelve cells, and the CFPRM
+# `Alterable` column that disagrees with it on two of them, are recorded once -
 # on the `eaAlterable7` declaration in `src/mcf5307/ea.nim`. That is the site
-# whose VALUE the evidence establishes; this block only pins it. The
-# disagreement is NOT settled there and is not settled here: a future reader
-# who narrows the mask to follow the column reds the two `(xxx).W` and
-# `(xxx).L` rows below, and that is the intended conversation.
+# whose value the evidence establishes; this block only pins it. The
+# disagreement is not settled there and is not settled here: a reader who
+# narrows the mask to follow the column reds the two `(xxx).W` and `(xxx).L`
+# rows below, and that is the intended conversation.
 
 block:
   const
@@ -1485,175 +1263,93 @@ block:
         " `m68k-elf-as -mcpu=5307` answers \"operands mismatch\")")
 
 # ---------------------------------------------------------------------------
-# (17) THE MODE-7 SETS HELD AGAINST THEIR LITERAL MEMBERSHIP STOOD HERE UNTIL
-# 2026-08-12 AND WAS DELETED ON THE TEST BLOCK (15) WAS DELETED ON. Three cases
-# pinned `eaValid7`, `eaControl7` and `eaAlterable7` against the members spelled
-# out in them. Each of the three sets is read by an arm of `eaLegalityFor` whose
-# mask block (19) below holds against a literal, so NO VALUE CHANGE TO ANY OF
-# THEM CAN RED BLOCK (17) ALONE. Measured 2026-08-12, each mutation configured
-# FRESH and run through `ctest`, with block (17) still present:
+# (17) The mode-7 sets held against their literal membership stood here and
+# was deleted. Three cases pinned `eaValid7`, `eaControl7` and `eaAlterable7`
+# against the members spelled out in them. Each of the three sets is read by an
+# arm of `eaLegalityFor` whose mask block (19) below holds against a literal,
+# so no value change to any of them can red block (17) alone.
 #
-#   eaValid7 + {ea7Invalid}    block (17) 1, block (19) 16, `t_control` 1
-#   eaControl7 + {ea7Imm}      block (17) 1, block (19) 4, block (14) 2,
-#                              `t_control` 2
-#   eaAlterable7 - {ea7AbsW}   block (17) 1, block (19) 2, block (16) 2
-#
-# THE BLOCK'S OWN ADMISSION RULE IS WHAT CONDEMNS IT, and that rule had already
-# been used to delete three cases from INSIDE the block: "a case whose condition
-# is ENTAILED by the equality cases cannot be the sole detector of anything,
-# because two conditions that cannot disagree cannot red apart". With block (19)
-# in place each of the three equalities is itself entailed one level up -
+# The block's own admission rule is what condemns it: "a case whose condition
+# is entailed by the equality cases cannot be the sole detector of anything,
+# because two conditions that cannot disagree cannot red apart". With block
+# (19) in place each of the three equalities is itself entailed one level up -
 # `eaLegalityFor(opMove, 4)` held against a literal whose mode-7 half spells
-# `eaValid7`'s five members entails that `eaValid7` has those five members - so
-# the rule that removed three cases from the block removes the block.
+# `eaValid7`'s five members entails that `eaValid7` has those five members.
 #
-# THE READABILITY ARGUMENT IS REAL AND IS NOT ENOUGH, AND THAT IS THE ASYMMETRY
-# WITH BLOCK (15) NAMED RATHER THAN LEFT IMPLIED. Block (15) reported the SAME
-# proposition as `t_control` through the same predicate; these three cases
-# reported a DIFFERENT one - a failing log without them names sixteen operations
-# and never names `eaValid7`, which is a worse read. But block (15) had the same
-# localisation argument available, twenty-four cases in this file against twelve
-# rows in another, and was deleted anyway. An exception granted here on
-# readability would license re-adding block (15) on the same ground.
+# The readability argument is real and is not enough: a failing log without
+# those cases names the operations and never names `eaValid7`, which is a worse
+# read. Block (15) had the same localisation argument available and was deleted
+# anyway, so an exception granted here would license re-adding it.
 #
-# WHAT THE DELETION DOES NOT LOSE. The manual citations the three cases carried
-# - CFPRM Rev. 3 Table 2-3 folio 2-10 for all three - are on the declarations in
-# `src/mcf5307/ea.nim`, beside the values that evidence establishes. The idiom
-# the block stated and the admission rule are restated on block (19) below,
-# which is the block that now applies them.
+# What the deletion does not lose: the manual citations the three cases carried
+# - CFPRM Rev. 3 Table 2-3 folio 2-10 for all three - are on the declarations
+# in `src/mcf5307/ea.nim`, beside the values that evidence establishes.
 
 # ---------------------------------------------------------------------------
-# (19) EVERY MASK IN THE DOMAIN, HELD AGAINST ITS LITERAL VALUE. One case per
+# (19) Every mask in the domain, held against its literal value. One case per
 # operation-and-size mask, each holding the whole `EaLegality` against members
 # spelled out below.
 #
-# THE ADMISSION RULE, WHICH BLOCK (17) STATED AND THIS BLOCK INHERITED WITH THE
-# IDIOM: ONE LITERAL-EQUALITY CASE PER MASK, AND NOTHING DERIVED FROM THEM. A
-# case whose condition is ENTAILED by the equality cases cannot be the sole
+# The admission rule, which block (17) stated and this block inherited with the
+# idiom: one literal-equality case per mask, and nothing derived from them. A
+# case whose condition is entailed by the equality cases cannot be the sole
 # detector of anything, because two conditions that cannot disagree cannot red
-# apart. It has now removed three cases from inside block (17) and then block
-# (17) itself; it is stated here so a fourth is not written.
+# apart.
 #
-# THE DIRECTION THAT FORCED IT IS NARROWING, which the `coverage` table
-# structurally cannot see: every row there names ONE ILLEGAL mode, and a
-# narrowing removes a LEGAL one. Block (16) closed that for ADDQ and SUBQ by
-# hand; a sweep found it open nearly everywhere else.
+# The direction that forced it is narrowing, which the `coverage` table
+# structurally cannot see: every row there names one illegal mode, and a
+# narrowing removes a legal one. Block (16) closed that for ADDQ and SUBQ by
+# hand; a sweep found it open nearly everywhere else. Deleting any one legal
+# cell from any one operation's mask reds exactly one case in this block, and
+# for a large minority of cells it reds nothing else anywhere.
 #
-# THE SWEEP, 2026-08-12. The population is every LEGAL cell of every operation
-# whose `eaLegalityFor` mask is non-empty - one cell per mode and one per
-# mode-7 sub-variant, and separately per SIZE where the mask depends on it. It
-# is enumerated FROM `eaLegalityFor` and not by hand: 338 cells over the 47
-# operations in the domain, which is 51 operation-and-size masks, because
-# `opMulu`, `opMuls`, `opDivu` and `opDivs` carry two masks each - re-derived
-# 2026-08-12 by walking `Operation` and counting a second mask wherever the
-# word and long answers differ.
+# Equality is strictly stronger than a cell table, and that is why the shape is
+# this one. A cell table pins the cells someone enumerated; an equality pins
+# the mask, so it catches widening as well as narrowing and catches both for
+# cells nobody listed. Two widenings that are otherwise silent in the whole
+# repository - `eaLeaPeaTarget` accepting an address register, and the
+# `opScc`/`opCmpi` arm accepting postincrement - red here and nowhere else.
 #
-# EACH CELL IS DELETED FROM THAT ONE OPERATION'S MASK ALONE - the scope block
-# (16) measured in, not a shared declaration - and the WHOLE suite run through
-# `ctest`, the `t_*` suites and the conformance corpus both. Measured
-# 2026-08-12 with the table below in place, over all 338 cells: EVERY cell reds,
-# each reds EXACTLY ONE case in this block, and 121 of them red NOTHING ELSE
-# ANYWHERE. Those 121 are the blind spot. 80 are MODE cells and 41 are mode-7
-# sub-variants, so the blind spot is not a mode-7 curiosity: 72 of the 80 are an
-# ordinary addressing mode, the whole register-indirect group of `opAdd`,
-# `opSub`, `opAnd` and `opOr` among them, and the other 8 are the `eaMode7` MODE
-# of an operation that also has silent sub-variants.
+# It obsoletes nothing, which is the objection block (15) was deleted for.
+# Blocks (12), (13), (14) and (16) reach the table through `eaIsLegalFor`;
+# these cases compare the table itself, so the two layers red apart. With
+# `isEaLegal` made to answer true unconditionally those four blocks red and
+# every case in this one stays green.
 #
-# THE 121 FALL IN FIFTEEN OPERATIONS - `opMove`, `opMovea`, `opAdd`, `opSub`,
-# `opAdda`, `opSuba`, `opCmpa`, `opClr`, `opAnd`, `opOr`, `opBtst`, `opBchg`,
-# `opBclr`, `opBset` and `opEor`. `isEaLegal` returns at `ea.mode notin
-# leg.modes` before it reads `ea7`, which is why an `eaMode7` MODE cell and its
-# sub-variant cells are separate members of the population and not one.
+# A correct narrowing now has to be made in two places, and the cost is
+# proportional: one operation's arm narrowed by one cell reds one case here,
+# while narrowing a shared declaration in `ea.nim` reds one row per mask that
+# reads the set. A form that charged less would be pinning fewer masks.
 #
-# THE SILENCE IS AN EQUALITY WITH THE BASELINE APART FROM THE ONE CASE IN THIS
-# BLOCK, AND NOT AN EMPTY GREP. Each run is compared against the baseline
-# `ctest` result - the `abi_smoke` link failure and nothing else - with THIS
-# BLOCK'S single red for the deleted cell subtracted first. That subtraction is
-# the criterion and it has to be stated: with this block present every one of
-# the 338 runs reds `t_ea_masks`, so the floor is `2 tests failed out of 15` and
-# the baseline shape `93% tests passed, 1 tests failed out of 15` is one NO cell
-# deletion can produce - read literally it would classify all 338 as not-silent.
-# A suite that failed to compile or died before printing lands outside the
-# equality, not inside it.
+# What this block is not. It pins the value of each mask and carries no
+# provenance of its own. What makes a cell legal is recorded on the
+# declarations the mask is built from - `eaAllModes` and `eaValid7`,
+# `eaDataAlterableModes` and `eaDataAlterable7`, `eaDataAddressing`,
+# `eaBitDynamic`, `eaJumpTarget`, `eaLeaPeaTarget`, `eaMulDivLongModes` - each
+# carrying its manual folios and its `m68k-elf-as` transcript beside the value
+# that evidence establishes. It also cannot fail because the decoder handed the
+# wrong operation or size to a word, which reaches the right mask under the
+# wrong key, and it cannot fail if a literal below was mis-transcribed at
+# authoring time from an already-wrong mask - the sharpest limit of any guard
+# whose expected value is copied from its own subject.
 #
-# EVERY DELETION IS PROVED TO EXECUTE INSIDE THE COMPILED ARTIFACT, because a
-# reach guard that passes on a no-op is this project's recurring defect. The
-# harness emits a line the first time it removes the cell from a mask, and all
-# 338 runs emitted one, so no cell is recorded silent for want of a mutation
-# that arrived.
+# The execution-level limit, and it is the wider half of the gap. A mask case
+# proves the mask still admits the cell. It does not prove the emulator
+# executes that instruction correctly, and for the cells this block was written
+# for nothing anywhere does - which is why deleting them reds nothing. The ADD
+# corpus cases are `add.l %d0,%d1`, `0x2000.w`, `0x00030004`, `(0x1e,%pc)` and
+# `(4,%pc,%d2)`, exactly the complement of the `(An)`-family cells that were
+# silent; SUB carries `sub.l %d0,%d1` alone; and the only OR cases beyond
+# `or.l %d0,%d1` are the `Dn -> <ea>` direction, which `logic.nim` masks with
+# `eaMemoryAlterable` directly and which never reaches `eaLegalityFor(opOr)`.
 #
-# EQUALITY IS STRICTLY STRONGER THAN A CELL TABLE, AND THAT IS WHY THE SHAPE IS
-# THIS ONE. A cell table pins the cells someone enumerated; an equality pins the
-# mask, so it catches WIDENING as well as narrowing and catches both for cells
-# nobody listed.
-#
-# WHY ALL 51 MASKS AND NOT ONLY THE 15 THAT CARRY A SILENT CELL, MEASURED. Both
-# forms pin every silent cell, so the choice rests on what the other 36 rows
-# add, and two widenings on operations OUTSIDE the fifteen answer it. Each was
-# run twice on 2026-08-12, once with this block absent and once with it present:
-#
-#   `eaLeaPeaTarget` modes + {eaAn}      0 red without / 2 red with
-#   the `opScc`/`opCmpi` arm + {eaAnPost} 0 red without / 2 red with
-#
-# LEA and PEA accepting an ADDRESS REGISTER, and Scc and CMPI accepting
-# POSTINCREMENT, are silent in the whole repository today. Both are widenings,
-# so no cell table of any size reaches them; both are outside the fifteen, so
-# the narrow form would not have carried a row for them either. On coverage the
-# same gap shows as a count: fifteen rows pin 171 of the 338 cells and leave 167
-# depending on cases elsewhere, and 51 rows pin all 338.
-#
-# AND IT OBSOLETES NOTHING, WHICH IS THE OBJECTION BLOCK (15) WAS DELETED FOR.
-# Blocks (12), (13), (14) and (16) reach the table THROUGH `eaIsLegalFor`; these
-# cases compare the table itself, so the two layers red apart and neither is the
-# other's second detector. Measured 2026-08-12 with `isEaLegal` in `ea.nim` made
-# to answer true unconditionally: 242 cases red across the suite, 52 of them in
-# those four blocks, and EVERY case in this one stays green.
-#
-# WHAT A CORRECT NARROWING COSTS, because the mask is now written down twice and
-# a real repair has to be made in both places. Measured 2026-08-12:
-#
-#   one operation's arm narrowed by one cell           1 case here - and that
-#                                                      holds for all 338 cells
-#   `eaDataAlterableModes - {eaAnIndex}` in `ea.nim`   12 cases here, one per
-#                                                      mask that reads the set
-#
-# THE SHARED-DECLARATION FIGURE IS THE COST AND IT IS NOT A DEFECT. Twelve masks
-# name that set through four intermediaries, so twelve rows have to move; a form
-# that charged less than twelve would be pinning fewer than twelve masks.
-#
-# WHAT THIS BLOCK IS NOT. It pins the VALUE of each mask and carries no
-# provenance of its own. What makes a cell LEGAL is recorded on the declarations
-# the mask is built from - `eaAllModes` and `eaValid7`, `eaDataAlterableModes`
-# and `eaDataAlterable7`, `eaDataAddressing`, `eaBitDynamic`, `eaJumpTarget`,
-# `eaLeaPeaTarget`, `eaMulDivLongModes` - each carrying its manual folios and
-# its `m68k-elf-as` transcript beside the value that evidence establishes. It
-# also cannot fail because the DECODER handed the wrong operation or size to a
-# word, which reaches the right mask under the wrong key, and it cannot fail if
-# a literal below was mis-transcribed AT AUTHORING TIME from an already-wrong
-# mask - the sharpest limit of any guard whose expected value is copied from its
-# own subject.
-#
-# THE EXECUTION-LEVEL LIMIT, AND IT IS THE WIDER HALF OF THE GAP. A mask case
-# proves the mask still ADMITS the cell. IT DOES NOT PROVE THE EMULATOR EXECUTES
-# THAT INSTRUCTION CORRECTLY, and for the cells this block was written for
-# nothing anywhere does - which is why deleting them red nothing. Read from
-# `conformance/corpus` on 2026-08-12: the ADD cases are `add.l %d0,%d1`,
-# `0x2000.w`, `0x00030004`, `(0x1e,%pc)` and `(4,%pc,%d2)`, EXACTLY the
-# complement of the `(An)`-family cells that were silent; SUB carries
-# `sub.l %d0,%d1` alone; and the only OR cases beyond `or.l %d0,%d1` are the
-# `Dn -> <ea>` direction, which `logic.nim` masks with `eaMemoryAlterable`
-# directly and which never reaches `eaLegalityFor(opOr)`. So for those cells the
-# mask half is guarded here and NOTHING ANYWHERE EXECUTES THE INSTRUCTION.
-#
-# THE DECAY THIS SHAPE DISSOLVES, AND THE RESIDUE IT DOES NOT. A cell table is
-# membership defined by a measurement: delete the four `add_l_*` corpus cases
-# later and the cells they caught go silent again while the table does not grow.
-# An equality does not depend on what else covers a cell, so all 338 stay pinned
-# whatever happens elsewhere. What remains is the OPERATION axis: a 48th
-# operation joining the domain, or an existing one becoming size-dependent,
-# needs a row here. The row count below is held against the domain so that is
-# RED rather than silent - which is the mechanism the `coverage` enumeration
-# uses one level up, not a second detector for anything this block already pins.
+# The decay this shape dissolves, and the residue it does not. A cell table is
+# membership defined by a measurement: delete the `add_l_*` corpus cases later
+# and the cells they caught go silent again while the table does not grow. An
+# equality does not depend on what else covers a cell. What remains is the
+# operation axis: an operation joining the domain, or an existing one becoming
+# size-dependent, needs a row here. The row count below is held against the
+# domain so that is red rather than silent.
 
 block:
   # THE MEMBERS ARE SPELLED HERE AND NOT NAMED FROM `ea.nim`. A row reading
@@ -1888,76 +1584,48 @@ block:
   mcf5307_destroy(ctx)
 
 
-# (18) THIS FILE'S OWN CASE TOTAL, HELD AGAINST THE ONE FIGURE THE TRANSCRIPTS
-# QUOTE. Block (13) above and the `opMovem` arm of `decode_types.nim` each
-# transcribe a mutation run as "N of <total> cases failed", and `cpu.nim`'s
-# per-suite BASELINE line records the same total a third time; that total is
-# what the summary line at the foot of this file prints. The denominator moved
-# 367 -> 420 -> 419 over three consecutive repairs; on each one a single copy of
-# the transcript was updated and the other was left standing, and on the last
-# the very repair that corrected the figure invalidated it again by deleting a
-# case. Nothing went red, because the denominator was PROSE IN TWO FILES.
+# (18) This file's own case total, held against the one figure the other sites
+# quote. Block (13) above, the `opMovem` arm of `decode_types.nim` and
+# `cpu.nim`'s per-suite BASELINE line each name the total the summary line at
+# the foot of this file prints. When that figure was prose in two files it went
+# stale repeatedly and nothing went red.
 #
-# THAT TALLY IS CLOSED AT THE POINT THIS BLOCK LANDED AND IS NOT EXTENDED. The
-# constant has moved since and will move again; a list that grows by one entry
-# per repair is the defect this block exists to end, not a record of it.
+# The figure now exists once, as `caseTotalMustMatchTranscripts`, and the other
+# sites name the constant rather than spelling a number. This case is what
+# keeps the constant true: it holds the live count of every case this run
+# emitted against it, so a block added to or removed from this file is red here
+# until the constant moves.
 #
-# THE FIGURE NOW EXISTS ONCE, AS `caseTotalMustMatchTranscripts`, AND ALL THREE
-# SITES NAME THE CONSTANT RATHER THAN SPELLING A NUMBER. This case is what keeps
-# the constant true: it holds the live count of every case this run emitted
-# against it, so a block added to or removed from this file is RED here until
-# the constant moves - and moving the constant moves all three sites with it,
-# because none of them carries a second copy to forget.
-#
-# THE `cpu.nim` SITE WAS A BARE LITERAL AND IS THE SAME DEFECT ONE DIRECTORY
-# OVER. Its BASELINE line spelled a number for this suite that NO RUN COULD
-# REACH: that copy lives in PRODUCTION SOURCE, which this case does not count
-# and cannot reach, so it can go stale in silence. NO DISAGREEMENT IS CLAIMED -
-# at HEAD that line and the constant here read the SAME figure, and an earlier
-# revision of this paragraph reported a drift that no committed state carried.
-# The SHAPE is the defect; naming the constant is what removes it.
-#
-# IT IS A RUN-TIME CASE AND NOT THE `static: doAssert` ASSERTION (9) USES, AND
-# THAT IS FORCED RATHER THAN PREFERRED. `passCount` and `failures` are
+# It is a run-time case and not the `static: doAssert` assertion (9) uses, and
+# that is forced rather than preferred. `passCount` and `failures` are
 # accumulated by the enumeration over `Operation` and over the `coverage` seq,
-# and both are run-time values. Measured 2026-08-11: appending
+# and both are run-time values: appending
 # `static: doAssert failures.len + passCount == <any total>` to this file fails
-# to COMPILE, with `Error: cannot evaluate at compile time: failures` - the
-# right-hand side is not what it objects to - and the
-# registered test reports that as a driver error rather than as a case. The
-# price of the run-time form is that it fires only when the suite runs; the
-# compile-time form is not an option that exists here.
+# to compile, with `Error: cannot evaluate at compile time: failures`, and the
+# registered test reports that as a driver error rather than as a case.
 #
-# THE `+ 1` IS THIS CASE ITSELF. `checkDetail` below is called exactly once in
+# The `+ 1` is this case itself. `checkDetail` below is called exactly once in
 # this block and increments one of the two counters whichever way it goes, so
 # the figure the summary line goes on to print is one greater than the one read
-# here. The constant is the SUMMARY LINE's figure, because that is the figure
-# the three sites quote.
+# here. The constant is the summary line's figure, because that is the figure
+# the other sites quote.
 #
-# WHAT IT DOES NOT CATCH, STATED SO THE CONSTANT IS NOT READ AS MORE THAN A
-# TOTAL. It pins the COUNT and says nothing about WHICH cases ran: one block
-# deleted and another of the same size added in a single change passes. And it
-# says nothing about the other figures those transcripts carry - the `4` red
-# cases under the wide MOVEM mask, and `t_move`'s own `3 of 34` - which are a
-# mutation's blast radius and another file's total, neither of them this run's
-# to count.
+# What it does not catch: it pins the count and says nothing about which cases
+# ran, so one block deleted and another of the same size added in a single
+# change passes.
 
 const caseTotalMustMatchTranscripts = 446
-  ## THE TOTAL THE SUMMARY LINE PRINTS. ITS VALUE IS WRITTEN DOWN ONCE IN THIS
-  ## REPOSITORY - here - and the three sites that need the denominator name the
-  ## constant instead of copying it: block (13) above, the `opMovem` arm of
-  ## `src/mcf5307/decode_types.nim`, and the BASELINE line in
-  ## `src/mcf5307/cpu.nim`. So there is one figure to move and the case below is
-  ## what refuses to let it be moved wrongly. Measured through `ctest` on
-  ## 2026-08-12, when block (19) was reworked into the equality form.
+  ## The total the summary line prints. Its value is written down once in this
+  ## repository - here - and the sites that need the denominator name the
+  ## constant instead of copying it. The case below is what refuses to let it
+  ## be moved wrongly.
   ##
-  ## THE LIMIT IS THE SYMBOL AND NOT THE VALUE, AND IT IS UNCLOSEABLE FROM HERE.
-  ## All three sites name this constant as TEXT INSIDE A COMMENT, and nothing
-  ## links the text to the symbol: renaming or deleting the constant leaves the
-  ## three stale with nothing red. An import cannot close it - `src/` does not
-  ## import `tests/`, and this constant is not exported - and exporting it would
-  ## not help, because a comment cannot reference a symbol at all. The `opMovem`
-  ## arm of `decode_types.nim` records the same gap from its own side.
+  ## The limit is the symbol and not the value, and it is uncloseable from here.
+  ## Those sites name this constant as text inside a comment, and nothing
+  ## links the text to the symbol: renaming or deleting the constant leaves
+  ## them stale with nothing red. An import cannot close it - `src/` does not
+  ## import `tests/`, and this constant is not exported - and exporting it
+  ## would not help, because a comment cannot reference a symbol at all.
 
 block:
   let totalBeforeThisCase = failures.len + passCount
@@ -1971,38 +1639,33 @@ block:
     "and re-read all three sites")
 
 # ---------------------------------------------------------------------------
-# THE SUMMARY LINE CARRIES THE ATTRIBUTION FIGURE, BECAUSE A BARE COUNT WOULD
-# LET THE READER CONCLUDE THAT EVERY OPERATION IS GUARD-COVERED. The attribution
-# figure is what says otherwise.
+# The summary line carries the attribution figure, because a bare count would
+# let the reader conclude that every operation is guard-covered.
 #
-# NO COUNT IS WRITTEN DOWN IN THIS COMMENT OR IN THE LINE ITSELF. Every figure
+# No count is written down in this comment or in the line itself. Every figure
 # the line prints is counted by the run that prints it.
 #
-# WHAT THIS DOES NOT REACH, STATED SO IT IS NOT MISTAKEN FOR A FULL REPAIR. A
-# plain `ctest` prints `t_ea_masks ... Passed` and captures this program's
-# stdout, so a CI summary shows the NAME and the STATUS and nothing below.
+# A plain `ctest` prints `t_ea_masks ... Passed` and captures this program's
+# stdout, so a CI summary shows the name and the status and nothing below.
 # Nothing this program prints can change that: the registered name and the
-# driver both live in `tests/tests_cpu.cmake`, which section 7.4.2 gives to
-# CPU-26. The line below serves the reader of `-V`, of a failing run, or of the
-# saved log - which is the reader who sees a count at all.
+# driver both live in `tests/tests_cpu.cmake`. The line below serves the reader
+# of `-V`, of a failing run, or of the saved log.
 #
-# THE DRIVER'S PASS PATTERN STILL MATCHES. It searches for
+# The driver's pass pattern still matches. It searches for
 # `t_ea_masks: <N> cases passed` and is not anchored at the end, so text
-# APPENDED after that phrase is safe and text inserted inside it is not.
+# appended after that phrase is safe and text inserted inside it is not.
 
 proc attribution(): string =
-  ## BOTH FIGURES ARE COUNTED BY THE RUN, AND THAT IS STILL NOT ENOUGH TO MAKE
-  ## THE LINE A MEASUREMENT. `discriminating` is a HAND-DECLARED field; the sum
-  ## over it is live, the evidence under it is not. The guard-deletion runs
-  ## that established the values are dated in the plan section and do not travel
-  ## with this line, so a forty-eighth entry declaring `discriminating: true`
-  ## and measuring nothing would raise the numerator with exactly the authority
-  ## of a measured one. The line therefore says DECLARE, and carries the date of
-  ## the evidence, so that a reader of a bare log can see the gap.
+  ## Both figures are counted by the run, and that is still not enough to make
+  ## the line a measurement. `discriminating` is a hand-declared field; the sum
+  ## over it is live, the evidence under it is not. A new entry declaring
+  ## `discriminating: true` and measuring nothing raises the numerator with
+  ## exactly the authority of a measured one. The line therefore says DECLARE,
+  ## and carries the date of the evidence.
   ##
-  ## The denominator is the DOMAIN and not the covered set, so an operation
-  ## that joined the domain without an entry enlarges it. Under the old
-  ## denominator that operation shrank the figure while going red.
+  ## The denominator is the domain and not the covered set, so an operation
+  ## that joined the domain without an entry enlarges it rather than shrinking
+  ## the figure.
   result = " (guard attribution: " & $opsDiscriminating & " of the " &
     $opsInDomain & " operations in the domain DECLARE `discriminating: true`" &
     " - a sum over a hand-declared field, not a measurement this run makes;" &

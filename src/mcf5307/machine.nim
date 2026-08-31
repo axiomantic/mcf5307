@@ -151,16 +151,10 @@ proc fetchExt*(ctx: MCF5307Ctx): uint16 =
   ## Read one extension word from the instruction stream and advance the pc
   ## past it.
   ##
-  ## THIS PROCEDURE DOES NOT DEFINE THE PC-RELATIVE BASE, AND AN EARLIER
-  ## REVISION OF THIS COMMENT ASSERTED THAT IT DID. It read "the pc-relative
-  ## base of a PC mode is the pc AFTER its last extension word, which is
-  ## exactly where the next instruction begins", and that is false: the base is
-  ## the address OF the displacement word, which is the pc BEFORE this call.
-  ## `eaAddr` reads `ctx.pc` into a local before it calls this procedure for
-  ## exactly that reason; the citation is on the two PC arms there.
-  ##
-  ## The wrong sentence was not idle. `eaAddr` was written to agree with it and
-  ## every PC-relative operand in the core was two bytes high.
+  ## This procedure does not define the PC-relative base. That base is the
+  ## address *of* the displacement word, which is the pc before this call, so
+  ## `eaAddr` reads `ctx.pc` into a local before it calls this procedure; the
+  ## citation is on the two PC arms there.
   var st = Mcf5307BusStatus.busOk
   let v = ctx.readFn(ctx.user, ctx.pc, 2, addr st)
   if st != Mcf5307BusStatus.busOk:
@@ -190,35 +184,31 @@ func s8*(x: uint16): int32 =
 
 proc indexOperand*(ctx: MCF5307Ctx; ext: uint16): uint32 =
   ## The scaled index operand of an indexed extension word. Bit 15 selects
-  ## Dn(0) or An(1), bits 14..12 the index register, BIT 11 word(0) or long(1)
+  ## Dn(0) or An(1), bits 14..12 the index register, bit 11 word(0) or long(1)
   ## index, bits 10..9 the scale (1, 2, 4, 8), bit 8 the brief-format marker,
-  ## bits 7..0 the signed d8.
+  ## bits 7..0 the signed d8. Bit 8 is zero in every word the assembler emits,
+  ## so a word/long select read there answers word for every legal encoding.
   ##
-  ## THE WORD/LONG SELECT IS BIT 11 AND THIS READ IT AT BIT 8. Bit 8 is the
-  ## brief-format marker and is zero in every word the assembler emits, so the
-  ## old reading answered WORD for every legal encoding and sign-extended an
-  ## index that must not be narrowed at all.
-  ##
-  ## THE MANUAL DOES NOT PRINT THE EXTENSION WORD'S LAYOUT. There is no
+  ## The manual does not print the extension word's layout. There is no
   ## brief-format figure anywhere in the MCF5307 User's Manual, so the pinned
   ## assembler is the authority for the bit position: `btst %d1,(4,%pc,%d2)`
-  ## assembles to `033b 2804`, whose `2804` has bit 11 SET and bit 8 CLEAR, and
-  ## `m68k-elf-objdump -m m68k:5307` prints `%pc@(0x6,%d2:l)` - `:l`, a LONG
+  ## assembles to `033b 2804`, whose `2804` has bit 11 set and bit 8 clear, and
+  ## `m68k-elf-objdump -m m68k:5307` prints `%pc@(0x6,%d2:l)` - `:l`, a long
   ## index. Scaling corroborates the neighbouring fields: `(4,%pc,%d2*4)` is
   ## `2c04`, which moves bits 10..9 alone.
   ##
-  ## WHAT THE MANUAL DOES SAY IS THAT THE WORD FORM DOES NOT EXIST HERE.
+  ## The word form does not exist here.
   ## Section 3.5.2, "Address Error Exception", page 3-15: "Any attempted use of
   ## a word-sized index register (Xi.w) or a scale factor of 8 on an indexed
   ## effective addressing mode generates an address error". `m68k-elf-as
-  ## -mcpu=5307` agrees and REJECTS `btst %d1,(4,%pc,%d2.w)`, so bit 11 is set
+  ## -mcpu=5307` agrees and rejects `btst %d1,(4,%pc,%d2.w)`, so bit 11 is set
   ## in every encoding this core can legally be given and the narrowing branch
   ## below is unreachable from assembled code.
   ##
-  ## THAT ADDRESS ERROR IS NOT RAISED HERE, and nothing asserts it. This
+  ## That address error is not raised here, and nothing asserts it. This
   ## procedure narrows a word index rather than faulting on one, and it applies
-  ## a scale of 8 rather than faulting on that. Both are outside the defect
-  ## this comment repairs; see the uncertainty note in `eaAddr` below.
+  ## a scale of 8 rather than faulting on that. See the uncertainty note in
+  ## `eaAddr` below.
   let isAn = (ext and 0x8000'u16) != 0'u16
   let n = (ext shr 12) and 0x7'u16
   let scale = (ext shr 9) and 0x3'u16
@@ -232,24 +222,22 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
   ## The effective address of a memory-addressing mode. Register and
   ## immediate modes have no address; a caller that asks for one gets 0.
   ##
-  ## WHAT THIS PROCEDURE DOES NOT KNOW. Two things, and the rule for both is
-  ## the one `logic.nim`'s header uses: THE IMPLEMENTATION PICKS A BEHAVIOUR
-  ## AND NOTHING ASSERTS IT.
+  ## What this procedure does not know. Two things; the implementation picks a
+  ## behaviour and nothing asserts it.
   ##
-  ##   1. THE ADDRESS ERROR OF AN ILLEGAL INDEX. MCF5307 User's Manual section
+  ##   1. The address error of an illegal index. MCF5307 User's Manual section
   ##      3.5.2, page 3-15, says a word-sized index register or a scale factor
   ##      of 8 "generates an address error". `indexOperand` raises no such
   ##      error: it narrows the word index and it applies the scale of 8. No
-  ##      case reaches either, because `m68k-elf-as -mcpu=5307` REFUSES to
+  ##      case reaches either, because `m68k-elf-as -mcpu=5307` refuses to
   ##      assemble `(4,%pc,%d2.w)` and `(4,%pc,%d2*8)`, so the corpus - which
   ##      is generated through that assembler - cannot express one, and a
   ##      hand-written word would be asserting a trap this core does not have.
-  ##      Raising it is a change of behaviour and belongs to whoever owns the
-  ##      exception model, not to a repair of the address arithmetic.
+  ##      Raising it belongs to whoever owns the exception model.
   ##
-  ##   2. THE SIGN EXTENSION OF `(xxx).W`. `ea7AbsW` sign-extends its one
-  ##      extension word, so `0x8000.w` addresses `0xFFFF8000`. NOTHING PINS
-  ##      IT: the conformance runner's board is 1 MiB, an access above it
+  ##   2. The sign extension of `(xxx).W`. `ea7AbsW` sign-extends its one
+  ##      extension word, so `0x8000.w` addresses `0xFFFF8000`. Nothing pins
+  ##      it: the conformance runner's board is 1 MiB, an access above it
   ##      reports `busUnmapped`, and a case whose operand access faults fails
   ##      on the run state rather than on the address. Every `(xxx).W` case in
   ##      the corpus therefore uses a positive short address, at which
@@ -273,31 +261,25 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
     of ea7AbsW:
       result = uint32(s16(fetchExt(ctx)))
     of ea7AbsL:
-      # THE FIRST EXTENSION WORD IS THE HIGH HALF OF THE ADDRESS. MCF5307
+      # The first extension word is the high half of the address. MCF5307
       # User's Manual section 3.7.2, "Organization of Integer Data Formats in
       # Memory", page 3-19: "The address N of a longword data item corresponds
       # to the address of the high order word. The lower order word is located
       # at address N + 2." The extension pair is a longword in the instruction
       # stream, so the word at the lower address is the high half.
       # `m68k-elf-as -mcpu=5307` agrees: `btst %d1,0x00030004` assembles to
-      # `0339 0003 0004`.
-      #
-      # THIS READ THE TWO HALVES THE OTHER WAY ROUND, and nothing saw it: no
-      # case in any group used an absolute-long operand at all. Measured on a
-      # dynamic BTST against `$00030004`, the core reached `$00040003`. The two
-      # other readers of a longword in the instruction stream - `ea7Imm` below
-      # and `execImmediate` in `logic.nim` - already took the high half first,
-      # so the tree disagreed with itself.
+      # `0339 0003 0004`. The two other readers of a longword in the
+      # instruction stream - `ea7Imm` below and `execImmediate` in `logic.nim`
+      # - take the high half first as well.
       let hi = fetchExt(ctx)
       let lo = fetchExt(ctx)
       result = (uint32(hi) shl 16) or uint32(lo)
     of ea7PCDisp:
-      # THE PC-RELATIVE BASE IS THE ADDRESS *OF* THE EXTENSION WORD, so it is
-      # taken BEFORE `fetchExt` advances the program counter past it. The
-      # indexed PC mode below takes its base the same way and for the same
-      # reason.
+      # The PC-relative base is the address *of* the extension word, so it is
+      # taken before `fetchExt` advances the program counter past it. The
+      # indexed PC mode below takes its base the same way.
       #
-      # THE MANUAL DOES NOT SETTLE THIS. The MCF5307 User's Manual names
+      # The manual does not settle this. The MCF5307 User's Manual names
       # `(d16,PC)` and `(d8,PC,Xi)` in Table 3-5 (page 3-21) and prints no
       # effective-address equation for any mode, so the authority here is the
       # pinned assembler. Measured: `btst %d1,(target,%pc)` with the opcode at
@@ -305,13 +287,6 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
       # `m68k-elf-objdump -m m68k:5307` prints `btst %d1,%pc@(6 <target>)`.
       # Base + 4 = 6, so the base is 2 - the address of the displacement word
       # and not the address after it.
-      #
-      # THIS TOOK THE BASE AFTER THE WORD and every PC-relative operand in the
-      # core - MOVE's, the arithmetic group's and BTST's alike - was two bytes
-      # high. Nothing saw it: no conformance case in any group used a
-      # PC-relative operand, and `tests/t_logic.nim` seeded both candidate
-      # addresses with the same byte on purpose so that it would not pin the
-      # base.
       let base = ctx.pc
       result = base + uint32(s16(fetchExt(ctx)))
     of ea7PCIndex:
@@ -440,29 +415,23 @@ proc eaRefWrite*(ctx: MCF5307Ctx; r: EaRef; size: uint8; value: uint32) =
   of erNone: discard
 
 # ---------------------------------------------------------------------------
-# THE EXCEPTION STACK FRAME. CPU-10 adds it, because `TRAP` is in its group and
-# a TRAP that did not take its vector would be a NOP with extra steps.
+# The exception stack frame.
 #
-# IT IS HERE AND NOT IN `control.nim` FOR THE REASON THIS MODULE EXISTS. Four
-# later tasks need the same frame - CPU-14 owns the exception model itself,
-# CPU-15 the bus-fault channel, CPU-17 interrupts, and `control.nim`'s own
-# format-error path - and `exception.nim` will be a SIBLING of `control.nim`,
-# so it could not reach a copy that lived there without putting one executor
-# under another. That is the decoder-under-executor inversion one layer down;
-# `~/Desktop/avoiding-cycles.md` is the rule and CPU-8 followed it when it
-# lifted the register file out of `move.nim`.
+# It is here and not in `control.nim` because more than one executor needs it:
+# the exception model, the bus-fault channel, interrupts and `control.nim`'s
+# own format-error path. An executor that reached into another executor for it
+# would be the decoder-under-executor inversion one layer down.
 #
-# IT IS THE MINIMUM `TRAP` NEEDS AND NOT THE EXCEPTION MODEL. There is no
+# It is the minimum `TRAP` needs and not the exception model. There is no
 # vector table object, no fault-status computation and no double-fault
-# handling; CPU-14 and CPU-15 own those and this procedure is what they will
-# extend.
+# handling.
 
 const
   srSupervisor* = 0x2000'u32   ## S, status register bit 13
   srTrace* = 0x8000'u32        ## T, status register bit 15
 
 proc exceptionFrameBase*(sp: uint32): uint32 =
-  ## Where the two-longword frame goes, and it is NOT simply `sp - 8`.
+  ## Where the two-longword frame goes, and it is not simply `sp - 8`.
   ##
   ## MCF5307 User's Manual section 3.3, page 3-11: "the exception stack frame
   ## is created at a 0-modulo-4 address on the top of the current system
@@ -473,8 +442,8 @@ proc exceptionFrameBase*(sp: uint32): uint32 =
   (sp - 8'u32) and not 3'u32
 
 proc exceptionFormat*(sp: uint32): uint32 =
-  ## The FORMAT field of the frame the stack pointer `sp` produces: 4, 5, 6 or
-  ## 7, the four rows of Table 3-2 in order. It RECORDS the misalignment the
+  ## The format field of the frame the stack pointer `sp` produces: 4, 5, 6 or
+  ## 7, the four rows of Table 3-2 in order. It records the misalignment the
   ## frame base removed, so that `RTE` can put it back.
   4'u32 + (sp and 3'u32)
 
@@ -482,41 +451,38 @@ proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32) =
   ## Stack a two-longword exception frame, then load the program counter from
   ## the vector table.
   ##
-  ## THE STATUS REGISTER IS COPIED BEFORE IT IS CHANGED. Section 3.3, page
+  ## The status register is copied before it is changed. Section 3.3, page
   ## 3-11: "the processor makes an internal copy of the SR and then enters
   ## supervisor mode by setting the S-bit and disabling trace mode by clearing
-  ## the T-bit". The COPY is what reaches the frame; the modified word is what
+  ## the T-bit". The copy is what reaches the frame; the modified word is what
   ## the handler runs under. The M-bit and the interrupt priority mask are
-  ## changed only by an INTERRUPT exception, which is CPU-17's, so nothing
-  ## here touches them.
+  ## changed only by an interrupt exception, so nothing here touches them.
   ##
-  ## THE FRAME IS TWO LONGWORD WRITES AND NOT SIX BYTEWISE PUSHES. Figure 3-7,
+  ## The frame is two longword writes and not six bytewise pushes. Figure 3-7,
   ## page 3-13, draws it as two longwords - the format/vector word above the
   ## status register, then the program counter - and Table 3-14, page 3-29,
-  ## gives `trap #imm` a cost of `18(1/2)`: ONE read, the vector, and TWO
+  ## gives `trap #imm` a cost of `18(1/2)`: one read, the vector, and two
   ## writes. Table 3-7's `TRAP` row on page 3-25 spells the same thing as
   ## `SP-4;PC`, `SP-2;SR`, `SP-2;Format`, which agrees whenever A7 was already
   ## longword aligned and does not show the self-alignment at all.
   ##
-  ## THE VECTOR TABLE IS BASED AT ZERO, AND THAT IS A LIMITATION AND NOT A
-  ## CHOICE. Section 3.3, page 3-12: the handler address is "obtained by
-  ## fetching a value from the table located at the address defined in the
-  ## vector base register", indexed by `4 x vector_number`. THIS CORE HAS NO
-  ## VBR: the context holds no such field, and CPU-11 is the task that adds
-  ## `MOVEC` and therefore the only way to write one.
+  ## The vector table is based at zero, and that is a limitation. Section 3.3,
+  ## page 3-12: the handler address is "obtained by fetching a value from the
+  ## table located at the address defined in the vector base register", indexed
+  ## by `4 x vector_number`. This core has no VBR: the context holds no such
+  ## field, and `MOVEC` - the only way to write one - is not implemented.
   ##
-  ## THE RESET VALUE IS ZERO AND THE MANUAL PRINTS IT. Table B-2, "Summary
+  ## The reset value is zero and the manual prints it. Table B-2, "Summary
   ## Chart of MCF5307 Internal CPU Memory Map", Appendix page B-5, gives
-  ## `CPU @ $801` the name VBR, a width of 32, a RESET VALUE of `$00000000`
-  ## and an ACCESS of `W`. So this expression is correct for a machine that
+  ## `CPU @ $801` the name VBR, a width of 32, a reset value of `$00000000`
+  ## and an access of `W`. So this expression is correct for a machine that
   ## has not written VBR and wrong for one that has, and the one line that
-  ## changes when CPU-11 lands is the `readMem` below.
+  ## changes when VBR arrives is the `readMem` below.
   ##
-  ## A FAULT INSIDE THIS PROCEDURE IS A DOUBLE FAULT AND CPU-15 OWNS IT. Each
-  ## access is checked and the procedure returns early, leaving the context
-  ## halted with `fault`; it does not recurse, which is design section 5.2.1's
-  ## requirement. The status register has already been modified at that point,
-  ## which is a state a double-fault handler will have to define.
+  ## A fault inside this procedure is a double fault. Each access is checked
+  ## and the procedure returns early, leaving the context halted with `fault`;
+  ## it does not recurse. The status register has already been modified at that
+  ## point, which is a state a double-fault handler will have to define.
   let stackedSr = ctx.sr and 0xFFFF'u32
   ctx.sr = (ctx.sr or srSupervisor) and not srTrace
   let format = exceptionFormat(ctx.sp)

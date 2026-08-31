@@ -20,7 +20,7 @@ project(mcf5307
 # that registers no test: the first is a broken build tree and the second is a
 # tree with an empty registration list.
 #
-# IT IS NOT GUARDED BY `PROJECT_IS_TOP_LEVEL` AND THE SUITE BELOW IT IS. A
+# It is not guarded by `PROJECT_IS_TOP_LEVEL` and the suite below it is. A
 # guarded one writes no `CTestTestfile.cmake` for this directory in a consumer's
 # tree, and the ABI-gate assertion `tests/tests_cpu.cmake` registers there would
 # then not register at all.
@@ -88,7 +88,7 @@ add_custom_target(mcf5307_tests
 # needs the target to exist when its own list is read.
 include(cmake/Nim.cmake)
 
-# `tests/` IS ENTERED IN EVERY TREE AND `conformance/` ONLY AT TOP LEVEL.
+# `tests/` is entered in every tree and `conformance/` only at top level.
 # `tests/tests_cpu.cmake` registers the ABI-gate assertion and then returns
 # unless this project is top-level, so a consumer inherits that one test, no
 # other, and no test executable. Nothing in `conformance/` has a reason to

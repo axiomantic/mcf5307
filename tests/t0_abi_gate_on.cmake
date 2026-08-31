@@ -1,6 +1,6 @@
 # The driver of the registered test `t0_abi_gate_on`. `GATE_CACHE_OFFSET` and
-# `GATE_STAMP_OFFSET` are RELATIVE paths - to the build tree's `CMakeCache.txt`
-# and to the record step 4a left behind - resolved HERE against the working
+# `GATE_STAMP_OFFSET` are relative paths - to the build tree's `CMakeCache.txt`
+# and to the record step 4a left behind - resolved here against the working
 # directory, so the files read are the running tree's and not this file's.
 
 foreach(offset_name GATE_CACHE_OFFSET GATE_STAMP_OFFSET)

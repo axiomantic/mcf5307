@@ -4,148 +4,116 @@
 # correct state for the skeleton, and CPU-26's own check asserts it by reading
 # `Total Tests: 0` out of the CTest listing.
 #
-# Each later cpu task adds its own `add_test(NAME <name> ...)` line here, with
+# Each cpu task adds its own `add_test(NAME <name> ...)` line here, with
 # whatever target the name needs, and attaches that target to the `mcf5307_tests`
-# aggregate that the root list creates, AFTER the `PROJECT_IS_TOP_LEVEL` guard
+# aggregate that the root list creates, after the `PROJECT_IS_TOP_LEVEL` guard
 # below unless it has the same reason to outlive it the block above the guard has.
 
-# --------------------------------------------------------------------- CPU-3
+# ---------------------------------------------------------------------------
 # `t0_abi_gate_on` - step 4a is switched ON in the tree this suite is running
 # against.
 #
-# THE BANNER READ CPU-26 AND THAT WAS WRONG. Section 7.4.2's owner row, CPU-26's
-# own block and the root list all three say CPU-26 registers no test of its own,
-# and the section defines no third role for a registration that belongs to
-# nobody. CPU-3 is the later task the second role names: it owns `cmake/Nim.cmake`
-# as a declared second write, and the gate this test reads is its work.
-#
-# WHAT IT PROTECTS. What the OFF branch of step 4a does is `message(WARNING)`,
+# What it protects. What the OFF branch of step 4a does is `message(WARNING)`,
 # and a warning fails neither `cmake`, nor `cmake --build`, nor `ctest`. The
 # switch is a `CACHE BOOL`, so a directory configured OFF once stays OFF with
 # nobody naming it again. The whole OFF state was therefore reportable only as
 # one line of scrollback on a run that ends in exit 0 - the shape of a check
 # that quietly does not run, which is the shape step 4a was written to end.
+# This test is the only thing in the repository that fails when the gate is
+# off: `git grep -n MCF5307_ABI_GATE` answers with `cmake/Nim.cmake` and this
+# file and nothing else.
 #
-# THIS TEST IS THE ONLY THING IN THE REPOSITORY THAT FAILS WHEN THE GATE IS
-# OFF. Measured 2026-08-12: `git grep -n MCF5307_ABI_GATE` answers with
-# `cmake/Nim.cmake` and this file and nothing else. No CI step, no lint and no
-# other test reads the switch. The command is `git grep` because a literal
-# `grep -rn` also walks `.claude/worktrees/`, where an untracked checkout of
-# this same repository carries its own `cmake/Nim.cmake`; measured the same
-# day, that answered with a THIRD file.
-#
-# THE CACHE ENTRY IS NOT THE GATE. It is the SWITCH. A run can read `ON` out of
+# The cache entry is not the gate. It is the switch. A run can read `ON` out of
 # `CMakeCache.txt` and still not have run step 4a: delete the branch and keep
 # the `set(... CACHE BOOL)`, or let a parent list file shadow the entry with a
-# NORMAL variable, which the docstring in `cmake/Nim.cmake` records. Both were
-# MEASURED 2026-08-12 against the cache-only form this block replaces, and a
-# cache-only assertion PASSED on each.
+# normal variable, which the docstring in `cmake/Nim.cmake` records. A
+# cache-only assertion passes on both.
 #
-# SO THE ASSERTION IS ON AN ARTIFACT STEP 4a PRODUCED, AND THE CACHE CHECKS ARE
-# KEPT BESIDE IT. `cmake/Nim.cmake` writes `mcf5307_abi_gate_ran.token` at the
-# END of step 4a's own branch, carrying the counts the three parts measured and
-# the number of sites that ran. This file MOVES that token - removes any
+# So the assertion is on an artifact step 4a produced, and the cache checks are
+# kept beside it. `cmake/Nim.cmake` writes `mcf5307_abi_gate_ran.token` at the
+# end of step 4a's own branch, carrying the counts the three parts measured and
+# the number of sites that ran. This file moves that token - removes any
 # previous stamp, then renames - into the binary directory ctest starts the
-# driver in. The token is CONSUMED, so a stamp can be here only if step 4a
+# driver in. The token is consumed, so a stamp can be here only if step 4a
 # wrote a token in the same run that moved it.
 #
-# WHAT THE MOVE DOES NOT CLOSE is a configure that ABORTS before this directory
-# is read: nothing here runs to remove the previous stamp. MEASURED 2026-08-12:
-# an honest tree passed, a fault injected inside step 4a made the reconfigure
-# exit 1 without generating, and the test PASSED against the surviving stamp.
-# So a stamp proves the branch ran through IN THE MOST RECENT CONFIGURE THAT
-# REACHED `tests/`, which is what the pass line says. It is bounded: `cmake
-# --build` on that tree re-runs cmake and exits 2, so CI never reaches ctest.
+# What the move does not close is a configure that aborts before this directory
+# is read: nothing here runs to remove the previous stamp, so the test can pass
+# against a surviving stamp. A stamp therefore proves the branch ran through in
+# the most recent configure that reached `tests/`, which is what the pass line
+# says. It is bounded: `cmake --build` on that tree re-runs cmake and exits 2,
+# so CI never reaches ctest.
 #
-# THE MOVE IS WHY THERE IS NO MTIME COMPARISON. An existence-only stamp needs
-# one, and `CMakeCache.txt` is the file it would have to name. MEASURED
-# 2026-08-12 on a two-line probe project, both directions defeat it. Within one
-# configure the cache is written AFTER every list file has run, so a stamp
-# written by step 4a is ALWAYS older than the cache of its own run and the
-# honest ON case would red. And a second configure that changed no entry left
-# `CMakeCache.txt` at the mtime of the first while the probe's own list-file
-# write moved forward, so the cache is not rewritten on every configure either
-# - which makes a STALE stamp read NEWER than the cache. Consumption answers
-# the question the mtime was reaching for without depending on either ordering.
+# The move is why there is no mtime comparison. An existence-only stamp needs
+# one, and `CMakeCache.txt` is the file it would have to name. Both directions
+# defeat it. Within one configure the cache is written after every list file
+# has run, so a stamp written by step 4a is always older than the cache of its
+# own run and the honest ON case would red. And a second configure that changed
+# no entry leaves `CMakeCache.txt` at the mtime of the first, so a stale stamp
+# reads newer than the cache. Consumption answers the question the mtime was
+# reaching for without depending on either ordering.
 #
-# THE TWO OFFSETS ARE ANCHORED DIFFERENTLY ON PURPOSE. The token lands in THIS
-# PROJECT's binary directory, `PROJECT_BINARY_DIR`; `CMakeCache.txt` is written
-# once per BUILD TREE, `CMAKE_BINARY_DIR`. The two are the same directory ONLY
-# when mcf5307 is top-level. MEASURED 2026-08-12 with the cache offset taken
-# from `PROJECT_BINARY_DIR`: configured through `add_subdirectory()` it named
-# `<build>/mcf5307_build`, which holds no cache, and the test was red on every
-# run WITH THE GATE ON - closed rather than open, but broken in the
-# configuration step 6 exists to serve.
+# The two offsets are anchored differently on purpose. The token lands in this
+# project's binary directory, `PROJECT_BINARY_DIR`; `CMakeCache.txt` is written
+# once per build tree, `CMAKE_BINARY_DIR`. The two are the same directory only
+# when mcf5307 is top-level: with the cache offset taken from
+# `PROJECT_BINARY_DIR`, a configure through `add_subdirectory()` names
+# `<build>/mcf5307_build`, which holds no cache, and the test is red on every
+# run with the gate on.
 #
-# THE CACHE CHECKS ARE KEPT AND NOT REPLACED. They read the persisted entry,
+# The cache checks are kept and not replaced. They read the persisted entry,
 # which is the thing that survives into the next configure, and they name a
 # different fault: a tree whose switch is off, or whose switch is no longer
 # declared, is a different report from a tree whose branch did not run.
 #
-# THE TWO FILES IT READS ARE RESOLVED AT RUN TIME AND NOT BAKED AT CONFIGURE
-# TIME. What `add_test` records for each is a RELATIVE offset, resolved against
+# The two files it reads are resolved at run time and not baked at configure
+# time. What `add_test` records for each is a relative offset, resolved against
 # the directory ctest starts the driver in, in whatever tree ctest was invoked
-# in. An absolute path
-# computed at configure time names THAT tree forever, and a build tree is a
-# directory anyone can copy. MEASURED 2026-08-12 against the absolute form this
-# replaces: configure a tree with `-DMCF5307_ABI_GATE=OFF`, copy it,
-# reconfigure the ORIGINAL to ON, run ctest in the COPY - PASSED, exit 0,
-# printing the ORIGINAL tree's path in its own pass line.
+# in. An absolute path computed at configure time names that tree forever, and
+# a build tree is a directory anyone can copy: with the absolute form, a tree
+# configured OFF and copied, with the original reconfigured to ON, passes in
+# the copy and prints the original tree's path in its own pass line.
 #
-# THE ASSERTION IS ON CMAKE'S OWN BOOLEAN READING OF THE LITERAL, not on the
+# The assertion is on CMake's own boolean reading of the literal, not on the
 # spelling `ON`. `-DMCF5307_ABI_GATE=TRUE` and `-DMCF5307_ABI_GATE=1` are gates
-# that ARE on, and a test that demanded the three letters would red on a tree
+# that are on, and a test that demanded the three letters would red on a tree
 # whose gate runs. The literal is reported verbatim in both the pass line and
-# the failure message, so the evidence is the value itself either way.
+# the failure message.
 #
-# THE COUNT CHECK IS NOT DECORATION. Zero entries means `cmake/Nim.cmake` no
+# The count check is not decoration. Zero entries means `cmake/Nim.cmake` no
 # longer declares the switch at all, which is a way to lose step 4a that an
 # ON/OFF assertion alone reads as a missing variable and CMake reads as false.
 # The two are separated so the failure names which one happened.
 #
-# IT REGISTERS NO CHECK TARGET, AND `docs/check-targets.txt` IS LEFT EMPTY AND
-# UNMODIFIED. VERIFIED 2026-08-12 in the tool: the check-target condition
-# compares that file against a set harvested from the PLAN DOCUMENT and opens
-# NO SOURCE FILE, so an `add_test()` written here puts a name into neither set.
-# The file's own prose - it declares the targets of tasks declared COMPLETE -
-# is no filter in that comparison, so the empty file is correct because no name
-# reaches either set and NOT because a filter holds incomplete tasks back. The
-# prose is not inert: a SECOND half of the same tool reads the same file, by a
-# different rule, as a completion signal. Neither reading reaches this block.
-#
-# The `t0_` prefix is what puts this name in front of CI instead -
+# The `t0_` prefix is what puts this name in front of CI -
 # `.github/workflows/ci.yml` runs `-R '^t0_'` in two jobs, and this name joins
 # that pattern with no edit to the workflow.
 
-# The consume step. It runs on EVERY configure, because this file is what
+# The consume step. It runs on every configure, because this file is what
 # registers the test: a configure that does not reach this line registers no
 # `t0_abi_gate_on` at all, which `--no-tests=error` and the suite's own count
 # report as a missing test rather than as a pass. The removal comes first so
 # that a configure which finds no token leaves no stamp behind.
 #
-# THE TOKEN IS HELD AGAINST THE VARIABLE `cmake/Nim.cmake` LEFT BESIDE IT.
-# WHAT THAT REJECTS is a token on disk that step 4a's branch did not write in
-# this run. Measured 2026-08-12 without the comparison: a token planted in the
-# build tree, with step 4a's whole branch then deleted from `cmake/Nim.cmake`,
-# was moved here and the test PASSED. A rejected token is removed rather than
-# left, so the next configure starts from the same place a clean one does.
+# The token is held against the variable `cmake/Nim.cmake` left beside it. What
+# that rejects is a token on disk that step 4a's branch did not write in this
+# run: without the comparison, a token planted in the build tree with step 4a's
+# branch deleted is moved here and the test passes. A rejected token is removed
+# rather than left, so the next configure starts from the same place a clean one
+# does.
 #
-# WHAT IT DOES NOT REJECT IS `-D`. The variable is NOT set by this run or not
-# at all: `cmake -DMCF5307_ABI_GATE_RECORD=<text>` creates a cache entry, the
-# same persistence `MCF5307_ABI_GATE` has and this test exists to catch.
-# MEASURED 2026-08-12 against a branch-deleted source with a token planted by
-# hand, one configure naming `-D` PASSED and the entry landed as
-# `MCF5307_ABI_GATE_RECORD:UNINITIALIZED=`. It is bounded twice, and neither
-# bound makes the old claim safe to restate. The record is multi-line and CMake
+# What it does not reject is `-D`. `cmake -DMCF5307_ABI_GATE_RECORD=<text>`
+# creates a cache entry, the same persistence `MCF5307_ABI_GATE` has and this
+# test exists to catch. It is bounded twice: the record is multi-line and CMake
 # truncates a cached value at the first newline, so a later configure that does
-# not name `-D` reds - measured the same run. And naming it is hand-writing the
-# record with an extra step, which belongs with forging the stamp.
+# not name `-D` reds; and naming it is hand-writing the record with an extra
+# step, which belongs with forging the stamp.
 #
-# DELETING THIS STEP IS NOT A QUIET WAY TO DISARM THE TEST. The offset computed
+# Deleting this step is not a quiet way to disarm the test. The offset computed
 # below names `MCF5307_GATE_STAMP`, so a tree without this step reaches
-# `file(RELATIVE_PATH)` with an empty argument. MEASURED 2026-08-12: `CMake
-# Error ... file RELATIVE_PATH must be passed a full path to the file`, and the
-# configure ends non-zero with no test registered at all.
+# `file(RELATIVE_PATH)` with an empty argument: `CMake Error ... file
+# RELATIVE_PATH must be passed a full path to the file`, and the configure ends
+# non-zero with no test registered at all.
 set(MCF5307_GATE_TOKEN "${PROJECT_BINARY_DIR}/mcf5307_abi_gate_ran.token")
 set(MCF5307_GATE_STAMP "${CMAKE_CURRENT_BINARY_DIR}/t0_abi_gate_ran.stamp")
 file(REMOVE "${MCF5307_GATE_STAMP}")
@@ -164,23 +132,22 @@ file(RELATIVE_PATH MCF5307_GATE_CACHE_OFFSET
 file(RELATIVE_PATH MCF5307_GATE_STAMP_OFFSET
     "${CMAKE_CURRENT_BINARY_DIR}" "${MCF5307_GATE_STAMP}")
 
-# THE DRIVER IS A SOURCE FILE AND THE OFFSETS STILL RESOLVE AGAINST THE BUILD
-# TREE. `cmake -P` sets `CMAKE_CURRENT_BINARY_DIR` to the WORKING DIRECTORY and
-# never to the script's own directory. MEASURED 2026-08-12 on CMake 4.3.4, with
-# a decoy `CMakeCache.txt` reading OFF planted where a script-anchored
-# resolution would have landed: the driver read the build tree's cache.
+# The driver is a source file and the offsets still resolve against the build
+# tree. `cmake -P` sets `CMAKE_CURRENT_BINARY_DIR` to the working directory and
+# never to the script's own directory: with a decoy `CMakeCache.txt` reading
+# OFF planted where a script-anchored resolution would have landed, the driver
+# reads the build tree's cache.
 add_test(NAME t0_abi_gate_on
     COMMAND "${CMAKE_COMMAND}"
         "-DGATE_CACHE_OFFSET=${MCF5307_GATE_CACHE_OFFSET}"
         "-DGATE_STAMP_OFFSET=${MCF5307_GATE_STAMP_OFFSET}"
         -P "${CMAKE_CURRENT_LIST_DIR}/t0_abi_gate_on.cmake")
 
-# THE BLOCK ABOVE REGISTERS IN EVERY TREE AND EVERYTHING BELOW ONLY AT TOP
-# LEVEL. A test that runs in a tree no task owns is a test whose failure has no
-# owner. THE GATE ASSERTION IS THE EXCEPTION ON PURPOSE: `add_subdirectory()` is
+# The block above registers in every tree and everything below only at top
+# level. A test that runs in a tree no task owns is a test whose failure has no
+# owner. The gate assertion is the exception on purpose: `add_subdirectory()` is
 # where a hidden published symbol breaks a plugin, and it is the configuration
-# the parent-variable shadow of `MCF5307_ABI_GATE` was found in. MEASURED
-# 2026-08-12: 16 names top-level, 1 from a scratch parent.
+# the parent-variable shadow of `MCF5307_ABI_GATE` was found in.
 if(NOT PROJECT_IS_TOP_LEVEL)
     return()
 endif()
@@ -467,29 +434,26 @@ add_test(NAME t_checks_on
 # ---------------------------------------------------------------------------
 # `t_ea_masks` - the decoder and effective-address legality masks.
 #
-# ONE REGISTERED NAME, AND EVERY CASE CAN FAIL.
+# One registered name, and every case can fail.
 #
-# THE CASE COUNT AND THE OPCODE ROSTER ARE DELIBERATELY NOT WRITTEN DOWN HERE.
-# This block used to name FIFTEEN cases over a hand-maintained list of four
-# opcodes, and that hand-maintained list is precisely the defect
-# `tests/t_ea_masks.nim` was rewritten to abolish: an opcode that gained a
-# legality mask went SILENTLY UNCOVERED instead of LOUDLY MISSING, and the
-# stated count went stale without anything turning red. A count restated here
-# would decay the same silent way. The program prints its own count and its own
-# attribution figure on the summary line the driver below matches, and THAT
-# LINE IS THE LIVE FIGURE. In case order:
+# The case count and the opcode roster are deliberately not written down here.
+# A hand-maintained roster is the defect `tests/t_ea_masks.nim` exists to
+# abolish: an opcode that gains a legality mask goes silently uncovered instead
+# of loudly missing, and a stated count goes stale without anything turning
+# red. The program prints its own count and its own attribution figure on the
+# summary line the driver below matches, and that line is the live figure. In
+# case order:
 #
-#   FIRST  `exec` runs a NOP fetch and returns a non-zero cycle count - the
-#      assertion that moved here from CPU-3 (W3-7). Drives
+#   FIRST  `exec` runs a NOP fetch and returns a non-zero cycle count. Drives
 #      `mcf5307_create`/`mcf5307_reset`/`mcf5307_exec`/`mcf5307_destroy`
 #      through the real ABI against a board that answers `MCF5307_BUS_OK`.
-#   THEN  EA legality, ENUMERATED OVER `Operation` AND NOT OVER A ROSTER OF
-#      OPCODE NAMES. Every operation whose `eaLegalityFor` mask is NON-EMPTY
-#      carries FOUR assertions: the mask REJECTS an illegal mode cited from the
+#   THEN  EA legality, enumerated over `Operation` and not over a roster of
+#      opcode names. Every operation whose `eaLegalityFor` mask is non-empty
+#      carries four assertions: the mask rejects an illegal mode cited from the
 #      MCF5307 User's Manual and never derived from the mask itself, the mask
-#      ACCEPTS a legal mode, the executor RUNS the legal operand, and the
-#      executor TRAPS the illegal one. Every operation whose mask is EMPTY
-#      carries ONE assertion instead - that no stale coverage entry names it.
+#      accepts a legal mode, the executor runs the legal operand, and the
+#      executor traps the illegal one. Every operation whose mask is empty
+#      carries one assertion instead - that no stale coverage entry names it.
 #      Both directions are therefore red-on-drift: an operation that gains a
 #      mask with no coverage entry fails in the wave that adds it, and an entry
 #      whose mask has gone empty fails as a stale entry.
@@ -497,28 +461,18 @@ add_test(NAME t_checks_on
 #      a representative word, so the legality assertions are attached to the
 #      code that runs and not to a table the decoder never reads.
 #
-# THE TRAP IS NOT EQUALLY ATTRIBUTABLE FOR EVERY OPERATION, AND THE SUMMARY
-# LINE SAYS SO RATHER THAN LETTING A BARE COUNT IMPLY OTHERWISE. A minority of
-# operations carry a mask WHOSE COMPLEMENT THE MACHINE LAYER ALREADY REFUSES -
+# The trap is not equally attributable for every operation, and the summary
+# line says so rather than letting a bare count imply otherwise. A minority of
+# operations carry a mask whose complement the machine layer already refuses -
 # the reserved mode-7 encodings, which `machine.nim`'s `eaAddr` and `eaRead`
 # fault on independently of any mask, and the `(d16,PC)` destination of ADDQ
 # and SUBQ, whose `eaResolve` accepts exactly the two mode-7 encodings the mask
 # admits and faults on every other. For those the trap is real but cannot be
-# attributed to the guard: deleting the guard leaves a MACHINE-LAYER FALLBACK
-# to fault in its place, so the case stays GREEN; `tests/t_ea_masks.nim` marks
+# attributed to the guard: deleting the guard leaves a machine-layer fallback
+# to fault in its place, so the case stays green. `tests/t_ea_masks.nim` marks
 # each such entry `discriminating: false`, and the first assertion is what
-# covers a widened mask for them. The program prints `<N> of <M> operations
-# attribute the refusal to their own guard` beside the case count. Read that
-# figure from the run and not from this comment.
-#
-#   EA legality, with the positive control and the negative control for
-#   every opcode the decoder recognizes that carries an effective-address
-#   mask: MOVE, ADDQ, SUBQ and LEA. Each accepts a legal mode and rejects
-#   at least one illegal mode.
-#
-#   The decoder recognizes each implemented opcode from a representative
-#   word, so the legality assertions are attached to the code that runs and
-#   not to a table the decoder never reads.
+# covers a widened mask for them. Read the attribution figure from the run and
+# not from this comment.
 #
 # The compile happens inside the test and not in the build, for the reason
 # `t0_abi_header` and `t_checks_on` give: a `ctest` run over a tree whose
@@ -995,13 +949,12 @@ add_test(NAME t_move
 # declared mask - which admits the PC-relative pair - and the executor is
 # invisible there.
 #
-# AND NO REGISTERED TEST ENTERED `logic.nim` AT ALL BEFORE THIS ONE.
-# `t_ea_masks` HAS SINCE BEEN REWRITTEN TO ENUMERATE OVER `Operation`, so it
-# now enters `logicFamily` for every logic operation carrying a legality mask -
-# BUT IT ENTERS THROUGH THE EFFECTIVE-ADDRESS DOOR ALONE. It asserts that a
+# `t_ea_masks` enumerates over `Operation`, so it
+# enters `logicFamily` for every logic operation carrying a legality mask -
+# but it enters through the effective-address door alone. It asserts that a
 # legal operand runs and that an illegal one traps whole, and it asserts
-# NOTHING about the COMPUTED RESULT of a legal run and NOTHING about the
-# ENCODING of any logic word - it hand-builds its `Decoded` objects, and the
+# nothing about the computed result of a legal run and nothing about the
+# encoding of any logic word - it hand-builds its `Decoded` objects, and the
 # six words it does put through `decodeWord` are NOP, MOVE, ADDQ, SUBQ, LEA and
 # MOVEQ, not one logic opcode among them. Its `opBtst` entry offers `Dn` and
 # `An` and no other mode, so the PC-relative and immediate operands named above
@@ -1123,33 +1076,31 @@ add_test(NAME t_logic
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_logic_driver.cmake")
 
-# -------------------------------------------------------------------- CPU-10
+# ---------------------------------------------------------------------------
 # `t_control` - control flow and comparison.
 #
-# ONE REGISTERED NAME, AND EVERY CASE CAN FAIL. The CPU-10 Check: line is
-# `mcf5307_conformance_control`, and this test is registered BESIDE it rather
-# than instead of it, for the reason the `t_logic` block above gives: a POSITIVE
-# corpus STRUCTURALLY CANNOT SEE a wrongly-claimed encoding, because a stolen
-# encoding produces a PASSING EXECUTION OF A DIFFERENT INSTRUCTION.
+# One registered name, and every case can fail. It is registered beside
+# `mcf5307_conformance_control` rather than instead of it, for the reason the
+# `t_logic` block above gives: a positive corpus structurally cannot see a
+# wrongly-claimed encoding, because a stolen encoding produces a passing
+# execution of a different instruction.
 #
-# THIS GROUP ARRIVED WITH ONE. Measured on a sweep of all 65536 words against
-# the decoder of commit a124077: `decode.nim`'s ADDQ and SUBQ arms matched on
+# This group arrived with one. `decode.nim`'s ADDQ and SUBQ arms matched on
 # `word and 0xF100` alone and claimed all 1024 `0101 cccc 11 <ea>` words, 512 as
 # `opAddq` and 512 as `opSubq`, none unclaimed. Every one of them then trapped
 # on the illegal size field, which is indistinguishable from "the opcode is not
 # written yet". `tests/t_control.nim` asserts `decodeWord(0x50c0).op == opScc`
 # and the three ADDQ/SUBQ controls beside it.
 #
-# THOSE 1024 WORDS ARE NOT "THE Scc AND DBcc SPACE", which is what this block
-# used to call them. The split is measured, not assumed:
+# Those 1024 words are not "the Scc and DBcc space". The split is measured:
 #
 #     128 are `Scc Dn` - EA field `000 rrr`, eight registers times sixteen
 #         conditions. All 128 assemble under `m68k-elf-as -mcpu=5307` (`st %d0`
 #         is `50c0`, `sf %d0` is `51c0`, `shi %d0` is `52c0`) and `st (%a0)` is
-#         REFUSED. Table 3-7, page 3-25, gives Scc an OPERAND SYNTAX of `Dx`,
+#         refused. Table 3-7, page 3-25, gives Scc an operand syntax of `Dx`,
 #         and Table 3-12, page 3-27, one `scc Dx` row and no memory column.
 #
-#       0 are DBcc. THE INSTRUCTION IS NOT ON THIS PART. Section 3.9, page
+#       0 are DBcc. The instruction is not on this part. Section 3.9, page
 #         3-21, lists "decrement and branch" among the removed instructions,
 #         no table carries a row, and the pinned assembler rejects `dbf`,
 #         `dbra`, `dbt` and `dbne` under `-mcpu=5307`. The 128 words
@@ -1157,20 +1108,19 @@ add_test(NAME t_logic
 #
 #       3 are TRAPF - `51fa`, `51fb` and `51fc`, measured from `trapf.w #1`,
 #         `trapf.l #1` and `trapf`. `trapt`, `trapeq`, `trapne` and `traphi`
-#         are all REJECTED, so it is three words and not a condition family.
-#         TRAPF is NOT in this task's opcode list; `t_control` asserts all
-#         three as `opIllegal` so they stay unclaimed for whichever task owns
-#         them, and keeps `51c0`, `51f9` and `51fd` as Scc controls beside
-#         them.
+#         are all rejected, so it is three words and not a condition family.
+#         TRAPF is not implemented; `t_control` asserts all three as
+#         `opIllegal` so they stay unclaimed, and keeps `51c0`, `51f9` and
+#         `51fd` as Scc controls beside them.
 #
 #     893 are none of the three - no instruction on this part.
 #
-# IT ALSO CARRIES THE ONE ASSERTION THE PLAN ROW WRITES IN BOLD: a `Bcc` whose
-# 8-bit displacement is `0xff` means a 32-bit displacement, which is ISA_B, and
-# must trap. No corpus case can hold it - `m68k-elf-as -mcpu=5307` refuses to
-# assemble `bra.l` at all - so the word is built by hand there.
+# It also carries the assertion no corpus case can hold: a `Bcc` whose 8-bit
+# displacement is `0xff` means a 32-bit displacement, which is ISA_B, and must
+# trap. `m68k-elf-as -mcpu=5307` refuses to assemble `bra.l` at all, so the
+# word is built by hand there.
 #
-# THE FLAG SET, THE COMPILE INSIDE THE TEST and the two-part failure check are
+# The flag set, the compile inside the test and the two-part failure check are
 # taken from `t_ea_masks`, `t_sign_extend`, `t_alu`, `t_move` and `t_logic`
 # above, for the reasons those blocks give.
 
@@ -1210,7 +1160,7 @@ set(MCF5307_CONTROL_DRIVER_TEMPLATE [==[
 # GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
 #
 # The driver of the registered test `t_control`. It compiles the Nim test
-# program with THE LIBRARY'S OWN FLAG SET, runs it, and fails when the run exits
+# program with the library's own flag set, runs it, and fails when the run exits
 # non-zero or does not report a full pass.
 
 set(nim_command
@@ -1219,7 +1169,7 @@ set(source "@MCF5307_CONTROL_SOURCE@")
 set(binary "@MCF5307_CONTROL_BINARY@")
 set(nimcache "@MCF5307_CONTROL_NIMCACHE@")
 
-# The binary of an earlier run is REMOVED BEFORE THE COMPILE. Without this a
+# The binary of an earlier run is removed before the compile. Without this a
 # compile that failed would leave the earlier binary in place, and the run
 # would then execute code this run never produced.
 file(REMOVE "${binary}")
@@ -1253,17 +1203,13 @@ endif()
 # non-zero, which the check above already rejects. Anchoring the tail here
 # keeps a run that printed the banner but skipped the cases from passing.
 #
-# THE COUNT IS `[1-9][0-9]*` AND NOT `[0-9]+`, AND THE DIFFERENCE IS THE WHOLE
-# CHECK. `[0-9]+` matches `0`, so a `t_control.nim` reduced to nothing but
+# The count is `[1-9][0-9]*` and not `[0-9]+`, and the difference is the whole
+# check. `[0-9]+` matches `0`, so a `t_control.nim` reduced to nothing but
 # `echo "t_control: ", 0, " cases passed"` exits 0, prints the banner, runs no
-# case and PASSES this test - which is the one outcome the paragraph above says
-# this anchor exists to reject. The `t_logic` block above measured exactly that
-# and this block uses its tightened form.
+# case and passes this test - the one outcome the paragraph above says this
+# anchor exists to reject.
 #
-# THE FOUR OLDEST BLOCKS IN THIS FILE STILL USE `[0-9]+`. They belong to their
-# own tasks - section 7.4.2 makes CPU-26 the owner of this file and admits a
-# later cpu task only as a second writer of ITS OWN registration - so they are
-# not repaired here and they are filed.
+# The older blocks in this file still use `[0-9]+`.
 if(NOT control_run_out MATCHES "t_control: [1-9][0-9]* cases passed")
     message(FATAL_ERROR
         "t_control: the run exited 0 but did not report a full pass.\n"

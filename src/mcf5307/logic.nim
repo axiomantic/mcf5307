@@ -54,41 +54,24 @@
 ##   LSL, LSR, ASL, ASR
 ##       X and C both take the last bit shifted out, which Table 3-7 states
 ##       for all four (`X/C <- (Dy << Dx) <- 0` and the two right-shift
-##       forms). N and Z come from the result. V IS CLEARED BY ALL FOUR, ASL
-##       INCLUDED, and the ColdFire Family Programmer's Reference Manual says
-##       so in its own words rather than by inference from the word
-##       "arithmetic". Folio 4-12 gives V a flat "Always cleared" in the
+##       forms). N and Z come from the result. V is cleared by all four, ASL
+##       included. CFPRM folio 4-12 gives V a flat "Always cleared" in the
 ##       condition-code table and adds "Note that CCR[V] is always cleared by
 ##       ASL and ASR, unlike on the 68K family processors"; folio 4-11 says
-##       "The overflow bit is always zero". THIS PART COMPUTES NO SHIFT
-##       OVERFLOW AT ALL.
-##
-##       AN EARLIER REVISION IMPLEMENTED THE 68000 RULE - V set when the sign
-##       changed - and reasoned its way there from section 3.2.1.5's
-##       definition of V as an ARITHMETIC overflow: LSL and LSR are logical so
-##       V is clear, ASR cannot leave the operand size, ASL can and therefore
-##       sets V. The reasoning is sound about the 68000 and wrong about this
-##       part, which is exactly what the CFPRM note calls out. The User's
-##       Manual never contradicted it; it simply does not carry the
-##       per-instruction flag table that settles it.
+##       "The overflow bit is always zero". This part computes no shift
+##       overflow at all, and the 68000 rule - V set when the sign changes -
+##       is what the CFPRM note calls out. The User's Manual does not carry
+##       the per-instruction flag table that settles it.
 ##
 ## THE SHIFT IS PERFORMED ONE BIT AT A TIME, ON PURPOSE. A count is at most 63
 ## and the loop costs nothing, and it makes the carry rule that is easy to get
 ## wrong in closed form come out by construction: the carry is THE LAST BIT
 ## THAT LEFT THE WORD rather than a bit of the result.
 ##
-## AN EARLIER REVISION OF THIS PARAGRAPH FRAMED A DICHOTOMY THAT DOES NOT
-## EXIST - "the sign changed AT ANY POINT during the shift" against "the sign
-## of the result differs from the sign of the operand" - and then held the
-## corpus back from asserting V at any count where the two readings disagree,
-## on the stated ground that the document separating them was unavailable.
-## BOTH HALVES WERE WRONG. The CFPRM is on disk, it names neither reading, and
-## it gives V a flat "Always cleared" for ASL (folios 4-11 and 4-12). There is
-## no reading to choose between and no count that separates anything.
-##
-##   1. ASL's overflow reading. "The sign changed at any point" against "the
-##      sign of the result differs from the sign of the operand". No case pins
-##      a count at which the two readings disagree.
+## A SHIFT COUNT OF ZERO IS REACHABLE THROUGH THE REGISTER FORM ALONE, because
+## the immediate form spends its zero slot on the value eight. It shifts
+## nothing. ONE OF THE FIVE FLAGS HAS A REASON AND FOUR ARE A CHOICE, and the
+## code and this paragraph now say the same thing about which is which:
 ##
 ##   2. The status word of a shift by zero.
 ##
@@ -102,7 +85,7 @@
 ##   THAT CASE AND NOT ITS STATUS WORD, which is what keeps the choice
 ##   unpinned.
 ##
-## CYCLES. The block above the constants in `cpu.nim` says why nothing checks
+## Cycles. The block above the constants in `cpu.nim` says why nothing checks
 ## any of them, and uncertainty 2 below is this group's entry. Every
 ## instruction here has a timing row - all of them in Table 3-13 (folios 3-28
 ## and 3-29) except NOT, which is in Table 3-12 (3-27) - and none of the
@@ -111,39 +94,20 @@
 ## rows, and the four shifts, which are timed under `Rn` and `#xxx` and dashed
 ## everywhere else - against the 4 and 6 returned.
 ##
-## WHAT THIS MODULE DOES NOT KNOW. Five things, and the rule for every one of
-## them is the same: THE IMPLEMENTATION PICKS A BEHAVIOUR AND NOTHING ASSERTS
-## IT.
+## What this module does not know. Five things, and the rule for every one of
+## them is the same: the implementation picks a behaviour and nothing asserts
+## it. Entries 3, 4 and 5 are per-instruction questions of exactly the kind
+## the CFPRM (`~/Development/datasheets/CFPRM.pdf`, Rev. 3) answers, and its
+## pages for them have not been read.
 ##
-## THE LIST WAS SIX AND THE CFPRM SETTLED ONE OF THEM. An earlier revision
-## recorded that the ColdFire Family Programmer's Reference Manual "is NOT on
-## this machine" and hung five of the six entries on that absence. THE RECORD
-## WAS FALSE. The manual is on disk at `~/Development/datasheets/CFPRM.pdf`
-## (Rev. 3), its per-instruction pages give the flag rules directly, and its
-## ASL page settled what was entry 1 - ASL'S OVERFLOW READING - by stating
-## that ColdFire computes no ASL overflow at all. That entry is gone and the
-## rest are renumbered.
+##   1. The status word of a shift by zero. See the paragraph above.
 ##
-## THE REMAINING FIVE HAVE NOT BEEN RE-CHECKED AGAINST IT. Entries 3, 4 and 5
-## below are per-instruction questions of exactly the kind the CFPRM answers,
-## and the change that deleted entry 1 did not open their pages. Treat "the
-## document is unavailable" as retracted and "these are still open" as
-## UNVERIFIED rather than as a standing finding.
+##   2. The exact cycle count of every instruction in this group. Nothing
+##      asserts it, and `tests/t_logic.nim`'s `cycles` field is not a counter-
+##      case though its name reads like one; `cpu.nim` states the mechanism
+##      once, above its cycle constants.
 ##
-##   1. THE STATUS WORD OF A SHIFT BY ZERO. See the paragraph above.
-##
-##   2. THE EXACT CYCLE COUNT of every instruction in this group. NOTHING
-##      ASSERTS IT, AND `tests/t_logic.nim`'s `cycles` FIELD IS NOT A COUNTER-
-##      CASE THOUGH ITS NAME READS LIKE ONE; `cpu.nim` states the mechanism
-##      once, above its cycle constants. MEASURED 2026-08-12 AGAINST THIS TREE,
-##      as part of the project-wide run recorded there: all nine cycle
-##      expressions of this module - nine over seven return sites, by the
-##      census convention stated there - given distinct wrong values (71..79),
-##      `trap`'s zero left alone, each confirmed as its own literal in the
-##      generated C of a fresh configure; `t_logic` held its 74 cases and the
-##      logic corpus held its 48.
-##
-##   3. WHETHER A DYNAMIC BTST MAY READ AN IMMEDIATE OPERAND. User's Manual
+##   3. Whether a dynamic BTST may read an immediate operand. User's Manual
 ##      Table 3-13, page 3-28, dashes the `#xxx` column of the `btst Dy,<ea>`
 ##      row, and `m68k-elf-as -mcpu=5307` assembles `btst %d1,#5` anyway. The
 ##      mask follows the manual and traps it; the full evidence, including why
@@ -166,15 +130,12 @@
 ##      BOTH: the `btst %d1,#5` trap case, and the
 ##      `checkMask(eaIsLegalFor(opBtst, decodeEa(0x3C)), false, ...)` row that
 ##      this commit flipped from `true`. MEASURED: `eaBitDynamic`'s `ea7`
-##      restored to the full valid mode-7 set (then `eaData7`, now
-##      `eaValid7`), confirmed in the generated C as `{253, 31}`
-##      against this commit's `{253, 15}`, rebuilt from a fresh configure of a
-##      `git archive` of this commit - `t_logic: 2 of 74 cases failed`, exactly
-##      those two, and the corpus stayed 41 of 41. It is the one entry on this
-##      list that a future reader may have to REVERSE rather than merely fill
-##      in.
+##      restored to `eaValid7`, the full valid mode-7 set, shows in the
+##      generated C as `{253, 31}` against this mask's `{253, 15}`. It is the
+##      one entry on this list that a future reader may have to reverse rather
+##      than merely fill in.
 ##
-##   4. THE BIT NUMBER'S MODULUS. `execBitOp` reduces the number modulo the
+##   4. The bit number's modulus. `execBitOp` reduces the number modulo the
 ##      operand width - 32 for a data register, 8 for memory. Table 3-7 gives
 ##      the two widths ("8,32") and states no modulus anywhere, and no other
 ##      passage does either. Figure 3-8 on page 3-18 is the closest thing and
@@ -229,7 +190,7 @@
 ##      operand, and nothing pins the MEMORY reduction at any bit number except
 ##      9.
 ##
-##   5. THE REGISTER SHIFT COUNT'S MODULUS. `execShift` takes it modulo 64.
+##   5. The register shift count's modulus. `execShift` takes it modulo 64.
 ##      Table 3-7 gives the shift operations as `X/C <- (Dy << Dx) <- 0` and
 ##      states no modulus, and no other passage does. No case in the corpus or
 ##      in `tests/t_logic.nim` uses a count above 31, so nothing distinguishes
@@ -497,7 +458,7 @@ proc execShift(ctx: MCF5307Ctx; d: Decoded): uint32 =
     if toLeft:
       carry = (before and 0x80000000'u32) != 0'u32
       value = before shl 1
-      # NO OVERFLOW IS COMPUTED FOR ASL. CFPRM folio 4-12 gives V a flat
+      # No overflow is computed for ASL. CFPRM folio 4-12 gives V a flat
       # "Always cleared" and adds "Note that CCR[V] is always cleared by ASL
       # and ASR, unlike on the 68K family processors"; folio 4-11 says "The
       # overflow bit is always zero". The clearing at the foot of this proc is
@@ -532,7 +493,7 @@ proc execShift(ctx: MCF5307Ctx; d: Decoded): uint32 =
 proc logicFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   ## Execute one logic, bit-operation or shift instruction. Called from `step`
   ## in `mcf5307/cpu` with the opcode word and the decoded operation. Returns a
-  ## PLACEHOLDER cycle count excluding the fetch - see the cycle block in
+  ## placeholder cycle count excluding the fetch - see the cycle block in
   ## `cpu.nim` - and halts the context with `fault` set on an illegal size or
   ## an illegal effective address.
   case d.op
