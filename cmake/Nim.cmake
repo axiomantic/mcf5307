@@ -287,10 +287,11 @@ message(STATUS "mcf5307: nim invocation: ${MCF5307_NIM_COMMAND_TEXT}")
 # same variable.
 set(MCF5307_ABI_CONTRACT_FILE "${PROJECT_SOURCE_DIR}/include/mcf5307.h")
 
-# The smoke test's symbol list. It is CPU-3's file, it is read here and it is
-# never written here. Step 4a compares it against the published set of the
-# contract header above. It is named at this point for the same reason the
-# contract header is: the dependency list below has to carry it.
+# The smoke test's EXPECTED symbol list. It is CPU-3's file, it is read here
+# and it is never written here. Step 4a compares it against the set it
+# MEASURES as defined and exported by the library, in both directions. It is
+# named at this point for the same reason the contract header is: the
+# dependency list below has to carry it.
 set(MCF5307_ABI_SMOKE_LIST_FILE
     "${PROJECT_SOURCE_DIR}/tests/abi_smoke_symbols.inc")
 
@@ -317,11 +318,12 @@ set(MCF5307_ABI_STUB_FILE "${PROJECT_SOURCE_DIR}/tests/abi_stub.c")
 #   `.nim-version`     step 1 compares it against the compiler.
 #   `include/mcf5307.h` step 4a reads the published set out of it.
 #   `tests/abi_smoke_symbols.inc`
-#                      step 4a reads the smoke test's list out of it and
-#                      compares the two. A list edited without a re-run would
-#                      leave the comparison speaking about a version of the
-#                      list that no longer exists - the exact failure the
-#                      paragraph below records for the contract header.
+#                      step 4a reads the EXPECTED ABI out of it and compares
+#                      it against the measured one. A list edited without a
+#                      re-run would leave the comparison speaking about a
+#                      version of the list that no longer exists - the exact
+#                      failure the paragraph below records for the contract
+#                      header.
 #   `tests/abi_stub.c` step 4a compiles it and reads the symbols the object
 #                      defines. A definition added or removed without a re-run
 #                      would leave that comparison speaking about an object
@@ -1368,29 +1370,53 @@ endif()
 # ---------------------------------------------------------------------------
 # Step 4a, part two. THE SMOKE-TEST LIST GATE.
 #
-# WHAT IT PROTECTS. `tests/abi_smoke.cpp` states its own invariant as taking
-# the address of every function the contract header declares. That sentence
-# was FALSE for two symbols: `mcf5307_set_reg` and `mcf5307_get_reg` reached
-# the contract with CPU-7 and never reached the test, so a rename of either
-# one was not a link error in the one test whose stated job is the ABI
-# surface. Nothing measured the gap, which is exactly why it opened.
+# TWO MECHANISMS, WIRED TOGETHER, BECAUSE EACH ONE ALONE FAILS SILENTLY.
 #
-# WHY THE CHECK LIVES HERE AND NOT IN THE TEST. The published set is what the
-# list must equal, and the published set is parsed HERE, by a C compiler,
+#   THE MEASURED SET IS THE FACT. `tests/tests_cpu.cmake` generates the
+#   address set of `tests/abi_smoke.cpp` from `MCF5307_ABI_VISIBLE`, the set
+#   this step measured as DEFINED AND EXPORTED by the library. That is what
+#   makes the test buildable at all: most of the published surface has no
+#   definition yet, and taking the address of an undefined name is an
+#   unresolved symbol that takes the whole build down. A measured set also
+#   grows on its own, so the task that implements a published name brings it
+#   under this test with no edit anywhere.
+#
+#   A MEASURED SET ALONE CANNOT REPORT AN ABI ADDITION NOBODY INTENDED. It
+#   simply grows, and the check still passes. An export that reached the
+#   library by accident would be adopted in silence and reported as success.
+#
+#   THE COMMITTED LIST IS THE EXPECTATION. `tests/abi_smoke_symbols.inc` names
+#   the symbols this project INTENDS the library to define and export. A
+#   committed list alone goes stale the moment somebody forgets to update it -
+#   a roster amended by memory is not a rule.
+#
+#   SO THE TWO ARE COMPARED, AND A MISMATCH IN EITHER DIRECTION FAILS HERE.
+#   An unintended addition to the exported ABI then does two things at once:
+#   it stops the configure step with the symbol NAMED, and it shows up as a
+#   diff in `tests/abi_smoke_symbols.inc` for a reviewer to read.
+#
+# WHY THE CHECK LIVES HERE AND NOT IN THE TEST. The measured set is what the
+# list must equal, and it is measured HERE, by `nm` over a real shared object,
 # above. A count asserted inside the test would be a third hand-maintained
-# number beside the list and the header, and it would fall behind them the
-# same way. This block compares two SETS and asserts no number at all.
+# number beside the list and the measurement, and it would fall behind them
+# the same way. This block compares two SETS and asserts no number at all.
 #
 # IT FAILS IN BOTH DIRECTIONS.
 #
-#   A name the contract declares and the list omits. That is the defect this
-#   block was written for, and the message names the symbol.
+#   A name the library defines and exports and the list omits. That is an
+#   ABI addition nobody wrote down, and the message names the symbol.
 #
-#   A name the list carries and the contract does not declare. The C++ side
-#   also refuses that one - `&name` needs a declaration - but it refuses it
-#   with a compiler diagnostic about a test file, at build time, and this
-#   block refuses it at configure time and says which of the two files is
-#   wrong.
+#   A name the list carries and the library does not define. That is an ABI
+#   symbol that was expected and is gone - a rename, a dropped definition, or
+#   an `exportc` name that changed. The link of `abi_smoke` would NOT catch
+#   it, because the generated address set shrank with the measurement, so this
+#   direction is the one the committed list exists for.
+#
+# THE WHOLE PUBLISHED SET STILL HAS A COMMITTED TWO-WAY ROSTER, and it is not
+# this file. `tests/abi_stub.c` must define externally exactly the set
+# `include/mcf5307.h` declares, and part three below fails in both directions
+# over it. So a declaration added to the contract and written down nowhere is
+# still a named configure failure; it is simply not this block's job.
 #
 # THE LIST IS READ AND THE TEST'S C++ IS NOT. `tests/abi_smoke_symbols.inc`
 # holds nothing but blank lines, comment lines and the entry macro, so the
@@ -1402,14 +1428,19 @@ endif()
 # semicolon - is a failure and never a skip.
 #
 # A COMMENTED-OUT ENTRY NEEDS NO SPECIAL RULE, and the reader deliberately has
-# none. Both readers skip a comment, so both stop seeing the name, and the
-# comparison against the CONTRACT is what fails: the header still declares the
-# symbol and the list no longer names it. This block compares two sets and
+# none. This reader skips a comment, so it stops seeing the name, and the
+# comparison against the MEASUREMENT is what fails: the library still exports
+# the symbol and the list no longer names it. This block compares two sets and
 # never a count, so a name it cannot see is a name it reports as missing. That
 # is why the comment shape is tested BEFORE the macro shape below, and why
 # this file's own prose may name the macro.
 #
-# WHEN THE GATE IS OFF THIS CHECK DOES NOT RUN, because there is no published
+# THE C++ SIDE NO LONGER INCLUDES THIS FILE, and the reader below is stricter
+# than it needs to be for that reason alone. It is kept strict on purpose: a
+# line this reader cannot classify is a line whose intent is unclear, and the
+# expectation half of a two-way comparison may not be read by guesswork.
+#
+# WHEN THE GATE IS OFF THIS CHECK DOES NOT RUN, because there is no measured
 # set to compare against. The warning that `-DMCF5307_ABI_GATE=OFF` prints
 # already says the configure run measured nothing.
 
@@ -1466,10 +1497,10 @@ foreach(MCF5307_ABI_SMOKE_LINE IN LISTS MCF5307_ABI_SMOKE_LINES)
 
     # A line that is not a comment, that mentions the macro, and that is not
     # an entry. An entry with a leading space, a trailing comment or a
-    # semicolon lands here. THE C++ SIDE WOULD EXPAND IT AND THIS READER WOULD
-    # NOT, and that disagreement is the one shape this comparison cannot
-    # survive, because it makes the test take an address of a name this step
-    # never saw. It is refused rather than guessed at.
+    # semicolon lands here. A READER THAT GUESSED AT IT WOULD PUT A NAME INTO
+    # THE EXPECTATION THAT NOBODY WROTE, or drop one that somebody did, and
+    # either way the comparison below would speak about a list that is not on
+    # disk. It is refused rather than guessed at.
     if(MCF5307_ABI_SMOKE_LINE MATCHES "MCF5307_ABI_FN")
         message(FATAL_ERROR
             "mcf5307: step 4a failed: ${MCF5307_ABI_SMOKE_LIST_FILE} line "
@@ -1477,9 +1508,9 @@ foreach(MCF5307_ABI_SMOKE_LINE IN LISTS MCF5307_ABI_SMOKE_LINES)
             "neither an entry nor a comment.\n"
             "  line : ${MCF5307_ABI_SMOKE_LINE}\n"
             "An entry is exactly `MCF5307_ABI_FN(<identifier>)` with no "
-            "leading space, no trailing text and no semicolon. The C++ side "
-            "would expand this line and this step would not have counted it, "
-            "so the two would disagree about what the list holds.")
+            "leading space, no trailing text and no semicolon. A line this "
+            "step cannot classify is a line it would have to guess at, and "
+            "the expectation half of a two-way comparison is not guessed.")
     endif()
 
     message(FATAL_ERROR
@@ -1487,67 +1518,75 @@ foreach(MCF5307_ABI_SMOKE_LINE IN LISTS MCF5307_ABI_SMOKE_LINES)
         "${MCF5307_ABI_SMOKE_LINE_NUMBER} is neither blank, nor a comment, "
         "nor an entry.\n"
         "  line : ${MCF5307_ABI_SMOKE_LINE}\n"
-        "That file is data and not C. `tests/abi_smoke.cpp` includes it twice "
-        "with two different definitions of `MCF5307_ABI_FN`, and anything "
-        "else in it would expand into both of them.")
+        "That file is data and not C. It is the committed expectation this "
+        "step compares against the measured exported set, and anything else "
+        "in it has no meaning to either reader.")
 endforeach()
 
 if(MCF5307_ABI_SMOKE_NAMES STREQUAL "")
     message(FATAL_ERROR
         "mcf5307: step 4a failed: ${MCF5307_ABI_SMOKE_LIST_FILE} holds no "
-        "entry at all. An empty list makes the smoke test take no address, "
-        "and the comparison below would then report every published symbol as "
-        "missing. Silence is not a pass.")
+        "entry at all. An empty expectation would report every symbol the "
+        "library exports as an unintended addition, and an empty measured set "
+        "is refused separately. Silence is not a pass.")
 endif()
 
-# The comparison. Two directions, two messages, and each one names the
-# symbols rather than a count.
-set(MCF5307_ABI_SMOKE_MISSING "")
-foreach(name IN LISTS MCF5307_ABI_PUBLISHED)
+# The comparison. THE MEASURED SET IS THE FACT AND THE LIST IS THE
+# EXPECTATION. Two directions, two messages, and each one NAMES THE SYMBOLS
+# rather than reporting a count or the bare word `differ`. A reviewer who
+# reads either message knows which symbol to act on and which file to change.
+set(MCF5307_ABI_SMOKE_UNEXPECTED "")
+foreach(name IN LISTS MCF5307_ABI_VISIBLE)
     if(NOT name IN_LIST MCF5307_ABI_SMOKE_NAMES)
-        list(APPEND MCF5307_ABI_SMOKE_MISSING "${name}")
+        list(APPEND MCF5307_ABI_SMOKE_UNEXPECTED "${name}")
     endif()
 endforeach()
 
-set(MCF5307_ABI_SMOKE_EXTRA "")
+set(MCF5307_ABI_SMOKE_ABSENT "")
 foreach(name IN LISTS MCF5307_ABI_SMOKE_NAMES)
-    if(NOT name IN_LIST MCF5307_ABI_PUBLISHED)
-        list(APPEND MCF5307_ABI_SMOKE_EXTRA "${name}")
+    if(NOT name IN_LIST MCF5307_ABI_VISIBLE)
+        list(APPEND MCF5307_ABI_SMOKE_ABSENT "${name}")
     endif()
 endforeach()
 
-if(NOT MCF5307_ABI_SMOKE_MISSING STREQUAL "")
+if(NOT MCF5307_ABI_SMOKE_UNEXPECTED STREQUAL "")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: ${MCF5307_ABI_CONTRACT_FILE} publishes a "
+        "mcf5307: step 4a failed: the library DEFINES AND EXPORTS a published "
         "symbol that ${MCF5307_ABI_SMOKE_LIST_FILE} does not name.\n"
-        "  missing from the test : ${MCF5307_ABI_SMOKE_MISSING}\n"
-        "  published             : ${MCF5307_ABI_PUBLISHED}\n"
-        "  named by the test     : ${MCF5307_ABI_SMOKE_NAMES}\n"
-        "`tests/abi_smoke.cpp` states its invariant as taking the address of "
-        "EVERY function the contract declares, and a symbol it does not name "
-        "is a symbol whose rename that test cannot catch. Add one "
-        "`MCF5307_ABI_FN(<name>)` line to the list file for each name above. "
-        "The test's array grows with the list and carries no written length.")
+        "  added to the ABI and not expected : ${MCF5307_ABI_SMOKE_UNEXPECTED}\n"
+        "  measured (defined and exported)   : ${MCF5307_ABI_VISIBLE}\n"
+        "  expected by the committed list    : ${MCF5307_ABI_SMOKE_NAMES}\n"
+        "The measured set is the FACT and the list is the EXPECTATION. A "
+        "measured set on its own would simply grow and this step would still "
+        "pass, so an export nobody intended would be adopted in silence. If "
+        "the addition is intended, add one `MCF5307_ABI_FN(<name>)` line to "
+        "the list file for each name above and the diff is what a reviewer "
+        "reads. If it is not intended, the library grew an export it should "
+        "not have.")
 endif()
 
-if(NOT MCF5307_ABI_SMOKE_EXTRA STREQUAL "")
+if(NOT MCF5307_ABI_SMOKE_ABSENT STREQUAL "")
     message(FATAL_ERROR
         "mcf5307: step 4a failed: ${MCF5307_ABI_SMOKE_LIST_FILE} names a "
-        "symbol that ${MCF5307_ABI_CONTRACT_FILE} does not declare.\n"
-        "  named by the test and not published : ${MCF5307_ABI_SMOKE_EXTRA}\n"
-        "  published                           : ${MCF5307_ABI_PUBLISHED}\n"
-        "  named by the test                   : ${MCF5307_ABI_SMOKE_NAMES}\n"
-        "Either the contract lost the declaration, or the list names "
-        "something that was never in the contract. The C++ compiler refuses "
-        "the second one too, at build time, and this message says which of "
-        "the two files to change.")
+        "symbol the library does NOT define and export.\n"
+        "  expected and missing from the ABI : ${MCF5307_ABI_SMOKE_ABSENT}\n"
+        "  measured (defined and exported)   : ${MCF5307_ABI_VISIBLE}\n"
+        "  expected by the committed list    : ${MCF5307_ABI_SMOKE_NAMES}\n"
+        "  not yet implemented               : ${MCF5307_ABI_UNIMPLEMENTED}\n"
+        "Either a definition was renamed or dropped, or its `exportc` name "
+        "changed, or the list names something the library was never going to "
+        "define. THE LINK OF `abi_smoke` CANNOT CATCH THIS: its address set is "
+        "generated from the measurement, so it shrank along with the ABI and "
+        "linked clean. This direction is the whole reason the committed list "
+        "exists beside the measurement.")
 endif()
 
 list(LENGTH MCF5307_ABI_SMOKE_NAMES MCF5307_ABI_SMOKE_COUNT)
 message(STATUS
-    "mcf5307: step 4a ${MCF5307_ABI_SMOKE_LIST_FILE} names exactly the "
-    "${MCF5307_ABI_SMOKE_COUNT} published symbol(s), so `tests/abi_smoke.cpp` "
-    "takes the address of every one of them")
+    "mcf5307: step 4a ${MCF5307_ABI_SMOKE_LIST_FILE} expects exactly the "
+    "${MCF5307_ABI_SMOKE_COUNT} symbol(s) the library defines and exports, so "
+    "`tests/abi_smoke.cpp` takes the address of every one of them and no ABI "
+    "addition or loss can pass unnamed")
 
 # ---------------------------------------------------------------------------
 # Step 4a, part three. THE LINK-PARTNER STUB GATE.
