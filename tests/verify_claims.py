@@ -107,6 +107,13 @@ def check(ref):
 
 
 def main(refs):
+    # An empty ref list checked nothing, and returning 0 for it would be this
+    # file's own subject: a verdict whose population is empty reporting
+    # success. The CLI defaults to WORKTREE so this cannot happen from the
+    # command line, but a caller passing [] gets a refusal rather than a pass.
+    if not refs:
+        print('no refs given -- nothing was checked, which is not a pass')
+        return 1
     total_missing = 0
     for ref in refs:
         missing, count = check(ref)
