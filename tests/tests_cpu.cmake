@@ -3937,7 +3937,7 @@ add_test(NAME t_claims
         -P "${CMAKE_CURRENT_LIST_DIR}/t_claims.cmake")
 
 # ---------------------------------------------------------------------------
-# The application binary interface SMOKE test `t0_abi_smoke`.
+# The application binary interface smoke test `t0_abi_smoke`.
 #
 # This is the test the CPU-3 task CHECK names. It tests the ABI surface the
 # task's closure produces, and it asserts NO CORE BEHAVIOUR. The test takes
@@ -4040,15 +4040,11 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         ${MCF5307_TEST_WARNING_RELAXATIONS})
 endif()
 add_dependencies(mcf5307_tests abi_smoke)
-# THE REGISTERED NAME CARRIES THE `t0_` PREFIX AND THE TARGET DOES NOT, AND
-# THAT DIFFERENCE IS THE WHOLE SELECTION MECHANISM. `T0_PATTERN` in
-# `.github/workflows/ci.yml` is `^t0_|^t_`, and it matches the registered test
-# NAME. A test registered as `abi_smoke` is therefore run by no T0 job and by
-# no `ctest --preset t0`: the published ABI could lose a symbol and the narrow
-# run would still report every test passed. This test needs no firmware byte
-# and no cross assembler, so T0 is the tier it belongs to, and the prefix is
-# how it gets there. `t0_abi_header` above names its test and its binary
-# differently for the same reason.
+# The registered name carries the `t0_` prefix and the target does not.
+# `T0_PATTERN` in `.github/workflows/ci.yml` is `^t0_|^t_`, and it matches the
+# registered test NAME. A test registered as `abi_smoke` is therefore run by no
+# T0 job and by no `ctest --preset t0`: the published ABI could lose a symbol
+# and the narrow run would still report every test passed.
 add_test(NAME t0_abi_smoke COMMAND abi_smoke)
 
 # ---------------------------------------------------------------------------
