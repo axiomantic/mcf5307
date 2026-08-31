@@ -3632,24 +3632,23 @@ add_test(NAME t_bus_size_unit
 # ---------------------------------------------------------------------------
 # `t_runtime_latch` - the one-time runtime latch and the refusal behind it.
 #
-# ONE REGISTERED NAME, AND EACH CASE IN `t_runtime_latch.nim` CAN FAIL. The
-# suite drives a HEALTHY latch and a STALLED one in the same run, which is why
+# One registered name, and each case in `t_runtime_latch.nim` can fail. The
+# suite drives a healthy latch and a stalled one in the same run, which is why
 # `src/mcf5307/latch.nim` carries the latch as an object rather than as a
-# module global: a global reaches its terminal state once per process and a
-# suite built on one could hold either half and never both.
+# module global.
 #
-# WHAT IT ASSERTS THAT NO OTHER SUITE DOES. `mcf5307_runtime_init` reports a
+# What it asserts that no other suite does. `mcf5307_runtime_init` reports a
 # stalled latch to its caller instead of ending the process, and the two
 # `*_create` entry points refuse to hand back a context behind an abandoned
-# latch. The second half is what makes an IGNORED status harmless: C lets a
+# latch. The second half is what makes an ignored status harmless: C lets a
 # caller drop a return value, so the refusal may not depend on the caller
 # reading it.
 #
-# THE HEALTHY ANSWER OF THE PUBLISHED ENTRY POINT IS ASSERTED IN `t0_abi_smoke`
-# AND NOT HERE. This suite reaches the Nim procedure; that one links the real
+# The healthy answer of the published entry point is asserted in `t0_abi_smoke`
+# and not here. This suite reaches the Nim procedure; that one links the real
 # library and reads the C status through `include/mcf5307.h`.
 #
-# THE FLAG SET, THE COMPILE INSIDE THE TEST and the two-part failure check are
+# The flag set, the compile inside the test and the two-part failure check are
 # taken from the `t_state` block above, for the reasons that block gives.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)

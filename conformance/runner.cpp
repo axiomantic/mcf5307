@@ -742,11 +742,10 @@ int main(int argc, char** argv) {
   // The Nim runtime initialiser runs once, before the first case creates a
   // context. It is idempotent and called here rather than per case.
   //
-  // THE STATUS IS READ AND THE RUN STOPS ON A 0. Every case below calls
+  // The status is read and the run stops on a 0. Every case below calls
   // `mcf5307_create`, which returns null behind a runtime that did not come
   // up, and a corpus that reported thousands of cases as "no context" would
-  // bury the one fact that matters. This is a consumer of the contract and it
-  // behaves the way the contract asks a consumer to behave.
+  // bury the one fact that matters.
   if (mcf5307_runtime_init() != 1) {
     std::cerr << "runner: mcf5307_runtime_init reported that the runtime is "
                  "not initialised\n";

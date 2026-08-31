@@ -2184,13 +2184,13 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: contro
 # using it here is what makes the stripped name the reader answers with the
 # route name the classifier is asked about. A literal underscore would be an
 # assumption about a target, and this file measures that one already.
-# THE PROBE SOURCES BELOW SPELL THIS NAME'S SIGNATURE AND NOT JUST ITS NAME.
+# The probe sources below spell this name's signature and not just its name.
 # Every arm includes `include/mcf5307.h`, so a probe declaring a different
 # return type than the contract does is a constraint violation and the arm
 # reports a compile fault rather than the category it exists to measure. A
 # signature change to the chosen name therefore has to be made here too. That
-# coupling is real and it is not hidden: an arm that goes stale FAILS THE
-# CONFIGURE STEP and names the file, which is the loud direction.
+# coupling is real and it is not hidden: an arm that goes stale fails the
+# configure step and names the file, which is the loud direction.
 set(MCF5307_ABI_STUB_ROUTE_NAME "mcf5307_runtime_init")
 
 if(NOT "${MCF5307_ABI_STUB_ROUTE_NAME}" IN_LIST MCF5307_ABI_PUBLISHED)

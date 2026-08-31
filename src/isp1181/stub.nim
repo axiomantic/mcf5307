@@ -54,7 +54,7 @@ proc advanceFrames*(ctx: ISP1181Ctx; frames: int) =
 proc isp1181_create*(user: pointer; irq: Isp1181IrqFn;
                      tx: Isp1181TxFn): ISP1181Ctx
     {.exportc: "isp1181_create", cdecl, dynlib.} =
-  ## IT REFUSES WHEN THE RUNTIME WAS ABANDONED. See `mcf5307_create` in
+  ## It refuses when the runtime was abandoned. See `mcf5307_create` in
   ## `mcf5307/cpu.nim`: the two allocate, the allocator needs the runtime, and
   ## a nil handle is a value every `isp1181_*` call already answers for.
   if runtimeAbandoned(runtimeLatch):

@@ -1,30 +1,28 @@
 ## `t_runtime_latch` - the one-time runtime latch, and what a stalled one
 ## answers.
 ##
-## WHAT THIS SUITE IS FOR. `mcf5307_runtime_init` used to end the process when
-## the latch stalled. It now REPORTS the stall to its caller, and a report
-## nobody is obliged to read is worth nothing unless the rest of the library
-## refuses to run behind it. Both halves are asserted here: the report, and the
+## `mcf5307_runtime_init` reports a stall to its caller, and a report nobody
+## is obliged to read is worth nothing unless the rest of the library refuses
+## to run behind it. Both halves are asserted here: the report, and the
 ## refusal.
 ##
-## EVERY CASE DRIVES THE REAL MECHANISM. The stall is produced by a second
+## Every case drives the real mechanism. The stall is produced by a second
 ## thread that claims the latch through `runtimeInitOnce` itself and stays
 ## inside its initializer, which is the exact shape `src/mcf5307/latch.nim`
 ## documents: module initialization waits for a thread, and that thread calls
 ## the initializer again. Nothing here writes a latch state by hand.
 ##
-## THE POSITIVE CONTROL IS IN THIS RUN AND NOT IN ANOTHER TEST. Case 1 drives a
-## HEALTHY latch through the same procedure and reads `true` out of it. Without
+## The positive control is in this run and not in another test. Case 1 drives a
+## healthy latch through the same procedure and reads `true` out of it. Without
 ## it a `false` from the stalled latch would not be separable from a procedure
 ## that answers `false` to everything.
 ##
-## WHY THE LATCH IS A VALUE AND NOT A MODULE GLOBAL. A single global latch can
+## Why the latch is a value and not a module global. A single global latch can
 ## be driven to its terminal state exactly once per process, so a suite built
 ## on one could hold either the healthy case or the stalled case and never
 ## both. `RuntimeLatch` is an object, the published ABI owns one instance of
 ## it, and this suite makes as many as it needs.
-##
-## MIT licensed. Nothing here is a fact about Motorola silicon.
+
 
 import std/atomics
 import std/os
@@ -58,7 +56,7 @@ template check(ok: bool; label: string; got: string; want: string) =
 # ---------------------------------------------------------------------------
 # The initializers this suite hands to `runtimeInitOnce`.
 #
-# THEY ARE `cdecl` BECAUSE THE PUBLISHED PATH'S INITIALIZER IS. The one the
+# They are `cdecl` because the published path's initializer is. The one the
 # library passes is the runtime entry point the Nim code generator emits, and
 # the parameter type is what makes that call legal; a suite that passed a
 # `nimcall` procedure would be exercising a signature the library cannot use.
@@ -71,7 +69,7 @@ proc countingInitializer() {.cdecl.} =
 proc inertInitializer() {.cdecl.} =
   discard
 
-# The holder's initializer. It announces that it is INSIDE - which is when the
+# The holder's initializer. It announces that it is inside - which is when the
 # latch is claimed and the waiter's wait is guaranteed to be a real one - and
 # then stays there until the waiter says it is finished. A fixed sleep would
 # make the whole suite a race against a duration.
@@ -108,7 +106,7 @@ proc stall(target: var RuntimeLatch; waitMillis: int64): bool =
   joinThread(holder)
 
 # ---------------------------------------------------------------------------
-# Case 1 and 2. THE POSITIVE CONTROL, on a latch nothing interferes with.
+# Case 1 and 2. The positive control, on a latch nothing interferes with.
 
 var healthy: RuntimeLatch
 
@@ -129,7 +127,7 @@ check(not runtimeAbandoned(healthy),
       $runtimeAbandoned(healthy), "false")
 
 # ---------------------------------------------------------------------------
-# Case 4 to 7. THE STALL, driven by a real holder against a short deadline.
+# Case 4 to 7. The stall, driven by a real holder against a short deadline.
 
 var stalled: RuntimeLatch
 let stalledAnswer = stall(stalled, 50'i64)
@@ -155,8 +153,8 @@ check(not repeatAnswer,
       $repeatAnswer, "false")
 
 # ---------------------------------------------------------------------------
-# Case 8. THE DEFAULT DEADLINE IS THE ONE THE LIBRARY USES, and it is asserted
-# by MEASURING a wait rather than by reading the constant back. A suite that
+# Case 8. The default deadline is the one the library uses, and it is asserted
+# by measuring a wait rather than by reading the constant back. A suite that
 # compared `latchWaitMillis` against a literal would agree with itself whatever
 # the wait loop did with it.
 
@@ -171,10 +169,10 @@ check(not defaultAnswer and defaultElapsed >= latchWaitMillis - 100,
       "false elapsed>=" & $(latchWaitMillis - 100))
 
 # ---------------------------------------------------------------------------
-# Case 9 and 10. THE REFUSAL. A caller that DROPPED the status of
+# Case 9 and 10. The refusal. A caller that dropped the status of
 # `mcf5307_runtime_init` reaches a library that will not hand it a context.
 #
-# THIS IS THE HALF THAT DOES NOT DEPEND ON THE CALLER. The status return is
+# This is the half that does not depend on the caller. The status return is
 # advice, and C lets a caller ignore advice; these two cases are what makes an
 # ignored status harmless instead of silent.
 
@@ -194,7 +192,7 @@ check(refusedDevice.isNil,
       (if refusedDevice.isNil: "nil" else: "a context"), "nil")
 
 # ---------------------------------------------------------------------------
-# THE REGISTRY LINES. They are DATA AND NOT A VERDICT.
+# The registry lines. They are data and not a verdict.
 const declaredCaseSites = declaredSites
 const declaredOffGreenPathSites = offGreenPathSites
 echo caseSiteLine("declared", "t_runtime_latch", declaredCaseSites)

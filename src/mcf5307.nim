@@ -27,7 +27,7 @@ import isp1181/state
 import isp1181/stub
 {.pop.}
 
-# The latch. It is imported OUTSIDE the pushed warning mask because this
+# The latch. It is imported outside the pushed warning mask because this
 # module names three of its symbols below.
 import mcf5307/latch
 
@@ -69,29 +69,23 @@ proc mcf5307_NimMain() {.importc: "mcf5307_NimMain", cdecl, gcsafe,
 # `mcf5307_runtime_init` - the published entry point, and the only caller of
 # the runtime entry point in this project.
 #
-# THE MECHANISM IS IN `mcf5307/latch` AND NOT HERE. Two other modules ask the
+# The mechanism is in `mcf5307/latch` and not here. Two other modules ask the
 # same latch whether the runtime was abandoned before they allocate, and a
 # suite drives it directly; that module states why neither can reach it
 # through this one.
 
 proc mcf5307RuntimeInit(): cint {.exportc: "mcf5307_runtime_init",
                                   mcf5307Abi.} =
-  ## Runs the Nim runtime's initializer once and REPORTS whether it succeeded.
+  ## Runs the Nim runtime's initializer once and reports whether it succeeded.
   ##
   ## C++ never names `mcf5307_NimMain`. It calls this procedure instead.
   ##
-  ## THE RETURN IS 1 FOR USABLE AND 0 FOR NOT, which is the convention every
+  ## The return is 1 for usable and 0 for not, which is the convention every
   ## other `int` in `include/mcf5307.h` already uses. It is not a POSIX-style
   ## error code, and mixing the two conventions inside one contract is the
   ## footgun that decided it.
   ##
-  ## AN EARLIER VERSION ENDED THE PROCESS HERE. A library has no business
-  ## killing its host: a plugin that aborts takes the whole digital audio
-  ## workstation with it and the user loses unsaved work that has nothing to do
-  ## with this core. The abort stood only because `void mcf5307_runtime_init(
-  ## void)` carried no failure channel at all. The contract now carries one.
-  ##
-  ## WHAT REPLACES THE ABORT'S GUARANTEE. The abort existed so that a caller
+  ## What replaces the abort's guarantee. The abort existed so that a caller
   ## could not proceed with a runtime that does not exist. C lets a caller drop
   ## a return value, so the status alone would not have kept that guarantee.
   ## `mcf5307_create` and `isp1181_create` read the latch themselves and hand

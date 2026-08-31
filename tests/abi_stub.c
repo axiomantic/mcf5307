@@ -37,7 +37,7 @@
 #include "mcf5307.h"
 
 /* The runtime bridge. It returns 0, which the contract reads as "the runtime
- * is NOT initialised". That is the fixed benign value here for the same reason
+ * is not initialised". That is the fixed benign value here for the same reason
  * `mcf5307_set_reg` returns 0 below: of the two answers it is the one that
  * claims less, and a caller that believed a stub had brought a runtime up
  * would proceed on the strength of it. */

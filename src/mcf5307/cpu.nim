@@ -98,11 +98,10 @@ proc mcf5307_create*(user: pointer; rd: Mcf5307ReadFn; wr: Mcf5307WriteFn;
   ## Allocate the context and store the board callbacks. This is the one
   ## place the core allocates.
   ##
-  ## IT REFUSES WHEN THE RUNTIME WAS ABANDONED, AND THAT REFUSAL IS WHAT
-  ## REPLACES AN ABORT. `mcf5307_runtime_init` used to end the process on a
-  ## stalled latch; it now reports the stall and returns. C lets a caller drop
-  ## a return value, so a status nobody is obliged to read cannot carry the
-  ## guarantee the abort carried. This check does: `new(result)` needs the Nim
+  ## It refuses when the runtime was abandoned, and that refusal is what
+  ## replaces an abort. C lets a caller drop a return value, so a status
+  ## nobody is obliged to read cannot carry the guarantee the abort carried.
+  ## This check does: `new(result)` needs the Nim
   ## allocator, the allocator needs the runtime, and a nil context is a value
   ## every other call in `include/mcf5307.h` already documents an answer for.
   ## A caller that ignored the status gets a library that does nothing.

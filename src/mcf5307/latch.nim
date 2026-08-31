@@ -1,10 +1,10 @@
 ## `latch` - the one-time runtime latch, its deadline, and the terminal state a
 ## stalled initializer leaves behind.
 ##
-## WHY THIS IS ITS OWN MODULE AND NOT PART OF `src/mcf5307.nim`. Two readers
+## Why this is its own module and not part of `src/mcf5307.nim`. Two readers
 ## need the latch and neither may import the entry module.
 ##
-##   `mcf5307/cpu` and `isp1181/stub` ask whether the runtime was ABANDONED
+##   `mcf5307/cpu` and `isp1181/stub` ask whether the runtime was abandoned
 ##   before they allocate anything. The entry module imports both of them, so
 ##   an import the other way is a cycle.
 ##
@@ -13,20 +13,19 @@
 ##   `--nimMainPrefix:mcf5307_`; every Nim suite strips that flag, so a suite
 ##   that reached the latch through the entry module would not link.
 ##
-## NOTHING HERE NEEDS THE NIM RUNTIME. `runtimeInitOnce` is what BRINGS the
+## Nothing here needs the Nim runtime. `runtimeInitOnce` is what brings the
 ## runtime up, so every line it reaches has to be correct before the runtime
 ## exists: no `string`, no `seq`, no allocation, no exception. The clock and
 ## the yield are C library functions named directly, and the report goes out as
 ## C string literals one line at a time.
 ##
-## THE LATCH IS AN OBJECT AND NOT A MODULE GLOBAL. The published ABI owns one
+## The latch is an object and not a module global. The published ABI owns one
 ## instance, `runtimeLatch` below, and that is the only instance a shipped
 ## build ever has. A latch reaches its terminal state at most once, so a suite
 ## built on a single global could assert the healthy half or the stalled half
 ## and never both in one run; an object lets `tests/t_runtime_latch` make as
 ## many as it needs and drive each through the real procedure.
-##
-## MIT licensed. Nothing here is a fact about Motorola silicon.
+
 
 import std/atomics
 import system/ansi_c
@@ -34,7 +33,7 @@ import system/ansi_c
 # ---------------------------------------------------------------------------
 # The wait primitives.
 #
-# THE DEADLINE USES A MONOTONIC CLOCK AND NOT THE WALL CLOCK. `time` is wrong
+# The deadline uses a monotonic clock and not the wall clock. `time` is wrong
 # for two separate reasons.
 #
 #   Its resolution is one second, and the deadline is `time() + 5`. The start
@@ -42,7 +41,7 @@ import system/ansi_c
 #   the true wait is anything between four and five seconds rather than the
 #   five the constant names.
 #
-#   `time` reads the SETTABLE wall clock. An operator, NTP or a container start
+#   `time` reads the settable wall clock. An operator, NTP or a container start
 #   can step it backwards at any moment. A backward step moves the deadline
 #   away from the waiter, and the loop then spins with no end. That is the
 #   unbounded spin this whole deadline exists to close, re-opened by a clock
@@ -53,8 +52,8 @@ import system/ansi_c
 # Windows equivalent and it counts milliseconds since boot.
 #
 # `sched_yield`, or `SwitchToThread` on Windows, hands the core to another
-# thread. The wait loop below calls it. THE WINDOWS BRANCH OF BOTH IS
-# UNMEASURED. This host is macOS and it builds the other branch.
+# thread. The wait loop below calls it. The Windows branch of both is
+# unmeasured. This host is macOS and it builds the other branch.
 
 when defined(windows):
   proc mcf5307TickCount(): uint64 {.
@@ -98,12 +97,12 @@ else:
 # ---------------------------------------------------------------------------
 # The states.
 #
-# `latchAbandoned` is the TERMINAL FAILURE STATE. Without it the word held no
+# `latchAbandoned` is the terminal failure state. Without it the word held no
 # value that ends a wait, and a waiter could spin until the process was killed.
 #
-# TERMINAL MEANS TERMINAL, AND THAT IS ENFORCED AT THE COMPLETING END TOO. The
+# Terminal means terminal, and that is enforced at the completing end too. The
 # thread that finishes the initializer moves the latch to `latchDone` with a
-# COMPARE-EXCHANGE FROM `latchRunning` and not with a plain store. A plain
+# compare-exchange from `latchRunning` and not with a plain store. A plain
 # store overwrites an abandonment that a waiter has already reported and
 # already acted on, so the same process would hold one caller that was told the
 # runtime is unusable and another that is told it is fine.
@@ -116,8 +115,8 @@ const
 const latchWaitMillis* = 5000'i64
   ## How long a caller waits for another thread to finish the initializer.
   ##
-  ## THE BOUND IS A TRADE, AND IT SITS FAR ABOVE ANY INITIALIZER RUN OBSERVED
-  ## ON THIS HOST. A runtime initializer that needs five seconds is already
+  ## The bound is a trade, and it sits far above any initializer run observed
+  ## on this host. A runtime initializer that needs five seconds is already
   ## broken. A wait with no bound cannot report a stall at all, and that
   ## outcome is worse.
   ##
@@ -125,7 +124,7 @@ const latchWaitMillis* = 5000'i64
 
 type
   RuntimeLatch* = object
-    ## THE WHOLE OBJECT MUST BE CORRECT AT ZERO. `runtimeInitOnce` runs before
+    ## The whole object must be correct at zero. `runtimeInitOnce` runs before
     ## the Nim runtime exists, so a latch that needed an initializing call
     ## would have nothing to run it. Measured on Nim 2.2.10, a global of this
     ## type translates to a file-scope C object with no initializer, and the
@@ -138,15 +137,15 @@ const reportNotYetMade = 0
 const reportMade = 1
 
 var runtimeLatch*: RuntimeLatch
-  ## THE ONE INSTANCE THE PUBLISHED ABI USES. `mcf5307_runtime_init` drives
+  ## The one instance the published ABI uses. `mcf5307_runtime_init` drives
   ## this one, `mcf5307_create` and `isp1181_create` read it, and no shipped
   ## build makes another.
 
 var initializing {.threadvar.}: bool
   ## True while this thread is inside an initializer this module is running.
   ## It translates to a zero-initialized `NIM_THREADVAR`, so it needs no
-  ## initializing call either. It separates a RE-ENTRANT call on the
-  ## initializing thread from a CONCURRENT first call on some other thread: the
+  ## initializing call either. It separates a re-entrant call on the
+  ## initializing thread from a concurrent first call on some other thread: the
   ## two look alike at the latch and need opposite answers.
   ##
   ## There is a third case and this flag cannot see it. Another thread may call
@@ -155,8 +154,8 @@ var initializing {.threadvar.}: bool
   ## for each other. An unbounded loop holds that deadlock spinning, with no
   ## diagnostic and no end. The deadline below ends it.
   ##
-  ## THE FLAG IS PER-THREAD AND NOT PER-LATCH, AND THAT IS EXACT ONLY BECAUSE A
-  ## SHIPPED BUILD HAS ONE LATCH. A build with two would let an initializer of
+  ## The flag is per-thread and not per-latch, and that is exact only because a
+  ## shipped build has one latch. A build with two would let an initializer of
   ## latch A return early from a first call on latch B. `tests/t_runtime_latch`
   ## makes several latches and nests none of their initializers, so the
   ## condition holds there too; a second production latch would not be covered
@@ -165,7 +164,7 @@ var initializing {.threadvar.}: bool
 proc runtimeAbandoned*(latch: var RuntimeLatch): bool =
   ## True once a waiter has reported a stall on `latch`.
   ##
-  ## THIS IS THE REFUSAL EVERY OTHER ENTRY POINT READS. A C caller may drop the
+  ## This is the refusal every other entry point reads. A C caller may drop the
   ## status `mcf5307_runtime_init` returns - the language allows it and no
   ## attribute can make it impossible - so the library may not depend on the
   ## caller having read it. `mcf5307_create` and `isp1181_create` ask this
@@ -173,14 +172,13 @@ proc runtimeAbandoned*(latch: var RuntimeLatch): bool =
   latch.state.load(moAcquire) == latchAbandoned
 
 proc reportStall(latch: var RuntimeLatch) =
-  ## Write the stall to standard error, ONCE PER LATCH.
+  ## Write the stall to standard error, once per latch.
   ##
   ## The runtime is not initialized here, so the text goes out one C string
   ## literal at a time: no allocation and no Nim string.
   ##
-  ## ONCE, BECAUSE THE PROCEDURE NO LONGER ENDS THE PROCESS. The abort this
-  ## replaces printed once because there was no second call; a host that keeps
-  ## running and retries would otherwise fill its log with the same five lines.
+  ## Once, because a host that keeps running and retries would otherwise fill
+  ## its log with the same five lines.
   var expected = reportNotYetMade
   if not latch.reported.compareExchange(
       expected, reportMade, moAcquireRelease, moAcquire):
@@ -209,21 +207,21 @@ proc runtimeInitOnce*(latch: var RuntimeLatch;
   ## Run `initializer` exactly once behind `latch`, and answer whether the
   ## runtime it brings up is usable.
   ##
-  ## THE PARAMETER TYPE CARRIES `gcsafe` AND `raises: []`, AND BOTH ARE
-  ## LOAD-BEARING. An indirect call through a procedure type without them makes
+  ## The parameter type carries `gcsafe` and `raises: []`, and both are
+  ## load-bearing. An indirect call through a procedure type without them makes
   ## this procedure itself GC-unsafe and raising, which is wrong twice over: it
-  ## runs BEFORE the runtime exists, so it can neither touch a garbage-collected
+  ## runs before the runtime exists, so it can neither touch a garbage-collected
   ## heap nor unwind an exception through the C ABI. Written this way the
-  ## compiler REFUSES an initializer that could do either, on the calling side,
+  ## compiler refuses an initializer that could do either, on the calling side,
   ## rather than leaving the rule in this comment.
   ##
-  ## THE RESULT IS THE LATCH'S VERDICT AND NOT THIS CALL'S HISTORY. A thread
+  ## The result is the latch's verdict and not this call's history. A thread
   ## that ran the initializer to completion under a latch some other waiter had
   ## already abandoned answers `false` like everyone else. The alternative -
   ## answering `true` because this particular thread's work went well - puts
   ## two callers in one process on opposite sides of the same question.
   ##
-  ## The latch is claimed BEFORE the call and not after it. Two hazards decide
+  ## The latch is claimed before the call and not after it. Two hazards decide
   ## that order.
   ##
   ## The first hazard is re-entrancy. Any code that module initialization
@@ -257,7 +255,7 @@ proc runtimeInitOnce*(latch: var RuntimeLatch;
     initializing = true
     initializer()
     initializing = false
-    # THE COMPLETION IS A COMPARE-EXCHANGE. See the note on `latchAbandoned`
+    # The completion is a compare-exchange. See the note on `latchAbandoned`
     # above: a plain store would resurrect a latch a waiter has already
     # reported as dead.
     var running = latchRunning
@@ -279,10 +277,10 @@ proc runtimeInitOnce*(latch: var RuntimeLatch;
       reportStall(latch)
       return false
     if monotonicMillis() >= deadline:
-      # THE RESULT OF THE EXCHANGE IS READ AND IT IS NOT DISCARDED. There is a
+      # The result of the exchange is read and it is not discarded. There is a
       # race between the load above and this line. The initializing thread can
       # finish in that window. The exchange then fails, `running` comes back
-      # holding `latchDone`, and the runtime IS initialized. A discarded result
+      # holding `latchDone`, and the runtime is initialized. A discarded result
       # would report a stall on a runtime that has just come up.
       #
       # A failure that reports any other value is a real stall. `latchRunning`
