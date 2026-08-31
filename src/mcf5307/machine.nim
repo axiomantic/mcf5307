@@ -228,8 +228,14 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
     of ea7AbsW:
       result = uint32(s16(fetchExt(ctx)))
     of ea7AbsL:
-      let lo = fetchExt(ctx)
+      # THE FIRST EXTENSION WORD IS THE HIGH HALF. ColdFire Family
+      # Programmer's Reference Manual, Rev. 3, section 2.2.11 and Figure 2-13:
+      # "The first extension word contains the high-order part of the address;
+      # the second contains the low-order part." The two `fetchExt` calls are
+      # ordered, so naming them the other way round assembles the address
+      # word-swapped and every `(xxx).L` operand reads the wrong place.
       let hi = fetchExt(ctx)
+      let lo = fetchExt(ctx)
       result = (uint32(hi) shl 16) or uint32(lo)
     of ea7PCDisp:
       let d = s16(fetchExt(ctx))

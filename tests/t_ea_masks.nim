@@ -1,7 +1,7 @@
 ## `t_ea_masks` - the decoder and effective-address legality masks. Task
 ## CPU-6 creates this file. Design section 6.1.
 ##
-## THREE ASSERTIONS, AND EACH ONE CAN FAIL.
+## FOUR GROUPS OF ASSERTION, AND EACH ONE CAN FAIL.
 ##
 ##   (1) THE FIRST NON-ZERO CYCLE RETURN, moved here from CPU-3. The test
 ##       drives `mcf5307_create` with a board that returns `MCF5307_BUS_OK`
@@ -22,6 +22,14 @@
 ##       everything would report (2) as a pass, and "the illegal mode is
 ##       rejected" would not be separable from "the opcode admits no mode".
 ##
+##   (4) THE EXTENSION-WORD ORDER OF ABSOLUTE LONG ADDRESSING, with its own
+##       control. `(xxx).L` carries the high half of the address in the FIRST
+##       extension word. No case in `conformance/corpus/` uses an absolute-long
+##       operand at all, so nothing else in this project can see a core that
+##       reads the two words the other way round. The block near the end of
+##       this file says which manual section that is and why the control is
+##       there.
+##
 ## The test also decodes a representative word for every recognized opcode
 ## and checks the operation comes back, so that the legality assertions are
 ## attached to the decoder and not to a table the decoder never reads.
@@ -36,14 +44,17 @@
 ## the test takes from it: `cpu` the lifecycle ABI (`mcf5307_create`,
 ## `mcf5307_reset`, `mcf5307_exec`, `mcf5307_destroy`), `decode` the decoder
 ## (`decodeWord`), `decode_types` the shared types and the legality table
-## (`Operation`, `Mcf5307BusStatus`, `eaIsLegalFor`), and `ea` the
-## effective-address decoding (`EA`, `decodeEa`).
+## (`Operation`, `Mcf5307BusStatus`, `eaIsLegalFor`), `ea` the
+## effective-address decoding (`EA`, `decodeEa`), and `machine` the register
+## bridge the absolute-long case drives (`mcf5307_set_reg`,
+## `mcf5307_get_reg`).
 
 import std/[strutils]
 import mcf5307/cpu
 import mcf5307/decode
 import mcf5307/decode_types
 import mcf5307/ea
+import mcf5307/machine
 
 var failures: seq[string]
 var passCount = 0
@@ -118,6 +129,71 @@ block:
   for (word, opx, name) in words:
     check(decodeWord(word).op == opx,
       "decodes " & name & " (0x" & word.toHex(4) & ")")
+
+# ---------------------------------------------------------------------------
+# (4) THE EXTENSION-WORD ORDER OF ABSOLUTE LONG ADDRESSING, AND A CONTROL FOR
+#     IT.
+#
+# ColdFire Family Programmer's Reference Manual, Rev. 3, section 2.2.11 and
+# Figure 2-13: `(xxx).L` occupies two extension words, and "the first
+# extension word contains the high-order part of the address; the second
+# contains the low-order part." A core that reads them the other way round
+# assembles 0x00123456 as 0x34560012 and every absolute-long operand reads the
+# wrong place.
+#
+# NO CORPUS CASE REACHES THIS. `conformance/corpus/` holds no `(xxx).L`
+# operand in any group, so the swap was invisible to every registered
+# conformance test and stayed invisible to the four hand-written ones. This
+# case is what makes it visible.
+#
+# THE CASE RUNS THROUGH THE SHIPPED C ENTRY POINTS and not through `eaAddr`
+# reached around the back, so it asserts the path the corpus runner drives.
+#
+# THE SECOND ASSERTION IS THE CONTROL. The board answers the swapped address
+# with a different value rather than with a fault, so the first assertion
+# fails on a WRONG VALUE and not on a bus error the core would have reported
+# for any number of unrelated reasons. Asserting that the swapped address was
+# never presented to the board is what separates "the address was assembled
+# correctly" from "the read happened to land somewhere that answered".
+
+const
+  absLProgramBase = 0x100'u32
+  absLTargetAddr = 0x00123456'u32
+  absLSwappedAddr = 0x34560012'u32
+  absLTargetValue = 0xCAFEBABE'u32
+  absLDecoyValue = 0x0BADC0DE'u32
+
+var absLSawSwapped = false
+
+# `move.l (0x00123456).L,%d0`. Source mode 111 register 001 is absolute long;
+# destination mode 000 register 000 is D0; bits 13..12 of 0b10 are the long
+# size. Assembled by hand from the encoding in the manual, and the two
+# extension words below are the manual's order: high first.
+proc readAbsL(user: pointer; address: uint32; size: cint;
+              status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+  status[] = Mcf5307BusStatus.busOk
+  if address == absLSwappedAddr:
+    absLSawSwapped = true
+    return absLDecoyValue
+  case address
+  of absLProgramBase: 0x2039'u32          # move.l (xxx).L,%d0
+  of absLProgramBase + 2: 0x0012'u32      # first extension word:  high half
+  of absLProgramBase + 4: 0x3456'u32      # second extension word: low half
+  of absLTargetAddr: absLTargetValue
+  else: 0'u32
+
+block:
+  let ctx = mcf5307_create(nil, readAbsL, writeNoop, iackNoop)
+  discard mcf5307_set_reg(ctx, 0, 0'u32)
+  mcf5307_reset(ctx, 0x4000000'u32, absLProgramBase)
+  discard mcf5307_exec(ctx, 64'u32)
+  let d0 = mcf5307_get_reg(ctx, 0)
+  check(d0 == absLTargetValue,
+    "move.l (0x00123456).L,%d0 reads the address whose HIGH half is the " &
+    "first extension word (got 0x" & d0.toHex(8) & ")")
+  check(not absLSawSwapped,
+    "the word-swapped address 0x34560012 is never presented to the board")
+  mcf5307_destroy(ctx)
 
 if failures.len > 0:
   echo ""
