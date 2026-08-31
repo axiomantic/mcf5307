@@ -11,12 +11,11 @@
 ## on this machine describes at all, and it did not go away when the six
 ## data-flow commands were numbered.
 ##
-## THE SIZE OF THAT CLASS IS NOT WRITTEN HERE, AND THAT IS THE POINT. It used
-## to be, and the number went stale the first time the classification moved: a
-## figure in a comment is read by nobody and checked by nothing, so it drifts
-## silently and then misleads with the authority of a measurement. The figure
-## lives in `wantPartition` below, where the run compares it against a live
-## sweep of all 256 bytes and goes red the moment it is wrong.
+## The size of that class is not written here. A figure in a comment is checked
+## by nothing, so it drifts silently and then misleads with the authority of a
+## measurement. The figure lives in `wantPartition` below, where the run
+## compares it against a live sweep of all 256 bytes and goes red the moment it
+## is wrong.
 ##
 ## The data-flow opcodes are inherited. They are typed here from Table 109 of
 ## the ISP1362 data sheet, Rev. 06, which states that it integrates the
@@ -89,14 +88,14 @@ const implementedOpcodes: array[59, uint8] = [
   0xC2'u8, 0xC3'u8,                           # interrupt enable
   0xF4'u8,                                    # acknowledge setup
   0x01'u8,                            # control IN buffer write
-  # THE IN HALF OF ENDPOINTS 1 TO 3. ISP1362 Rev. 06 Table 109 p.105-106
+  # The IN half of endpoints 1 to 3. ISP1362 Rev. 06 Table 109 p.105-106
   # numbers Write endpoint n buffer `02` to `0F` and Validate endpoint n buffer
   # `62` to `6F` for n = 1 to 14, and annotates both destinations "(IN
-  # endpoints only)". THAT ANNOTATION IS NOT PART OF THE CODE MAP: section
-  # 15.2.1 p.114 states the wrong-direction access as BEHAVIOUR - "There is no
+  # endpoints only)". That annotation is not part of the code map: section
+  # 15.2.1 p.114 states the wrong-direction access as behaviour - "There is no
   # protection against ... writing into an OUT buffer" - and note [4] p.106
   # gives validating an OUT endpoint buffer as unpredictable. So the opcode is
-  # implemented for every endpoint this model buffers, and the DIRECTION is a
+  # implemented for every endpoint this model buffers, and the direction is a
   # run-time precondition the model refuses by name. These six are in
   # `speaksOnFreshHandle` below, because a fresh handle has EPDIR = 0 for all
   # sixteen slots and every one of them then addresses the wrong direction.
@@ -237,12 +236,12 @@ const illegalCommands: array[4, tuple[opcode: uint8, name: string,
 const speaksOnFreshHandle: array[7, tuple[opcode: uint8, want: string]] = [
   (0x61'u8, "isp1181: a validate for endpoint 0 IN found no buffer write " &
             "staged for it; nothing is validated"),
-  # THE SIX IN-FAMILY CODES FOR ENDPOINTS 1 TO 3 SPEAK ON A FRESH HANDLE AND
-  # THE REASON IS THE HANDLE AND NOT THE CODE. Table 110 p.107 gives every bit
+  # The IN-family codes for endpoints 1 to 3 speak on a fresh handle, and the
+  # reason is the handle and not the code. Table 110 p.107 gives every bit
   # of DcEndpointConfiguration a reset value of 0, so EPDIR reads OUT for all
   # sixteen slots until the firmware writes one, and an IN command then
-  # addresses a direction the endpoint is not configured for. The same six
-  # codes on a handle whose endpoint IS configured IN write nothing, which
+  # addresses a direction the endpoint is not configured for. The same codes on
+  # a handle whose endpoint is configured IN write nothing, which
   # `tests/t_isp1181.nim` drives.
   (0x02'u8, "isp1181: command 0x02 (endpoint 1 buffer write) addresses the " &
             "IN buffer of endpoint 1, and EPDIR is 0 in its " &
@@ -456,20 +455,17 @@ let partition: Partition = (implemented: accepted.driven +
                             total: accepted.driven + speaking.driven +
                                    refused.driven + illegalDriven.driven +
                                    unspecified.driven)
-# THE TWO FIGURES THAT MOVED, AND THE ONE REASON BOTH MOVED FOR. `0x02` to
-# `0x04` and `0x62` to `0x64` are Write and Validate endpoint n buffer for the
-# three endpoints beyond endpoint 0 that this model carries buffers for. They
-# were refused while the model had no IN path on those endpoints; it has one
-# now, and the DIRECTION those buffers face is checked when the command runs
-# rather than when it is classified. Six moved from the refused class to the
-# implemented one and nothing else moved.
+# `0x02` to `0x04` and `0x62` to `0x64` are Write and Validate endpoint n
+# buffer for the three endpoints beyond endpoint 0 that this model carries
+# buffers for. They are implemented, and the direction those buffers face is
+# checked when the command runs rather than when it is classified.
 #
-# THE EARLIER MOVE IS STILL RECORDED. The eleven codes `0x25` to `0x2F` write
-# the DcEndpointConfiguration register of a slot this model carries no buffer
-# for, and ISP1362 Rev. 06 section 15.1.1 p.107 states that the part allocates
-# buffer memory only "after all 16 endpoints have been configured in sequence".
-# A slot the model refused would make a step the authority requires look like a
-# step the part cannot take, so those eleven moved the same way.
+# The codes `0x25` to `0x2F` write the DcEndpointConfiguration register of a
+# slot this model carries no buffer for, and are implemented for a different
+# reason: ISP1362 Rev. 06 section 15.1.1 p.107 states that the part allocates
+# buffer memory only "after all 16 endpoints have been configured in sequence",
+# so a slot the model refused would make a step the authority requires look
+# like a step the part cannot take.
 const wantPartition: Partition = (implemented: 59, refused: 83, illegal: 4,
                                   unspecified: 110, total: 256)
 check(partition == wantPartition,

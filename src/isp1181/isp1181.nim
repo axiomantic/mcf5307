@@ -430,19 +430,13 @@ proc clearInterrupt*(m: ISP1181; mask: uint32) =
   m.updateIrq()
 
 proc refusalCause(m: ISP1181; index: int; length: int): string =
-  ## THE TWO CAUSES A `Fifo` REFUSAL HAS, EACH NAMED IN WORDS. `Fifo.accept`
-  ## returns one `false` for a buffer that is FULL and for a packet that is
-  ## LARGER THAN THE BUFFER, and those are different findings: a full buffer is
+  ## The two causes a `Fifo` refusal has, each named in words. `Fifo.accept`
+  ## returns one `false` for a buffer that is full and for a packet that is
+  ## larger than the buffer, and those are different findings: a full buffer is
   ## ordinary flow control that a drain fixes, and an oversized packet is a
   ## fault in whatever produced it that no amount of draining fixes.
   ##
-  ## THEY USED TO SHARE ONE SENTENCE AND WERE SEPARATED ONLY BY THE FIGURES IN
-  ## IT. A reader then had to know the buffer's capacity and its depth from
-  ## `fifoShape` before the line meant anything, so the line could be read
-  ## correctly only by someone who did not need it. The figures are KEPT and the
-  ## cause is now said as well.
-  ##
-  ## IT IS CALLED AFTER THE REFUSAL AND READS THE STATE THE REFUSAL LEFT. A
+  ## It is called after the refusal and reads the state the refusal left. A
   ## refused `accept` changes nothing, so the occupancy here is the occupancy
   ## the packet met.
   if m.fifos[index].isFull:
@@ -607,22 +601,19 @@ proc transmit*(m: ISP1181; endpoint: int): bool =
     m.note("isp1181: " & fifoNames[index] & " holds a packet and the host " &
            "installed no transmit callback; the packet is kept")
     return false
-  # A ZERO-LENGTH PACKET IS REFUSED HERE AND NOT INDEXED. `addr packet[0]` on
-  # an empty `seq` is out of bounds. MEASURED, by removing this guard and
+  # A zero-length packet is refused here and not indexed. `addr packet[0]` on
+  # an empty `seq` is out of bounds. Measured, by removing this guard and
   # running the suite under the library's own flags: `--mm:arc --panics:on
-  # -d:release` DOES keep the bounds check, and the run aborts with
-  # `IndexDefect`. That is the outcome, not a silent wrong pointer - and an
-  # abort is what `portWrite` above refuses for a nil handle, for the same
-  # reason: the caller is a plugin's host and an abort destroys a session that
-  # has nothing to do with this model. A build with `-d:danger` would not check
-  # at all and would read the memory. The buffer can hold one: `Fifo.accept`
-  # takes a
-  # zero-length packet, `deliver` reaches it on an endpoint configured OUT, and
-  # endpoints 1 to 3 have ONE buffer, so a later EPDIR write turns that same
-  # buffer IN and `transmit` finds it. The refusal says the same thing
-  # `queueIn` says about a zero-length IN packet, and for the same reason: no
-  # source on this machine states what one carries, so the model declines to
-  # invent a pointer for it.
+  # -d:release` does keep the bounds check, and the run aborts with
+  # `IndexDefect`. An abort is what `portWrite` above refuses for a nil handle,
+  # for the same reason: the caller is a plugin's host and an abort destroys a
+  # session that has nothing to do with this model. A build with `-d:danger`
+  # would not check at all and would read the memory. The buffer can hold one:
+  # `Fifo.accept` takes a zero-length packet, `deliver` reaches it on an
+  # endpoint configured OUT, and endpoints 1 to 3 have one buffer, so a later
+  # EPDIR write turns that same buffer IN and `transmit` finds it. No source on
+  # this machine states what a zero-length IN packet carries, so the model
+  # declines to invent a pointer for it.
   if m.fifos[index].peekPacket().packet.len == 0:
     m.note("isp1181: " & fifoNames[index] & " holds a packet of zero bytes " &
            "and no source on this machine states what a zero-length IN " &
@@ -657,15 +648,14 @@ const
     ## endpoint buffer, lower byte first.
 
 proc endpointOfOpcode(opcode, controlBase, endpointBase: uint8): int =
-  ## The ENDPOINT NUMBER a data-flow opcode names, or -1 when this model
+  ## The endpoint number a data-flow opcode names, or -1 when this model
   ## carries no buffer for it. `controlBase` is the family's control form and
   ## `endpointBase` is endpoint 1's.
   ##
-  ## IT ANSWERS AN ENDPOINT AND NOT A BUFFER, AND THAT IS THE WHOLE REASON IT
-  ## REPLACED A PROCEDURE THAT ANSWERED A BUFFER. Endpoint 0 has TWO buffers,
-  ## and which one a family means is a property of the family: `0x10` and `0x70`
+  ## It answers an endpoint and not a buffer. Endpoint 0 has two buffers, and
+  ## which one a family means is a property of the family: `0x10` and `0x70`
   ## address its OUT buffer, `0x01` and `0x61` its IN buffer. A decode that
-  ## returned a buffer had to pick one, so it could serve only the OUT half.
+  ## returned a buffer would have to pick one, and could serve only that half.
   if opcode == controlBase:
     return 0
   let endpoint = int(opcode) - int(endpointBase) + 1
@@ -675,7 +665,7 @@ proc endpointOfOpcode(opcode, controlBase, endpointBase: uint8): int =
 
 proc bufferOfEndpoint(endpoint: int; facing: BufferDirection): int =
   ## The buffer an endpoint presents in one direction. Endpoints 1 to 3 carry
-  ## ONE buffer and both tables name it; endpoint 0 carries two and they differ.
+  ## one buffer and both tables name it; endpoint 0 carries two and they differ.
   case facing
   of bdOut: outFifoOfEndpoint[endpoint]
   of bdIn: inBufferOfEndpoint[endpoint]
@@ -708,14 +698,14 @@ proc beginRefused(m: ISP1181; opcode: uint8) =
 
 proc directionRefused(m: ISP1181; opcode: uint8; name: string; endpoint: int;
                       index: int; needs: BufferDirection): bool =
-  ## THE DIRECTION IS A RUN-TIME PRECONDITION OF THE COMMAND AND IT REFUSES OUT
-  ## LOUD. A single-buffered endpoint faces the way EPDIR points it, so a Write
+  ## The direction is a run-time precondition of the command and it refuses out
+  ## loud. A single-buffered endpoint faces the way EPDIR points it, so a Write
   ## or Validate aimed at an endpoint the firmware configured OUT - or a Read or
   ## Clear aimed at one it configured IN - is addressing a buffer that is not
   ## there in that direction.
   ##
-  ## THE AUTHORITY SAYS WHAT THE PART DOES, AND IT IS NOT SOMETHING THIS MODEL
-  ## MAY IMITATE. ISP1362 Rev. 06 section 15.2.1 p.114 remarks that "There is no
+  ## The authority says what the part does, and it is not something this model
+  ## may imitate. ISP1362 Rev. 06 section 15.2.1 p.114 remarks that "There is no
   ## protection against writing or reading past a buffer's boundary, against
   ## writing into an OUT buffer or reading from an IN buffer. Any of these
   ## actions can cause an incorrect operation", and Table 109 notes [4] and [5]
@@ -726,7 +716,7 @@ proc directionRefused(m: ISP1181; opcode: uint8; name: string; endpoint: int;
   ## mistake as a success. So it refuses, and the line names the endpoint, the
   ## direction the command needs and the direction the register holds.
   ##
-  ## THE CONTROL ENDPOINT CANNOT REACH THIS. `directionOfBuffer` gives buffers 0
+  ## The control endpoint cannot reach this. `directionOfBuffer` gives buffers 0
   ## and 1 fixed directions, which section 15.1.1 p.107 states control endpoints
   ## have, so `0x01`, `0x10`, `0x61` and `0x70` always match what they need. The
   ## check is run for them anyway rather than being skipped by a list: an
@@ -817,12 +807,10 @@ proc beginBufferWrite(m: ISP1181; opcode: uint8; index: int) =
   m.index = 0
 
 proc commitValidate(m: ISP1181; endpoint: int; index: int) =
-  ## Validate: the staged bytes become a packet the host can collect.
-  ##
-  ## THE ENDPOINT IS A PARAMETER AND WAS ONCE THE LITERAL `0`. While the only
-  ## caller was the control IN form the literal was correct and indistinguishable
-  ## from the bug it became the moment endpoints 1 to 3 got the same pair of
-  ## commands: every validate would have queued on endpoint 0.
+  ## Validate: the staged bytes become a packet the host can collect. The
+  ## endpoint is a parameter and not the literal `0`: every family that reaches
+  ## here has an endpoint form, and a literal would queue all of them on
+  ## endpoint 0.
   if m.stageFifo != index:
     m.note("isp1181: a validate for " & fifoNames[index] &
            " found no buffer write staged for it; nothing is validated")
@@ -888,9 +876,9 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
     discard
 
   block dataFlow:
-    # THE FOUR ENDPOINT-ADDRESSING FAMILIES EACH DECODE AN ENDPOINT, CHECK THE
-    # DIRECTION THAT ENDPOINT'S BUFFER FACES, AND THEN ACT. The order is the
-    # same in all four and `directionRefused` states what the check is for.
+    # Each endpoint-addressing family decodes an endpoint, checks the direction
+    # that endpoint's buffer faces, and then acts. `directionRefused` states
+    # what the check is for.
     let readEndpoint = endpointOfOpcode(opcode, bufferReadControlOut,
                                         bufferReadEndpointBase)
     if readEndpoint >= 0:
@@ -942,13 +930,11 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
       if m.directionRefused(opcode, command.name, validateEndpoint,
                             validateIndex, bdIn):
         return
-      # THE INTERLOCK IS THE CONTROL ENDPOINT'S ALONE AND IS NOW SCOPED TO IT.
+      # The interlock is the control endpoint's alone and is scoped to it.
       # ISP1362 Rev. 06 section 12.3.6 p.53 disables Validate Buffer and Clear
       # Buffer "for the control IN and OUT endpoints" on the arrival of a set-up
-      # packet, and names no other endpoint. While `0x61` was the only validate
-      # this model implemented, an unscoped test of the flag was the same thing
-      # as a scoped one; with `0x62` to `0x64` implemented it would stop
-      # endpoints 1 to 3 for a reason that belongs to endpoint 0.
+      # packet, and names no other endpoint. An unscoped test of the flag would
+      # stop endpoints 1 to 3 for a reason that belongs to endpoint 0.
       if validateIndex == inFifoOfEndpoint0 and m.setupUnacknowledged:
         m.noteInterlock(opcode, command.name)
         return

@@ -308,13 +308,9 @@ check(boundary == wantBoundary,
       "fifos: a packet of exactly the buffer's size fits and one byte more does not",
       $boundary, $wantBoundary)
 
-# THE TWO REFUSALS EACH SAY WHICH ONE THEY ARE, IN WORDS AND IN FIGURES. A full
+# The two refusals each say which one they are, in words and in figures. A full
 # buffer is ordinary flow control and an oversized packet is a fault in whatever
-# produced it. They shared one sentence until 2026-08-28 and were separated only
-# by the packet's size against the buffer's occupancy, so the line could be read
-# only by a reader who already knew `fifoShape` - which is the reader who does
-# not need the line. The figures are still asserted here; the CAUSE is asserted
-# with them. The full-buffer refusal is driven on endpoint 3, which holds ONE
+# produced it. The full-buffer refusal is driven on endpoint 3, which holds one
 # packet. A buffer too many would accept the second packet, so the refusal is
 # the assertion and the count is not.
 type Refusals = tuple[full: seq[string], oversize: seq[string]]
@@ -1210,14 +1206,14 @@ check(configSequence == wantConfigSequence,
       $configSequence, $wantConfigSequence)
 
 # ---------------------------------------------------------------------------
-# THE IN PATH ON AN ENDPOINT THAT IS NOT ENDPOINT 0. `0x03` then `0x63` is the
-# sequence the emulated firmware drives and the model refused whole until
-# 2026-08-28: ISP1362 Rev. 06 Table 109 p.105-106 numbers Write endpoint n
-# buffer `02` to `0F` and Validate endpoint n buffer `62` to `6F` for n = 1 to
-# 14, and this model implements them for the endpoints it carries buffers for.
+# The IN path on an endpoint that is not endpoint 0. `0x03` then `0x63` is the
+# sequence the emulated firmware drives: ISP1362 Rev. 06 Table 109 p.105-106
+# numbers Write endpoint n buffer `02` to `0F` and Validate endpoint n buffer
+# `62` to `6F` for n = 1 to 14, and this model implements them for the
+# endpoints it carries buffers for.
 #
-# THE PACKET IS FOLLOWED ALL THE WAY OUT, and each step is asserted apart from
-# the next. A model that queued at the WRITE would make the validate a no-op; a
+# The packet is followed all the way out, and each step is asserted apart from
+# the next. A model that queued at the write would make the validate a no-op; a
 # model that queued on endpoint 0 whatever the opcode said would still transmit
 # something, so the endpoint the host callback reports is asserted and not only
 # the bytes. `0xC1` is FIFOEN, EPDIR and FFOSZ = 1; only bit 6 is read here.
@@ -1247,8 +1243,8 @@ check(inPath == wantInPath,
         "it to THAT endpoint's buffer and hand it to the host",
       $inPath, $wantInPath)
 
-# THE DIRECTION GUARD REFUSES IN BOTH DIRECTIONS, ON ONE HANDLE, AND THE TWO
-# ENDPOINTS DIFFER IN ONE BIT. `0xC1 xor 0x81` is `0x40`, which is EPDIR alone.
+# The direction guard refuses in both directions, on one handle, and the two
+# endpoints differ in one bit. `0xC1 xor 0x81` is `0x40`, which is EPDIR alone.
 # Endpoint 1 is configured IN and is driven with the OUT commands `0x12` and
 # `0x72`; endpoint 2 is configured OUT and is driven with the IN commands `0x03`
 # and `0x63`. ISP1362 Rev. 06 section 15.2.1 p.114 states that
@@ -1256,18 +1252,18 @@ check(inPath == wantInPath,
 # the validate and clear forms as unpredictable, so the model refuses rather
 # than picking one of the outcomes the document declines to name.
 #
-# THE KNOWN POSITIVE IS IN THE SAME RUN: each endpoint is also driven with the
-# command that MATCHES its direction, and none of those four is refused. A run
+# The known positive is in the same run: each endpoint is also driven with the
+# command that matches its direction, and none of those four is refused. A run
 # in which every command refused would satisfy the refusal half alone.
 #
-# ONE OF THE FOUR SPEAKS AND ITS LINE IS ASSERTED RATHER THAN COUNTED, AND THE
-# LINE IT SPEAKS PROVES BOTH HALVES. `0x02` and `0x62` both address endpoint 1,
-# which IS configured IN, so the guard lets both through; `0x02` then stages
-# nothing because no operand byte follows it, and `0x62` reports a staged buffer
-# that is shorter than the two-byte length prefix. That report names a buffer
-# write it FOUND, so it is evidence that `0x02` reached `beginBufferWrite` and
-# not merely that it was silent. A count of lines cannot tell "passed the guard
-# and reported a staging fault" from "was refused by the guard".
+# One of the four speaks and its line is asserted rather than counted. `0x02`
+# and `0x62` both address endpoint 1, which is configured IN, so the guard lets
+# both through; `0x02` then stages nothing because no operand byte follows it,
+# and `0x62` reports a staged buffer that is shorter than the two-byte length
+# prefix. That report names a buffer write it found, so it is evidence that
+# `0x02` reached `beginBufferWrite` and not merely that it was silent. A count
+# of lines cannot tell "passed the guard and reported a staging fault" from
+# "was refused by the guard".
 type Guard = tuple[log: seq[string], matching: seq[string]]
 
 proc driveDirectionGuard(): Guard =
@@ -1312,10 +1308,10 @@ check(guard == wantGuard,
         "configured for is refused by name, and the matching command is not",
       $guard, $wantGuard)
 
-# THE SET-UP INTERLOCK BELONGS TO THE CONTROL ENDPOINTS AND TO NO OTHER.
+# The set-up interlock belongs to the control endpoints and to no other.
 # ISP1362 Rev. 06 section 12.3.6 p.53 disables Validate Buffer and Clear Buffer
 # "for the control IN and OUT endpoints" until `0xF4` acknowledges the set-up
-# packet, and names no other endpoint. The two halves run on ONE handle in ONE
+# packet, and names no other endpoint. The two halves run on one handle in one
 # set-up state, so the difference between them is the endpoint and nothing else.
 type Interlock2 = tuple[controlLog: seq[string], endpointPending: int,
                         endpointLog: seq[string]]
@@ -1346,18 +1342,18 @@ check(interlockScope == wantInterlockScope,
         "IN validate and leaves endpoint 2's alone",
       $interlockScope, $wantInterlockScope)
 
-# A BUFFER HOLDING A ZERO-LENGTH PACKET IS NOT HANDED TO THE HOST, AND THE
-# ROUTE THAT PUTS ONE THERE IS DRIVEN RATHER THAN DESCRIBED. `Fifo.accept`
+# A buffer holding a zero-length packet is not handed to the host, and the
+# route that puts one there is driven rather than described. `Fifo.accept`
 # takes a packet of zero bytes, `deliver` reaches it on an endpoint configured
-# OUT, and endpoints 1 to 3 carry ONE buffer, so the EPDIR write that follows
-# turns that same buffer IN and `transmit` finds the empty packet in it. The
-# transmit used to take `addr packet[0]` of it, which is out of bounds. Removing
-# the guard and running this suite under the library's own flags aborts it with
-# `IndexDefect` before it can print a total - measured, not argued - and an
-# abort inside a plugin's host is the outcome `portWrite` refuses for a nil
-# handle. Under `-d:danger` there would be no check and no abort.
+# OUT, and endpoints 1 to 3 carry one buffer, so the EPDIR write that follows
+# turns that same buffer IN and `transmit` finds the empty packet in it. Taking
+# `addr packet[0]` of it is out of bounds: removing the guard and running this
+# suite under the library's own flags aborts it with `IndexDefect` before it
+# can print a total - measured, not argued - and an abort inside a plugin's
+# host is the outcome `portWrite` refuses for a nil handle. Under `-d:danger`
+# there would be no check and no abort.
 #
-# THE PACKET IS KEPT AND THE REFUSAL IS THE ASSERTION. A model that dropped it
+# The packet is kept and the refusal is the assertion. A model that dropped it
 # would leave the firmware with a buffer that emptied itself and a transfer that
 # never happened, which is what the nil-callback case above refuses too.
 type EmptyIn = tuple[delivered: bool, sent: bool, stillThere: int,

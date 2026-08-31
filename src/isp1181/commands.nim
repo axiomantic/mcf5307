@@ -123,29 +123,27 @@ proc classifyFamily(opcode: int): (bool, Command) =
   ## byte, which is not the same as the byte being unspecified: the caller
   ## still has the register families and the general commands to try.
   ##
-  ## A CLASS ANSWERS "IS THERE A BUFFER BEHIND THIS OPCODE", AND NEVER "WHICH
-  ## WAY IS IT FACING". The two questions were entangled here while the IN
-  ## families were refused for endpoints 1 to 3, and disentangling them is what
-  ## let those families be implemented. A class is a property of the opcode, and
+  ## A class answers "is there a buffer behind this opcode", and never "which
+  ## way is it facing". A class is a property of the opcode, and
   ## `modelEndpoints` - the buffer memory this model carries - is a property of
   ## the opcode too, so the class may depend on it. EPDIR is not: it is a bit
   ## the firmware writes and rewrites at run time, and a classification that
   ## moved with it would answer a different thing at two instants.
   ##
-  ## THE AUTHORITY PUTS THE DIRECTION IN THE SAME PLACE. ISP1362 Rev. 06
+  ## The authority puts the direction in the same place. ISP1362 Rev. 06
   ## Table 109 p.105-106 numbers `02` to `0F` and `62` to `6F` for endpoints 1
-  ## to 14 with no configuration attached to the CODE, and annotates the
+  ## to 14 with no configuration attached to the code, and annotates the
   ## destination "(IN endpoints only)". What happens when the direction is wrong
-  ## is stated as BEHAVIOUR and not as a missing code: section 15.2.1 p.114
+  ## is stated as behaviour and not as a missing code: section 15.2.1 p.114
   ## remarks that "There is no protection against ... writing into an OUT buffer
   ## or reading from an IN buffer. Any of these actions can cause an incorrect
   ## operation", and Table 109 note [4] p.106 gives validating an OUT endpoint
-  ## buffer as "unpredictable behavior". So the direction is a RUN-TIME
-  ## PRECONDITION of the command, and `src/isp1181/isp1181.nim` refuses it there
+  ## buffer as "unpredictable behavior". So the direction is a run-time
+  ## precondition of the command, and `src/isp1181/isp1181.nim` refuses it there
   ## by name.
   ##
-  ## `ccIllegal` IS STILL RESERVED FOR THE BYTES THE AUTHORITY PARENTHESISES -
-  ## `00`, `11`, `60` and `71`. Those are forbidden by the CODE, whatever any
+  ## `ccIllegal` is still reserved for the bytes the authority parenthesises -
+  ## `00`, `11`, `60` and `71`. Those are forbidden by the code, whatever any
   ## register says, and none of `02` to `0F` or `62` to `6F` is parenthesised.
   for family in families:
     if family.illegalOpcode == opcode:
