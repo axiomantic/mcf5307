@@ -55,21 +55,16 @@ jobs:
       # The four lint scripts live in the tools repository, which is PUBLIC.
       # Reading it needs no credential of any kind.
       #
-      # `lint-current` IS A MOVING ALIAS IN nmg2-tools, AND THE PIN IS TEMPORARY
-      # BY CONSTRUCTION. The lint code and the register data file this job reads
-      # live on an unmerged PR stack there. A foreign-repository checkout with
-      # no `ref:` takes that repository's DEFAULT branch, which carries older
+      # `lint-current` is a moving alias in nmg2-tools, and the pin is
+      # temporary. The lint code and the register data file this job reads live
+      # on an unmerged PR stack there. A foreign-repository checkout with no
+      # `ref:` takes that repository's default branch, which carries older
       # copies, so an unpinned job lints against stale rules and says nothing
-      # about it. `lint-current` names the stack branch that is current. One
-      # push in nmg2-tools moves every consuming repository forward, so no
-      # consumer is edited when the stack grows.
+      # about it.
       #
-      # DELETE THE `ref:` LINE when the stack merges into that default branch.
-      # Until then two failure modes exist, and BOTH ARE LOUD ON PURPOSE: a
-      # deleted alias makes this step error, and an alias that falls behind the
-      # stack makes the next step fail. Do not add a fallback ref, `|| true`, or
-      # `continue-on-error`. The silence those produce is the exact defect the
-      # pin exists to remove.
+      # Delete the `ref:` line when the stack merges into that default branch.
+      # Do not add a fallback ref, `|| true`, or `continue-on-error`: the
+      # silence those produce is the defect the pin exists to remove.
       #
       # `fetch-depth: 0` is required by the staleness step below, which needs
       # merge bases.
@@ -81,31 +76,19 @@ jobs:
           fetch-depth: 0
           path: lint-tools
 
-      # A PIN THAT MERELY FALLS BEHIND FAILS SILENTLY. Only a DELETED alias is
-      # loud on its own. If the alias simply stops being the tip, these guards
-      # keep running, stay green, and read older rules. This step makes that
-      # case loud too.
+      # A pin that merely falls behind fails silently: only a deleted alias is
+      # loud on its own. If the alias stops being the tip, these guards keep
+      # running, stay green, and read older rules.
       #
-      # THE SCOPE IS DERIVED, NOT KEPT BY HAND. The read set is computed from
-      # the `-m nmg2_tools.<module>` entry points and the `--register` path that
-      # appear in the steps of THIS file, plus the import closure of those entry
-      # points inside the checkout. A hand-kept path list is correct on the day
-      # it is written and silently wrong the day a step starts reading something
-      # new. Drift elsewhere in the tools repository cannot change a verdict
-      # here and is deliberately not reported.
+      # The read set is derived, not kept by hand. A hand-kept path list is
+      # correct on the day it is written and silently wrong the day a step
+      # starts reading something new. Drift elsewhere in the tools repository
+      # cannot change a verdict here and is deliberately not reported.
       #
-      # A THREE-DOT DIFF asks what a branch INTRODUCED that `lint-current`
+      # A three-dot diff asks what a branch introduced that `lint-current`
       # lacks, and ignores work `lint-current` has that the branch does not. A
       # branch lower in the stack is behind by design, and that is not
       # staleness.
-      #
-      # THIS IS AN ABSENCE TEST, SO IT CARRIES CONTROLS. Each one turns a
-      # scan-that-never-ran into a RED with its own reason, instead of the
-      # silent exit 0 that is byte for byte what a fresh alias prints:
-      #
-      #   1. this workflow file is present, so the read set has a source
-      #   2. at least two entry points were derived from it
-      #   3. at least one `tools/*` branch was fetched to compare against
       - name: lint-current-is-not-behind
         working-directory: lint-tools
         run: |
@@ -113,7 +96,6 @@ jobs:
 
           wf="$GITHUB_WORKSPACE/under-test/.github/workflows/track-repo.yml"
 
-          # CONTROL 1: the read set has a source.
           if [ ! -f "$wf" ]; then
             echo "CONTROL FAILED: $wf is missing, so the read set could not be derived."
             exit 1
@@ -123,7 +105,6 @@ jobs:
           registers=$(grep -oE -- '--register [^ ]+' "$wf" | sed 's|^--register ||' | sort -u || true)
           nroots=$(printf '%s\n' "$roots" | sed '/^$/d' | wc -l | tr -d ' ')
 
-          # CONTROL 2: the derivation found the entry points it was meant to find.
           if [ "$nroots" -lt 2 ]; then
             echo "CONTROL FAILED: derived $nroots lint entry point(s) from $wf; expected at least 2."
             echo "The read set would have been narrower than what this job runs."
@@ -157,7 +138,6 @@ jobs:
           fi
           n=$(git for-each-ref --format='%(refname:short)' refs/remotes/stack | wc -l | tr -d ' ')
 
-          # CONTROL 3: the comparison examined something.
           if [ "$n" -eq 0 ]; then
             echo "CONTROL FAILED: no tools/* branch was fetched, so this step compared"
             echo "lint-current against nothing and proved nothing."
