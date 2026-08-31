@@ -1,4 +1,15 @@
-"""Check every t_claims-registered sentence still exists in its source file.
+"""Check every pinned source line still exists, for every mechanism that pins one.
+
+TWO mechanisms in this repository read source text and fail when it moves,
+and they have different shapes:
+
+  * ``tests/t_claims.cmake`` registers comment SENTENCES by file.
+  * ``tests/reach.sh``'s selftest holds a comment line and a code line as its
+    known-negative and known-positive CONTROLS -- change either and the
+    control stops proving what it exists to prove.
+
+The general rule is not "check the registry" but "grep for any mechanism
+that reads this text", so this checks both and is written to be extended.
 
 The comment-stripping equality check used by prose passes CANNOT see this:
 it removes the very lines the registry reads, reports IDENTICAL, and the
@@ -48,6 +59,27 @@ def _read(ref, path):
                           capture_output=True, text=True).stdout
 
 
+# The assignments sit indented inside a `case` arm, so the anchor allows
+# leading whitespace: a pattern requiring column zero matched nothing and
+# reported a clean zero, which is the failure this whole file exists to catch.
+_REACH = re.compile(r"^\s*(CMT_OLD|POS_OLD)=(?:'([^']*)'|\"([^\"]*)\")", re.M)
+
+
+def reach_controls(ref):
+    """Return (name, path, line) for each control ``reach.sh`` pins.
+
+    ``None`` when the file is absent, matching ``registry``'s contract.
+    """
+    proc = subprocess.run(['git', 'show', f'{ref}:tests/reach.sh'],
+                          capture_output=True, text=True)
+    if proc.returncode != 0:
+        return None
+    # Both controls quote from control.nim; the script names it in the same
+    # invocation, so the path is read rather than assumed.
+    path = 'src/mcf5307/control.nim'
+    return [(n, path, sq or dq) for n, sq, dq in _REACH.findall(proc.stdout)]
+
+
 def check(ref):
     claims = registry('HEAD' if ref == 'WORKTREE' else ref)
     if claims is None:
@@ -59,6 +91,9 @@ def check(ref):
         # is broken and every "missing: 0" below it would be vacuous.
         print(f'{ref}: NO CLAIMS PARSED -- the reader is broken, not the tree')
         return 1, 0
+    controls = reach_controls('HEAD' if ref == 'WORKTREE' else ref)
+    if controls:
+        claims = claims + controls
     missing = 0
     for name, path, text in claims:
         body = _read(ref, path)
