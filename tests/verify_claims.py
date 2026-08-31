@@ -21,9 +21,17 @@ _TEXT = re.compile(r'set\(CLAIM_(\w+)_CLAIM_TEXT\s+"([^"]+)"\)')
 
 
 def registry(ref):
-    """Return (name, path, sentence) for every claim the registry pins."""
-    src = subprocess.run(['git', 'show', f'{ref}:tests/t_claims.cmake'],
-                         capture_output=True, text=True).stdout
+    """Return (name, path, sentence) for every claim the registry pins.
+
+    Returns ``None`` when the registry FILE is absent, which is different
+    from parsing to nothing: the registry arrives partway up this stack, so
+    a branch below it has no claims to keep rather than a reader that failed.
+    """
+    proc = subprocess.run(['git', 'show', f'{ref}:tests/t_claims.cmake'],
+                          capture_output=True, text=True)
+    if proc.returncode != 0:
+        return None
+    src = proc.stdout
     files = dict(_FILE.findall(src))
     texts = dict(_TEXT.findall(src))
     return [(n, files[n], texts[n]) for n in files if n in texts]
@@ -42,6 +50,9 @@ def _read(ref, path):
 
 def check(ref):
     claims = registry('HEAD' if ref == 'WORKTREE' else ref)
+    if claims is None:
+        print(f'{ref}: no claim registry on this ref -- nothing to check')
+        return 0, 0
     if not claims:
         # An empty registry is a parse failure, not a clean result: the
         # file exists and pins sentences, so reading none means the reader
