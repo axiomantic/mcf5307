@@ -308,6 +308,25 @@ the line the comment describes. Change nothing else.
 
 ## Gotchas
 
+- **USE THE GDB DEBUGGER EARLY AND OFTEN for anything the MCF5307 stub can
+  reach.** This repo ships the stub and the G2 harness exposes it as
+  `g2TestConsole --gdb` (see `gearmulator/AGENTS.md`, "Debugging the MCF5307
+  with GDB"). For any runtime question about firmware execution — is this
+  routine reached, who writes this address, what do the registers hold — a
+  breakpoint or watchpoint is the FIRST tool to reach for, before static
+  disassembly and before adding probe scaffolds to test files. Static analysis
+  enumerates candidate paths; the debugger tells you which one ran. Reserve
+  scaffolds for what the stub cannot reach (DSP-side state, whole-run
+  statistics). When dispatching a subagent on firmware work, state this in the
+  dispatch prompt explicitly — an agent that defaults to print-probes and
+  disassembly wastes the instrument this project already built.
+- **FOR STATIC STRUCTURE QUESTIONS, USE THE GHIDRA DECOMPILER** — full setup,
+  working recipe, and the decompile-vs-breakpoint decision table are in
+  `nmg2-artifacts/AGENTS.md` §0.1 (project at `/tmp/ghidra_nmg2`, language
+  `68000:BE:32:Coldfire`, base address `0x30000400`; Java scripts only —
+  Ghidra 12 dropped Python). Decompile answers "what does this code do / who
+  calls it"; the debugger answers "did it run". Decompile to plan breakpoints,
+  break to confirm; neither alone is evidence.
 - A build that succeeds is not a check. Verify the artifact a step should have
   produced, not the exit status. A stale binary left by a failed compile makes a
   test runner report a pass that describes code which no longer exists.

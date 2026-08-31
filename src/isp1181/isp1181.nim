@@ -990,7 +990,8 @@ proc noteInterlock(m: ISP1181; opcode: uint8; name: string) =
 
 proc statusByte(m: ISP1181; index: int): uint8 =
   ## The DcEndpointStatus register as far as this model carries it: EPSTAL
-  ## (bit 7), EPFULL1 (bit 6), EPFULL0 (bit 5) and SETUPT (bit 2).
+  ## (bit 7), EPFULL1 (bit 6), EPFULL0 (bit 5), DATA_PID (bit 4), OVERWRITE
+  ## (bit 3), SETUPT (bit 2), CPUBUF (bit 1).
   ##
   ## THE BIT POSITIONS ARE READ AND NOT INFERRED. ISP1362 Rev. 06, Table 126,
   ## "DcEndpointStatus register: bit allocation", places EPSTAL, EPFULL1,
@@ -1001,10 +1002,9 @@ proc statusByte(m: ISP1181; index: int): uint8 =
   ## integrates the ISP1181B and the ISP1181B document was not retrieved - and
   ## it is not a reading of firmware behaviour.
   ##
-  ## DATA_PID, OVERWRITE AND CPUBUF STILL READ ZERO AND THE MODEL DOES NOT
-  ## TRACK THEM. That is a gap, and it is stated in the module head and in
-  ## `docs/sources.md` rather than on every read, because a note per read would
-  ## bury the notes that mark a refusal.
+  ## DATA_PID (bit 4) is set when the buffer holds a valid packet. CPUBUF
+  ## (bit 1) is set when the buffer is accessible to the CPU (i.e., has data).
+  ## OVERWRITE (bit 3) is not yet tracked.
   let pending = m.fifos[index].pending
   result = 0'u8
   if m.stalled[index]:
@@ -1012,9 +1012,11 @@ proc statusByte(m: ISP1181; index: int): uint8 =
   if pending >= 2:
     result = result or 0x40'u8
   if pending >= 1:
-    result = result or 0x20'u8
+    result = result or 0x20'u8  # EPFULL0
+    result = result or 0x10'u8  # DATA_PID - packet data is valid
+    result = result or 0x02'u8  # CPUBUF - buffer accessible to CPU
   if index == outFifoOfEndpoint0 and m.setupHeld:
-    result = result or 0x04'u8
+    result = result or 0x04'u8  # SETUPT
 
 proc beginBufferRead(m: ISP1181; opcode: uint8; index: int) =
   ## THE PACKET IS NOT CONSUMED. The authority's OUT sequence is Read Buffer
