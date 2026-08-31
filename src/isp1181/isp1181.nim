@@ -1002,9 +1002,9 @@ proc statusByte(m: ISP1181; index: int): uint8 =
   ## integrates the ISP1181B and the ISP1181B document was not retrieved - and
   ## it is not a reading of firmware behaviour.
   ##
-  ## DATA_PID (bit 4) is set when the buffer holds a valid packet. CPUBUF
-  ## (bit 1) is set when the buffer is accessible to the CPU (i.e., has data).
-  ## OVERWRITE (bit 3) is not yet tracked.
+  ## DATA_PID (bit 4) is set when the buffer holds a valid packet, and CPUBUF
+  ## (bit 1) when the buffer is accessible to the CPU. OVERWRITE (bit 3) is not
+  ## tracked by this model.
   let pending = m.fifos[index].pending
   result = 0'u8
   if m.stalled[index]:
@@ -1013,8 +1013,8 @@ proc statusByte(m: ISP1181; index: int): uint8 =
     result = result or 0x40'u8
   if pending >= 1:
     result = result or 0x20'u8  # EPFULL0
-    result = result or 0x10'u8  # DATA_PID - packet data is valid
-    result = result or 0x02'u8  # CPUBUF - buffer accessible to CPU
+    result = result or 0x10'u8  # DATA_PID
+    result = result or 0x02'u8  # CPUBUF
   if index == outFifoOfEndpoint0 and m.setupHeld:
     result = result or 0x04'u8  # SETUPT
 
