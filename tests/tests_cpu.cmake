@@ -1011,13 +1011,11 @@ add_test(NAME t_move
 # declared mask - which admits the PC-relative pair - and the executor is
 # invisible there.
 #
-# `t_ea_masks` ENTERS `logic.nim` THROUGH THE EFFECTIVE-ADDRESS DOOR ALONE. It
-# asserts that a legal operand runs and that an illegal one traps whole, and it
-# asserts NOTHING about the COMPUTED RESULT of a legal run and NOTHING about
-# the ENCODING of any logic word: it hand-builds its `Decoded` objects, and the
-# words it does put through `decodeWord` carry no logic opcode. Its `opBtst`
-# entry offers `Dn` and `An` and no other mode, so the PC-relative and
-# immediate operands named above are never presented to it.
+# `t_ea_masks` enters `logic.nim` through the effective-address door alone: it
+# hand-builds its `Decoded` objects, and the words it does put through
+# `decodeWord` carry no logic opcode. Its `opBtst` entry offers `Dn` and `An`
+# and no other mode, so the PC-relative and immediate operands named above are
+# never presented to it.
 #
 # The flag set, the compile inside the test and the two-part failure check are
 # taken from `t_ea_masks`, `t_sign_extend`, `t_alu` and `t_move` above, for the
@@ -1299,21 +1297,9 @@ add_test(NAME t_control
 # ---------------------------------------------------------------------------
 # `t_bra_displacement` - `BRA` over every value of its displacement byte.
 #
-# WHY IT IS A SUITE OF ITS OWN AND NOT ANOTHER BLOCK OF `t_control`. It is 256
-# executions of ONE opcode, and its verdict is a comparison of two sequences
-# this file's Nim source builds rather than a row-per-case table. Folded into
-# `t_control` the sweep would add one case to a total that reads as a count of
-# hand-written rows, and the two mutations registered against it in
-# `tests/t_claims.cmake` would have to be measured against a suite whose count
-# moves for unrelated reasons.
-#
-# WHAT IT ADDS OVER THE CORPUS. `mcf5307_conformance_control` executes two byte
-# displacements and two word ones. The displacement field is one signed byte, so
-# the whole of it is small enough to run - and half of the values it can hold
-# transfer control to an ODD address, which no even-target fixture reaches.
-#
-# THE FLAG SET, THE COMPILE INSIDE THE TEST and the two-part failure check are
-# taken from `t_control` above, for the reasons that block gives.
+# The displacement field is one signed byte, so the whole of it is small enough
+# to run - and half of the values it can hold transfer control to an ODD
+# address, which no even-target fixture reaches.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
     message(FATAL_ERROR
@@ -1429,22 +1415,15 @@ add_test(NAME t_bra_displacement
 # ---------------------------------------------------------------------------
 # `t_movec` - the `MOVEC` encoding and the control-register map.
 #
-# No corpus beside it. A positive corpus executes an encoding and compares the
-# machine state after it, and `MOVEC` writes a control register this core does
-# not keep. There is
-# no state for a corpus case to read back, so a corpus case would assert that
-# the instruction decoded and nothing about which register it named - which is
-# the one thing this suite exists to pin.
+# There is no corpus beside it: `MOVEC` writes a control register this core
+# does not keep, so a corpus case could assert that the instruction decoded and
+# nothing about which register it named.
 #
-# The hazard is silent in both directions and that is why the map is tested
-# number by number. The 68k collision: `0x004` and `0x005` are ACR0 and ACR1 here and ITT0 and ITT1 on the
-# 68040, and `0x800` is USP on the 68040 and names no register of this part. A
-# decoder carrying the wrong map writes a real register with a real value and
-# reports nothing, so no exit status anywhere can catch it.
-#
-# The compile happens inside the test and not in the build: a `ctest` run over a
-# tree whose build had failed would otherwise run a stale binary of an earlier
-# build and pass.
+# The map is tested number by number because the 68k collision is silent in
+# both directions: `0x004` and `0x005` are ACR0 and ACR1 here and ITT0 and ITT1
+# on the 68040, and `0x800` is USP on the 68040 and names no register of this
+# part. A decoder carrying the wrong map writes a real register with a real
+# value and reports nothing.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
     message(FATAL_ERROR
@@ -2217,19 +2196,11 @@ add_test(NAME t_exception
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_exception_driver.cmake")
 
 # ---------------------------------------------------------------------------
-# `t_control_registers` - the control registers as CHANNELS.
+# `t_control_registers` - the control registers as channels.
 #
-# ONE REGISTERED NAME, AND NO CORPUS BESIDE IT, for the reason the
-# `t_exception` block above gives: the corpus runner executes ASSEMBLED
-# encodings and adjudicates a register file, and neither the vector base a
-# dispatch consults nor a snapshot block is a register file it can compare.
-#
-# THE SUITE COVERS TWO OF THE FOUR CLAUSES ITS PLAN BLOCK STATES and says so in
-# its own header. A green run of this name is NOT evidence that the whole of
-# that block passes, and nothing here should be read as that.
-#
-# THE FLAG SET, THE COMPILE INSIDE THE TEST and the two-part failure check are
-# taken from the `t_exception` block above, for the reasons that block gives.
+# There is no corpus beside it: the corpus runner executes assembled encodings
+# and adjudicates a register file, and neither the vector base a dispatch
+# consults nor a snapshot block is a register file it can compare.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
     message(FATAL_ERROR
@@ -3524,30 +3495,21 @@ add_test(NAME t_no_alloc
 # callbacks, pinned as a behaviour of the core rather than as a sentence in the
 # header.
 #
-# WHAT IT EXISTS TO CATCH. `include/mcf5307.h` states that `size` is a COUNT OF
-# BYTES. A header sentence cannot fail, so this suite is the mechanism that
-# can: it installs recording callbacks through the PUBLISHED entry points and
-# asserts the values the core actually hands a board.
+# `include/mcf5307.h` states that `size` is a count of bytes.
 #
-# IT DRIVES THE CALLBACKS A CONSUMER INSTALLS, AND THAT IS THE WHOLE POINT. The
-# path is `mcf5307_create`, `mcf5307_reset`, `mcf5307_exec` - the same three
-# calls a board makes - so the values asserted are the values that cross the
-# ABI. A suite that reached `readMem` directly would assert the core's internal
-# spelling, and a core and a board that read the unit differently would each
-# stay internally consistent and each stay green.
+# The path is `mcf5307_create`, `mcf5307_reset`, `mcf5307_exec` - the same
+# three calls a board makes - so the values asserted are the values that cross
+# the ABI. A suite that reached `readMem` directly would assert the core's
+# internal spelling, and a core and a board that read the unit differently
+# would each stay internally consistent and each stay green.
 #
-# THE SWEEP IS WHAT MAKES THE SET CLAIM A MEASUREMENT. The named MOVE programs
-# show a byte, a word and a longword reaching a board on the read path and on
-# the write path; the sweep then runs every one of the 65536 opcode words and
-# collects every width any of them presents, so the claim that nothing else
-# reaches a board is measured over the whole opcode space and not over the
-# encodings someone thought to write. `sizeField` in `src/mcf5307/decode.nim`
-# reports the `11` size encoding as 0, so a value that is not a legal width
-# exists inside the decoder and the sweep is what establishes that no such
-# value reaches a board.
+# `sizeField` in `src/mcf5307/decode.nim` reports the `11` size encoding as 0,
+# so a value that is not a legal width exists inside the decoder; the sweep
+# over all 65536 opcode words is what establishes that no such value reaches a
+# board.
 #
-# A VACUOUS PASS IS REFUSED. Each sweep set is asserted EQUAL to the byte
-# widths, so a run that observed nothing at all reports an empty set and is red.
+# Each sweep set is asserted EQUAL to the byte widths, so a run that observed
+# nothing at all reports an empty set and is red.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
     message(FATAL_ERROR
@@ -3707,20 +3669,12 @@ add_test(NAME t_bus_size_unit
 # A STALE BUILD TREE REPORTS HERE. Side B globs the generated drivers, so a
 # driver left behind by a deleted suite is an extra name and is red. The repair
 # is a clean configure and never a relaxation of this check.
-# IT TAKES BOTH LINES, AND THE SECOND IS NOT REDUNDANT. They answer two
-# different edits and neither answers the other:
-#
-#   `CONFIGURE_DEPENDS` re-globs at build time and re-runs the configure when
-#   the SET OF MATCHED FILES changes - a suite added, deleted or renamed.
-#
-#   The directory property registers each matched file INDIVIDUALLY, which is
-#   what answers an edit INSIDE a file that already matched. Side A's
-#   membership turns on one line of text, so a suite can join or leave it with
-#   the glob's result set unchanged, and THE GLOB WORD DOES NOT WATCH CONTENT.
-#
-# This is the pairing `cmake/Nim.cmake` already applies to `src/*.nim` for the
-# same reason, and the shape is the general one: a value read at configure time
-# is stale unless the file it was read from is a configure dependency.
+# Both lines are needed and neither answers the other's edit.
+# `CONFIGURE_DEPENDS` re-globs at build time and re-runs the configure when the
+# SET OF MATCHED FILES changes - a suite added, deleted or renamed. The
+# directory property registers each matched file INDIVIDUALLY, which is what
+# answers an edit INSIDE a file that already matched: the glob word does not
+# watch content.
 file(GLOB MCF5307_SUITE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_LIST_DIR}/t_*.nim")
 set_property(DIRECTORY "${PROJECT_SOURCE_DIR}"
@@ -3834,47 +3788,21 @@ message(STATUS
 
 
 # ----------------------------------- THE SECOND SOURCE FOR A TYPED CASE TOTAL.
-# `tests/case_sites.cmake` accepts ONE TYPED figure per suite because a table
-# that gets shorter fails no derived check. What stops an author who meets that
-# red from editing the figure instead of restoring the cases is this block.
+# `tests/case_sites.cmake` accepts one TYPED figure per suite because a table
+# that gets shorter fails no derived check. The second source is `src/` itself:
+# it carries transcripts of runs of these suites, quoted inside the comments
+# that record cycle-mutation and mask-mutation measurements, and a transcript
+# naming a suite and a case count is a figure the driver's number can be held
+# against.
 #
-# THE SECOND SOURCE IS `src/` ITSELF. It carries transcripts of runs of these
-# suites, quoted inside the comments that record cycle-mutation and
-# mask-mutation measurements, and a transcript naming a suite and a case count
-# is a figure the driver's number can be held against. It is not derived from
-# the RUN - both sides are written down - but they are written down in
-# different files, for different reasons, and one of them is production source
-# that a test may not edit. An author moving one to silence a red has to move
-# the other in the same change, and the other is not a test.
+# No suite is named here and no count is typed here, so a transcript added to
+# or removed from `src/` moves this check with it.
 #
-# BOTH ENDS ARE DERIVED, as they are for the wiring check above. Side A is every
-# transcript found by READING `src/`; side B is the figure read out of the
-# GENERATED driver. No suite is named here and no count is typed here, so a
-# transcript added to or removed from `src/` moves this check with it.
-#
-# NO COVERAGE FIGURE IS PRINTED, AND THAT IS DELIBERATE. A count of transcripts
-# found moves in BOTH directions without failing: rewording or line-wrapping a
-# real transcript drops it silently, and prose that merely names a suite beside
-# a number raises it. A number that moves both ways without failing measures the
-# wording of comments and not the coverage it names. What stays is the AGREEMENT
-# GATE below, because it is the half that FAILS: a transcript this scan DOES
-# find and that DISAGREES with the driver's figure stops the configure and names
-# the file, the suite and both numbers.
-#
-# HOW MANY TRANSCRIPTS THE SCAN READS IS DELIBERATELY NOT WRITTEN DOWN HERE.
-# Nothing in the tree reads such a figure, so nothing makes it fail.
-#
-# WHAT IT DOES NOT REACH, STATED SO ITS SILENCE IS NOT READ AS COVERAGE. A suite
-# no transcript names is not covered and this check says nothing whatever about
-# it: the typed figure is still the only guard there. Neither is a suite whose
-# transcript is written in a shape this scan does not read - a figure whose
-# suite is named by an ANAPHOR is outside what any per-line regex can resolve,
-# and widening the scan until it guessed would make it match prose. Nor does it
-# make the transcripts a specification: they are records of past runs, so a
-# DELIBERATE change in a suite's case count makes them red. The repair for that
-# is a NAMED REFERENCE in place of a number, which stays true at every date and
-# leaves this scan nothing to compare. Retyping the driver's figure to agree
-# with a stale transcript is not a repair, and neither is deleting this block.
+# A suite no transcript names is not covered by this check: the typed figure is
+# still the only guard there. The transcripts are records of past runs, not a
+# specification, so a DELIBERATE change in a suite's case count makes them red.
+# The repair is a NAMED REFERENCE in place of the number in `src/`, not
+# retyping the driver's figure to agree with a stale transcript.
 file(GLOB_RECURSE MCF5307_CORE_SOURCES "${PROJECT_SOURCE_DIR}/src/*.nim")
 foreach(mcf5307_core_source IN LISTS MCF5307_CORE_SOURCES)
     # SPLIT BY HAND for the reason `tests/case_sites.cmake` gives at its own
@@ -3895,38 +3823,22 @@ foreach(mcf5307_core_source IN LISTS MCF5307_CORE_SOURCES)
             # name is not a bound: without the left one, `helper_t_alu` answers
             # for `t_alu`.
             #
-            # BOTH ORDERS ARE READ. A transcript may put the number BEFORE the
-            # suite name, and a scan that reads only a number FOLLOWING the name
-            # never sees it - a real total that would then go stale in `src/`
-            # with nothing to say so. The second branch below reads it.
+            # Both orders are read: a transcript may put the number BEFORE the
+            # suite name, and the second branch below reads that shape. It is
+            # bounded on both sides of the name exactly as the first is, and it
+            # requires the word `cases` to FOLLOW the name.
             #
-            # WHAT THE SECOND BRANCH IS NOT ALLOWED TO DO is match a line the
-            # first branch would have rejected as prose. It is bounded on both
-            # sides of the name exactly as the first is, and it requires the
-            # word `cases` to FOLLOW the name, so a sentence that merely holds
-            # a number and a suite name in the same clause is not a figure.
-            #
-            # THE SECOND BRANCH DOES MATCH ORDINARY PROSE, AND IT IS KEPT
-            # ANYWAY. Block numbers, then a backticked suite name, then `cases`
-            # is a shape this codebase writes, and the configure stops on it.
-            #
-            # WHAT WOULD BE TRADED FOR SILENCING IT IS THE REASON IT STAYS. The
-            # only feature separating such a line from a real transcript is
-            # which noun the number counts, and no per-line
-            # regex reads nouns. Every narrowing available here - bounding the
-            # gap between the number and the name, refusing a number that
-            # follows a comma - also rejects transcripts an author may
-            # legitimately write, and a transcript this scan does not reach is
-            # a STALE FIGURE SURVIVING IN `src/` WITH NOTHING TO SAY SO.
+            # The second branch also matches ordinary prose - block numbers,
+            # then a backticked suite name, then `cases` - and is kept anyway.
+            # The only feature separating such a line from a real transcript is
+            # which noun the number counts, and no per-line regex reads nouns.
             # A false positive costs one rewording and prints the line it
-            # matched; a false negative costs nothing and says nothing.
+            # matched; a false negative leaves a stale figure in `src/` with
+            # nothing to say so.
             #
-            # NEITHER BRANCH REACHES A FIGURE WHOSE SUITE IS AN ANAPHOR, and
-            # that limit is stated because it cannot be closed here. No widening
-            # of a per-line regex resolves "that suite", and a window over
-            # adjacent lines does not reach far enough. The repair for that
-            # shape is in the SOURCE: write the suite's name where the number
-            # is.
+            # Neither branch reaches a figure whose suite is named by an
+            # anaphor. The repair for that shape is in the SOURCE: write the
+            # suite's name where the number is.
             set(mcf5307_quoted "")
             if(mcf5307_core_line MATCHES
                     "(^|[^A-Za-z0-9_])${mcf5307_suite}[^A-Za-z0-9_].*[^0-9]([0-9]+) cases")
@@ -4134,42 +4046,18 @@ add_test(NAME abi_smoke COMMAND abi_smoke)
 # `t0_no_local_paths` - no shipped source file names a path that exists on one
 # machine.
 #
-# ONE REGISTERED NAME, AND EACH CASE BELOW CAN FAIL:
+# A scan that read no file at all reports no hit and exits 0, which is the same
+# output a clean tree gives. The negative control fires the instrument in the
+# same run.
 #
-#   1  THE NEGATIVE CONTROL. The scanner runs over a scratch tree this driver
-#      builds, holding one planted home-shorthand reference, one planted
-#      absolute reference and one directory of build output. The case asserts
-#      the WHOLE report and the exit status: both plants are named by file and
-#      by line, the build output is named in the excluded set and nothing
-#      inside it is reported.
-#   2  THE ASSERTION. The scanner runs over `src/`, `tests/` and
-#      `conformance/` of this repository and reports nothing.
+# The planted strings are assembled from character codes, and so are the
+# strings the case expects to read back. `tests/` is one of the scanned
+# directories, so a plant spelled out here would be found in this file.
 #
-# CASE 1 IS WHAT MAKES CASE 2 EVIDENCE. A scan that read no file at all
-# reports no hit and exits 0, which is the same output a clean tree gives. The
-# control fires the instrument in the same run, so a green case 2 is a
-# measurement rather than a silence.
-#
-# THE PLANTED STRINGS ARE ASSEMBLED FROM CHARACTER CODES, and so are the
-# strings the case expects to read back. `tests/` is one of the directories
-# case 2 scans, so a plant spelled out here would be found in this file and
-# case 2 would red on the test that proves case 2 works.
-#
-# THE EXCLUSION IS BY A PROPERTY AND NEVER BY A NAME: a directory that holds
-# `CMakeCache.txt` is build output. The scratch directory case 1 excludes is
-# called `notbuild`, so a scanner that filtered on the name `build` fails the
-# case. The excluded set is printed with the result, so a reader sees what was
-# not searched.
-#
-# CASE 2 ASSERTS THE EXCLUDED SET IS EMPTY, WHICH IS AN ASSERTION AND NOT AN
-# ACCIDENT. This project's build trees are `build/`, `build-asan/` and
-# `../build-mcf5307/`, and none of them is inside a scanned directory. A cache
-# found under `src/`, `tests/` or `conformance/` means a tree was configured
-# where no tree belongs, and the case names it.
-#
-# THE COMPILE HAPPENS INSIDE THE TEST, for the reason `t0_abi_header` gives:
-# a `ctest` run over a tree whose build had failed would otherwise run the
-# stale executable of an earlier build and pass.
+# The exclusion is by a property and never by a name: a directory that holds
+# `CMakeCache.txt` is build output. The scratch directory the control excludes
+# is called `notbuild`, so a scanner that filtered on the name `build` fails
+# the case.
 
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t0_no_local_paths_driver.cmake" [==[
 # GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.

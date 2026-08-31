@@ -39,13 +39,13 @@ type
     opAddx, opSubx, opNegx, opExtb
     opEor, opAndi, opOri, opEori
     opAsl, opAsr, opLsl, opLsr
-    # `opBsr` IS NOT `opBcc` WITH A CONDITION OF 1: `0110 0001 dddddddd`
+    # `opBsr` is not `opBcc` with a condition of 1: `0110 0001 dddddddd`
     # pushes a return address, so an executor that folded it into the
     # conditional arm would branch and never push.
     opBsr
     opJmp, opJsr, opRts, opRte, opTrap
     opCmp, opCmpa, opCmpi
-    # `MOVEC` IS A GROUP OF ONE: it shares no encoding shape, no size field
+    # `MOVEC` is a group of one: it shares no encoding shape, no size field
     # and no effective address with any member above, and
     # `src/mcf5307/movec.nim` is its executor.
     opMovec
@@ -120,27 +120,18 @@ type
     halted*: bool
     fault*: bool
 
-    # THE VECTOR BASE REGISTER. `machine.nim`'s `takeException` is its ONLY
-    # reader, and it reads it through `exception.nim`'s `vectorAddress`, which
-    # is where the rule about the unimplemented low bits lives. The field
-    # holds what was written to it and the mask is applied at the dispatch, so
-    # a reader of this field sees the value the machine was given.
-    #
-    # A FIELD NO DISPATCH CONSULTED WOULD BE INDISTINGUISHABLE FROM NO FIELD
-    # AT ALL, which is why the reader and not the field is what the exception
-    # suite adjudicates.
+    # The vector base register. `machine.nim`'s `takeException` is its only
+    # reader, through `exception.nim`'s `vectorAddress`, which is where the rule
+    # about the unimplemented low bits lives. The field holds what was written
+    # to it and the mask is applied at the dispatch.
     vbr*: uint32                ## the vector base register
 
-    # THE REST OF THE CONTROL REGISTERS THIS PART IMPLEMENTS. `movec.nim`
-    # writes them and NOTHING IN THIS CORE READS THEM: the cache, the access
+    # The rest of the control registers this part implements. `movec.nim`
+    # writes them and nothing in this core reads them: the cache, the access
     # control regions, the on-chip SRAM and the peripheral base are not
-    # modelled, so each holds what was written and changes no behaviour.
-    #
-    # THEY ARE FIELDS ANYWAY, AND THE ALTERNATIVE IS WHAT DECIDES IT. A core
+    # modelled, so each holds what was written and changes no behaviour. A core
     # that dropped the write instead would let firmware configure a register
-    # and report nothing, and the task that gives one of these a meaning would
-    # have no value to give it a meaning ABOUT. The register file publishes
-    # them, so the landing is observable before the behaviour exists.
+    # and report nothing.
     cacr*: uint32               ## the cache control register
     acr0*: uint32               ## access control register 0
     acr1*: uint32               ## access control register 1
@@ -152,7 +143,7 @@ type
     # they live here because the context type lives here and `irq.nim` is above
     # this module.
     #
-    # THE SPLIT INTO A PRESENTED LEVEL AND AN ARMED LATCH IS THE WHOLE MODEL.
+    # The split into a presented level and an armed latch is the whole model.
     # Interrupt levels 1 through 6 are level-sensitive only and level 7 is
     # both level sensitive and edge triggered, so the presented fields are the
     # board's CURRENT presentation and carry no history at all, and the armed

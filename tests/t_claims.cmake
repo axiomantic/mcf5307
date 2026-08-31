@@ -402,17 +402,15 @@ set(CLAIM_reset_edge_clear_suite_t_irq_EDIT_1_REPLACE "")
 # `tests/t_irq.nim` block 15 carries the case the sentence stands on - a level 7
 # armed from INSIDE the acknowledge reaches the core between its take and the
 # handler's first instruction - and block 17 arms it from inside the frame
-# write. THE SENTENCE HAD NO TEST: adding the `continue` once reddened nothing,
-# because no committed fixture raised a second interrupt on that path.
+# write.
 #
-# THE MUTATION IS SPEND-AFTER-TAKE AND IT IS NOT THE INHIBITION FLIP. Setting
+# The mutation is spend-after-take and it is not the inhibition flip. Setting
 # `atHandlerEntry = false` after the take instead of at the clear spends the
-# inhibition EARLY: the sample of the NEXT iteration is admitted, so a second
+# inhibition early: the sample of the next iteration is admitted, so a second
 # pending interrupt lands on an unexecuted handler entry. The flip mutation of
-# `reset_inhibit_suite_t_irq` moves the SAME assignment in the opposite
-# direction and redded SIX cases; this one reds TWO, and they are different
-# wrong cores with different signatures - which is why each carries its own
-# entry rather than sharing one count.
+# `reset_inhibit_suite_t_irq` moves the same assignment in the opposite
+# direction; the two are different wrong cores with different signatures, which
+# is why each carries its own entry.
 set(CLAIM_one_iteration_suite_t_irq_KIND "suite-red")
 set(CLAIM_one_iteration_suite_t_irq_SUITE "t_irq")
 set(CLAIM_one_iteration_suite_t_irq_EXPECT_RED 2)
@@ -428,20 +426,15 @@ set(CLAIM_one_iteration_suite_t_irq_EDIT_1_REPLACE "    if not ctx.atHandlerEntr
 # the address error, which the MCF5307 User's Manual requires of any attempted
 # execution transferring control to an odd instruction address.
 #
-# THE MUTATION DELETES THE REFUSAL AND KEEPS THE ASSIGNMENT, which is the core
-# this repository shipped until the check was written - and that core FAULTS on
+# The mutation deletes the refusal and keeps the assignment. That core faults on
 # every one of these cases too, one instruction later, from the illegal-encoding
-# path, with no frame written. So the entry is registered against a suite whose
-# rows read the HANDLER and the FRAME. A row that asserted `fault == true` would
-# be green under this mutation and the count below would be zero.
+# path, with no frame written, so the entry is registered against a suite whose
+# rows read the handler and the frame. A row that asserted `fault == true` would
+# be green under this mutation.
 #
-# `discard faultPc` KEEPS THE PARAMETER USED. Without it the mutant fails to
+# `discard faultPc` keeps the parameter used. Without it the mutant fails to
 # compile under this project's flag set, and a mutation that does not compile
 # reports nothing.
-#
-# THE COUNT WAS MEASURED against this tree by compiling `t_control` against a
-# mutated copy of `src/`, with the unmutated copy on the same harness reporting
-# 175 passed and 0 red.
 set(CLAIM_address_error_odd_target_suite_t_control_KIND "suite-red")
 set(CLAIM_address_error_odd_target_suite_t_control_SUITE "t_control")
 set(CLAIM_address_error_odd_target_suite_t_control_EXPECT_RED 6)
@@ -454,28 +447,21 @@ set(CLAIM_address_error_odd_target_suite_t_control_EDIT_1_REPLACE "  discard fau
 
 # --- the branch displacement sweep ------------------------------------------
 # `tests/t_bra_displacement.nim` runs every value the displacement byte can
-# hold. IT LANDED GREEN. A suite that was never watched failing is a claim about
-# coverage and not a measurement of it, so the two entries below are what make
-# it one, and each was WATCHED reddening this suite before it was written down.
+# hold.
 #
-# TWO ENTRIES AND NOT ONE, because they are two different wrong cores and the
+# Two entries and not one, because they are two different wrong cores and the
 # sweep separates them differently. Both red the sweep's own comparison; the
-# BASE mutation additionally reds the 16-bit marker row and leaves the ISA_B row
-# green, and the ISA_B mutation does the reverse. A single entry would have been
-# satisfied by either.
+# base mutation additionally reds the 16-bit marker row and leaves the ISA_B row
+# green, and the ISA_B mutation does the reverse.
 #
-# THE BASE MUTATION MOVES THE DISPLACEMENT BASE from the opcode's address plus
+# The base mutation moves the displacement base from the opcode's address plus
 # two to the opcode's address, which is the reading the manual's sentence exists
 # to exclude.
 #
-# THE ISA_B MUTATION ACCEPTS `0xff` as an ordinary byte displacement. The
+# The ISA_B mutation accepts `0xff` as an ordinary byte displacement. The
 # longword form first appeared in ISA_B and this part implements ISA_A; the
 # pinned assembler refuses to assemble `bra.l` under `-mcpu=5307` at all, so no
 # generated corpus case can carry this and only a hand-built word reaches it.
-#
-# BOTH COUNTS WERE MEASURED against this tree by compiling
-# `t_bra_displacement` against a mutated copy of `src/`, with the unmutated copy
-# on the same harness reporting 4 passed and 0 red.
 set(CLAIM_bra_base_suite_t_bra_displacement_KIND "suite-red")
 set(CLAIM_bra_base_suite_t_bra_displacement_SUITE "t_bra_displacement")
 set(CLAIM_bra_base_suite_t_bra_displacement_EXPECT_RED 2)

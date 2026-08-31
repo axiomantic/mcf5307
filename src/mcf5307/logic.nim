@@ -9,14 +9,14 @@
 ## sibling executor. An executor that reaches into another executor for a
 ## helper rebuilds the decoder-under-executor cycle one layer down.
 ##
-## THE SIZE IS LONG AND THE EXCEPTIONS ARE NAMED. Every operation in this group
+## The size is long, with one exception. Every operation in this group
 ## is 32-bit on this part, and `m68k-elf-as -mcpu=5307` confirms by rejecting
 ## `and.b %d0,%d1`, `not.w %d0`, `andi.b #5,%d1` and `lsl.w #1,%d0`. The one
 ## exception is the bit operations, whose operand is 32 bits WHEN IT IS A DATA
 ## REGISTER and 8 bits otherwise - the documented "8,32". Every byte and word
 ## form of everything else TRAPS here.
 ##
-## EVERY SHIFT IS REGISTER-ONLY AND A MEMORY SHIFT TRAPS. The `asl.l`, `asr.l`,
+## Every shift is register-only and a memory shift traps. The `asl.l`, `asr.l`,
 ## `lsl.l` and `lsr.l` timing rows all read `<ea>,Dx` and carry a time under
 ## `Rn` and under `#xxx` ALONE - `1(0/0)` in each - with A DASH under `(An)`,
 ## `(An)+`, `-(An)`, `(d16,An)`, `(d8,An,Xi*SF)` and `xxx.wl`. A shift on this
@@ -30,7 +30,7 @@
 ## its low six bits are mode 000 - a data register - which is not a memory
 ## operand on the 68000 either, so its refusal is not ColdFire's doing.
 ##
-## THE ROTATES ARE GONE TOO: "logical rotate" is among the removed
+## The rotates are gone too: "logical rotate" is among the removed
 ## instructions, and `decode.nim` never produces an operation for them.
 ##
 ## The condition codes, and where each rule comes from.
@@ -58,33 +58,28 @@
 ##       "The overflow bit is always zero". THIS PART COMPUTES NO SHIFT
 ##       OVERFLOW AT ALL.
 ##
-## THE SHIFT IS PERFORMED ONE BIT AT A TIME, ON PURPOSE. A count is at most 63
+## The shift is performed one bit at a time. A count is at most 63
 ## and the loop costs nothing, and it makes the carry rule that is easy to get
 ## wrong in closed form come out by construction: the carry is THE LAST BIT
 ## THAT LEFT THE WORD rather than a bit of the result.
 ##
-## A SHIFT COUNT OF ZERO IS REACHABLE THROUGH THE REGISTER FORM ALONE, because
+## A shift count of zero is reachable through the register form alone, because
 ## the immediate form spends its zero slot on the value eight. It shifts
-## nothing. ONE FLAG HAS A REASON AND THE REST ARE A CHOICE, and the code and
-## this paragraph say the same thing about which is which:
+## nothing. One flag has a reason and the rest are a choice:
 ##
 ##   2. The status word of a shift by zero.
 ##
-##   N, Z, V AND C ARE WRITTEN ANYWAY - N and Z from the unmoved operand, V
-##   and C cleared - AND THAT IS THIS MODULE'S CHOICE AND NOT A RULE ANY
-##   document on this machine states. It is undecided, the code still has to
-##   do something, and what it does is written here so that a reader is not
-##   left to infer it.
+##   N, Z, V and C are written anyway - N and Z from the unmoved operand, V and
+##   C cleared - and that is this module's choice and not a rule any document
+##   on this machine states.
 ##
-## CYCLES. See the block above the constants in `cpu.nim`; uncertainty 2 below
-## is this group's entry. Every instruction here has a timing row, and none of
+## CYCLES. See the block above the constants in `cpu.nim`. Every instruction here has a timing row, and none of
 ## the returns here was derived from one. Many of those rows carry `1(0/0)` in
 ## every cell they carry at all - `not.l Dx`, the `#imm,Dx` immediate rows, and
 ## the shifts, which are timed under `Rn` and `#xxx` and dashed everywhere else
 ## - against the 4 and 6 returned.
 ##
-## WHAT THIS MODULE DOES NOT KNOW, and the rule for every entry is the same:
-## THE IMPLEMENTATION PICKS A BEHAVIOUR.
+## What this module does not know. The implementation picks a behaviour.
 ##
 ##   3. Whether a dynamic BTST may read an immediate operand. User's Manual
 ##      Table 3-13, page 3-28, dashes the `#xxx` column of the `btst Dy,<ea>`
@@ -93,20 +88,19 @@
 ##      the assembler's acceptance is the 68000's rule rather than this part's,
 ##      is on `eaBitDynamic` in `decode_types.nim`.
 ##
-##      Two tables of the one manual disagree. Table 3-5 on page 3-21,
-##      "Effective Addressing Modes and Categories", marks Immediate `#<xxx>`
-##      with an `x` in the DATA column. A dynamic BTST reads its operand, so
-##      the DATA class is its class, and that column restores the immediate
-##      the timing table dashes. Cutting the other way, Table 3-7 on page 3-23
-##      gives BTST's operand syntax as `Dy,<ea>x`, and the `x` suffix is the
-##      manual's destination mark - `CLR <ea>x` is "0 -> Destination" and
-##      `CMP <ea>y,Dx` is "Destination - Source" - which an immediate cannot
-##      be.
+##      Two tables of the same reference disagree. The addressing-mode
+##      category table marks Immediate `#<xxx>` with an `x` in the DATA column.
+##      A dynamic BTST READS its operand, so the DATA class is its class, and
+##      that column RESTORES the immediate the timing table dashes. Cutting the
+##      other way, the instruction summary gives BTST's operand syntax as
+##      `Dy,<ea>x`, and the `x` suffix is the DESTINATION mark - `CLR <ea>x` is
+##      "0 -> Destination" and `CMP <ea>y,Dx` is "Destination - Source" - which
+##      an immediate cannot be.
 ##
 ##      This is the one entry on this list that a future reader may have to
 ##      REVERSE rather than merely fill in.
 ##
-##   4. THE BIT NUMBER'S MODULUS. `execBitOp` reduces the number modulo the
+##   4. The bit number's modulus. `execBitOp` reduces the number modulo the
 ##      operand width - 32 for a data register, 8 for memory. The reference
 ##      gives the WIDTHS ("8,32") and states no modulus anywhere. The closest
 ##      thing does not carry the weight: its `BIT` row reads "BIT (0 <= MODULO
@@ -229,8 +223,7 @@ proc execImmediate(ctx: MCF5307Ctx; d: Decoded): uint32 =
   6'u32
 
 proc execNot(ctx: MCF5307Ctx; d: Decoded): uint32 =
-  ## NOT.L Dn. THE MEMORY FORMS OF THE 68000 ARE GONE, AND THE REFERENCE IS
-  ## WHAT SAYS SO. The `not.l` timing row carries `Dx` in the `<EA>` column,
+  ## NOT.L Dn. The memory forms of the 68000 are gone. The `not.l` timing row carries `Dx` in the `<EA>` column,
   ## `1(0/0)` under `Rn`, and A DASH under every one of `(An)`, `(An)+`,
   ## `-(An)`, `(d16,An)`, `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`. The `clr.l` and
   ## `tst.l` rows of the same table carry times in those same columns, so the
@@ -257,9 +250,9 @@ proc execNot(ctx: MCF5307Ctx; d: Decoded): uint32 =
 proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## One bit operation, in either of its two forms.
   ##
-  ## THE OPERAND WIDTH DECIDES THE WIDTH OF THE ACCESS, AND THE REFERENCE
-  ## GIVES BOTH WIDTHS. A data register operand is 32 bits and every memory
-  ## operand is 8 bits AND THE ACCESS IS ONE BYTE - the documented "8,32",
+  ## The operand width decides the width of the access. A data register operand
+  ## is 32 bits and every memory operand is 8 bits, and the access is one byte -
+  ## the documented "8,32",
   ## which is carried by the bit operations and by no other instruction in this
   ## group. A core that read or wrote a
   ## longword in memory here would answer a different question and would also
@@ -267,11 +260,11 @@ proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ##
   ## The modulus below is a choice and not a citation. Taking the bit number
   ## modulo the operand width - 32 for a register, 8 for memory - is what this
-  ## core does with a number that does not fit, and NO PASSAGE OF THE
-  ## REFERENCE STATES IT. It is uncertainty 4 in this module's header, which
-  ## says why the `MODULO (OFFSET)` annotation does not settle it.
+  ## core does with a number that does not fit, and no passage of the reference
+  ## states it. The header says why the `MODULO (OFFSET)` annotation does not
+  ## settle it.
   ##
-  ## THE STATIC FORM IS NARROWER THAN THE DYNAMIC ONE. `eaBitStatic` is its
+  ## The static form is narrower than the dynamic one. `eaBitStatic` is its
   ## mask and the measurement behind it is beside that constant; the dynamic
   ## form reads the ordinary per-operation mask.
   let mask = if d.regOperand: eaLegalityFor(d.op) else: eaBitStatic
@@ -300,8 +293,7 @@ proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
   #
   # The immediate is not one of them. `eaBitDynamic` excludes it, so the mask
   # check above refuses `btst %d1,#5` before either evaluator is reached. See
-  # that constant in `decode_types.nim` for the rows behind it, and
-  # uncertainty 3 in this module's header for what would overturn it.
+  # that constant in `decode_types.nim` for the rows behind it.
   #
   # The fix belongs here and not in `eaResolve`. Widening that procedure would
   # let a write reach a PC-relative or an immediate operand, and the three bit
@@ -349,10 +341,9 @@ proc execShift(ctx: MCF5307Ctx; d: Decoded): uint32 =
   if d.size != 4'u8:
     return trap(ctx)
   # An immediate count is 1 to 8, which the encoding itself fixes. A register
-  # count is taken modulo 64, and that number is a choice, not a citation.
-  # Table 3-7 gives the four shifts as `X/C <- (Dy << Dx) <- 0` and the two
-  # right-hand forms and STATES NO MODULUS, and no other passage of the
-  # User's Manual does either. It is uncertainty 5 in this module's header.
+  # count is taken modulo 64, and that number is a choice, not a citation: the
+  # reference gives the shifts as `X/C <- (Dy << Dx) <- 0` and the two
+  # right-hand forms and states no modulus anywhere.
   #
   # The modulus is treated as a property of the shift unit rather than of the
   # operand width, so a count of 40 shifts a 32-bit register 40 times and
@@ -368,7 +359,7 @@ proc execShift(ctx: MCF5307Ctx; d: Decoded): uint32 =
     if toLeft:
       carry = (before and 0x80000000'u32) != 0'u32
       value = before shl 1
-      # NO OVERFLOW IS COMPUTED FOR ASL. V is given a flat "Always cleared",
+      # No overflow is computed for ASL. V is given a flat "Always cleared",
       # with the note that CCR[V] is always cleared by ASL and ASR, unlike on
       # the 68K family processors, and the prose adds "The overflow bit is
       # always zero". The clearing at the foot of this proc is the whole rule.

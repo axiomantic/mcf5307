@@ -6,11 +6,10 @@
 ## all "how the machine is touched". What each opcode means is the job of the
 ## instruction-group modules, and none of that is here.
 ##
-## The helpers live here rather than in one executor because a second executor
-## needs the same register file, the same board accesses and the same
-## effective-address evaluation. `alu.nim` importing `move.nim` for them would
-## put an executor under another executor. The helpers are pure functions over
-## the shared types, so they belong beside those types, not beside one caller.
+## `alu.nim` importing `move.nim` for the shared helpers would put an executor
+## under another executor, which is the same shape as the decoder-under-executor
+## cycle. The helpers are pure functions over the shared types, so they live
+## beside those types and not beside one caller.
 ##
 ## This module sits at the `decode_types` level. It reads the shared types and
 ## it names no executor and no decoder:
@@ -48,15 +47,12 @@ import mcf5307/exception
 # 18 upwards the control registers - 18 = vbr, 19 = cacr, 20 = acr0,
 # 21 = acr1, 22 = rambar0, 23 = rambar1, 24 = mbar.
 #
-# THE CONTROL REGISTERS ARE NOT PART OF THE REGISTER FILE, AND THEY ARE HERE
-# BECAUSE THIS INDEX SPACE IS THE ONLY CHANNEL A HOST HAS. `MOVEC` is the
-# machine's own way to write them and it reaches nothing outside a running
-# program; a host that must place the machine at a vector table the firmware
-# has not filled yet has no other door, and a test that must see where a
-# `MOVEC` put its value has none either. The MOVEM mask never names an index
-# above 15, so widening this view does not widen that instruction.
+# The control registers are not part of the register file. They are here
+# because this index space is the only channel a host has: `MOVEC` reaches
+# nothing outside a running program. The MOVEM mask never names an index above
+# 15, so widening this view does not widen that instruction.
 #
-# 17 STAYS READ-ONLY THROUGH `regFileSet` AND THE CONTROL REGISTERS DO NOT. The
+# 17 stays read-only through `regFileSet` and the control registers do not. The
 # program counter is written by `mcf5307_reset`, which is the entry point that
 # owns it.
 
@@ -551,19 +547,15 @@ proc eaRefWrite*(ctx: MCF5307Ctx; r: EaRef; size: uint8; value: uint32) =
   of erNone: discard
 
 # ---------------------------------------------------------------------------
-# The exception stack frame.
+# The exception stack frame. It is here and not in `control.nim` because the
+# exception model, the bus-fault channel, interrupts and `control.nim`'s own
+# format-error path all need the same frame, and `exception.nim` is a sibling
+# of `control.nim`.
 #
-# It is here and not in `control.nim` because more than one executor needs it:
-# the exception model, the bus-fault channel, interrupts and `control.nim`'s
-# own format-error path. An executor that reached into another executor for it
-# would be the decoder-under-executor inversion one layer down.
-#
-# It is the minimum `TRAP` needs and not the exception model. There is no
-# vector table object, no fault-status computation and no double-fault
-# handling.
+# There is no vector table object, no fault-status computation and no
+# double-fault handling; this procedure is what those extend.
 
-# THE BITS NAMED HERE ARE THE ONES THIS MODULE'S OWN `takeException` WRITES OR
-# PRESERVES, and `srMaster` sits with them because a status-register
+# `srMaster` sits with the bits `takeException` writes because a status-register
 # bit position is a fact about the register and not about the exception that
 # happens to clear it.
 const
@@ -592,14 +584,14 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## Stack a two-longword exception frame, then load the program counter from
   ## the vector table.
   ##
-  ## THE STATUS REGISTER IS COPIED BEFORE IT IS CHANGED: "the processor makes
+  ## The status register is copied before it is changed: "the processor makes
   ## an internal copy of the SR and then enters supervisor mode by setting the
   ## S-bit and disabling trace mode by clearing the T-bit". The COPY is what
   ## reaches the frame; the modified word is what the handler runs under. The
   ## M-bit and the interrupt priority mask are changed only by an INTERRUPT
   ## exception, so nothing here touches them.
   ##
-  ## THE FRAME IS TWO LONGWORD WRITES AND NOT SIX BYTEWISE PUSHES. It is drawn
+  ## The frame is two longword writes and not six bytewise pushes. It is drawn
   ## as two longwords - the format/vector word above the status register, then
   ## the program counter - and `trap #imm` costs `18(1/2)`: ONE read, the
   ## vector, and TWO writes. The instruction summary spells the same thing as
@@ -612,11 +604,10 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## by `4 x vector_number`. This core has no VBR: the context holds no such
   ## field, and `MOVEC` - the only way to write one - is not implemented.
   ##
-  ## THE READ BELOW IS THE ONLY READER OF `ctx.vbr`, AND THAT IS WHAT MAKES
-  ## THE FIELD MEAN ANYTHING. A core that stored the value and dispatched from
-  ## zero would answer every read-back correctly and take every exception to
-  ## the wrong handler, so `t_exception`'s block 7 adjudicates on the handler
-  ## address it lands on and never on the value it reads back.
+  ## The read below is the only reader of `ctx.vbr`. A core that stored the
+  ## value and dispatched from zero would answer every read-back correctly and
+  ## take every exception to the wrong handler, so the suite adjudicates on the
+  ## handler address it lands on and never on the value it reads back.
   ##
   ## A fault inside this procedure is a double fault. Each access is checked
   ## and the procedure returns early, leaving the context halted with `fault`;
@@ -643,12 +634,10 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   # during the first instruction of all exception handlers." `mcf5307_exec`
   # reads this field at its sample and clears it.
   #
-  # It is written here, after the program counter, and that position is the
-  # whole of the rule's reach. Every exception this core takes ends on this
-  # line, so no exception path can acquire the rule and none can be forgotten
-  # by it. A flag set by `execTrap` instead would be a rule about TRAP. The
-  # reset is not a counterexample: it does not run through this procedure at
-  # all, it writes the field itself, and `cpu.nim` says why.
+  # It is written here, after the program counter: every exception this core
+  # takes ends on this line, so no exception path can acquire the rule and none
+  # can be forgotten by it. A flag set by `execTrap` instead would be a rule
+  # about TRAP.
   #
   # A take that faulted does not set it, because each early return above is
   # ahead of this line and a machine that never reached a handler is not at
@@ -710,22 +699,19 @@ proc transferControl*(ctx: MCF5307Ctx; target: uint32; faultPc: uint32) =
   ## its section 11.1.3 names a table of processor exceptions that the revision
   ## does not carry, so nothing in it says what raises this one.
   ##
-  ## IT IS A FUNNEL AND NOT A CHECK PER EXECUTOR, for the reason the note above
-  ## `atHandlerEntry` gives about its own line: a rule spelled once at the
-  ## single site every control transfer passes through cannot be acquired by
-  ## one branch form and forgotten by another. The alternative - a test beside
-  ## each `ctx.pc = target` - is silent for whichever executor is added next.
+  ## It is a funnel and not a check per executor: a test beside each
+  ## `ctx.pc = target` is silent for whichever executor is added next.
   ##
-  ## THE STACKED PROGRAM COUNTER IS THE TRANSFERRING INSTRUCTION'S, not the odd
+  ## The stacked program counter is the transferring instruction's, not the odd
   ## address and not the instruction after it: vector 3 is marked `Fault` in
   ## the vector assignments, and "fault refers to the PC of the instruction
   ## that caused the exception".
   ##
-  ## `fsInstructionFetch` IS THE FAULT STATUS. The field is defined for access
+  ## `fsInstructionFetch` is the fault status. The field is defined for access
   ## and address errors, and `0100` - "error on instruction fetch" - is the one
   ## defined code naming the access this exception exists to refuse.
   ##
-  ## THE PROGRAM COUNTER LOADED BY `takeException` ITSELF IS NOT CHECKED HERE,
+  ## The program counter loaded by `takeException` itself is not checked here,
   ## and a vector table entry with bit 0 set therefore still enters a handler
   ## at an odd address. The manual puts that case in the fault-on-fault halted
   ## state, which this core has no representation for yet; routing the handler

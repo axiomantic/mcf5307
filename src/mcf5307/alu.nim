@@ -28,11 +28,10 @@
 ##
 ## CYCLES. The block above the constants in `cpu.nim` says why nothing checks
 ## any of them. `adda.l`, `suba.l`, `rems.l` and `remu.l` have no timing row at
-## all, and that was established by FULL ENUMERATION of the timing pages rather
-## than by looking at neighbours: THE OPCODE COLUMN IS NOT ALPHABETICAL, so a
-## gap between neighbours proves nothing. Those opcodes have no timing source
-## rather than a flattened one. `control.nim` records the same absence for
-## CMPA, established the same way.
+## all, established by full enumeration of the timing pages rather than by
+## looking at neighbours: the opcode column is not alphabetical, so a gap
+## between neighbours proves nothing. `control.nim` records the same absence for
+## CMPA.
 ##
 ## The REMx forms do not inherit the divide row. This module models them as
 ## behaviour of their own inside `execDiv` - an unequal register pair writes
@@ -299,9 +298,9 @@ proc execMulWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## MULU.W and MULS.W: `16 x 16 -> 32`, one instruction word, no extension.
   ##
   ## In the word form the multiplier and multiplicand are both word operands
-  ## and the result is a longword operand. A REGISTER OPERAND IS THE LOW-ORDER
-  ## WORD; THE UPPER WORD OF THE REGISTER IS IGNORED. ALL 32 BITS OF THE
-  ## PRODUCT ARE SAVED in the destination data register.
+  ## and the result is a longword operand. A register operand is the low-order
+  ## word; the upper word of the register is ignored. All 32 bits of the product
+  ## are saved in the destination data register.
   let src = eaRead(ctx, d.ea, 2)
   if ctx.halted: return 0'u32
   let dst = regD(ctx, d.destReg)
@@ -323,7 +322,7 @@ proc execMulWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
     else:
       uint32(srcW) * uint32(dstW)
   setRegD(ctx, d.destReg, res)
-  # V AND C ARE CLEARED AND N AND Z COME FROM ALL 32 BITS, which is the same
+  # V and C are cleared and N and Z come from all 32 bits, which is the same
   # rule the long form uses and for the same reason: there is ONE
   # condition-code table for both sizes, printed above the WORD instruction
   # format, so it governs both.
@@ -350,8 +349,8 @@ proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
   let src = eaRead(ctx, d.ea, 4)
   if ctx.halted: return 0'u32
   let dst = regD(ctx, dl)
-  # V IS ALWAYS CLEARED, AND THAT IS THE REFERENCE'S OWN WORD RATHER THAN AN
-  # INFERENCE. MULS and MULU each give V "Always cleared" in the condition-code
+  # V is always cleared, and that is the reference's own word rather than an
+  # inference. MULS and MULU each give V "Always cleared" in the condition-code
   # table, and each add that CCR[V] is always cleared by MULS/MULU, unlike the
   # 68K family processors. The longword form carries no condition-code table of
   # its own, so the word-form table governs this 32-bit form too. C is
@@ -375,8 +374,8 @@ proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
   10'u32
 
 const divWordCycles = 20'u32
-  ## `divs.w`/`divu.w <ea>,Dx` reads `20(0/0)` under `Rn` AND under `#xxx`. THE
-  ## EQUALITY IS NOT A MODEL - the rest of the row is `23(1/0)` for the memory
+  ## `divs.w`/`divu.w <ea>,Dx` reads `20(0/0)` under `Rn` and under `#xxx`. The
+  ## equality is not a model - the rest of the row is `23(1/0)` for the memory
   ## modes, `24(1/0)` for `(d8,An,Xi*SF)` and `23(1/0)` for `xxx.wl`.
 
 proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
@@ -384,9 +383,9 @@ proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## both halves of the answer packed into Dx.
   ##
   ## For a word-sized operation the destination operand is a longword and the
-  ## source is a word; THE 16-BIT QUOTIENT IS IN THE LOWER WORD AND THE 16-BIT
-  ## REMAINDER IS IN THE UPPER WORD of the destination. THE SIGN OF THE
-  ## REMAINDER IS THE SAME AS THE SIGN OF THE DIVIDEND.
+  ## source is a word; the 16-bit quotient is in the lower word and the 16-bit
+  ## remainder is in the upper word of the destination. The sign of the
+  ## remainder is the same as the sign of the dividend.
   let src = eaRead(ctx, d.ea, 2)
   if ctx.halted: return 0'u32
   # The divisor is the low word and the mask is load-bearing. `eaRead` hands
@@ -394,8 +393,8 @@ proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # `0x00010000` would divide by 65536 instead of trapping on a zero divisor.
   let divisor = uint16(src and 0xFFFF'u32)
   if divisor == 0'u16:
-    # A DIVIDE BY ZERO IS EXCEPTION VECTOR 5 AT VECTOR OFFSET 0x014, of class
-    # Fault. NO REGISTERS ARE AFFECTED and the stack frame points at the
+    # A divide by zero is exception vector 5 at vector offset 0x014, of class
+    # Fault. No registers are affected and the stack frame points at the
     # offending opcode.
     #
     # There is no exception model yet, so this halts with `fault` - the channel
@@ -485,10 +484,10 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
     return trap(ctx)
   let dividend = regD(ctx, dq)
   if signed and dividend == 0x80000000'u32 and src == 0xFFFFFFFF'u32:
-    # THE ONE SIGNED DIVISION OVERFLOW. The most negative value has no
-    # positive counterpart, so the quotient does not exist. THE OPERANDS ARE
-    # UNCHANGED and the status word is fully determined: V set, C cleared, AND
-    # N AND Z CLEARED. DIVS, DIVU, REMS and REMU all read "N Cleared if
+    # The one signed division overflow. The most negative value has no
+    # positive counterpart, so the quotient does not exist. The operands are
+    # unchanged and the status word is fully determined: V set, C cleared, and
+    # N and Z cleared. DIVS, DIVU, REMS and REMU all read "N Cleared if
     # overflow is detected; otherwise ..." and "Z Cleared if overflow is
     # detected; otherwise ...", with "V Set if an overflow occurs" and "C
     # Always cleared". X is "Not affected" and is the one bit that survives.
@@ -508,7 +507,7 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
   else:
     quotient = dividend div src
     written = if dr == dq: quotient else: dividend mod src
-  # COLDFIRE'S REMx.L PRODUCES THE REMAINDER ONLY. An unequal register pair
+  # ColdFire's REMx.L produces the remainder only. An unequal register pair
   # is `REMU.L`/`REMS.L` here and `DIVUL`/`DIVSL` on the 68020, and the
   # 68020 instruction also writes the quotient into Dq. Writing Dq here
   # would corrupt the dividend a following instruction still reads.

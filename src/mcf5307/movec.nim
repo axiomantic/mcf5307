@@ -1,11 +1,9 @@
 ## `movec` - the `MOVEC` encoding, the privilege rule, the control-register map
 ## and the group's executor.
 ##
-## THE MAP AND THE EXECUTOR ARE BOTH HERE, AND THE SPLIT INSIDE THE FILE IS
-## WHAT MATTERS. Everything above `movecFamily` is a function of the
-## instruction stream and of the status register, so it can be asserted value
-## by value without a machine to run. `movecFamily` is the one procedure that
-## needs a context.
+## Everything above `movecFamily` is a function of the instruction stream and
+## of the status register; `movecFamily` is the one procedure that needs a
+## context.
 ##
 ## Nothing here writes a control register: the value the instruction carries is
 ## discarded. The one consequence a reader must not miss is that
@@ -20,7 +18,7 @@
 import mcf5307/decode_types
 import mcf5307/machine
 
-# THE OPCODE WORD IS AN EQUALITY AND NOT A MASK: line 4 is dense here, and
+# The opcode word is an equality and not a mask: line 4 is dense here, and
 # `0x4E7A` is a word this part must refuse rather than a `MOVEC` variant.
 
 const movecOpcodeWord* = 0x4E7B'u16
@@ -51,7 +49,7 @@ type
     ## The control registers this part implements, and one member for every
     ## other number.
     ##
-    ## THE SET IS THE PART'S AND NOT THE FAMILY'S. A member for a register the
+    ## The set is the part's and not the family's. A member for a register the
     ## part does not have would be a destination nothing can reach and a decode
     ## that looks successful.
     crUnimplemented
@@ -63,7 +61,7 @@ proc controlRegisterFor*(rc: uint16): ControlRegister =
   ## the 68040, and `0x800` is USP on the 68040 and names no register of this
   ## part.
   ##
-  ## RAMBAR1 AT `0xC05` IS ACCEPTED RATHER THAN TREATED AS A DECODE ERROR: the
+  ## RAMBAR1 at `0xC05` is accepted rather than treated as a decode error: the
   ## firmware writes that number in genuine code. `crRambar0` carries the
   ## family spelling of `0xC04` because that spelling distinguishes the two.
   case rc
@@ -91,15 +89,15 @@ proc movecFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   ## Execute one `MOVEC`. Returns the cycles the execution pipe spent, 0 for an
   ## instruction that did not run.
   ##
-  ## THE PRIVILEGE IS TESTED BEFORE THE EXTENSION WORD IS FETCHED, AND THE
-  ## ORDER IS A DECISION THE MANUALS DO NOT SETTLE. `fetchExt` can itself take
+  ## The privilege is tested before the extension word is fetched, and the
+  ## order is a decision the manuals do not settle. `fetchExt` can itself take
   ## an ACCESS ERROR, so fetching first would let
   ## an instruction the core is about to refuse for privilege report the wrong
   ## exception instead. The stacked program counter is the same either way,
   ## so an `RTE` from the handler re-executes the whole instruction and
   ## re-reads the word this path did not.
   if movecPrivilegeViolation(ctx.sr):
-    # THE STACKED PROGRAM COUNTER IS THIS INSTRUCTION AND NOT THE NEXT ONE.
+    # The stacked program counter is this instruction and not the next one.
     # `step` has already advanced the pc past the opcode word, so the faulting
     # address is one word back.
     takeException(ctx, vecPrivilegeViolation, ctx.pc - insWordBytes)
@@ -107,8 +105,8 @@ proc movecFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   let ext = fetchExt(ctx)
   if ctx.halted:
     return 0'u32
-  # THE MAP IS CONSULTED ONCE AND THE REFUSAL AND THE STORE BOTH READ THAT ONE
-  # ANSWER. Two calls would be two decodes of one instruction, and a later
+  # The map is consulted once and the refusal and the store both read that one
+  # answer. Two calls would be two decodes of one instruction, and a later
   # change to `controlRegisterFor` could then be refused by one and accepted by
   # the other.
   let destination = controlRegisterFor(movecControlField(ext))
@@ -120,15 +118,15 @@ proc movecFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
     # report nothing.
     ctx.halted = true
     return 0'u32
-  # THE SOURCE IS THE REGISTER THE EXTENSION WORD NAMES, ACROSS BOTH FILES. The
+  # The source is the register the extension word names, across both files. The
   # A/D bit selects the file and Ry selects within it, so an implementation
   # that read a data register whatever the encoding said would move the wrong
   # value for every `movec Ay,Rc` the firmware issues.
   let source =
     if movecSourceIsAddressRegister(ext): regA(ctx, movecSourceRegister(ext))
     else: regD(ctx, movecSourceRegister(ext))
-  # THE VALUE IS STORED AS WRITTEN AND IS NOT MASKED HERE. VBR's unimplemented
-  # low bits are dropped by `exception.nim` AT THE DISPATCH, so a reader of the
+  # The value is stored as written and is not masked here. VBR's unimplemented
+  # low bits are dropped by `exception.nim` at the dispatch, so a reader of the
   # field sees what the machine was given rather than what one consumer of it
   # makes of the value; the other registers have no consumer to mask for.
   case destination

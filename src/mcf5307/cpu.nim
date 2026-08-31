@@ -18,7 +18,7 @@
 ##
 ## `decode` and the executors are level-2 siblings. Neither imports the other.
 ##
-## TO ADD AN INSTRUCTION GROUP: write the new executor module beside
+## To add an instruction group: write the new executor module beside
 ## `move.nim` and `alu.nim`, add one `import` line here, and add one arm to
 ## the `case decoded.op` below. A shared helper a second executor needs goes
 ## DOWN into `mcf5307/machine`, not sideways into another executor.
@@ -49,27 +49,24 @@ import mcf5307/irq
 # The cycle counts, and why nothing checks them. Stated once here; the four
 # executor modules point at this block instead of repeating it.
 #
-# `mcf5307_exec` REPORTS THE COST OF EVERYTHING THAT RAN, AND MAY THEREFORE
-# RETURN MORE THAN THE BUDGET IT WAS GIVEN. The loop tests the budget only
+# `mcf5307_exec` reports the cost of everything that ran, and may therefore
+# return more than the budget it was given. The loop tests the budget only
 # BEFORE a step, so the last instruction of a call has already retired when the
 # budget is found to be spent; there is nothing left to decline. A caller that
 # passes a budget of 1 gets the whole cost of the one instruction that ran -
 # `nopCycles + fetchCycles` for a NOP - and 0 for one that trapped.
 #
-# THE OVERRUN IS BOUNDED BY ONE INSTRUCTION AND BY NOTHING ELSE. The return is
+# The overrun is bounded by one instruction and by nothing else. The return is
 # at most `maxCycles` plus the cost of the single instruction that crossed the
 # budget, so a caller carrying the difference forward carries a bounded
 # quantity. `tests/t_exec_budget.nim` pins the exact return for every budget in
 # a sweep, and pins it against a cost it MEASURES rather than transcribes.
 #
-# WHY IT IS NOT CLAMPED, WHICH IT WAS. A clamp made the return no greater than
-# the budget for every call, so a consumer computing `spent - want` got a
-# floor-of-zero difference that could never be anything but zero, and an
-# overrun the machine really took was invisible to it. The clamped return also
-# flattened to 0-or-1 at a budget of 1, which reads like a counter and is not
-# one. What is returned now is not a cycle-ACCURATE count either - the numbers
-# below and in the executors are this core's own, and the paragraph after next
-# says where they did not come from - but it is at least the sum of them.
+# The return is not clamped to the budget: a clamp gives a consumer computing
+# `spent - want` a floor-of-zero difference that can never be anything but
+# zero, and hides an overrun the machine really took. It is not a
+# cycle-accurate count either - the numbers below and in the executors are this
+# core's own - but it is the sum of them.
 #
 # How to read any number here or in an executor. None was derived from the
 # manual, and the split into a fetch cost plus an executor return is this
@@ -131,10 +128,9 @@ proc mcf5307_reset*(ctx: MCF5307Ctx; initialSp: uint32; initialPc: uint32)
   ctx.sr = 0x2700'u32
   ctx.halted = false
   ctx.fault = false
-  # THE CONTROL REGISTERS, TO THE VALUES THE MANUAL GIVES THEM AT RESET.
+  # The control registers, to the values the manual gives them at reset.
   #
-  # TWO OF THE SEVEN ARE STATED OUTRIGHT AND FIVE ARE NOT, AND THE DIFFERENCE
-  # IS WHY THIS COMMENT EXISTS. The MCF5307 User's Manual gives the vector base
+  # The MCF5307 User's Manual gives the vector base
   # register `$00000000` at reset (section 3.7's reset exception) and says a
   # hardware reset CLEARS the CACR (section 5.5). The ACRs, the RAMBARs and the
   # MBAR are weaker: the manual guarantees only that the enable or valid bit is
@@ -143,7 +139,7 @@ proc mcf5307_reset*(ctx: MCF5307Ctx; initialSp: uint32; initialPc: uint32)
   # reading for the ACRs - reset "places 0's in all CACR and ACR bits" - and
   # the manual therefore disagrees with itself about those two.
   #
-  # ZERO IS CHOSEN FOR ALL FIVE, AND THE ALTERNATIVE IS WHAT DECIDES IT. Zero
+  # Zero is chosen for all five. Zero
   # satisfies every documented constraint, including the weak ones: the enable
   # and valid bits are the low bit or bit 15 of their registers and zero clears
   # them. Leaving the undocumented bits at whatever the previous run wrote
@@ -165,20 +161,16 @@ proc mcf5307_reset*(ctx: MCF5307Ctx; initialSp: uint32; initialPc: uint32)
   ctx.pendingFaultStatus = 0'u32
   ctx.pendingStackedSr = 0'u32
   ctx.pendingStackedPc = 0'u32
-  # THE RESET EXCEPTION IS AN EXCEPTION, SO ITS FIRST INSTRUCTION IS INHIBITED
-  # LIKE EVERY OTHER HANDLER'S. The instruction at `initialPc` is the first
-  # instruction of an exception handler, and interrupt sampling is inhibited
-  # during the first instruction of every exception handler.
-  #
-  # The write has to be here because this call does not route through
-  # `takeException`, which is where every other exception in this core acquires
-  # the field.
+  # The instruction at `initialPc` is the first instruction of an exception
+  # handler, and interrupt sampling is inhibited during the first instruction of
+  # every exception handler. The write has to be here because this call does not
+  # route through `takeException`, which is where every other exception in this
+  # core acquires the field.
   #
   # `true` and not `false`: the reset acquires its own inhibition, and the
   # instruction that spends it is the one this call has just installed. With
-  # `false` the core could take an interrupt at the reset program counter
-  # before retiring a single instruction, which is the state the sentence above
-  # forbids.
+  # `false` the core could take an interrupt at the reset program counter before
+  # retiring a single instruction.
   ctx.atHandlerEntry = true
   # The level-7 edge latch is cleared and the pin is then re-observed;
   # `resetInterruptEdge` in `mcf5307/irq.nim` carries the argument. The board's
@@ -257,15 +249,14 @@ proc step(ctx: MCF5307Ctx): uint32 =
   of opMoveFromSr, opMoveFromCcr, opMoveToCcr, opMoveToSr:
     result = fetchCycles + systemControlFamily(ctx, opWord, decoded)
   of opExg, opTas, opNbcd:
-    # EXG, TAS AND NBCD ARE NOT ON THIS PART, so nothing decodes them. The arm
+    # EXG, TAS and NBCD are not on this part, so nothing decodes them. The arm
     # is kept rather than deleted because the enum members are reachable
     # through `eaLegalityFor` and a `case` over `Operation` must be exhaustive.
     # `halted` is set and `fault` is not, because an encoding that never
     # arrives here is not an illegal one.
     #
-    # AN UNREACHABLE-OPCODE NOTE IS THE SHAPE THAT MAKES A LIVE DEFECT LOOK
-    # LIKE A PROPERTY OF THE SILICON, so a sweep confirming that no arm
-    # produces an opcode is not evidence that the part lacks it.
+    # A sweep confirming that no arm produces an opcode is not evidence that
+    # the part lacks it.
     ctx.halted = true
     result = 0
   of opIllegal:
@@ -291,8 +282,8 @@ proc mcf5307_exec*(ctx: MCF5307Ctx; maxCycles: uint32): uint32
     return 0
   var spent = 0'u32
   while spent < maxCycles and not ctx.halted:
-    # THE INTERRUPT IS SAMPLED AT AN INSTRUCTION BOUNDARY AND AT NO OTHER
-    # POINT. The part takes a pending interrupt within one instruction
+    # The interrupt is sampled at an instruction boundary and at no other
+    # point. The part takes a pending interrupt within one instruction
     # boundary after any higher-priority exception, so it executes at least
     # one instruction of an interrupt handler before recognizing another
     # request; and sampling is inhibited during the first instruction of every
@@ -305,6 +296,11 @@ proc mcf5307_exec*(ctx: MCF5307Ctx; maxCycles: uint32): uint32
     # exception taken inside `step` returns here with the machine at a
     # handler's entry and `halted` false, so the sample at the top of the next
     # iteration would land on an instruction that has not run.
+    #
+    # THE SAMPLE AND THE `step` BELOW ARE ONE ITERATION. Making the take
+    # `continue` instead is an equivalent loop rather than a defect: the take's
+    # own `atHandlerEntry` inhibits the sample the extra iteration would make.
+    # What the one iteration still buys is stated at the clear below.
     #
     # The clear sits between the sample and the `step`, and each of its two
     # neighbours is a reason for that position. Ahead of `step` it cannot wipe
@@ -332,7 +328,7 @@ proc mcf5307_exec*(ctx: MCF5307Ctx; maxCycles: uint32): uint32
       break
     if cost == 0'u32:
       break
-    # THE INSTRUCTION HAS ALREADY RETIRED, SO ITS WHOLE COST IS SPENT. The
+    # The instruction has already retired, so its whole cost is spent. The
     # `while` above is the only place the budget is tested, and it is tested
     # BEFORE a step and never after one: nothing here can un-run the step that
     # has just happened, so a clamp at `maxCycles` would report less than the

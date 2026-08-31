@@ -90,12 +90,10 @@
 ## Cycles. Nothing checks any of them, and the numbers are not a transcription
 ## of the tables.
 ##
-##   Four are exact, each of them a row carrying a single cell that the one
-##   return equals. `execScc` returns 1 and Table 3-12, folio 3-27, gives
-##   `scc Dx` 1(0/0); `execRts` returns 8 and Table 3-15, folio 3-30, gives
-##   `rts` 8(1/0); `execRte` returns 14 and the same table gives `rte` 14(2/0);
-##   `execTrap` returns 18 and Table 3-14, folio 3-29, gives `trap #imm`
-##   18(1/2).
+##   Exact - a row carrying a SINGLE cell that the one return equals, so no
+##   effective address can pull them apart. `execScc` returns 1 and `scc Dx` is
+##   1(0/0); `execRts` returns 8 and `rts` is 8(1/0); `execRte` returns 14 and
+##   `rte` is 14(2/0); `execTrap` returns 18 and `trap #imm` is 18(1/2).
 ##
 ##   Three are flattened across the effective address. `execJump` returns 5 for
 ##   every operand; Table 3-15 gives `jmp`/`jsr` 5 for `(An)` and `(d16,An)`
@@ -134,21 +132,19 @@
 ##   vary between 1 to 3 cycles depending on the amount of decoupling" between
 ##   the two pipelines.
 ##
-##   A table's rows and its notes can end on different folios, and a second
-##   table on the same subject can follow the notes. A citation to a table read
-##   on one page is not complete until the next page has been read.
+##   A table's rows and its notes can end on different pages, and a second
+##   table on the same subject can follow the notes.
 ##
-## WHAT THIS MODULE DOES NOT KNOW, and the rule for every entry is the one
-## `logic.nim` established: THE IMPLEMENTATION PICKS A BEHAVIOUR AND THIS LIST
-## SAYS SO.
+## What this module does not know. The implementation picks a behaviour and
+## this list says so.
 ##
-##   1. THE BOOLEAN TEST OF EACH CONDITION. The four-bit ENCODING is measured
+##   1. The boolean test of each condition. The four-bit ENCODING is measured
 ##      and is not in doubt: `m68k-elf-as -mcpu=5307` put `bhi` at 0x62, `bls`
 ##      at 0x63, `bcc` at 0x64, `bcs` at 0x65, `bne` at 0x66, `beq` at 0x67,
 ##      `bvc` at 0x68, `bvs` at 0x69, `bpl` at 0x6a, `bmi` at 0x6b, `bge` at
 ##      0x6c, `blt` at 0x6d, `bgt` at 0x6e and `ble` at 0x6f, and `st` at
-##      0x50c0 and `sf` at 0x51c0. THE TESTS THEMSELVES ARE THE M68000 FAMILY
-##      DEFINITION AND NO DOCUMENT ON THIS MACHINE STATES THEM. The available
+##      0x50c0 and `sf` at 0x51c0. The tests themselves are the M68000 family
+##      definition and no document on this machine states them. The available
 ##      sources give the condition-code BITS and name the wildcard `cc` as
 ##      "Logical Condition (example: NE for not equal)", and print no table of
 ##      the tests anywhere.
@@ -168,11 +164,10 @@
 ##   3. The exact cycle count of every instruction in this group. `cpu.nim`
 ##      states the mechanism once, above its cycle constants.
 ##
-##   4. What an `RTE` with a bad format field should do. Section 3.5.7, "RTE
-##      and Format Error Exceptions", page 3-16, is unambiguous that it
-##      "generates a format error", which Table 3-1 on page 3-13 places at
-##      vector 14 with a stacked program counter of "Fault" - the address of
-##      the RTE itself. This module traps instead. A trap is this core's one
+##   4. What an `RTE` with a bad format field should do. The reference is
+##      unambiguous that it "generates a format error", placed at vector 14
+##      with a stacked program counter of "Fault" - the address of the RTE
+##      itself. This module traps instead, because a trap is this core's one
 ##      observable for "the core refused", the same channel every illegal size
 ##      and illegal operand in every group uses; `alu.nim`'s header makes the
 ##      identical statement about a divide by zero. What `tests/t_control.nim`

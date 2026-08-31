@@ -6,20 +6,19 @@
 ## overwrites them whole, which is what makes the call idempotent without a
 ## comparison against a previous value.
 ##
-## THE ONE PIECE OF HISTORY THE CORE DOES KEEP IS THE LEVEL-7 EDGE. Interrupt
+## The one piece of history the core does keep is the level-7 edge. Interrupt
 ## levels 1 through 6 are level-sensitive only. Level 7 is nonmaskable, so a 7
 ## in the interrupt mask does not disable it, and it is edge triggered by a
 ## transition from a lower priority request to the level 7 request - so a held
 ## IRQ7 is recognized once, because only one such transition occurred.
 ##
 ## This module implements the edge half of level 7 and not the level half,
-## which is a deliberate divergence from the manual. The rule here is
-## edge-only: an edge arms one interrupt, a held level arms no second one, and
-## the core clears the latch when it takes the interrupt. Section 7.6.1's
-## second numbered sequence describes a case that rule cannot produce - a
-## handler that lowers the interrupt mask sees a second level 7 interrupt "even
-## though no transition has occurred on the interrupt control pins". No level-7
-## source is programmed in this project, so nothing here can reach the
+## which is a deliberate divergence. The rule is edge-only: an edge arms one
+## interrupt, a held level arms no second one, and the core clears the latch
+## when it takes the interrupt. That rule cannot produce the case where a
+## handler which LOWERS the interrupt mask sees a second level 7 interrupt
+## "even though no transition has occurred on the interrupt control pins". The
+## G2 programs no level-7 source, so nothing in this project can reach the
 ## difference.
 ##
 ## The order inside `takeInterrupt` is the manual's four steps, and the
@@ -88,19 +87,18 @@ proc resetInterruptEdge*(ctx: MCF5307Ctx) =
   ## What a RESET does to the level-7 edge latch: clear it, then re-observe the
   ## pin.
   ##
-  ## THIS IS AN INFERENCE AND NOT A CITATION, AND THE SOURCES ARE SILENT RATHER
-  ## THAN BRIEF. The reset exception's effects name no pending-interrupt state,
-  ## and level 7's trigger type is given without any mention of reset. Two
-  ## arguments stand in for the quotation this procedure does not have, and they
-  ## pull in opposite directions, which is why it does two things and not one:
+  ## This is an inference and not a citation. The reset exception's effects name
+  ## no pending-interrupt state, and level 7's trigger type is given without any
+  ## mention of reset. Two arguments pull in opposite directions, which is why
+  ## it does two things and not one:
   ##
   ##   The clear. RSTI resets every register in the SIM and every peripheral
   ##   (folio 8-10) and the entire device including the PLL (folio 7-40). There
   ##   is no silicon that does all of that and preserves a one-bit edge-history
   ##   flop inside the core's own recognition logic.
   ##
-  ##   THE RE-OBSERVATION, WITHOUT WHICH THE CLEAR ALONE DROPS AN INTERRUPT REAL
-  ##   HARDWARE TAKES. The level 7 request on IRQ7 must be held until the second
+  ##   The re-observation, without which the clear alone drops an interrupt real
+  ##   hardware takes. The level 7 request on IRQ7 must be held until the second
   ##   interrupt-acknowledge bus cycle has begun for the interrupt to be
   ##   recognized. A latched edge whose pin has since been released therefore
   ##   has nothing left for an acknowledge cycle to acknowledge, and keeping it
@@ -161,7 +159,7 @@ proc pendingInterrupt*(ctx: MCF5307Ctx): tuple[take: bool, level: int,
   ## level 7 with no armed latch is not an interrupt at all - that is the
   ## state a held level 7 is in after the core has taken it.
   ##
-  ## LEVELS 1 TO 6 ARE TESTED AGAINST THE PRESENTATION AND NOTHING ELSE.
+  ## Levels 1 to 6 are tested against the presentation and nothing else.
   ## Interrupt requests are inhibited for all priority levels less than or equal
   ## to the current priority, so the test is STRICTLY GREATER THAN. A `>=` here
   ## would take a level the hardware inhibits, and a mask of 7 would then stop
