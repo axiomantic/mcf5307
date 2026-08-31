@@ -1,20 +1,17 @@
 /* t0_abi_header.c - case 3 of the registered test `t0_abi_header`.
  *
- * THE DECLARED SURFACE IS ASSERTED BY MECHANISM AND NOT BY PROSE, and the
- * two mechanisms are different failures on purpose:
+ * The two mechanisms are different failures on purpose:
  *
  *   - one `_Static_assert` for each declared TYPE, so a deleted or renamed
  *     type is a COMPILE error;
- *   - EIGHTEEN ADDRESS-OF EXPRESSIONS, written out below as a FIXED LIST and
+ *   - eighteen address-of expressions, written out below as a FIXED LIST and
  *     not derived from what the header happens to hold, so a MISSING
  *     declaration is a compile error and a RENAMED one is a LINK error
  *     against `abi_stub.c`.
  *
- * THE FIXED LIST IS THE POINT. An assertion written as "one address-of
+ * The fixed list is the point. An assertion written as "one address-of
  * expression for each declared function" takes its assertion set from the
  * artifact under test, so a header missing four declarations satisfies it.
- * The eighteen names below come from the plan's table and from nowhere else,
- * and the count of address-of expressions is eighteen.
  *
  * Each pointer also carries the EXACT declared signature, so a changed
  * parameter type or a changed return type is an initialisation diagnostic

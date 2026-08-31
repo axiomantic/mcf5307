@@ -1,48 +1,34 @@
-/* tests/abi_smoke.cpp - the application binary interface smoke test (CPU-3).
+/* tests/abi_smoke.cpp - the application binary interface smoke test.
  *
- * ONE TEST, TWO ASSERTIONS, AND EACH ONE CAN FAIL.
+ * Two assertions, and each one can fail.
  *
- * (1) THE LINK ITSELF. The test takes the address of every function that
+ * (1) The link itself. The test takes the address of every function that
  *     `include/mcf5307.h` declares AND the library actually defines. A
  *     renamed definition, a definition that lost its `exportc` name, or a
  *     declaration that lost its `extern "C"` block is a link error here,
- *     NOT a warning, and the test fails BEFORE `main` runs. That is the
- *     assertion - the executable does not build is the failure mode, and
- *     the test never needs to say so in a message.
+ *     NOT a warning, and the test fails BEFORE `main` runs.
  *
- * (2) THE TWICE-CALL. The test calls `mcf5307_runtime_init()` TWICE and
+ * (2) The twice-call. The test calls `mcf5307_runtime_init()` twice and
  *     asserts both calls return. The function is documented as idempotent;
- *     a re-entrant call that crashes is a regression in the runtime, and
- *     a re-entrant call that does nothing is the whole point of the
- *     function. C++ never names `NimMain`; the C names are the whole
- *     contract.
+ *     a re-entrant call that crashes is a regression in the runtime. C++
+ *     never names `NimMain`; the C names are the whole contract.
  *
- * THIS TEST LINKS THE REAL LIBRARY AND NO STUB. That is what separates it
- * from `t0_abi_header`, whose cases 3 and 4 link the whole eighteen-name
- * surface against `tests/abi_stub.c` and are the check that the CONTRACT is
- * linkable. This test is the check that the LIBRARY is, so its address set
- * is the set of published names the library defines - measured by the
- * configure step, not written out here. A name no compilation unit defines
- * cannot be renamed and cannot be dropped, so taking its address here would
- * assert nothing and would only make the link fail.
+ * This test links the real library and no stub. `t0_abi_header` cases 3 and 4
+ * link the whole eighteen-name surface against `tests/abi_stub.c` and are the
+ * check that the CONTRACT is linkable; this is the check that the LIBRARY is.
+ * Its address set is therefore the set of published names the library defines,
+ * measured by the configure step and not written out here. A name no
+ * compilation unit defines cannot be renamed and cannot be dropped, so taking
+ * its address here would assert nothing and would only make the link fail.
  *
- * THE ADDRESS SET IS GENERATED AND IT GROWS ON ITS OWN. `tests/tests_cpu.cmake`
- * writes `abi_smoke_implemented.h` into the build tree from the same measured
- * set the visibility gate reports, so every later task that implements a
+ * The address set is generated and it grows on its own.
+ * `tests/tests_cpu.cmake` writes `abi_smoke_implemented.h` into the build tree
+ * from the same measured set the visibility gate reports, so implementing a
  * published name brings that name under this test with no edit to this file
  * and no edit to the registration list.
  *
- * The test asserts NO CORE BEHAVIOUR. It does not exercise
- * `mcf5307_create`, `mcf5307_exec`, `isp1181_read`, or any other entry point
- * whose semantics belong to a later task. Asserting no core behaviour is
- * what makes this test right at this task's completion and still right
- * after every later task that supersedes the implementation.
- *
- * The address-taking is the only way to make a rename a fail. The C++
- * translation unit reads no field of any function pointer, and the linker
- * is what turns a missing symbol into a build error. The test is C++17
- * clean, links against the `mcf5307` static library, and exits 0 on
- * success.
+ * The test asserts no core behaviour, so it stays right across every later
+ * change to the implementation.
  */
 
 #include <cstddef>

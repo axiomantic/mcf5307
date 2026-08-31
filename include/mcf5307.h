@@ -1,17 +1,16 @@
 /* mcf5307.h - the C application binary interface of the MCF5307 ColdFire core
  * and the ISP1181 USB device model.
  *
- * THIS HEADER IS THE CONTRACT AND IT IS REVIEWED AS ONE. The Nim
- * implementation exports these symbols with `{.exportc, cdecl.}` and both
- * sides include this file. C++ owns the board and calls down into this
+ * The Nim implementation exports these symbols with `{.exportc, cdecl.}` and
+ * both sides include this file. C++ owns the board and calls down into this
  * interface; nothing here calls up into C++ except through the C function
  * pointers the board installs at construction time.
  *
- * WHAT CROSSES: fixed-width integers, opaque pointers to context objects
+ * What crosses: fixed-width integers, opaque pointers to context objects
  * allocated on the other side, raw byte buffers with an explicit length, and
  * `cdecl` C function pointers.
  *
- * WHAT NEVER CROSSES: a Nim `string`, `seq`, `ref` or any garbage-collected
+ * What never crosses: a Nim `string`, `seq`, `ref` or any garbage-collected
  * type; a C++ object, reference or virtual table; a Nim closure; and an
  * exception, in either direction. A fault is reported as a plain integer
  * value through an out-parameter, and never as a thrown object.
@@ -19,11 +18,6 @@
  * The two state calls exist so that a scheduler can take a snapshot. The
  * snapshot is a flat byte block of a fixed size with a version word in it,
  * and it holds no pointer.
- *
- * MIT licensed and clean-room with respect to GPL and LGPL code. Register
- * addresses, bit layouts, access widths and opcode encodings are facts about
- * Motorola silicon; the authority to implement from is the Motorola manual
- * set and this project's own measurements.
  */
 
 #ifndef MCF5307_H
@@ -62,7 +56,7 @@ typedef enum {
 
 /* The board's two memory handlers.
  *
- * `status` IS AN OUT-PARAMETER ON BOTH, and the core writes
+ * `status` is an out-parameter on both, and the core writes
  * `MCF5307_BUS_OK` into it before every call. A board that models no fault
  * behaves exactly as it did before the parameter existed: silence means
  * success. A board that writes a non-OK value also logs the address, the
@@ -116,10 +110,10 @@ uint32_t mcf5307_exec(mcf5307_ctx* ctx, uint32_t max_cycles);
  * IDEMPOTENT, so a board may call it unconditionally after every
  * recomputation.
  *
- * FOR LEVELS 1 TO 6 THE CORE LATCHES NOTHING: the arguments of the last call
+ * For levels 1 to 6 the core latches nothing: the arguments of the last call
  * are the whole truth until the next call, exactly as hardware compares a
  * level on a pin, and deasserting is a call with a lower level or with
- * `MCF5307_IRQ_NONE`. LEVEL 7 IS DIFFERENT - it is edge-triggered and
+ * `MCF5307_IRQ_NONE`. Level 7 is different - it is edge-triggered and
  * non-maskable on this part, so the core latches a rising edge to level 7,
  * a level 7 held across two calls arms no second interrupt, and the core
  * clears the latch when it takes the interrupt. */
@@ -134,7 +128,7 @@ void mcf5307_state_load(mcf5307_ctx* ctx, const void* src);
 
 typedef struct isp1181_ctx isp1181_ctx;
 
-/* The LOGICAL interrupt state of the device, and NOT the pin state. 1 means
+/* The logical interrupt state of the device, and NOT the pin state. 1 means
  * the device requests service and 0 means it does not. The board owns the
  * inversion to the active-low pin, not this model. The source is
  * level-triggered: it stays 1 until the firmware clears the condition inside
@@ -153,7 +147,7 @@ void isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
 /* Advances the USB frame counter and the SOFTCT timer by `sof_frames` USB
  * Start-of-Frame frames.
  *
- * ONE SOF FRAME IS 1 ms. THE UNIT IS NOT THE 96 kHz AUDIO FRAME. At a 96 kHz
+ * One SOF frame is 1 ms. The unit is NOT the 96 kHz audio frame. At a 96 kHz
  * frame rate and a scheduler quantum of one audio frame, one SOF frame spans
  * 96 quanta, and the board calls this with `sof_frames` = 1 once for each
  * virtual millisecond. */

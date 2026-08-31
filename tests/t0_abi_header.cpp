@@ -7,7 +7,7 @@
  * what makes a rename a link error here too rather than a mangled symbol
  * nobody looks for.
  *
- * THE C++ BUILD IS WHAT MAKES THE FORBIDDEN LIST TESTABLE. A C++ reference
+ * The C++ build is what makes the forbidden list testable. A C++ reference
  * parameter, a namespace, a template, an overload, a C++ object or a
  * reference in the header is either a syntax error in the C build of case 3
  * or a diagnostic under `-Wall -Wextra -pedantic -Werror` in one of the two.

@@ -1,8 +1,6 @@
-# CMake drives Nim. Task CPU-1 creates this file.
-#
-# The repository ships Nim source plus build integration, and never a prebuilt
-# `.a`. Design section 20.1 gives six integration steps. This file runs them in
-# that order, at configure time, and reports each one by number.
+# CMake drives Nim. The repository ships Nim source plus build integration, and
+# never a prebuilt `.a`. Six integration steps run here, in order, and each one
+# reports itself by number.
 #
 #   1  Read `.nim-version`, run `nim --version`, fail the configure step on a
 #      mismatch and print both versions.
@@ -16,11 +14,6 @@
 # The steps run at configure time and not at build time. Steps 4 and 5 need the
 # unit list to declare their targets, and a CMake target's source list is fixed
 # when the target is declared.
-#
-# `.nim-version` is read here and owned by CPU-25. The root `CMakeLists.txt` is
-# owned by CPU-26 and carries one `include()` of this file.
-#
-# MIT licensed and clean-room with respect to GPL and LGPL code.
 
 # ---------------------------------------------------------------------------
 # A shell-safe rendering of a command list.
@@ -69,10 +62,7 @@ function(mcf5307_clip mcf5307_clip_output mcf5307_clip_text mcf5307_clip_limit)
 endfunction()
 
 # ---------------------------------------------------------------------------
-# Step 1. The version pin.
-#
-# Design section 5.7 rule 2. Both known audio-Nim precedents broke at a major
-# version. The pin is therefore exact, and a mismatch fails the configure step
+# Step 1. The version pin. It is exact, and a mismatch fails the configure step
 # instead of raising a warning.
 
 find_program(MCF5307_NIM_EXECUTABLE nim REQUIRED
@@ -143,11 +133,9 @@ message(STATUS
 # ---------------------------------------------------------------------------
 # Step 2. The compile-only run of the C backend.
 #
-# The flag set is mandated. It holds no `--checks:off` and no `-d:danger`. With
-# `-d:release` alone the run-time checks stay compiled in. Removing them turns
-# a defect that ends the process into a defect that returns a wrong value and
-# exits 0. A wrong answer with exit status 0 inside a CPU core is the one
-# outcome this design refuses. Design sections 5.6 and 20.1.
+# The flag set holds no `--checks:off` and no `-d:danger`. With `-d:release`
+# alone the run-time checks stay compiled in. Removing them turns a defect that
+# ends the process into a defect that returns a wrong value and exits 0.
 
 set(MCF5307_NIMCACHE "${PROJECT_BINARY_DIR}/nimcache")
 set(MCF5307_NIM_HEADER "mcf5307_nim.h")
@@ -158,10 +146,9 @@ set(MCF5307_NIM_HEADER "mcf5307_nim.h")
 # different set proves nothing about the library the set governs.
 set(MCF5307_NIM_FLAGS --mm:arc --panics:on -d:release)
 
-# The Nim entry modules of this project. Design section 5.5 keeps the
-# one-project convention and the list holds one name today. A second Nim
-# library appends its name here and writes its own command below, with its own
-# `--nimMainPrefix:` value. Step 2a reads this list.
+# The Nim entry modules of this project. A second Nim library appends its name
+# here and writes its own command below, with its own `--nimMainPrefix:` value.
+# Step 2a reads this list.
 set(MCF5307_NIM_ENTRIES mcf5307)
 
 # Each entry module's source file and its command are written out, and neither
@@ -180,31 +167,29 @@ set(MCF5307_NIM_COMMAND_mcf5307
     "${MCF5307_NIM_SOURCE_mcf5307}")
 
 # ---------------------------------------------------------------------------
-# Step 2a. The prefix check. Task CPU-2 adds this block.
+# Step 2a. The prefix check.
 #
 # `--nimMainPrefix:` renames the Nim runtime entry point of one Nim project.
 # Two Nim projects in one binary that keep the default names collide on
-# `NimMain`, `NimMainInner` and `NimMainModule` at link. THE FLAG IS WHAT
-# PREVENTS THAT COLLISION AND NOTHING IN THIS FILE ENFORCED IT.
+# `NimMain`, `NimMainInner` and `NimMainModule` at link.
 #
-# WHY THE FAULT MUST BE CAUGHT HERE. With the flag deleted the configure step
-# succeeds, the build succeeds and the archive is written, all without one
-# diagnostic: a static archive tolerates an undefined symbol, so
-# `libmcf5307.a` then carries an undefined `mcf5307_NimMain` beside an
-# unprefixed `NimMain`, and nothing fails until a consumer's final link, in a
-# different repository, at a later time. The configure step is the last place
-# at which the fault is still local to this project.
+# With the flag deleted the configure step succeeds, the build succeeds and the
+# archive is written, all without one diagnostic: a static archive tolerates an
+# undefined symbol, so `libmcf5307.a` then carries an undefined
+# `mcf5307_NimMain` beside an unprefixed `NimMain`, and nothing fails until a
+# consumer's final link, in a different repository, at a later time. The
+# configure step is the last place at which the fault is still local to this
+# project.
 #
 # The check has three steps and only the second one is fatal.
 #
 #   1  count the entry modules
 #   2  assert that every entry module's command carries a `--nimMainPrefix:`
-#      and that no two prefixes are equal - FAILS THE CONFIGURE STEP
-#   3  when the count is above one, print one line that names the departure
-#      from the one-project convention and the build integration it costs -
-#      DOES NOT FAIL THE CONFIGURE STEP
+#      and that no two prefixes are equal - fails the configure step
+#   3  when the count is above one, print one line that names the build
+#      integration a second entry module costs - does not fail
 #
-# IT READS THE COMMANDS AND NOT A SEPARATE DECLARATION OF INTENT. The command
+# It reads the commands and not a separate declaration of intent. The command
 # above is the text that runs, so a check that read anything else could pass
 # over a command that had lost the flag.
 
@@ -261,7 +246,7 @@ foreach(entry IN LISTS MCF5307_NIM_ENTRIES)
         "--nimMainPrefix:${MCF5307_NIM_PREFIX_${entry}}")
 endforeach()
 
-# Check step 3. The one-project convention. IT IS A NOTE AND NOT A FAILURE.
+# Check step 3. A note and not a failure.
 if(MCF5307_NIM_ENTRY_COUNT GREATER 1)
     message(STATUS
         "mcf5307: step 2a NOTE: this build declares ${MCF5307_NIM_ENTRY_COUNT} "
@@ -273,10 +258,7 @@ if(MCF5307_NIM_ENTRY_COUNT GREATER 1)
 endif()
 
 # ---------------------------------------------------------------------------
-# Steps 2 to 6 build the one library of the one-project convention. The note of
-# check step 3 names the integration a second entry module would need.
-#
-# THE ENTRY MODULE THEY BUILD IS THE FIRST ONE IN MCF5307_NIM_ENTRIES, and the
+# Steps 2 to 6 build the FIRST entry module in MCF5307_NIM_ENTRIES, and the
 # note above says exactly that. A name written out here instead would make the
 # note false as soon as the list held a second name. The pass or the failure of
 # this file would then depend on the order of that list alone.
@@ -294,9 +276,9 @@ set(MCF5307_NIM_BUILT_PREFIX "${MCF5307_NIM_PREFIX_${MCF5307_NIM_BUILT_ENTRY}}")
 mcf5307_render_command(MCF5307_NIM_COMMAND_TEXT ${MCF5307_NIM_COMMAND})
 message(STATUS "mcf5307: nim invocation: ${MCF5307_NIM_COMMAND_TEXT}")
 
-# The contract header. It is CPU-0's file, it is read here and it is never
-# written here. The name is set at this point because the line below has to
-# name it, and step 4a reads the same variable.
+# The contract header. It is read here and never written here. The name is set
+# at this point because the line below has to name it, and step 4a reads the
+# same variable.
 set(MCF5307_ABI_CONTRACT_FILE "${PROJECT_SOURCE_DIR}/include/mcf5307.h")
 
 # Editing a configure-time INPUT must re-run the configure step. Three files
@@ -307,11 +289,11 @@ set(MCF5307_ABI_CONTRACT_FILE "${PROJECT_SOURCE_DIR}/include/mcf5307.h")
 #   `.nim-version`     step 1 compares it against the compiler.
 #   `include/mcf5307.h` step 4a reads the published set out of it.
 #
-# THE CONTRACT HEADER WAS MISSING FROM THIS LIST. Measured before the repair:
-# an edit to `include/mcf5307.h` did not re-run the configure step, so step 4a
-# kept its verdict about a version of the contract that no longer existed, the
-# build exited 0, and no diagnostic named the stale read. An edit to
-# `src/mcf5307.nim` did re-run it, which is what made the gap hard to see.
+# Drop the contract header from this list and an edit to it does not re-run the
+# configure step: step 4a then keeps its verdict about a version of the
+# contract that no longer exists, the build exits 0, and no diagnostic names
+# the stale read. An edit to `src/mcf5307.nim` does re-run it, which is what
+# makes that gap hard to see.
 file(GLOB_RECURSE MCF5307_NIM_SOURCES CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/src/*.nim")
 set_property(DIRECTORY "${PROJECT_SOURCE_DIR}"
@@ -493,8 +475,7 @@ message(STATUS
 add_library(mcf5307_nim_objs OBJECT ${MCF5307_NIM_C_SOURCES})
 
 # The generated C is a build product and is not this project's own source. Two
-# mechanisms hold it apart from this project's warning policy. This text
-# replaces a comment that claimed the separation and supplied neither.
+# mechanisms hold it apart from this project's warning policy.
 #
 #   `SYSTEM` marks the Nim library directory as a system include directory, so
 #   a warning raised inside `nimbase.h` is suppressed.
@@ -505,17 +486,13 @@ add_library(mcf5307_nim_objs OBJECT ${MCF5307_NIM_C_SOURCES})
 #   `digitsutils.nim.c` raises `variable 'T1_' set but not used`, and the build
 #   fails.
 #
-# THE FLAG IS `-Wno-error` AND NOT `-w`. The requirement is to stop a
-# consumer's `-Werror` from failing a build over code this project compiles
-# and does not author. `-w` would also delete the diagnostics themselves.
-# Measured with `-Wall -Wextra -Werror`: both flags build clean, `-Wno-error`
-# leaves the warnings in the build log and `-w` leaves none there. A count is
-# not written here, because an edit to `src/mcf5307.nim` changes it. A silent
-# warning channel over the one body of code nobody here reviews is the worse
-# trade.
+# The flag is `-Wno-error` and not `-w`. Measured with `-Wall -Wextra -Werror`:
+# both build clean, `-Wno-error` leaves the warnings in the build log and `-w`
+# leaves none there. A silent warning channel over the one body of code nobody
+# here reviews is the worse trade.
 #
-# The collision is scheduled and not hypothetical. `tests/tests_cpu.cmake`
-# already compiles with `-Wall -Wextra -pedantic -Werror`.
+# `tests/tests_cpu.cmake` already compiles with `-Wall -Wextra -pedantic
+# -Werror`.
 target_include_directories(mcf5307_nim_objs SYSTEM PRIVATE
     "${MCF5307_NIM_LIB_DIR}")
 target_compile_options(mcf5307_nim_objs PRIVATE
@@ -528,21 +505,16 @@ set_target_properties(mcf5307_nim_objs PROPERTIES
 # `std/typedthreads`, which is what that setting puts there.
 #
 # The generated runtime names no thread function of its own. `nm` over the
-# archive reports zero matches for `pthread`. The positive control of that zero
-# is another symbol of the same run, and it is not a count of that symbol: the
-# same `nm` command reports matches for `__tlv_bootstrap`, so the command did
-# read the archive. A count is not written here. An edit to `src/mcf5307.nim`
-# changes it, and the `{.threadvar.}` in that file already put
-# `__tlv_bootstrap` into a further object.
-#
-# Nim's own link command in the JSON build file carries `-ldl` and no
-# `-lpthread`. The thread-local storage the runtime uses goes through the
-# platform's own mechanism.
+# archive reports zero matches for `pthread` and matches for
+# `__tlv_bootstrap`, so the command did read the archive. Nim's own link
+# command in the JSON build file carries `-ldl` and no `-lpthread`. The
+# thread-local storage the runtime uses goes through the platform's own
+# mechanism.
 #
 # The dependency is kept and is not required. A host that holds the thread
-# functions in a separate library needs the flag once a later cpu task creates
-# a thread. A host without a thread library configures today, because nothing
-# in the current object set calls into one.
+# functions in a separate library needs the flag once something here creates a
+# thread. A host without a thread library configures today, because nothing in
+# the current object set calls into one.
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads)
 if(TARGET Threads::Threads)
@@ -554,40 +526,40 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # ---------------------------------------------------------------------------
 # Step 4a. The visibility gate.
 #
-# WHAT THE GATE PROTECTS. The delivery form is a JUCE plugin, and a plugin is a
-# shared object. Every symbol `include/mcf5307.h` publishes must leave that
-# shared object with default visibility. Nim decides that in the pragma set of
-# the declaration. Measured on Nim 2.2.10, `{.exportc, cdecl.}` alone gives a
-# hidden symbol, and `dynlib` added to the set gives a visible one.
+# The delivery form is a JUCE plugin, and a plugin is a shared object. Every
+# symbol `include/mcf5307.h` publishes must leave that shared object with
+# default visibility. Nim decides that in the pragma set of the declaration.
+# Measured on Nim 2.2.10, `{.exportc, cdecl.}` alone gives a hidden symbol, and
+# `dynlib` added to the set gives a visible one.
 #
 # `nm` over the static archive reports a hidden symbol exactly as it reports a
-# visible one, and the smoke test of CPU-3 links statically. The shared object
-# is the first artifact that tells the two apart, so this step builds one.
+# visible one. The shared object is the first artifact that tells the two
+# apart, so this step builds one.
 #
-# HOW THE GATE MEASURES IT. It asks two tools, and it parses no C of its own.
+# The gate asks two tools and parses no C of its own.
 #
-#   THE PUBLISHED SET COMES FROM A C COMPILER. A generated translation unit
+#   The published set comes from a C compiler. A generated translation unit
 #   includes the contract header. `-Xclang -ast-dump=json` prints the syntax
 #   tree of that unit, and this file reads the function and object declarations
-#   out of the tree. A C parser decides what the C means.
+#   out of the tree.
 #
-#   THE EXPORTED SET COMES FROM THE LINKER. This file builds a shared object
+#   The exported set comes from the linker. This file builds a shared object
 #   from the generated C units and reads its symbol table with `nm`. That is
 #   the delivery-form property itself and not an opinion about it.
 #
 # The verdict is a comparison of sets. A published name that the shared object
 # defines and does not export is a fault. A published name that the shared
 # object does not define at all is NOT a fault, and the report keeps the two
-# apart. A later cpu task writes those definitions.
+# apart.
 #
-# THE GATE KNOWS NOTHING ABOUT `N_LIB_EXPORT`, `N_LIB_EXPORT_VAR` OR
+# The gate knows nothing about `N_LIB_EXPORT`, `N_LIB_EXPORT_VAR` or
 # `N_LIB_PRIVATE`. Those macros are one Nim release's way to write a visibility
 # attribute. The linker reports the result of the attribute, so the gate reads
 # the result and never the macro. A Nim release that renames the macros changes
 # nothing here.
 #
-# WHY THE READER THIS BLOCK REPLACES HAD TO GO. It parsed C with regular
-# expressions. Measured, seven ordinary shapes defeated it:
+# A regular expression over the header text cannot do this job. Seven ordinary
+# shapes defeat one, in both directions:
 #
 #   struct mcf5307_ctx* mcf5307_peek(void);          dropped in silence
 #   struct isp1181_ctx *isp1181_peek(void);          dropped in silence
@@ -599,12 +571,10 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 #                                                    published `uint32_t`
 #   extern uint32_t mcf5307_lo, mcf5307_hi;          lost `mcf5307_lo`
 #
-# It was wrong in both directions, and its own guard caught only a statement it
-# could not classify. It never caught one it classified WRONGLY. A compiler
-# handles all seven by construction, and the calibration below proves that on
-# every configure run rather than in a review comment.
+# A compiler handles all seven by construction, and the calibration below
+# proves that on every configure run.
 #
-# `include/mcf5307.h` belongs to CPU-0. It is read here and never written here.
+# `include/mcf5307.h` is read here and never written here.
 
 # ---------------------------------------------------------------------------
 # The escape hatch, and why it is loud.
@@ -614,9 +584,8 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # did not find, because a check that quietly does not run is the fault this
 # whole block exists to end.
 #
-# `-DMCF5307_ABI_GATE=OFF` configures such a host. It prints a WARNING on every
-# configure run. The build is then a build whose published symbols nobody
-# measured, and the warning says so in those words.
+# `-DMCF5307_ABI_GATE=OFF` configures such a host, and prints a warning on
+# every configure run.
 set(MCF5307_ABI_GATE ON CACHE BOOL
     "Measure the visibility of every published symbol at configure time")
 
@@ -691,17 +660,17 @@ file(MAKE_DIRECTORY "${MCF5307_ABI_DIR}")
 # It writes a translation unit that includes one header, asks the parser for
 # the syntax tree of that unit, and folds the tree.
 #
-# THE UNIT CARRIES TWO SENTINEL DECLARATIONS, one before the include and one
+# The unit carries two sentinel declarations, one before the include and one
 # after it. They are the per-read control of the file attribution below. The
 # caller asserts that the fold attributed exactly those two to the unit itself.
 # A fold that lost the attribution and gave everything to the header would put
 # the sentinels in the published set. A fold that gave nothing to the header
 # would still show them. Neither failure can pass this pair.
 #
-# HOW THE ATTRIBUTION WORKS. Clang prints `loc.file` on a node only when the
-# file differs from the previous node's file. The fold therefore carries the
-# last file it saw forward, exactly as the printer expects. A declaration that
-# no file covers goes into the unattributed list, and the caller stops over it.
+# Clang prints `loc.file` on a node only when the file differs from the
+# previous node's file. The fold therefore carries the last file it saw
+# forward, exactly as the printer expects. A declaration that no file covers
+# goes into the unattributed list, and the caller stops over it.
 #
 # It keeps a `FunctionDecl` and a `VarDecl`, and it keeps nothing else. A
 # `typedef`, a `struct`, a `union` and an `enum` name a type and publish no
@@ -824,11 +793,10 @@ function(mcf5307_abi_read_published
 endfunction()
 
 # ---------------------------------------------------------------------------
-# The per-read control of the reader above.
-#
-# It runs on the calibration read AND on the contract read, so the fold is
-# calibrated on the very read whose answer is used. The expected answer is
-# written out here, so a blind fold cannot produce it.
+# The per-read control of the reader above. It runs on the calibration read AND
+# on the contract read, so the fold is calibrated on the very read whose answer
+# is used. The expected answer is written out here, so a blind fold cannot
+# produce it.
 function(mcf5307_abi_check_sentinels mcf5307_check_label mcf5307_check_seen
         mcf5307_check_lost)
     set(mcf5307_check_want
@@ -867,8 +835,7 @@ endfunction()
 #
 # The two sets are what separate `hidden` from `not implemented yet`. A hidden
 # symbol is defined and not exported. A symbol nothing implements is in
-# neither set. The reader before this one could not tell those apart, and it
-# reported both as `not defined in this compilation`.
+# neither set. One `defined` set alone cannot tell those apart.
 #
 # `nm` prints `<address> <type> <name>`, and it prints `U`, `u`, `w` or `v` in
 # the type column for a symbol the object does not define. Those four are
@@ -906,9 +873,9 @@ function(mcf5307_abi_read_symbols mcf5307_symbols_out_defined
                     "^[0-9a-fA-F]*[ \t]+([A-Za-z])[ \t]+([^ \t]+)[ \t]*$")
                 continue()
             endif()
-            # THE TWO CAPTURES ARE COPIED OUT BEFORE THE NEXT `MATCHES` RUNS.
+            # The two captures are copied out before the next `MATCHES` runs.
             # A second `MATCHES` overwrites `CMAKE_MATCH_1` and `CMAKE_MATCH_2`
-            # on a hit AND clears them on a miss. Reading them afterwards gave
+            # on a hit AND clears them on a miss. Reading them afterwards gives
             # every defined symbol the empty name.
             set(mcf5307_symbols_type "${CMAKE_MATCH_1}")
             set(mcf5307_symbols_name "${CMAKE_MATCH_2}")
@@ -929,13 +896,12 @@ endfunction()
 # ---------------------------------------------------------------------------
 # Calibration 1. The published-set reader reads seven ordinary C shapes.
 #
-# THIS IS THE MECHANISED FORM OF THE DEFECT THAT ENDED THE READER BEFORE THIS
-# ONE. The calibration header below carries every shape that defeated it, plus
-# four shapes that publish nothing and one declaration behind `#if 0`. The
-# expected answer is WRITTEN OUT. A reader that lost a shape, that reported a
-# type keyword, or that reported a type name cannot produce it.
+# The calibration header below carries every shape that defeats a regular
+# expression, plus four shapes that publish nothing and one declaration behind
+# `#if 0`. The expected answer is written out. A reader that lost a shape, that
+# reported a type keyword, or that reported a type name cannot produce it.
 #
-# The check runs on every configure run and not in a review.
+# The check runs on every configure run.
 
 set(MCF5307_ABI_CALIBRATION "${MCF5307_ABI_DIR}/calibration.h")
 file(WRITE "${MCF5307_ABI_CALIBRATION}" [==[
@@ -1047,7 +1013,7 @@ endif()
 # from the archive with a force-load flag holds them all as well. This route
 # needs no archive semantics and no platform force-load flag.
 #
-# THE CONSUMER'S `CMAKE_C_FLAGS` ARE NOT PASSED HERE. This object is a
+# The consumer's `CMAKE_C_FLAGS` are not passed here. This object is a
 # measuring instrument and it is never shipped. A consumer's `-Werror` would
 # stop the measurement over a warning in code this project does not author.
 #
@@ -1116,7 +1082,7 @@ mcf5307_abi_read_symbols(MCF5307_ABI_DEFINED_RAW MCF5307_ABI_EXPORTED_RAW
 # ---------------------------------------------------------------------------
 # Control D. The symbol reader, calibrated on the object it just read.
 #
-# The visible probe also MEASURES the platform's symbol prefix. Mach-O puts one
+# The visible probe also measures the platform's symbol prefix. Mach-O puts one
 # underscore in front of every C name and ELF puts none. The prefix is read off
 # a name this file wrote, and it is never assumed.
 set(MCF5307_ABI_PREFIX "")
@@ -1220,11 +1186,10 @@ set(MCF5307_ABI_INSTRUMENT
 #   NOT IMPLEMENTED    published and NOT defined.           Reported, not a
 #                                                           fault.
 #
-# THE THIRD CATEGORY IS A SEPARATE LINE AND A SEPARATE WORD. The reader before
-# this one reported `not defined in this compilation` for both `a later cpu
-# task writes this` and `the reader could not see it`. Those two must never
-# share a line. The `defined` set is what separates them, and control D is what
-# proves the `defined` set works.
+# The third category gets a separate line and a separate word. `nothing
+# implements this yet` and `the reader could not see it` must never share a
+# line. The `defined` set is what separates them, and control D is what proves
+# the `defined` set works.
 
 set(MCF5307_ABI_VISIBLE "")
 set(MCF5307_ABI_HIDDEN "")
@@ -1262,10 +1227,10 @@ endif()
 # ---------------------------------------------------------------------------
 # The other direction. An exported name the contract does not declare.
 #
-# A consumer cannot call a symbol it cannot declare. This check is also a
-# CONSTRAINT ON THIS PROJECT, and `src/mcf5307.nim` records it: CPU-1 cannot
-# add an exported status symbol of its own, because the contract belongs to
-# CPU-0 and this step refuses an export the contract does not carry.
+# A consumer cannot call a symbol it cannot declare. This check also constrains
+# this project: no new exported symbol can be added in `src/mcf5307.nim` until
+# `include/mcf5307.h` declares it, because this step refuses an export the
+# contract does not carry.
 set(MCF5307_ABI_UNDECLARED "")
 foreach(name IN LISTS MCF5307_ABI_EXPORTED)
     if(name IN_LIST MCF5307_ABI_PUBLISHED
@@ -1304,12 +1269,11 @@ message(STATUS
     "IMPLEMENTED. No compilation unit defines them, and a later cpu task "
     "writes them: ${MCF5307_ABI_UNIMPLEMENTED}")
 
-# The scaffolding report. Design section 5.4 rule 2 asks C++ never to call the
-# runtime entry point directly. `include/mcf5307.h` does not declare it, and
-# that is the whole barrier. This line prints what the shared object actually
-# exports, so the fact sits in the configure log rather than nowhere. A
-# mechanism would be a linker export list, and that belongs to the build that
-# makes the shipped shared object.
+# The scaffolding report. C++ never calls the runtime entry point directly.
+# `include/mcf5307.h` does not declare it, and that is the whole barrier. This
+# line prints what the shared object actually exports, so the fact sits in the
+# configure log rather than nowhere. A mechanism would be a linker export list,
+# and that belongs to the build that makes the shipped shared object.
 set(MCF5307_ABI_REACHABLE "")
 foreach(name IN LISTS MCF5307_ABI_SCAFFOLDING)
     if(name IN_LIST MCF5307_ABI_EXPORTED)
@@ -1337,8 +1301,8 @@ endif()
 #
 # There is no `INSTALL_INTERFACE` expression and no `PUBLIC_HEADER` property
 # here. Nothing in this project installs this target, so both would be inert
-# text that no run can check. The task that adds an `install(TARGETS ...)` rule
-# adds them back in the same change, where they take effect.
+# text that no run can check. They belong in the same change as an
+# `install(TARGETS ...)` rule, where they take effect.
 #
 # `include/mcf5307.h` is in no target's source list, and no build step compiles
 # it. The compile check for the contract header is the registered test

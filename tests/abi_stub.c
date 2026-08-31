@@ -1,20 +1,14 @@
 /* abi_stub.c - one definition, with an empty body, of every function
  * `include/mcf5307.h` declares.
  *
- * WHY IT EXISTS. Cases 3 and 4 of `t0_abi_header` COMPILE AND LINK, and
- * linking is what makes a RENAMED declaration a link error rather than
- * nothing at all. `-fsyntax-only` never links, so the two header compiles
- * alone cannot catch a rename. The real implementation cannot supply the
- * definitions either: it is written by a later task that depends on this
- * contract, so a check that waited for it could never pass at this task's
- * completion. This stub breaks that circle.
+ * Cases 3 and 4 of `t0_abi_header` compile AND link, and linking is what makes
+ * a renamed declaration a link error rather than nothing at all.
+ * `-fsyntax-only` never links, so the two header compiles alone cannot catch a
+ * rename. The real implementation cannot supply the definitions either: it
+ * depends on this contract, so a check that waited for it could never pass.
+ * This stub breaks that circle.
  *
- * NO LATER TASK EDITS THIS FILE. The real implementation supersedes it for
- * every later test; this translation unit stays exactly as strict and
- * exactly as empty as it is here, because its only job is to make the link
- * of the eighteen names succeed or fail.
- *
- * NOTHING HERE EMULATES ANYTHING. Every body is empty and every return is a
+ * Nothing here emulates anything. Every body is empty and every return is a
  * fixed benign value. A test that needs behaviour links the real library.
  */
 
