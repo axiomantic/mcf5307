@@ -283,32 +283,33 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_checks_on_driver.cmake"
 add_test(NAME t_checks_on
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_checks_on_driver.cmake")
-# --------------------------------------------------------------------- CPU-6
+# ---------------------------------------------------------------------------
 # `t_ea_masks` - the decoder and effective-address legality masks.
 #
-# ONE REGISTERED NAME, FIFTEEN CASES, AND EACH ONE CAN FAIL:
+# One registered name, and each case can fail:
 #
-#   1  `exec` runs a NOP fetch and returns a non-zero cycle count - the
-#      assertion that moved here from CPU-3 (W3-7). Drives
-#      `mcf5307_create`/`mcf5307_reset`/`mcf5307_exec`/`mcf5307_destroy`
-#      through the real ABI against a board that answers `MCF5307_BUS_OK`.
-#   2..9  EA legality, with the positive control and the negative control for
-#      every opcode the decoder recognizes that carries an effective-address
-#      mask: MOVE, ADDQ, SUBQ and LEA. Each accepts a legal mode and rejects
-#      at least one illegal mode.
-#   10..15  the decoder recognizes each implemented opcode from a
-#      representative word, so the legality assertions are attached to the
-#      code that runs and not to a table the decoder never reads.
+#   `exec` runs a NOP fetch and returns a non-zero cycle count, driving
+#   `mcf5307_create`/`mcf5307_reset`/`mcf5307_exec`/`mcf5307_destroy`
+#   through the real ABI against a board that answers `MCF5307_BUS_OK`.
 #
-# THE COMPILE HAPPENS INSIDE THE TEST AND NOT IN THE BUILD, for the reason
+#   EA legality, with the positive control and the negative control for
+#   every opcode the decoder recognizes that carries an effective-address
+#   mask: MOVE, ADDQ, SUBQ and LEA. Each accepts a legal mode and rejects
+#   at least one illegal mode.
+#
+#   The decoder recognizes each implemented opcode from a representative
+#   word, so the legality assertions are attached to the code that runs and
+#   not to a table the decoder never reads.
+#
+# The compile happens inside the test and not in the build, for the reason
 # `t0_abi_header` and `t_checks_on` give: a `ctest` run over a tree whose
-# build had failed would otherwise run a STALE binary of an earlier build.
+# build had failed would otherwise run a stale binary of an earlier build.
 # The test takes the library's own flag set (`-d:release --mm:arc
 # --panics:on`), so a `--checks:off` added to the library reaches this
 # program too, and `--path:src` is what makes the `mcf5307/...` imports
 # resolve against the source tree.
 #
-# The driver also FAILS ON A NON-ZERO EXIT. The program itself prints a named
+# The driver also fails on a non-zero exit. The program itself prints a named
 # PASSED/FAILED line per case and exits 1 when any case fails, so a silent
 # pass is a failure of the driver, not a green result.
 
@@ -410,28 +411,27 @@ add_test(NAME t_ea_masks
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_ea_masks_driver.cmake")
 
-# --------------------------------------------------------------------- CPU-7
+# ---------------------------------------------------------------------------
 # `t_sign_extend` - the sign-extension helpers of `mcf5307/machine`.
 #
-# ONE REGISTERED NAME, TEN CASES, AND EACH ONE CAN FAIL. `s16` and `s8` turn a
-# displacement or an immediate value into the signed 32-bit value the address
-# arithmetic adds. The four boundary values of each helper are asserted with
-# their exact results, and `s8` is asserted twice more with a high byte it
-# must ignore. The file `tests/t_sign_extend.nim` gives the case list.
+# `s16` and `s8` turn a displacement or an immediate value into the signed
+# 32-bit value the address arithmetic adds. The boundary values of each helper
+# are asserted with their exact results, and `s8` is asserted again with a high
+# byte it must ignore. The file `tests/t_sign_extend.nim` gives the case list.
 #
-# THE FLAG SET IS WHAT MAKES THIS TEST BITE, and it is taken from the
+# The flag set is what makes this test bite, and it is taken from the
 # library's own compile command exactly as `t_checks_on` and `t_ea_masks` take
-# it. A checked narrowing conversion in either helper rejects EVERY NEGATIVE
+# it. A checked narrowing conversion in either helper rejects every negative
 # displacement; under the library's `--panics:on -d:release` that ends the
 # process with a `RangeDefect` instead of raising a catchable error. A test
 # compiled with a flag set of its own could report that as something other
 # than a dead program.
 #
-# THE COMPILE HAPPENS INSIDE THE TEST AND NOT IN THE BUILD, for the reason the
+# The compile happens inside the test and not in the build, for the reason the
 # tests above give: a `ctest` run over a tree whose build had failed would
-# otherwise run a STALE binary of an earlier build and pass.
+# otherwise run a stale binary of an earlier build and pass.
 #
-# The driver FAILS ON A NON-ZERO EXIT and also on a run that exited 0 without
+# The driver fails on a non-zero exit and also on a run that exited 0 without
 # reporting a full pass. The first is what catches the process the defect
 # kills; the second is what stops a program that printed nothing from passing.
 
@@ -532,33 +532,25 @@ add_test(NAME t_sign_extend
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_sign_extend_driver.cmake")
 
-# --------------------------------------------------------------------- CPU-8
+# ---------------------------------------------------------------------------
 # `t_alu` - the integer-arithmetic instruction group.
 #
-# ONE REGISTERED NAME, AND EVERY CASE CAN FAIL. The CPU-8 Check: line is
-# `mcf5307_conformance_alu`, and this test is registered BESIDE it rather than
-# instead of it, because the two measure different things and neither covers
-# the other.
+# This test is registered beside `mcf5307_conformance_alu` rather than instead
+# of it, because the two measure different things and neither covers the other.
 #
-# THE CORPUS CANNOT SEE A CONDITION CODE. Measured on the committed corpus:
-# not one case in any of the four groups names `sr` in its `expected` state,
-# and `conformance/runner.cpp` asserts only the registers a case names. A core
-# that computed every arithmetic result correctly and set no flag at all
-# reports `9 cases, 0 failed`. Half of this instruction group is the flags:
-# ADDX, SUBX and NEGX READ X, their sticky-Z rule is a rule about Z alone, and
-# the overflow of a 32-bit multiply is observable in V and nowhere else.
-# `tests/t_alu.nim` asserts those, through the same C entry points the corpus
-# runner uses.
+# Half of this instruction group is the flags: ADDX, SUBX and NEGX read X,
+# their sticky-Z rule is a rule about Z alone, and the overflow of a 32-bit
+# multiply is observable in V and nowhere else. `tests/t_alu.nim` asserts
+# those, through the same C entry points the corpus runner uses.
 #
-# THE CORPUS ALSO CARRIES NO NEGATIVE CASE YET. CPU-13 owns the negative
-# corpus and it is downstream of this task, so the encodings this part does
-# NOT have - byte and word arithmetic, an ADDI to memory, a NEG to memory, a
+# The corpus carries no negative case, so the encodings this part does not
+# have - byte and word arithmetic, an ADDI to memory, a NEG to memory, a
 # PC-relative ADDQ destination, a 64-bit MULU.L, the memory form of ADDX -
-# are asserted to trap here in the meantime. Each one was offered to
+# are asserted to trap here. Each one was offered to
 # `m68k-elf-as -mcpu=5307` and rejected, which is the ground truth for what
 # the silicon has.
 #
-# THE FLAG SET, THE COMPILE INSIDE THE TEST and the two-part failure check are
+# The flag set, the compile inside the test and the two-part failure check are
 # taken from `t_ea_masks` and `t_sign_extend` above, for the reasons those
 # blocks give.
 
@@ -656,28 +648,20 @@ add_test(NAME t_alu
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_alu_driver.cmake")
 
-# --------------------------------------------------------------------- CPU-7
+# ---------------------------------------------------------------------------
 # `t_move` - the sized write to a data register in the data-movement group.
 #
-# ONE REGISTERED NAME, SEVEN CASES, AND EVERY ONE CAN FAIL. This test is
-# registered BESIDE `mcf5307_conformance_move` rather than instead of it,
-# because that corpus CANNOT SEE THE RULE THIS TEST ASSERTS.
+# This test is registered beside `mcf5307_conformance_move` rather than instead
+# of it, because a corpus case that starts the destination register at zero
+# cannot see the rule this test asserts: a `MOVE.B` into `Dn` writes the low
+# byte and leaves the upper three alone, and a core that zeroes them produces
+# the same register from a zero destination. Every case in `tests/t_move.nim`
+# starts the destination at 0x12345678, which is what separates the two.
 #
-# THE CORPUS IS DEGENERATE ON THE SIZED WRITE. It is 18 of 18, and it holds
-# exactly two sized cases - `move_w_d0_to_d1` and `move_b_d0_to_d1` - and BOTH
-# START THE DESTINATION REGISTER AT ZERO. A `MOVE.B` into `Dn` writes the low
-# byte and leaves the upper three alone; a core that zeroes them produces the
-# same register as a correct core from a zero destination, so the corpus
-# reports 18 of 18 either way. Every case in `tests/t_move.nim` starts the
-# destination at 0x12345678, which is what separates the two.
+# Each case here asserts the register, the whole status register and `fault` as
+# one tuple.
 #
-# THE CORPUS ALSO CANNOT SEE A CONDITION CODE, for the reason the CPU-8 block
-# above records: no case in any of the four corpus files names `sr`, and
-# `conformance/runner.cpp` asserts only the registers a case names. Each case
-# here asserts the register, the whole status register and `fault` as ONE
-# TUPLE.
-#
-# THE FLAG SET, THE COMPILE INSIDE THE TEST and the two-part failure check are
+# The flag set, the compile inside the test and the two-part failure check are
 # taken from `t_ea_masks`, `t_sign_extend` and `t_alu` above, for the reasons
 # those blocks give.
 
@@ -782,32 +766,31 @@ add_test(NAME t_move
 #
 # This is the test the CPU-3 task CHECK names. It tests the ABI surface the
 # task's closure produces, and it asserts NO CORE BEHAVIOUR. The test takes
-# the address of every published function THE LIBRARY DEFINES AND EXPORTS,
+# the address of every published function the library defines and exports,
 # which is the assertion that a renamed or dropped definition is a link error.
 # It calls `mcf5307_runtime_init()` twice and asserts both calls return. C++
 # never names `NimMain`; it calls `mcf5307_runtime_init()`, which is
 # idempotent.
 #
-# THE ADDRESS SET IS THE DEFINED SET AND NOT THE PUBLISHED SET, AND THAT IS
-# THE WHOLE POINT OF THIS BLOCK. `abi_smoke` links the REAL library. Most of
-# the published surface has no definition yet - a later cpu task writes each
-# one - so an address set taken from the header made the link of this
-# executable fail and took the whole `cmake --build` down with it. The whole
-# PUBLISHED surface is already asserted, by `t0_abi_header` cases 3 and 4,
+# The address set is the defined set and not the published set. `abi_smoke`
+# links the real library, and most of the published surface has no definition
+# yet, so an address set taken from the header fails the link of this
+# executable and takes the whole `cmake --build` down with it. The whole
+# published surface is already asserted, by `t0_abi_header` cases 3 and 4,
 # which link it against `tests/abi_stub.c`. A name nothing defines cannot be
 # renamed and cannot be dropped, so asserting it here buys no coverage that
 # the stub cases do not already give.
 #
-# THE SET IS MEASURED AND IS NEVER WRITTEN OUT HERE. `cmake/Nim.cmake` step 4a
+# The set is measured and is never written out here. `cmake/Nim.cmake` step 4a
 # measures which published names the library defines and exports and leaves
 # them in `MCF5307_ABI_VISIBLE`. Generating the header from that variable is
-# what makes this test GROW ON ITS OWN: the task that implements
-# `mcf5307_exec` brings `mcf5307_exec` under this test with no edit here and
-# no edit to `abi_smoke.cpp`.
+# what makes this test grow on its own: implementing `mcf5307_exec` brings
+# `mcf5307_exec` under this test with no edit here and no edit to
+# `abi_smoke.cpp`.
 #
-# A MEASURED SET THAT GREW BY ACCIDENT IS NOT CAUGHT HERE, and it is not
+# A measured set that grew by accident is not caught here, and it is not
 # uncaught. Step 4a part two compares this same measured set against
-# `tests/abi_smoke_symbols.inc`, the committed EXPECTATION, in both
+# `tests/abi_smoke_symbols.inc`, the committed expectation, in both
 # directions, and names every symbol that differs. The measurement is what
 # keeps this test buildable and growing; the committed list is what keeps the
 # growth intended. Neither file is read by the other, and a disagreement stops
@@ -838,7 +821,7 @@ else()
         "in `tests/abi_smoke_symbols.inc`.")
 endif()
 
-# The generated header is included TWICE by `abi_smoke.cpp` under two
+# The generated header is included twice by `abi_smoke.cpp` under two
 # different definitions of `MCF5307_ABI_FN`: once to define the pointers and
 # once to list them in the array. It therefore carries no include guard, on
 # purpose.

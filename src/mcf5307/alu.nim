@@ -1,46 +1,38 @@
 ## `alu` - the integer-arithmetic instruction group of the ColdFire ISA_A
-## core. Task CPU-8 creates this file. Design section 6.1.
+## core.
 ##
 ## This module executes ADD, ADDA, ADDI, ADDQ, ADDX, SUB, SUBA, SUBI, SUBQ,
 ## SUBX, NEG, NEGX, CLR, EXT, EXTB, MULU.L, MULS.L, DIVU.L, DIVS.L and the two
-## REMx.L forms, AND NOTHING ELSE. The register file, the board accesses and
+## REMx.L forms, and nothing else. The register file, the board accesses and
 ## the effective-address evaluation are `mcf5307/machine`'s.
 ##
-## THIS MODULE IS A SIBLING OF `move.nim` AND OF `decode.nim`. It imports
-## neither, and neither imports it. Adding this group cost one new module, one
-## `import` line in `cpu.nim` and one arm of the `case` there; `decode.nim`
-## gained the opcodes and NO import. The rule and the reason are in
-## `~/Desktop/avoiding-cycles.md`: an executor that reaches into another
-## executor for a helper is the decoder-under-executor cycle one layer down,
-## and it is bad at two siblings and worse at four.
+## This module is a sibling of `move.nim` and of `decode.nim`. It imports
+## neither, and neither imports it. An executor that reaches into another
+## executor for a helper inverts the layering one level down.
 ##
-## THE SIZE IS LONG AND THE EXCEPTIONS ARE NAMED. Arithmetic on this part is
-## 32-bit. `ADD.B`, `ADD.W`, `ADDA.W`, `ADDI.B`, `ADDQ.W`, `NEG.W`, `ADDX.W`
-## and the rest of the byte and word forms are 68000 encodings that ISA_A
-## dropped, and each one TRAPS here; CPU-13 carries them as negative cases.
-## `CLR` is the exception: it keeps all three sizes, which
-## `m68k-elf-as -mcpu=5307` confirms by accepting `clr.b` and `clr.w`.
+## Arithmetic on this part is 32-bit. `ADD.B`, `ADD.W`, `ADDA.W`, `ADDI.B`,
+## `ADDQ.W`, `NEG.W`, `ADDX.W` and the rest of the byte and word forms are
+## 68000 encodings that ISA_A dropped, and each one traps here. `CLR` is the
+## exception: it keeps all three sizes, which `m68k-elf-as -mcpu=5307`
+## confirms by accepting `clr.b` and `clr.w`.
 ##
-## THE COLDFIRE DIVIDE IS NOT THE 68020 DIVIDE. `DIVU.L`/`DIVS.L` reuse the
+## The ColdFire divide is not the 68020 divide. `DIVU.L`/`DIVS.L` reuse the
 ## 68020 two-word encoding, and the second word names a quotient register Dq
 ## and a remainder register Dr. On the 68020 an unequal pair is `DIVUL`, which
-## writes BOTH. On ColdFire an unequal pair is `REMU.L`/`REMS.L`, WHICH WRITES
-## THE REMAINDER ONLY and leaves Dq alone.
+## writes both. On ColdFire an unequal pair is `REMU.L`/`REMS.L`, which writes
+## the remainder only and leaves Dq alone.
 ##
-## THERE IS NO EXCEPTION MODEL YET. A divide by zero is a trap vector on
-## silicon and CPU-14 owns the vector table. Until then it halts the context
-## with `fault`, which is the same channel every other illegal operand uses.
+## There is no exception model yet. A divide by zero is a trap vector on
+## silicon; until the vector table exists it halts the context with `fault`,
+## which is the same channel every other illegal operand uses.
 ##
-## CYCLES ARE NOMINAL, for the reason `move.nim` and `cpu.nim` both give: the
-## per-instruction budget needs the clock work of open question 6 in AGENTS.md
-## and no exact cost is asserted anywhere.
+## Cycles are nominal: the per-instruction budget is not settled and no exact
+## cost is asserted anywhere.
 ##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
-## semantics, the condition-code rules and the encodings are facts about
-## Motorola silicon; they are taken from the ColdFire Family Programmer's
-## Reference Manual and the MCF5307 User's Manual (AGENTS.md section 11) and
-## from this project's own measurements with the pinned cross assembler. No
-## expression was taken from any copyleft source.
+## Instruction semantics, the condition-code rules and the encodings are taken
+## from the ColdFire Family Programmer's Reference Manual and the MCF5307
+## User's Manual, and from this project's own measurements with the pinned
+## cross assembler.
 
 import mcf5307/decode_types
 import mcf5307/ea
@@ -60,14 +52,14 @@ proc trap(ctx: MCF5307Ctx): uint32 =
 # ---------------------------------------------------------------------------
 # The condition codes of addition and subtraction.
 #
-# X and C are the SAME BIT VALUE for these instructions and they live in two
+# X and C take the same bit value for these instructions and they live in two
 # places: C is read by the conditional branches and X is read by ADDX, SUBX
-# and NEGX. N and Z come from the result. V is the SIGNED overflow, which is
+# and NEGX. N and Z come from the result. V is the signed overflow, which is
 # a different question from the carry and is why both bits exist.
 #
-# The extended forms (ADDX, SUBX, NEGX) differ in Z alone: THEY CLEAR Z ON A
-# NON-ZERO RESULT AND LEAVE IT ALONE OTHERWISE, so that a multi-precision
-# sequence ends with Z set exactly when EVERY word of the result was zero. An
+# The extended forms (ADDX, SUBX, NEGX) differ in Z alone: they clear Z on a
+# non-zero result and leave it alone otherwise, so that a multi-precision
+# sequence ends with Z set exactly when every word of the result was zero. An
 # ordinary ADD would set Z from its own word and lose the earlier words.
 
 proc setAddCc(ctx: MCF5307Ctx; src, dst, res: uint32; carry: bool;
@@ -115,7 +107,7 @@ proc xBit(ctx: MCF5307Ctx): uint32 =
 
 proc execAddSub(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   ## `<ea> op Dn -> Dn` when `dirToEa` is false, `Dn op <ea> -> <ea>` when it
-  ## is true. The two directions carry DIFFERENT operand masks: the first
+  ## is true. The two directions carry different operand masks: the first
   ## reads any data-addressing mode, and the second writes a memory-alterable
   ## one. A single mask would let `add.l %d1,(4,%pc)` through.
   if d.size != 4'u8:
@@ -134,7 +126,7 @@ proc execAddSub(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
     return 4'u32
   if not isEaLegal(eaMemoryAlterable, d.ea):
     return trap(ctx)
-  # THE DESTINATION IS RESOLVED ONCE. `(An)+` and `-(An)` adjust the address
+  # The destination is resolved once. `(An)+` and `-(An)` adjust the address
   # register, and a read followed by an independent write would adjust it
   # twice and store to the wrong address.
   let dest = eaResolve(ctx, d.ea, 4)
@@ -151,7 +143,7 @@ proc execAddSub(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   6'u32
 
 proc execAddSubA(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
-  ## ADDA.L and SUBA.L. THEY TOUCH NO CONDITION CODE: an address computation
+  ## ADDA.L and SUBA.L. They touch no condition code: an address computation
   ## must not disturb the flags a following conditional branch reads.
   if d.size != 4'u8:
     return trap(ctx)
@@ -182,8 +174,8 @@ proc execAddSubI(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   6'u32
 
 proc execAddSubQ(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
-  ## ADDQ.L and SUBQ.L. An ADDRESS REGISTER DESTINATION SETS NO CONDITION
-  ## CODE, exactly as ADDA does; every other destination sets them all.
+  ## ADDQ.L and SUBQ.L. An address register destination sets no condition
+  ## code, exactly as ADDA does; every other destination sets them all.
   if d.size != 4'u8:
     return trap(ctx)
   if not eaIsLegalFor(d.op, d.ea):
@@ -227,8 +219,8 @@ proc execAddSubX(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
 # NEG, NEGX and CLR.
 
 proc execNeg(ctx: MCF5307Ctx; d: Decoded; extended: bool): uint32 =
-  ## NEG.L and NEGX.L: `0 - Dn` and `0 - Dn - X`. C IS SET WHENEVER A BORROW
-  ## LEFT THE WORD, which for NEG is exactly "the operand was not zero".
+  ## NEG.L and NEGX.L: `0 - Dn` and `0 - Dn - X`. C is set whenever a borrow
+  ## left the word, which for NEG is exactly "the operand was not zero".
   if d.size != 4'u8:
     return trap(ctx)
   if not eaIsLegalFor(d.op, d.ea):
@@ -241,8 +233,8 @@ proc execNeg(ctx: MCF5307Ctx; d: Decoded; extended: bool): uint32 =
   4'u32
 
 proc execClr(ctx: MCF5307Ctx; d: Decoded): uint32 =
-  ## CLR.B/.W/.L. N, V and C take fixed values, Z is always set, AND X IS
-  ## UNTOUCHED - a clear is not an arithmetic result and must not disturb a
+  ## CLR.B/.W/.L. N, V and C take fixed values, Z is always set, and X is
+  ## untouched - a clear is not an arithmetic result and must not disturb a
   ## multi-precision sequence in progress.
   if d.size == 0'u8:
     return trap(ctx)
@@ -260,7 +252,7 @@ proc execClr(ctx: MCF5307Ctx; d: Decoded): uint32 =
 
 proc execExt(ctx: MCF5307Ctx; d: Decoded; fromByte: bool): uint32 =
   ## EXT.W (byte into word), EXT.L (word into long) and EXTB.L (byte into
-  ## long). EXT.W WRITES THE LOW WORD ALONE and the upper half of the
+  ## long). EXT.W writes the low word alone and the upper half of the
   ## register is untouched, so N comes from bit 15 of a word result and from
   ## bit 31 of a long one.
   if not eaIsLegalFor(d.op, d.ea):
@@ -280,7 +272,7 @@ proc execExt(ctx: MCF5307Ctx; d: Decoded; fromByte: bool): uint32 =
 # MULU.L, MULS.L, DIVU.L, DIVS.L and REMx.L.
 #
 # Both families carry the 68020 two-word encoding. The second word follows the
-# opcode word and PRECEDES the effective address's own extension words, so it
+# opcode word and precedes the effective address's own extension words, so it
 # is fetched first.
 
 const
@@ -313,7 +305,7 @@ proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
     overflow = product > 0xFFFFFFFF'u64
   setRegD(ctx, dl, res)
   setNzClearVc(ctx, res, 4)
-  # V REPORTS THAT THE 32 BITS WRITTEN ARE NOT THE WHOLE PRODUCT. Without it
+  # V reports that the 32 bits written are not the whole product. Without it
   # a product whose low half is zero is indistinguishable from a multiply by
   # zero.
   if overflow:
@@ -333,15 +325,14 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
   let src = eaRead(ctx, d.ea, 4)
   if ctx.halted: return 0'u32
   if src == 0'u32:
-    # A divide by zero is exception vector 5 on silicon and CPU-14 owns the
-    # vector table. Halting with `fault` is the channel available today, and
-    # it is the one every other illegal operand already uses.
+    # A divide by zero is exception vector 5 on silicon. Halting with `fault`
+    # is the channel every other illegal operand already uses.
     return trap(ctx)
   let dividend = regD(ctx, dq)
   if signed and dividend == 0x80000000'u32 and src == 0xFFFFFFFF'u32:
-    # THE ONE SIGNED DIVISION OVERFLOW. The most negative value has no
+    # The one signed division overflow. The most negative value has no
     # positive counterpart, so the quotient does not exist. V is set, C is
-    # cleared and THE OPERANDS ARE UNCHANGED. The manual leaves N and Z
+    # cleared and the operands are unchanged. The manual leaves N and Z
     # undefined here; this core leaves them as it found them, which is the
     # one choice a reader can predict.
     ctx.sr = (ctx.sr and not ccrC) or ccrV
@@ -357,7 +348,7 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
               else: uint32(cast[uint64](a mod b) and 0xFFFFFFFF'u64)
   else:
     written = if dr == dq: dividend div src else: dividend mod src
-  # COLDFIRE'S REMx.L PRODUCES THE REMAINDER ONLY. An unequal register pair
+  # ColdFire's REMx.L produces the remainder only. An unequal register pair
   # is `REMU.L`/`REMS.L` here and `DIVUL`/`DIVSL` on the 68020, and the
   # 68020 instruction also writes the quotient into Dq. Writing Dq here
   # would corrupt the dividend a following instruction still reads.

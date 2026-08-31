@@ -1,9 +1,8 @@
-## `t_ea_masks` - the decoder and effective-address legality masks. Task
-## CPU-6 creates this file. Design section 6.1.
+## `t_ea_masks` - the decoder and effective-address legality masks.
 ##
-## FOUR GROUPS OF ASSERTION, AND EACH ONE CAN FAIL.
+## The assertion groups:
 ##
-##   (1) THE FIRST NON-ZERO CYCLE RETURN, moved here from CPU-3. The test
+##   (1) The first non-zero cycle return. The test
 ##       drives `mcf5307_create` with a board that returns `MCF5307_BUS_OK`
 ##       and a `NOP` for every fetch, `mcf5307_reset` with a synthetic stack
 ##       pointer and program counter, `mcf5307_exec` with a small cycle
@@ -11,19 +10,19 @@
 ##       zero. A core that returns zero cycles cannot loop at all, so this
 ##       separates "the decoder ran" from "the decoder is not wired in".
 ##
-##   (2) EA LEGALITY, NEGATIVE. Each opcode carries its own legality mask and
+##   (2) EA legality, negative. Each opcode carries its own legality mask and
 ##       an illegal mode traps. For each opcode the decoder recognizes with an
 ##       effective address, at least one illegal mode must be rejected by
 ##       `isEaLegal`. A mask that accepts every mode would hide the firmware
 ##       fault the whole rule exists to expose.
 ##
-##   (3) EA LEGALITY, POSITIVE CONTROL. For each such opcode at least one
+##   (3) EA legality, positive control. For each such opcode at least one
 ##       legal mode must be accepted. Without this, a mask that rejects
 ##       everything would report (2) as a pass, and "the illegal mode is
 ##       rejected" would not be separable from "the opcode admits no mode".
 ##
-##   (4) THE EXTENSION-WORD ORDER OF ABSOLUTE LONG ADDRESSING, with its own
-##       control. `(xxx).L` carries the high half of the address in the FIRST
+##   (4) The extension-word order of absolute long addressing, with its own
+##       control. `(xxx).L` carries the high half of the address in the first
 ##       extension word. No case in `conformance/corpus/` uses an absolute-long
 ##       operand at all, so nothing else in this project can see a core that
 ##       reads the two words the other way round. The block near the end of
@@ -34,13 +33,11 @@
 ## and checks the operation comes back, so that the legality assertions are
 ## attached to the decoder and not to a table the decoder never reads.
 ##
-## THE ONE A7. There is no supervisor and user stack split on ISA_A; the
-## context holds the single `sp`.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
+## There is no supervisor and user stack split on ISA_A; the context holds the
+## single `sp`.
 
-## THE IMPORTS NAME THE LAYER EACH SYMBOL COMES FROM. `decode` no longer
-## re-exports `decode_types`, so each module below supplies exactly the names
+## The imports name the layer each symbol comes from. `decode` does not
+## re-export `decode_types`, so each module below supplies exactly the names
 ## the test takes from it: `cpu` the lifecycle ABI (`mcf5307_create`,
 ## `mcf5307_reset`, `mcf5307_exec`, `mcf5307_destroy`), `decode` the decoder
 ## (`decodeWord`), `decode_types` the shared types and the legality table
@@ -131,8 +128,8 @@ block:
       "decodes " & name & " (0x" & word.toHex(4) & ")")
 
 # ---------------------------------------------------------------------------
-# (4) THE EXTENSION-WORD ORDER OF ABSOLUTE LONG ADDRESSING, AND A CONTROL FOR
-#     IT.
+# (4) The extension-word order of absolute long addressing, and a control for
+#     it.
 #
 # ColdFire Family Programmer's Reference Manual, Rev. 3, section 2.2.11 and
 # Figure 2-13: `(xxx).L` occupies two extension words, and "the first
@@ -141,17 +138,16 @@ block:
 # assembles 0x00123456 as 0x34560012 and every absolute-long operand reads the
 # wrong place.
 #
-# NO CORPUS CASE REACHES THIS. `conformance/corpus/` holds no `(xxx).L`
-# operand in any group, so the swap was invisible to every registered
-# conformance test and stayed invisible to the four hand-written ones. This
-# case is what makes it visible.
+# No corpus case reaches this. `conformance/corpus/` holds no `(xxx).L`
+# operand in any group, so a swap is invisible to every registered conformance
+# test. This case is what makes it visible.
 #
-# THE CASE RUNS THROUGH THE SHIPPED C ENTRY POINTS and not through `eaAddr`
+# The case runs through the shipped C entry points and not through `eaAddr`
 # reached around the back, so it asserts the path the corpus runner drives.
 #
-# THE SECOND ASSERTION IS THE CONTROL. The board answers the swapped address
+# The second assertion is the control. The board answers the swapped address
 # with a different value rather than with a fault, so the first assertion
-# fails on a WRONG VALUE and not on a bus error the core would have reported
+# fails on a wrong value and not on a bus error the core would have reported
 # for any number of unrelated reasons. Asserting that the swapped address was
 # never presented to the board is what separates "the address was assembled
 # correctly" from "the read happened to land somewhere that answered".

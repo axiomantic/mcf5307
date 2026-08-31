@@ -1,53 +1,32 @@
 ## `t_move` - the sized write to a data register in the data-movement group.
-## Design section 6.1.
 ##
-## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_move`. When this file was
-## written that corpus was 18 of 18, and it STAYED 18 of 18 with a destination
-## register that was WRONG. The corpus held exactly two sized cases,
-## `move_w_d0_to_d1` and `move_b_d0_to_d1`, and BOTH STARTED THE DESTINATION
-## REGISTER AT ZERO. A core that keeps the bytes outside the size and a core
-## that zeroes them produce the same register from a zero destination, so the
-## two cores were not separable by any case the corpus held. The hole was in
-## the corpus, not only in the executor.
+## This file exists beside `mcf5307_conformance_move` because it carries
+## source-operand and zero-source variants the corpus does not, and it is the
+## control that would catch a corpus regenerated wrongly.
 ##
-## THE CORPUS HOLE IS NOW CLOSED AND THIS FILE STAYS. `conformance/generate.py`
-## seeds every mergeable destination with 0x12345678 and both sized cases now
-## fail against a replacing write, as does `move_b_mem_to_d1`, which had the
-## same zero destination on the load path. The redundancy between a generated
-## corpus and a hand-written case is not duplication to remove: this file
-## carries source-operand and zero-source variants the corpus does not, and it
-## is the control that would catch a corpus regenerated wrongly.
-##
-## EVERY CASE BELOW STARTS THE DESTINATION AT 0x12345678. That is the whole
+## Every case below starts the destination at 0x12345678. That is the whole
 ## point of the file: the bytes outside the operand size carry a value that a
 ## replacing write destroys and a merging write keeps.
 ##
-## THE RULE. `MOVE.B` and `MOVE.W` into `Dn` write the low 8 or the low 16 bits
-## and LEAVE THE REST OF THE REGISTER ALONE. `MOVE.L` writes all 32. The same
-## rule already governs `CLR.B` and `CLR.W`, which `t_alu` asserts, and it
-## governs the low half of `EXT.W`; a core that is right there and wrong here
-## holds two versions of one rule.
+## The rule: `MOVE.B` and `MOVE.W` into `Dn` write the low 8 or the low 16
+## bits and leave the rest of the register alone. `MOVE.L` writes all 32. The
+## same rule governs `CLR.B` and `CLR.W`, which `t_alu` asserts, and the low
+## half of `EXT.W`; a core that is right there and wrong here holds two
+## versions of one rule.
 ##
-## THE CASES RUN THROUGH THE SHIPPED C ENTRY POINTS - `mcf5307_create`,
+## The cases run through the shipped C entry points - `mcf5307_create`,
 ## `mcf5307_reset`, `mcf5307_set_reg`, `mcf5307_exec`, `mcf5307_get_reg` - and
 ## not through an internal helper reached around the back, so a pass here is a
-## pass of the path the corpus runner drives. The board, the runner and the
-## tuple assertions are the ones `tests/t_alu.nim` established.
+## pass of the path the corpus runner drives.
 ##
-## EVERY CASE ASSERTS A COMPLETE TUPLE (the register, the whole status
+## Every case asserts a complete tuple (the register, the whole status
 ## register, `fault`), so a register that is right with a flag that is wrong
-## fails, and a flag that is right with a register that is wrong fails. When
-## this file was written it could assert the condition codes AT ALL only
-## because it was not the corpus: no case in any of the four corpus files
-## named `sr`. The corpus now names `sr` in the `move` and `alu` groups and
-## asserts THE SAME WHOLE 16-BIT WORD against the same `srBase` of 0x2700, so
-## the two views of one rule cannot drift apart.
+## fails, and a flag that is right with a register that is wrong fails.
 ##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
-## semantics, the condition-code rules and the encodings are facts about
-## Motorola silicon; they are taken from the ColdFire Family Programmer's
-## Reference Manual and the MCF5307 User's Manual (AGENTS.md section 11) and
-## from this project's own measurements. The three encodings below were
+## Instruction semantics, the condition-code rules and the encodings are taken
+## from the ColdFire Family Programmer's Reference Manual and the MCF5307
+## User's Manual, and from this project's own measurements. The encodings
+## below were
 ## produced by the pinned `m68k-elf-as -mcpu=5307`:
 ##
 ##     0:  1200    moveb %d0,%d1
@@ -151,7 +130,7 @@ proc runIns(words: openArray[uint16];
     discard mcf5307_set_reg(ctx, cint(i), d[i])
   for i in 0 .. 6:
     discard mcf5307_set_reg(ctx, cint(8 + i), a[i])
-  # The status register is set LAST: `mcf5307_reset` writes it, so an earlier
+  # The status register is set last: `mcf5307_reset` writes it, so an earlier
   # write would be overwritten.
   discard mcf5307_set_reg(ctx, 16, sr)
 
@@ -170,7 +149,7 @@ proc expectD(o: Outcome; n: int; want: uint32; wantSr: uint32; label: string) =
   check(got == wanted, label, $got, $wanted)
 
 # ---------------------------------------------------------------------------
-# THE DESTINATION STARTS NON-ZERO IN EVERY CASE.
+# The destination starts non-zero in every case.
 
 const dirtyDest = 0x12345678'u32
 
@@ -185,16 +164,16 @@ block:
     1, 0x123456AA'u32, srBase or ccrN,
     "move.b d0,d1 writes the low byte and keeps the upper three")
 
-  # A ZERO SOURCE BYTE IS THE STARKEST CASE OF THE RULE. The written value and
+  # A zero source byte is the starkest case of the rule. The written value and
   # the value a replacing write would leave behind are both zero in the low
-  # byte, so the two cores differ in the upper three bytes ALONE: 0x12345600
+  # byte, so the two cores differ in the upper three bytes alone: 0x12345600
   # against 0x00000000. Z is set and N is clear.
   expectD(runIns([0x1200'u16], d = [0'u32, dirtyDest, 0, 0, 0, 0, 0, 0]),
     1, 0x12345600'u32, srBase or ccrZ,
     "move.b d0,d1 of a zero byte clears the low byte alone and sets Z")
 
-  # THE OTHER HALF OF THE MERGE. The source carries bits above the byte, and
-  # they must NOT reach the destination. A merge that dropped the mask on the
+  # The other half of the merge. The source carries bits above the byte, and
+  # they must not reach the destination. A merge that dropped the mask on the
   # incoming value gives 0xFFFFFFAA here and is right on both cases above.
   expectD(runIns([0x1200'u16], d = [0xFFFFFFAA'u32, dirtyDest, 0, 0, 0, 0, 0, 0]),
     1, 0x123456AA'u32, srBase or ccrN,
@@ -219,7 +198,7 @@ block:
     1, 0x12340000'u32, srBase or ccrZ,
     "move.w d0,d1 of a zero word clears the low word alone and sets Z")
 
-  # The source's upper word must not reach the destination. N is CLEAR here:
+  # The source's upper word must not reach the destination. N is clear here:
   # bit 15 of 0x1234 is zero, and a core that took N from bit 31 of the whole
   # source would set it.
   expectD(runIns([0x3200'u16], d = [0xFFFF1234'u32, dirtyDest, 0, 0, 0, 0, 0, 0]),
@@ -227,9 +206,9 @@ block:
     "move.w d0,d1 takes the low word of the source alone")
 
 # ---------------------------------------------------------------------------
-# MOVE.L %d0,%d1 = 2200. THE CONTROL AGAINST AN OVER-FIX.
+# MOVE.L %d0,%d1 = 2200. The control against an over-fix.
 #
-# A long write REPLACES the whole register, and it is the only one of the three
+# A long write replaces the whole register, and it is the only one of the three
 # that does. Without this case a core that preserved bytes at every size - one
 # that masked with the byte width whatever the operand size - passes every case
 # above. The destination starts non-zero here too, and none of it survives.

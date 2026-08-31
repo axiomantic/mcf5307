@@ -158,7 +158,7 @@ set(MCF5307_NIM_ENTRIES mcf5307)
 set(MCF5307_NIM_SOURCE_mcf5307 "${PROJECT_SOURCE_DIR}/src/mcf5307.nim")
 # `--path:src` puts the package root on the Nim search path so that the
 # entry module's `import mcf5307/<sub>` resolves to `src/mcf5307/<sub>.nim`.
-# The submodules of the core (CPU-6 and later) live under `src/mcf5307/`, and
+# The submodules of the core live under `src/mcf5307/`, and
 # without the path an entry module at `src/mcf5307.nim` cannot import them.
 set(MCF5307_NIM_PATH "${PROJECT_SOURCE_DIR}/src")
 set(MCF5307_NIM_COMMAND_mcf5307
@@ -287,31 +287,26 @@ message(STATUS "mcf5307: nim invocation: ${MCF5307_NIM_COMMAND_TEXT}")
 # same variable.
 set(MCF5307_ABI_CONTRACT_FILE "${PROJECT_SOURCE_DIR}/include/mcf5307.h")
 
-# The smoke test's EXPECTED symbol list. It is CPU-3's file, it is read here
-# and it is never written here. Step 4a compares it against the set it
-# MEASURES as defined and exported by the library, in both directions. It is
+# The smoke test's expected symbol list. It is read here and never written
+# here. Step 4a compares it against the set it measures as defined and
+# exported by the library, in both directions. It is
 # named at this point for the same reason the contract header is: the
 # dependency list below has to carry it.
 set(MCF5307_ABI_SMOKE_LIST_FILE
     "${PROJECT_SOURCE_DIR}/tests/abi_smoke_symbols.inc")
 
-# The link-partner stub of `t0_abi_header` cases 3 and 4. It is CPU-0's file,
-# it is COMPILED here and it is never written here. Step 4a, part three reads
+# The link-partner stub of `t0_abi_header` cases 3 and 4. It is compiled here
+# and never written here. Step 4a, part three reads
 # the symbols its object defines and compares them against the same published
 # set. It is named at this point for the reason the two files above are: the
 # dependency list below has to carry it.
 set(MCF5307_ABI_STUB_FILE "${PROJECT_SOURCE_DIR}/tests/abi_stub.c")
 
-# Editing a configure-time INPUT must re-run the configure step. The inputs
+# Editing a configure-time input must re-run the configure step. The inputs
 # are enumerated here, and the property below lists every one of them.
 #
-# NO COUNT IS WRITTEN. A count is a number beside an enumeration that nothing
-# holds to it, and the enumeration is what a reader has to check anyway. The
-# count that stood here read `Four`, and `1188828` - the commit that added
-# `tests/abi_stub.c` to the list - had to hand-edit it to `Five` in the same
-# change. It was correct on both days, and it was correct because the author
-# remembered, which is the property being removed here rather than a stale
-# number.
+# No count is written. A count is a number beside an enumeration that nothing
+# holds to it, and the enumeration is what a reader has to check anyway.
 #
 #   `src/*.nim`        the unit list is read at configure time, and a new
 #                      module adds a unit to it.
@@ -628,43 +623,11 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # `-DMCF5307_ABI_GATE=OFF` configures such a host, and prints a warning on
 # every configure run.
 #
-# WHAT THE GATE COSTS, MEASURED. This file stated its price nowhere, and a
-# reader reaching for the switch above is usually paying configure time for
-# something else. An adjective would not help that reader, so here is a number.
-#
-#   2810 ms   the whole configure run, from an empty build tree
-#   1570 ms   step 4a, from this switch to the end of the stub verdict
-#    198 ms   controls E through I together - SIX compiles and SIX `nm` runs
-#             that exist only to make the gate's own fatal branches fire
-#    149 ms   control H alone, the largest single control
-#
-# Median of fourteen runs, measured 2026-08-10 on eeks-MBP.lan (Apple M4 Pro,
-# macOS 26.5.1, Apple clang 21.0.0, CMake 4.3.4, `-DCMAKE_BUILD_TYPE=Debug`),
-# read from `cmake --profiling-output=... --profiling-format=google-trace` as
-# the span between the first and last profiled command in each line range of
-# this file.
-#
-# THOSE MILLISECONDS WERE MEASURED ON A BUSY MACHINE, at load average 5.6, and
-# they are reported rather than tidied. An earlier set on the same tree with the
-# machine quiet read 2089, 1160, 151 and 113 ms for those same four lines -
-# about 25% lower across the board. WHAT DID NOT MOVE IS THE RATIOS:
-# step 4a was 56% of the configure run in both sets, and controls E through I
-# were 13% of step 4a in both. So the shares below are the durable part of this
-# record and the absolute figures are the perishable part.
-#
-# WHAT A READER SHOULD TAKE FROM THOSE NUMBERS. Step 4a is about HALF of this
-# project's configure time, and CONTROLS E THROUGH I ARE AN EIGHTH OF STEP 4A.
-# The rest of step 4a is not broken out here, because the line ranges that would
-# do it interleave each control with the production read it calibrates - control
-# D's range carries the `nm` of the shared object, control B's carries a second
-# AST parse - and a number that cannot be attributed to one or the other is not
-# a number worth writing down. So turning the gate off to buy back configure
-# time buys between one and two seconds per configure, in exchange for a build
-# whose published symbols nobody measured.
-#
-# THE NUMBERS MOVE WITH THE HOST AND THE TOOLCHAIN AND THE METHOD DOES NOT. The
-# command above is written out so a reader who needs a current figure takes one
-# instead of trusting this one.
+# The gate costs roughly half of this project's configure time, of which the
+# controls that exist only to fire the gate's own fatal branches are about an
+# eighth. Turning it off buys that back in exchange for a build whose published
+# symbols nobody measured. To take a current figure, run `cmake` with
+# `--profiling-output=... --profiling-format=google-trace`.
 set(MCF5307_ABI_GATE ON CACHE BOOL
     "Measure the visibility of every published symbol at configure time")
 
@@ -1368,79 +1331,71 @@ if(NOT MCF5307_ABI_REACHABLE STREQUAL "")
 endif()
 
 # ---------------------------------------------------------------------------
-# Step 4a, part two. THE SMOKE-TEST LIST GATE.
+# Step 4a, part two. The smoke-test list gate.
 #
-# TWO MECHANISMS, WIRED TOGETHER, BECAUSE EACH ONE ALONE FAILS SILENTLY.
+# Two mechanisms, wired together, because each one alone fails silently.
 #
-#   THE MEASURED SET IS THE FACT. `tests/tests_cpu.cmake` generates the
+#   The measured set is the fact. `tests/tests_cpu.cmake` generates the
 #   address set of `tests/abi_smoke.cpp` from `MCF5307_ABI_VISIBLE`, the set
-#   this step measured as DEFINED AND EXPORTED by the library. That is what
+#   this step measured as defined and exported by the library. That is what
 #   makes the test buildable at all: most of the published surface has no
 #   definition yet, and taking the address of an undefined name is an
 #   unresolved symbol that takes the whole build down. A measured set also
-#   grows on its own, so the task that implements a published name brings it
-#   under this test with no edit anywhere.
+#   grows on its own, so implementing a published name brings it under this
+#   test with no edit anywhere.
 #
-#   A MEASURED SET ALONE CANNOT REPORT AN ABI ADDITION NOBODY INTENDED. It
-#   simply grows, and the check still passes. An export that reached the
-#   library by accident would be adopted in silence and reported as success.
+#   A measured set alone cannot report an ABI addition nobody intended. It
+#   simply grows, and the check still passes.
 #
-#   THE COMMITTED LIST IS THE EXPECTATION. `tests/abi_smoke_symbols.inc` names
-#   the symbols this project INTENDS the library to define and export. A
-#   committed list alone goes stale the moment somebody forgets to update it -
-#   a roster amended by memory is not a rule.
+#   The committed list is the expectation. `tests/abi_smoke_symbols.inc` names
+#   the symbols this project intends the library to define and export. A
+#   committed list alone goes stale the moment somebody forgets to update it.
 #
-#   SO THE TWO ARE COMPARED, AND A MISMATCH IN EITHER DIRECTION FAILS HERE.
-#   An unintended addition to the exported ABI then does two things at once:
-#   it stops the configure step with the symbol NAMED, and it shows up as a
-#   diff in `tests/abi_smoke_symbols.inc` for a reviewer to read.
+#   So the two are compared, and a mismatch in either direction fails here.
+#   An unintended addition to the exported ABI then stops the configure step
+#   with the symbol named, and shows up as a diff in
+#   `tests/abi_smoke_symbols.inc` for a reviewer to read.
 #
-# WHY THE CHECK LIVES HERE AND NOT IN THE TEST. The measured set is what the
-# list must equal, and it is measured HERE, by `nm` over a real shared object,
-# above. A count asserted inside the test would be a third hand-maintained
-# number beside the list and the measurement, and it would fall behind them
-# the same way. This block compares two SETS and asserts no number at all.
+# The check lives here and not in the test because the measured set is
+# measured here, by `nm` over a real shared object, above. This block compares
+# two sets and asserts no number at all.
 #
-# IT FAILS IN BOTH DIRECTIONS.
+# It fails in both directions.
 #
 #   A name the library defines and exports and the list omits. That is an
 #   ABI addition nobody wrote down, and the message names the symbol.
 #
 #   A name the list carries and the library does not define. That is an ABI
 #   symbol that was expected and is gone - a rename, a dropped definition, or
-#   an `exportc` name that changed. The link of `abi_smoke` would NOT catch
+#   an `exportc` name that changed. The link of `abi_smoke` would not catch
 #   it, because the generated address set shrank with the measurement, so this
 #   direction is the one the committed list exists for.
 #
-# THE WHOLE PUBLISHED SET STILL HAS A COMMITTED TWO-WAY ROSTER, and it is not
+# The whole published set has its own committed two-way roster, and it is not
 # this file. `tests/abi_stub.c` must define externally exactly the set
 # `include/mcf5307.h` declares, and part three below fails in both directions
-# over it. So a declaration added to the contract and written down nowhere is
-# still a named configure failure; it is simply not this block's job.
+# over it.
 #
-# THE LIST IS READ AND THE TEST'S C++ IS NOT. `tests/abi_smoke_symbols.inc`
+# The list is read and the test's C++ is not. `tests/abi_smoke_symbols.inc`
 # holds nothing but blank lines, comment lines and the entry macro, so the
 # reader below needs no C parser and no preprocessor. That is the whole reason
-# the list is a separate file. THE GRAMMAR IS TOTAL: every line lands in
-# exactly one of those three shapes or FAILS THE CONFIGURE STEP with its line
+# the list is a separate file. The grammar is total: every line lands in
+# exactly one of those three shapes or fails the configure step with its line
 # number. A line that carries `MCF5307_ABI_FN` in a shape the C++ side would
 # expand but this reader would not - a leading space, a trailing comment, a
 # semicolon - is a failure and never a skip.
 #
-# A COMMENTED-OUT ENTRY NEEDS NO SPECIAL RULE, and the reader deliberately has
-# none. This reader skips a comment, so it stops seeing the name, and the
-# comparison against the MEASUREMENT is what fails: the library still exports
-# the symbol and the list no longer names it. This block compares two sets and
-# never a count, so a name it cannot see is a name it reports as missing. That
-# is why the comment shape is tested BEFORE the macro shape below, and why
-# this file's own prose may name the macro.
+# A commented-out entry needs no special rule. This reader skips a comment, so
+# it stops seeing the name, and the comparison against the measurement is what
+# fails: the library still exports the symbol and the list no longer names it.
+# That is why the comment shape is tested before the macro shape below, and
+# why this file's own prose may name the macro.
 #
-# THE C++ SIDE NO LONGER INCLUDES THIS FILE, and the reader below is stricter
-# than it needs to be for that reason alone. It is kept strict on purpose: a
-# line this reader cannot classify is a line whose intent is unclear, and the
-# expectation half of a two-way comparison may not be read by guesswork.
+# The reader is stricter than it needs to be, on purpose: a line it cannot
+# classify is a line whose intent is unclear, and the expectation half of a
+# two-way comparison may not be read by guesswork.
 #
-# WHEN THE GATE IS OFF THIS CHECK DOES NOT RUN, because there is no measured
+# When the gate is off this check does not run, because there is no measured
 # set to compare against. The warning that `-DMCF5307_ABI_GATE=OFF` prints
 # already says the configure run measured nothing.
 
@@ -1531,10 +1486,10 @@ if(MCF5307_ABI_SMOKE_NAMES STREQUAL "")
         "is refused separately. Silence is not a pass.")
 endif()
 
-# The comparison. THE MEASURED SET IS THE FACT AND THE LIST IS THE
-# EXPECTATION. Two directions, two messages, and each one NAMES THE SYMBOLS
-# rather than reporting a count or the bare word `differ`. A reviewer who
-# reads either message knows which symbol to act on and which file to change.
+# The comparison. The measured set is the fact and the list is the
+# expectation. Two directions, two messages, and each one names the symbols
+# rather than reporting a count or the bare word `differ`, so a reviewer knows
+# which symbol to act on and which file to change.
 set(MCF5307_ABI_SMOKE_UNEXPECTED "")
 foreach(name IN LISTS MCF5307_ABI_VISIBLE)
     if(NOT name IN_LIST MCF5307_ABI_SMOKE_NAMES)
@@ -1589,36 +1544,27 @@ message(STATUS
     "addition or loss can pass unnamed")
 
 # ---------------------------------------------------------------------------
-# Step 4a, part three. THE LINK-PARTNER STUB GATE.
+# Step 4a, part three. The link-partner stub gate.
 #
-# WHAT IT PROTECTS. `tests/abi_stub.c` opens by claiming one definition, with
-# an empty body, of every function the contract declares. THAT SENTENCE WAS
-# FALSE FOR FOUR SYMBOLS. Measured at `ed85588`: the contract declared
-# twenty-two and the stub defined eighteen. `mcf5307_set_reg` and
-# `mcf5307_get_reg` reached the contract with CPU-7, `mcf5307_halted` and
-# `mcf5307_faulted` with CPU-5, and none of the four reached the stub. Nothing
-# measured the gap, and the file's own prose disagreed with itself about the
-# size of it - the opening sentence said every function and a later sentence
-# said eighteen.
+# `tests/abi_stub.c` claims one definition, with an empty body, of every
+# function the contract declares. This gate is what holds that claim true.
 #
-# WHY THE STUB MUST DEFINE THE WHOLE PUBLISHED SET. It is the link partner of
-# cases 3 and 4 of `t0_abi_header`, and those two cases exist to make a
-# RENAMED declaration a link error rather than nothing at all. A reference
+# The stub must define the whole published set because it is the link partner
+# of cases 3 and 4 of `t0_abi_header`, and those two cases exist to make a
+# renamed declaration a link error rather than nothing at all. A reference
 # with no definition anywhere is an undefined symbol at that link, so the pair
 # can only report a rename for a name the stub defines.
 #
-# NOTHING HERE READS THE STUB'S SOURCE TEXT, AND NOTHING HERE PARSES C. The
+# Nothing here reads the stub's source text, and nothing here parses C. The
 # smoke-test list above is a separate data file precisely so that its reader
-# needs no C parser. THAT TRICK DOES NOT TRANSFER: a stub is real C with a
+# needs no C parser. That trick does not transfer: a stub is real C with a
 # real body and a different signature per function, so no list of names
-# generates it. The set is therefore read the way the EXPORTED set of the
-# measurement shared object is read above - the file is COMPILED, and `nm`
-# reports what the object DEFINES. A compiler and a linker decide what the C
-# means, exactly as this step's own history demands: a regular expression may
-# not be trusted to say what C declares, and the seven shapes in the
-# calibration header above are why.
+# generates it. The set is therefore read the way the exported set of the
+# measurement shared object is read above - the file is compiled, and `nm`
+# reports what the object defines. A regular expression may not be trusted to
+# say what C declares, and the shapes in the calibration header above are why.
 #
-# THE MEASUREMENT IS OVER EXTERNAL DEFINITIONS. `nm -g` reports what the link
+# The measurement is over external definitions. `nm -g` reports what the link
 # of `t0_abi_header` can resolve against. A published name defined `static`
 # resolves nothing there, so it is a fault with a message of its own. The
 # `all` pass is read as well, because it is what separates `defined with
@@ -1626,45 +1572,31 @@ message(STATUS
 # visibility verdict above draws between `hidden` and `not implemented yet`,
 # and for the same reason: two different faults must never share a line.
 #
-# IT FAILS IN BOTH DIRECTIONS, AND THE SECOND DIRECTION IS NOT THE SMOKE
-# LIST'S.
+# It fails in both directions.
 #
-#   A published name the stub does not define EXTERNALLY. That is the defect
+#   A published name the stub does not define externally. That is the defect
 #   this block was written for, and the message names the symbol.
 #
-#   An EXTERNAL name the stub defines that the contract does not declare. This
+#   An external name the stub defines that the contract does not declare. This
 #   translation unit is linked into two test executables, and a name of its
 #   own there is either a contract that lost a declaration or a stub that grew
-#   something outside its job. An INTERNAL name is exempt: a `static` helper
-#   publishes nothing and can collide with nothing, so the stub keeps a
-#   freedom the smoke list - which is a list of published names and nothing
-#   else - has no equivalent of.
+#   something outside its job. An internal name is exempt: a `static` helper
+#   publishes nothing and can collide with nothing.
 #
-#   THE FATAL MESSAGE FOR THIS BRANCH USED TO GIVE A REASON THAT WAS FALSE. It
-#   said the stub is linked `beside the real library's own surface`, so a name
-#   of its own could collide there. Measured: `tests/tests_cpu.cmake` links
-#   case 3 as `t0_abi_header.c` plus `abi_stub_for_c.o` and case 4 as
-#   `t0_abi_header.cpp` plus `abi_stub_for_cpp.o`. NEITHER LINKS `libmcf5307`.
-#   The built executables carry no `NimMain`, which the static library defines,
-#   so the real surface is not in that link at all. The rule is kept and the
-#   invented mechanism is gone: the message now states the two faults the
-#   check cannot tell apart, which is what it actually detects.
-#
-# THE CONSUMER'S `CMAKE_C_FLAGS` ARE NOT PASSED HERE, for the reason the
+# The consumer's `CMAKE_C_FLAGS` are not passed here, for the reason the
 # measurement shared object gives above: this object is an instrument and it
 # is never shipped. The registered test `t0_abi_header` compiles the same file
 # with `-Wall -Wextra -pedantic -Werror`, and that is where a warning in it is
 # a failure.
 #
-# `tests/abi_stub.c` belongs to CPU-0. It is read here and never written here.
+# `tests/abi_stub.c` is read here and never written here.
 #
-# WHICH FATAL BRANCHES OF THIS PART A CONTROL ENTERS, AND WHICH IT DOES NOT.
-# Controls E through I below drive the branches that depend on a MEASUREMENT -
+# Which fatal branches of this part a control enters, and which it does not.
+# Controls E through I below drive the branches that depend on a measurement -
 # the reader, the three verdict categories, the unpublished-export answer, the
 # internal-linkage route and the compile-fault split - because a measurement
 # can be wrong while the run stays green, and those are the branches that then
-# never fire. FIVE FATAL BRANCHES THIS PART CAN ENTER HAVE NO CONTROL AND ARE
-# NOT CLAIMED TO:
+# never fire. These fatal branches have no control and are not claimed to:
 #
 #   the stub source does not exist;
 #   the compiler rejected the stub for a fault of the stub's own;
@@ -1672,43 +1604,33 @@ message(STATUS
 #   control H's own precondition - the route name is not in the published set;
 #   `nm` exited non-zero, inside `mcf5307_abi_read_symbols` far above.
 #
-# THE LAST TWO WERE MISSING FROM THIS LIST. A heading that promises a partition
-# and then names three of five is the same defect as a blanket claim of
-# coverage, only quieter, so both are named now.
-#
-#   CONTROL H'S GUARD is not written as a control and is not one. It fails when
-#   `MCF5307_ABI_STUB_ROUTE_NAME` is absent from the published set, and no
+#   Control H's guard is not written as a control and is not one. It fails
+#   when `MCF5307_ABI_STUB_ROUTE_NAME` is absent from the published set, and no
 #   control plants a contract that has lost `mcf5307_runtime_init`. It exists
-#   because control C checks that the published set is NON-EMPTY and not that it
-#   carries this name, so the membership is tested there or nowhere.
+#   because control C checks that the published set is non-empty and not that
+#   it carries this name, so the membership is tested there or nowhere.
 #
-#   THE READER'S OWN `nm` BRANCH is not written below - it lives in
+#   The reader's own `nm` branch is not written below - it lives in
 #   `mcf5307_abi_read_symbols` - but this part reaches it twice: once for the
-#   stub object, and once inside control H for each unit that arm compiles. It
-#   is named here because this heading promises the fatal branches THIS PART CAN
-#   ENTER, and a branch is no less uncontrolled for being defined elsewhere.
+#   stub object, and once inside control H for each unit that arm compiles.
 #
-# WHY EACH IS UNCONTROLLED, ONE AT A TIME. A single sentence covering all of
-# them is what this listing got wrong before.
+# Why each is uncontrolled:
 #
 #   The two `EXISTS` branches and the reader's `nm` exit status are each a
 #   direct test of a condition this file did not compute, so there is no reading
 #   in between for a control to calibrate.
 #
-#   THE COMPILE-FAULT BRANCH DOES HAVE A READING IN BETWEEN, AND THIS LISTING
-#   USED TO DENY IT. Reaching it requires `MCF5307_ABI_STUB_COMPILE_COLLIDED` to
-#   be FALSE, that value is computed by the `mcf5307_abi_stub_collided` call
-#   below, and control I calibrates it in BOTH directions. Only the exit status
-#   itself is uncontrolled. The old sentence UNDER-claimed the coverage this
-#   part has, which is the safe direction to be wrong in and still wrong.
+#   The compile-fault branch does have a reading in between. Reaching it
+#   requires `MCF5307_ABI_STUB_COMPILE_COLLIDED` to be false, that value is
+#   computed by the `mcf5307_abi_stub_collided` call below, and control I
+#   calibrates it in both directions. Only the exit status itself is
+#   uncontrolled.
 #
-#   Control H's guard reads a set this file DID compute, and control B
+#   Control H's guard reads a set this file did compute, and control B
 #   calibrates the reader that produces it. It is uncontrolled in the one sense
-#   this heading means: no control makes it FIRE.
+#   this heading means: no control makes it fire.
 #
-# THE POINT OF SAYING SO IS THAT NOTHING HERE CLAIMS OTHERWISE. A blanket
-# sentence about every fatal branch being covered would be a sixth instance of
-# the defect this part keeps being corrected for.
+# Nothing here claims coverage beyond that.
 
 if(NOT EXISTS "${MCF5307_ABI_STUB_FILE}")
     message(FATAL_ERROR
@@ -1724,14 +1646,12 @@ set(MCF5307_ABI_STUB_OBJECT
 
 # The probe unit of part three.
 #
-# IT IS `-include`d AND NOT COMPILED BESIDE. That puts it in THE SAME
-# TRANSLATION UNIT and therefore in THE SAME OBJECT the verdict below is read
-# from - the rule the measurement shared object states above, applied to the
-# second artifact type this step measures. A sibling object would calibrate a
-# file no verdict reads.
+# It is `-include`d and not compiled beside. That puts it in the same
+# translation unit and therefore in the same object the verdict below is read
+# from. A sibling object would calibrate a file no verdict reads.
 #
-# `tests/abi_stub.c` IS NOT TOUCHED, and this file still only reads it. The
-# registered test `t0_abi_header` compiles that same source WITHOUT this flag,
+# `tests/abi_stub.c` is not touched, and this file only reads it. The
+# registered test `t0_abi_header` compiles that same source without this flag,
 # so no probe reaches a test executable or any shipped artifact.
 set(MCF5307_ABI_STUB_PROBE_SOURCE "${MCF5307_ABI_DIR}/stub_probe.h")
 file(WRITE "${MCF5307_ABI_STUB_PROBE_SOURCE}" [==[
@@ -1757,32 +1677,23 @@ __attribute__((used)) static void mcf5307_abi_stub_probe_internal(void) {}
 # unpublished-export check below EXEMPTS them, and an exemption is a hole
 # unless something closes it.
 #
-# WHAT CLOSES IT IS THE COMPILER, NOT A CONTROL. This comment used to say that
-# control G holds that check against the published set alone, so the exemption
-# cost nothing. IT DOES NOT: control G's own comment says the opposite in
-# capitals and gives the reason - held against the published set alone, a real
-# unpublished export would trip THE CONTROL instead of the check. So the
-# exemption is not covered there and never was.
-#
-# It is safe for a different reason, and the reason is measurable: THE PROBE
-# HEADER ABOVE DEFINES BOTH NAMES, so a stub that defines either one is
+# What closes it is the compiler, not a control. The probe header above
+# defines both names, so a stub that defines either one is
 # `error: redefinition` and the compile below exits non-zero. No verdict runs
 # on that translation unit at all, so there is no set for the exemption to hide
-# a name in. CONTROL I BELOW COMPILES THAT COLLISION AND ASSERTS IT.
+# a name in. Control I below compiles that collision and asserts it.
 set(MCF5307_ABI_STUB_INSTRUMENT
     mcf5307_abi_stub_probe_external mcf5307_abi_stub_probe_internal)
 
 # ---------------------------------------------------------------------------
-# TWO FAULTS MUST NEVER SHARE A LINE, AND THE PROBE INJECTION GAVE THIS COMPILE
-# A SECOND ONE. `tests/abi_stub.c` is compiled here with `-include` of a header
-# THIS FILE GENERATES, so the compile can now fail for a fault that is not the
-# stub's: a stub name that collides with a probe name. Measured, the message
-# for that was `tests/abi_stub.c did not compile` - about a file that compiles
-# clean under the registered test's own `-Wall -Wextra -pedantic -Werror`, exit
-# 0. That is the rule stated where `hidden` is kept apart from `not implemented
-# yet`, broken by the instrument that was added to close a different hole.
+# Two faults must never share a line. `tests/abi_stub.c` is compiled here with
+# `-include` of a header this file generates, so the compile can fail for a
+# fault that is not the stub's: a stub name that collides with a probe name.
+# Reporting that as `tests/abi_stub.c did not compile` would name the wrong
+# file, since the stub compiles clean under the registered test's own
+# `-Wall -Wextra -pedantic -Werror`.
 #
-# THE TWO ARE SEPARATED BY THE ONE THING THAT DISTINGUISHES THEM: whether the
+# The two are separated by the one thing that distinguishes them: whether the
 # compiler's own diagnostics name the generated probe header. `string(FIND)` is
 # literal, so a path with regex characters in it is still matched as a path.
 function(mcf5307_abi_stub_collided mcf5307_col_out mcf5307_col_text)
@@ -1796,22 +1707,16 @@ function(mcf5307_abi_stub_collided mcf5307_col_out mcf5307_col_text)
 endfunction()
 
 # ---------------------------------------------------------------------------
-# Control I. THE COMPILE-FAULT SPLIT, RUN ON EVERY CONFIGURE RUN.
+# Control I. The compile-fault split, run on every configure run.
 #
-# IT RUNS BEFORE THE COMPILE IT CALIBRATES, unlike controls E through H, which
+# It runs before the compile it calibrates, unlike controls E through H, which
 # all run after that compile. The branch this one feeds fires the instant the
 # real compile fails, so a calibration placed after it would be a calibration
 # the failing run never reaches.
 #
-# THAT CONTRAST IS ABOUT ORDER, AND IT USED TO BE STATED AS SOMETHING ELSE. It
-# said controls E through H `read an artifact that already exists`. That is
-# false of control H, which compiles four units of its own below. The property
-# that separates this control from those four is where it sits relative to THE
-# STUB COMPILE, and nothing else.
-#
-# IT HAS TWO ARMS AND NEEDS BOTH. An arm that only proves a collision is
+# It has two arms and needs both. An arm that only proves a collision is
 # detected is passed by a predicate that answers TRUE always - and such a
-# predicate would report EVERY genuine stub fault as an instrument collision,
+# predicate would report every genuine stub fault as an instrument collision,
 # which is the same two-faults defect pointing the other way.
 function(mcf5307_abi_stub_compile_probe mcf5307_cp_out_result
         mcf5307_cp_out_collided mcf5307_cp_name mcf5307_cp_text)
@@ -1882,7 +1787,7 @@ message(STATUS
     "mcf5307: step 4a control I the compile-fault split told an instrument "
     "collision from a fault of the stub's own")
 
-# The object of an earlier configure run is REMOVED BEFORE THE COMPILE, for
+# The object of an earlier configure run is removed before the compile, for
 # the reason every driver in `tests/tests_cpu.cmake` records: without it a
 # compile that failed would leave the earlier object in place, and the reader
 # below would then report a set this run never produced.
@@ -1956,32 +1861,28 @@ mcf5307_abi_read_symbols(MCF5307_ABI_STUB_DEFINED_RAW
     MCF5307_ABI_STUB_EXTERNAL_RAW "${MCF5307_ABI_STUB_OBJECT}")
 
 # ---------------------------------------------------------------------------
-# Control E. The symbol reader, calibrated on THE RELOCATABLE OBJECT it just
+# Control E. The symbol reader, calibrated on the relocatable object it just
 # read.
 #
-# WHY CONTROL D DOES NOT COVER THIS READ. Control D calibrates the reader on
+# Control D calibrates the reader on
 # `libmcf5307_abi_measure${CMAKE_SHARED_LIBRARY_SUFFIX}`, with a probe unit
 # compiled into that shared object. A relocatable object is a different
-# artifact type, and this step's own rule - stated where the measurement
-# shared object is built above - is that a calibration is a statement about
-# THE ARTIFACT THE VERDICT IS READ FROM. So this read gets probes of its own,
-# compiled into THIS object.
+# artifact type, and a calibration is a statement about the artifact the
+# verdict is read from, so this read gets probes of its own, compiled into
+# this object.
 #
-# NON-EMPTINESS WAS NOT ENOUGH AND IS GONE. This control used to ask only that
-# `nm` answered something. Any file with one symbol in it passes that, so it
-# could not separate `read the right file` from `read a file`. Pointed at the
-# measurement shared object it passed in silence, and the verdict below then
-# accused `tests/abi_stub.c` of missing thirteen definitions that file holds.
-# The three probes are NAMED, so a wrong file fails HERE and says so.
+# Non-emptiness is not enough: any file with one symbol in it passes that, so
+# it cannot separate `read the right file` from `read a file`. The three
+# probes are named, so a wrong file fails here and says so.
 #
-#   `mcf5307_abi_stub_probe_external` defined, EXTERNAL linkage.
-#   `mcf5307_abi_stub_probe_internal` defined, INTERNAL linkage.
+#   `mcf5307_abi_stub_probe_external` defined, external linkage.
+#   `mcf5307_abi_stub_probe_internal` defined, internal linkage.
 #   `mcf5307_abi_stub_probe_absent`   defined nowhere.
 #
-# THE SYMBOL PREFIX IS MEASURED HERE TOO, AND NOT INHERITED. `MCF5307_ABI_
+# The symbol prefix is measured here too, and not inherited. `MCF5307_ABI_
 # PREFIX` above is read off the shared object. Applying it to this object
 # without measuring it here would be an assumption about an artifact type
-# nothing had measured. It is read off a name this file wrote into THIS
+# nothing had measured. It is read off a name this file wrote into this
 # object, and the two answers must agree.
 
 set(MCF5307_ABI_STUB_PREFIX "")
@@ -2069,18 +1970,18 @@ message(STATUS
 # The verdict. Three categories over the published set, and each published
 # name lands in exactly one.
 #
-#   LINKABLE  published and defined with EXTERNAL linkage.  Pass.
-#   INTERNAL  published and defined with INTERNAL linkage.  FAILS.
-#   ABSENT    published and not defined at all.             FAILS.
+#   linkable  published and defined with external linkage.  Pass.
+#   internal  published and defined with internal linkage.  Fails.
+#   absent    published and not defined at all.             Fails.
 #
-# IT IS A FUNCTION SO THAT A PROBE CAN RUN THROUGH IT. Two of the three
+# It is a function so that a probe can run through it. Two of the three
 # categories are ones this project's own source is not expected to produce, so
 # on an ordinary run the two fatal branches below are never entered, and a
 # branch nothing enters is a branch nothing proves works. Control F below
-# sorts three probe names through THIS function and holds the answer against a
+# sorts three probe names through this function and holds the answer against a
 # written-out expectation.
 #
-# IT READS THE MEASURED SETS OUT OF THE CALLING SCOPE ON PURPOSE. The control
+# It reads the measured sets out of the calling scope on purpose. The control
 # and the verdict then sort names out of ONE reading of ONE object. A control
 # that carried sets of its own would prove something about its own sets and
 # nothing about the object the verdict is read from.
@@ -2104,7 +2005,7 @@ function(mcf5307_abi_stub_classify mcf5307_cls_out_linkable
 endfunction()
 
 # The other direction, also a function and for the same reason. It answers
-# every EXTERNAL definition of the object that the allowed set does not carry.
+# every external definition of the object that the allowed set does not carry.
 function(mcf5307_abi_stub_unallowed mcf5307_una_out)
     set(mcf5307_una_allowed ${ARGN})
     set(mcf5307_una_result "")
@@ -2117,18 +2018,18 @@ function(mcf5307_abi_stub_unallowed mcf5307_una_out)
 endfunction()
 
 # ---------------------------------------------------------------------------
-# Control F. EVERY CATEGORY OF THE VERDICT, ENTERED ON EVERY CONFIGURE RUN.
+# Control F. Every category of the verdict, entered on every configure run.
 #
 # Two of the three categories are ones this project's own source is not
 # expected to produce, so without this control the two fatal branches below are
-# never entered on an ordinary run. THE PROBES GO THROUGH THE SAME FUNCTION AND
-# THE SAME MEASURED SETS AS THE PUBLISHED SET, and the expected answer is
+# never entered on an ordinary run. The probes go through the same function and
+# the same measured sets as the published set, and the expected answer is
 # written out here, so a classifier that lost an arm cannot produce it.
 #
-# THIS CONTROL COVERS THE CLASSIFIER AND NOT THE C. It proves the internal arm
-# sorts a name the reader reported as internal-defined. It says NOTHING about
-# what C source makes a compiler produce such a name, and a claim about that is
-# a claim about a compiler. CONTROL H BELOW COMPILES ONE AND MEASURES IT.
+# This control covers the classifier and not the C. It proves the internal arm
+# sorts a name the reader reported as internal-defined. It says nothing about
+# what C source makes a compiler produce such a name. Control H below compiles
+# one and measures it.
 mcf5307_abi_stub_classify(MCF5307_ABI_STUB_PROBE_LINKABLE
     MCF5307_ABI_STUB_PROBE_INTERNAL MCF5307_ABI_STUB_PROBE_ABSENT
     mcf5307_abi_stub_probe_external
@@ -2165,7 +2066,7 @@ message(STATUS
     "${MCF5307_ABI_STUB_OBJECT}")
 
 # ---------------------------------------------------------------------------
-# Control G. THE OTHER DIRECTION, ENTERED ON EVERY CONFIGURE RUN.
+# Control G. The other direction, entered on every configure run.
 #
 # `mcf5307_abi_stub_probe_external` is an external definition of that object,
 # planted by this file, and the shape the check below is for is exactly `an
@@ -2173,10 +2074,10 @@ message(STATUS
 # that carries every external name of the object EXCEPT that probe, the answer
 # must be that probe and nothing else.
 #
-# THE ALLOWED SET IS NOT THE PUBLISHED SET, AND THAT IS DELIBERATE. Written
+# The allowed set is not the published set, and that is deliberate. Written
 # against the published set alone, this control's answer grows whenever the
-# stub grows a real unpublished export - so a real fault tripped THE CONTROL
-# instead of the check, and the operator got a calibration message where the
+# stub grows a real unpublished export - so a real fault trips the control
+# instead of the check, and the operator gets a calibration message where the
 # production one names the two files and says which to change. A control must
 # never take a production fault's message away from it. Holding the probe
 # against everything else the object exports keeps the answer exact whatever
@@ -2214,59 +2115,44 @@ message(STATUS
     "its probe on ${MCF5307_ABI_STUB_OBJECT}")
 
 # ---------------------------------------------------------------------------
-# Control H. THE INTERNAL BRANCH'S TWO ROUTES, COMPILED ON EVERY CONFIGURE RUN.
+# Control H. The internal branch's two routes, compiled on every configure run.
 #
-# A SENTENCE ABOUT WHAT A COMPILER DOES IS A MEASUREMENT AND NOT A FACT, and
-# this comment used to be a sentence. It named two ways to put a published name
-# into the object with INTERNAL linkage - a `static` definition placed ABOVE the
-# contract include, and an `__asm__` label on a `static` helper - and asserted
-# what each produced without compiling either. BOTH DESCRIPTIONS ALSO LEFT OUT
-# THE HALF THAT MAKES THE ROUTE WORK AT ALL: the definition has to SURVIVE to
-# `nm`, because `nm` is what the INTERNAL branch reads. Each arm below therefore
-# carries something that holds its definition alive - a reference for arm one,
-# `used` for arm two - and each asserts the category ITS OWN object lands in.
+# A sentence about what a compiler does is a measurement and not a fact, so
+# each route is compiled here rather than described. A route needs two things:
+# internal linkage, and a definition that survives to `nm`, because `nm` is
+# what the internal branch reads. Each arm below therefore carries something
+# that holds its definition alive - a reference for arm one, `used` for arm
+# two - and each asserts the category its own object lands in.
 #
-# THE ROUTES ARE REAL ONCE THE DEFINITION SURVIVES. Internal linkage plus
-# something that keeps the definition alive gives `t <name>` in the `all` pass,
-# absent from the `-g` pass, and that is what the INTERNAL branch below reads.
-# So this control STOPS DESCRIBING THE ROUTES AND COMPILES THEM: each source is
-# generated here, each object is read with the same reader, and the name is
-# sorted by the same function that sorts the published set. A route that stops
-# working fails HERE, where the claim is, instead of rotting in a comment.
+# Internal linkage plus something that keeps the definition alive gives
+# `t <name>` in the `all` pass, absent from the `-g` pass, and that is what the
+# internal branch below reads. Each source is generated here, each object is
+# read with the same reader, and the name is sorted by the same function that
+# sorts the published set, so a route that stops working fails here rather than
+# rotting in a comment.
 #
-#   ARM ONE is `static` ahead of the contract, with an anchor that references it.
-#   ARM TWO is the `__asm__` label, on a helper marked `used`.
+#   Arm one is `static` ahead of the contract, with an anchor that references it.
+#   Arm two is the `__asm__` label, on a helper marked `used`.
 #
-# THE TWO NON-ROUTES ARE COMPILED HERE TOO, for the same reason. `hidden`
-# visibility on a published name and `static` AFTER the contract include are
-# both written up as things that do NOT reach this category, and a sentence
-# saying a mutation does not reach a branch rots exactly like a sentence saying
-# it does. Arms three and four below run them.
+# The two non-routes are compiled here too, for the same reason. `hidden`
+# visibility on a published name and `static` after the contract include both
+# fail to reach this category, and a sentence saying a mutation does not reach
+# a branch rots exactly like a sentence saying it does. Arms three and four
+# below run them.
 #
-# BETWEEN THE FOUR ARMS EVERY SHAPE THIS COMMENT NAMES IS A COMPILE WHOSE ANSWER
-# IS ASSERTED. That sentence arrived in `6239af5` over THREE arms, while this
-# same comment went on naming a fourth shape - the `__asm__` label, named here
-# since `677a88b` - and asserting a measurement about it that no arm ran. THE
-# COMPLETENESS CLAIM WAS FALSE IN THE SENTENCE THAT DECLARED THE CLASS CLOSED,
-# which is this part's own defect committed once more by the correction meant to
-# end it. ARM TWO IS WHAT MAKES THE SENTENCE TRUE.
+# No arm compiles an unanchored shape, so this file says nothing about what one
+# produces.
 #
-# THE CLAIM ABOUT WHAT THESE SHAPES PRODUCE WITHOUT AN ANCHOR IS GONE RATHER
-# THAN REWORDED. No arm compiles an unanchored shape, so this file no longer
-# says what one produces. Keeping the sentence and marking it uncompiled was the
-# other way out and it is the weaker one: an uncompiled measurement rots whether
-# or not it is labelled.
-#
-# THE SCOPE OF THIS MEASUREMENT IS ONE TOOLCHAIN. Every answer above was read
+# The scope of this measurement is one toolchain. Every answer above was read
 # from Apple clang 21.0.0 targeting arm64 Mach-O. A different compiler may emit
 # an unreferenced internal definition and reach the branch by the shorter road.
 # That would not falsify anything here: these arms compile their shapes and
-# assert the OUTCOME, so a toolchain that gets there another way still passes
+# assert the outcome, so a toolchain that gets there another way still passes
 # arms one and two - and arms three and four would report the change rather than
 # hide it.
 #
-# ARM TWO'S LABEL CARRIES THE MEASURED SYMBOL PREFIX. An `__asm__` label names
-# an ASSEMBLER symbol, so it has to be written the way the assembler writes it -
+# Arm two's label carries the measured symbol prefix. An `__asm__` label names
+# an assembler symbol, so it has to be written the way the assembler writes it -
 # `_mcf5307_runtime_init` on this host, `mcf5307_runtime_init` on a target with
 # no prefix. `MCF5307_ABI_PREFIX` is the prefix `mcf5307_abi_strip` removes, so
 # using it here is what makes the stripped name the reader answers with the
@@ -2285,11 +2171,11 @@ if(NOT "${MCF5307_ABI_STUB_ROUTE_NAME}" IN_LIST MCF5307_ABI_PUBLISHED)
         "a name the contract still declares.")
 endif()
 
-# THE SAME CLASSIFIER, OVER ANOTHER OBJECT'S SETS. `mcf5307_abi_stub_classify`
-# reads the two measured sets out of its CALLING SCOPE, which is what lets the
+# The same classifier, over another object's sets. `mcf5307_abi_stub_classify`
+# reads the two measured sets out of its calling scope, which is what lets the
 # verdict and control F share one reading of one object. This wrapper names its
 # two parameters after those two variables, so inside it they are function-local
-# and the nested call sorts the ROUTE object instead. It is the production
+# and the nested call sorts the route object instead. It is the production
 # classifier that answers here - not a copy of it, and not a restatement of its
 # condition in this comment.
 function(mcf5307_abi_stub_classify_over
@@ -2304,31 +2190,23 @@ function(mcf5307_abi_stub_classify_over
 endfunction()
 
 # One arm. It writes a unit, compiles it, reads the object with the same reader,
-# and answers with THE CATEGORY THE VERDICT WOULD PUT THE ROUTE NAME IN.
+# and answers with the category the verdict would put the route name in.
 #
-# THE COMPILE LINE IS THE STUB'S MINUS ONE FLAG, AND THIS USED TO SAY IT WAS THE
-# STUB'S. It carries `-std=c11`, the project's include directory and `-c`,
-# exactly as the stub compile above does. It does NOT carry `-include` of the
-# generated probe header, and the stub compile DOES. The other helper this part
-# adds, `mcf5307_abi_stub_compile_probe`, carries it, because that header is
-# that helper's whole subject. Measured on this toolchain, adding it here puts
-# the two probe names in the object and changes no ANSWER here: arm one answers
-# INTERNAL with the flag and without it, because the classifier below is asked
-# about ONE name and the probe names are not it.
+# The compile line is the stub's minus one flag. It carries `-std=c11`, the
+# project's include directory and `-c`, exactly as the stub compile above does.
+# It does not carry `-include` of the generated probe header, and the stub
+# compile does. Adding it here would put the two probe names in the object and
+# change no answer here, because the classifier below is asked about one name
+# and the probe names are not it.
 #
-# `REJECTED` AND `NO OBJECT` ARE TWO ANSWERS, AND THEY USED TO BE ONE. This
-# helper reported both `the compiler refused the unit` and `the compiler exited
-# 0 and wrote nothing` as `REJECTED`, which is the two-faults-on-one-line defect
-# that this part states as a rule where `hidden` is kept apart from `not
-# implemented yet`, and that the production code obeys with a branch each. Two
-# consequences, and each was real. Arm four would have PASSED FOR THE WRONG
-# REASON on a toolchain that exits 0 without emitting - it asks for `REJECTED`
-# and would have got it from a compiler that accepted the unit. And an arm that
-# failed that way printed `the compiler refused the unit` with an EMPTY detail,
-# because the detail is clipped stderr and a silent success has none. The two
-# answers are separate below, and `NO OBJECT` carries a detail of its own.
+# `REJECTED` and `NO OBJECT` are two answers. Reporting `the compiler refused
+# the unit` and `the compiler exited 0 and wrote nothing` as one answer is the
+# two-faults-on-one-line defect: arm four asks for `REJECTED` and would get it
+# from a compiler that accepted the unit and emitted nothing, and the detail
+# line is clipped stderr, which a silent success has none of. The two answers
+# are separate below, and `NO OBJECT` carries a detail of its own.
 #
-# The units are NEVER LINKED INTO ANYTHING. They are compiled, read and left in
+# The units are never linked into anything. They are compiled, read and left in
 # the instrument directory, and no target of this project names them.
 function(mcf5307_abi_stub_route_probe mcf5307_rp_out_category
         mcf5307_rp_out_detail mcf5307_rp_name mcf5307_rp_text)
@@ -2385,9 +2263,9 @@ ${mcf5307_rp_text}")
         PARENT_SCOPE)
 endfunction()
 
-# Arm one. THE FIRST ROUTE. Internal linkage from a `static` declaration ahead
-# of the contract, and an anchor that keeps the definition from being dropped -
-# which is the half the old comment left out. The anchor is `used` for the
+# Arm one. The first route. Internal linkage from a `static` declaration ahead
+# of the contract, and an anchor that keeps the definition from being dropped.
+# The anchor is `used` for the
 # reason the probe header gives: without it the anchor goes, the reference goes
 # with it, and the definition goes with that.
 mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_ROUTE_CATEGORY
@@ -2427,13 +2305,13 @@ if(NOT MCF5307_ABI_STUB_ROUTE_CATEGORY STREQUAL "INTERNAL")
         "answers.")
 endif()
 
-# Arm two. THE SECOND ROUTE, AND THE ONE THIS COMMENT USED TO ONLY DESCRIBE. An
-# `__asm__` label renames the ASSEMBLER symbol of a `static` helper, so the
+# Arm two. The second route. An
+# `__asm__` label renames the assembler symbol of a `static` helper, so the
 # helper keeps internal linkage while carrying the published name. `used` is the
 # anchor here, and it is load-bearing for the same reason it is in the probe
 # header: an unreferenced `static` function is not emitted at all.
 #
-# THE LABEL IS BUILT FROM THE MEASURED PREFIX and not from a literal underscore,
+# The label is built from the measured prefix and not from a literal underscore,
 # for the reason the comment above this control gives.
 mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_ASMLABEL_CATEGORY
     MCF5307_ABI_STUB_ASMLABEL_DETAIL asm_label_route
@@ -2470,8 +2348,8 @@ if(NOT MCF5307_ABI_STUB_ASMLABEL_CATEGORY STREQUAL "INTERNAL")
         "`NO-OBJECT`, it accepted the unit and emitted nothing.")
 endif()
 
-# Arm three. NOT A ROUTE, AND MEASURED TO BE ONE. `hidden` visibility keeps
-# EXTERNAL linkage, so the name stays in the `-g` pass and this category never
+# Arm three. Not a route, and measured not to be one. `hidden` visibility keeps
+# external linkage, so the name stays in the `-g` pass and this category never
 # sees it. The shared-object verdict above is where `hidden` is a fault; here
 # it must read LINKABLE, and a run where it reads INTERNAL means the two
 # verdicts have swapped meanings.
@@ -2502,13 +2380,13 @@ if(NOT MCF5307_ABI_STUB_HIDDEN_CATEGORY STREQUAL "LINKABLE")
         "classify and the question this arm asks was never reached.")
 endif()
 
-# Arm four. NOT A ROUTE EITHER. `static` AFTER the contract include is a
+# Arm four. Not a route either. `static` after the contract include is a
 # constraint violation, so no object exists to classify and the compile branch
 # far above owns the report.
 #
-# IT ASKS FOR `REJECTED` AND NOT FOR `NO-OBJECT`, and until the split above
-# those were one answer. The claim this arm carries is that the COMPILER
-# REFUSES this shape. A toolchain that accepted it and wrote no object would
+# It asks for `REJECTED` and not for `NO-OBJECT`. The claim this arm carries is
+# that the compiler refuses this shape. A toolchain that accepted it and wrote
+# no object would
 # have satisfied the old combined answer and left the claim false.
 mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_LATESTATIC_CATEGORY
     MCF5307_ABI_STUB_LATESTATIC_DETAIL late_static_route
@@ -2536,12 +2414,8 @@ if(NOT MCF5307_ABI_STUB_LATESTATIC_CATEGORY STREQUAL "REJECTED")
         "the unit and emitted nothing, which is not a refusal either.")
 endif()
 
-# THE LINE BELOW COUNTS FOUR UNITS AND CALLS TWO OF THEM ROUTES, and it used to
-# contradict itself inside one sentence: it said `compiled three routes to the
-# INTERNAL category` and then reported two of the three as LINKABLE and
-# REJECTED, while the comment at the head of this control called those same two
-# THE TWO NON-ROUTES. What this control compiles is four shapes; two are routes
-# to that category and two are shapes measured NOT to reach it.
+# What this control compiles is four shapes: two are routes to the internal
+# category and two are shapes measured not to reach it.
 message(STATUS
     "mcf5307: step 4a control H compiled four shapes and asserted each "
     "category: `${MCF5307_ABI_STUB_ROUTE_NAME}` reaches INTERNAL by two "
@@ -2553,7 +2427,7 @@ message(STATUS
 mcf5307_abi_stub_classify(MCF5307_ABI_STUB_LINKABLE MCF5307_ABI_STUB_INTERNAL
     MCF5307_ABI_STUB_ABSENT ${MCF5307_ABI_PUBLISHED})
 
-# The stub's OWN external definitions. The two probe names above are this
+# The stub's own external definitions. The two probe names above are this
 # file's instrument and they are in no shipped artifact and in no test
 # executable, so a message that says `defined by the stub` must not print
 # them.
@@ -2598,12 +2472,10 @@ endif()
 
 # The other direction. An external name the contract does not declare.
 #
-# THE PROBE NAMES ARE EXEMPTED, AND CONTROL G IS NOT WHAT COVERS THAT. This
-# comment used to say control G holds this same measurement against the
-# published set alone. It does not, deliberately, and its own comment says so:
-# the allowed set there is every OTHER external name of the object, precisely
-# so that a real unpublished export reaches THIS message instead of tripping
-# the control. What covers the exemption is control I, above the compile: a
+# The probe names are exempted, and control G is not what covers that. The
+# allowed set there is every other external name of the object, precisely so
+# that a real unpublished export reaches this message instead of tripping the
+# control. What covers the exemption is control I, above the compile: a
 # stub that defines either probe name is `error: redefinition` and produces no
 # object, so no run reaches this line with such a name in the set.
 mcf5307_abi_stub_unallowed(MCF5307_ABI_STUB_EXTRA
@@ -2626,45 +2498,33 @@ if(NOT MCF5307_ABI_STUB_EXTRA STREQUAL "")
         "is `static`, and this check says nothing about a `static` one.")
 endif()
 
-# THE SUCCESS LINE STATES THE MEASUREMENT AND STOPS, and it used to state an
-# outcome instead: `so cases 3 and 4 of t0_abi_header can link against every
-# one of them`. THIS STEP NEVER RAN THAT LINK, and two things it did not run
-# can each falsify the sentence while this step exits 0.
+# The success line states the measurement and stops. It does not claim that
+# cases 3 and 4 of `t0_abi_header` link, because this step never ran that link
+# and two things it did not run can each falsify such a claim while this step
+# exits 0.
 #
-#   THE FLAGS DIFFER. The compile above carries `-std=c11` and no warning
+#   The flags differ. The compile above carries `-std=c11` and no warning
 #   flags. `tests/tests_cpu.cmake` sets `-Wall -Wextra -pedantic -Werror` and
-#   compiles the same file with them in both cases. Measured on a copy of the
-#   stub carrying one unused local in `mcf5307_destroy`: this step's command
-#   exited 0, and the driver's command exited 1 with `error: unused variable
-#   [-Werror,-Wunused-variable]`. A green verdict here therefore does not mean
-#   those two cases compile.
+#   compiles the same file with them in both cases, so a stub carrying an
+#   unused local passes here and fails there.
 #
-#   THE REFERENCES ARE FEWER THAN THE DEFINITIONS. `can link against every one
-#   of them` reads as coverage of the whole published set. `t0_abi_header.c`
-#   and `t0_abi_header.cpp` take their addresses from a fixed list of their own
+#   The references are fewer than the definitions. `t0_abi_header.c` and
+#   `t0_abi_header.cpp` take their addresses from a fixed list of their own
 #   that names neither `mcf5307_set_reg`, `mcf5307_get_reg`, `mcf5307_halted`
-#   nor `mcf5307_faulted`, so a definition here for those four is a definition
+#   nor `mcf5307_faulted`, so a definition here for those is a definition
 #   nothing over there references.
 #
-# THE FLAGS ARE NOT MATCHED HERE, AND THAT IS DELIBERATE. Adding `-Werror` to
-# this compile would make a warning in the stub fail the SYMBOL gate, so one
-# line would carry two faults - the thing this step refuses everywhere else,
-# stated where the measurement shared object is built and again where `hidden`
-# is kept apart from `not implemented yet`. The warning dimension already has
-# an owner that fails on it: the registered test `t0_abi_header`. So the
-# sentence is narrowed to the set this step measured, and the outcome it did
-# not measure is not claimed.
+# The flags are not matched here, and that is deliberate. Adding `-Werror` to
+# this compile would make a warning in the stub fail the symbol gate, so one
+# line would carry two faults. The warning dimension already has an owner that
+# fails on it: the registered test `t0_abi_header`.
 #
-# THE LINE NAMES A SET AND A FILE, AND THE TWO MUST AGREE. It used to give the
-# published count and then point at `abi_stub_measure.o`, and a reader who ran
-# `nm -g` on that object got ONE MORE NAME THAN THE COUNT: the external probe
-# this step compiles into it. The sentence was true of the stub and false of
-# the reproduction it offered. The set printed here is therefore the stub's OWN
-# external definitions - the same variable the two fatal messages above print,
-# introduced for exactly this reason - and the instrument that is in the object
-# but not in the set is named, so the two numbers a reader can get are both
-# accounted for.
-# The instrument names the EXTERNAL read actually answers with. It is computed
+# The line names a set and a file, and the two must agree. The set printed here
+# is the stub's own external definitions, and the instrument that is in the
+# object but not in the set is named, so the two numbers a reader can get from
+# the object are both accounted for.
+#
+# The instrument names the external read actually answers with. It is computed
 # and not written down: the sentence below has to reconcile the number it
 # prints with the number a reader gets from the object, and only a measured
 # difference does that. The internal probe is in the `all` pass and not in this

@@ -1,75 +1,40 @@
-// conformance/runner.cpp - the CPU-5 ColdFire conformance corpus runner.
+// conformance/runner.cpp - the ColdFire conformance corpus runner.
 //
-// Check: `ctest --test-dir build --no-tests=error -R
-// '^mcf5307_conformance_(move|alu|control)$'` runs every committed case of
-// every group whose executors exist AT THIS REVISION and reports `0 tests
-// failed`. The runner prints the failing instruction, the differing register
-// and both values on a failure.
-//
-// THE LOGIC GROUP CANNOT PASS HERE, AND ITS TWO REGISTRATIONS ARE LEFT
-// REGISTERED AND FAILING ON PURPOSE. This revision carries the decoder and the
-// move and arithmetic executors. CPU-9 writes the logic, bit-operation and
-// shift executors, and until it lands each of the eight committed logic cases
-// reaches no executor and TRAPS. MEASURED at this revision:
-// `mcf5307_conformance_logic` prints `mcf5307_conformance_logic: 8 cases, 8
-// failed`, and `mcf5307_conformance_all`, which runs all four groups, fails
-// with it.
-//
-// THE LINE ABOVE PREVIOUSLY NAMED `^mcf5307_conformance_all$` AND CLAIMED IT
-// REPORTED `0 tests failed`. It did not. MEASURED with that exact command at
-// this revision: `1 tests failed out of 1`, ctest exit 8. The claim was false
-// from the commit that added the logic corpus, and a check line that cannot
-// pass is worse than an absent one, because it is READ as a check somebody
-// ran.
-//
-// NOTHING IS SILENCED TO MAKE THE NEW LINE TRUE. All five tests stay
-// registered, the two that fail keep failing, and the corpus is untouched;
-// what changed is the sentence stating what has been verified.
-// `mcf5307_conformance_all` is the right target again the day CPU-9 lands,
-// and the narrowing above has to be deleted then.
+// The logic group's registrations are left registered and failing on purpose.
+// There is no logic, bit-operation or shift executor yet, so each committed
+// logic case reaches no executor and traps. `mcf5307_conformance_all`, which
+// runs every group, fails with it. Nothing is silenced to hide that: all the
+// tests stay registered and the corpus is untouched.
 //
 // The runner registers one CTest test per group, and the group is selected by
-// the registered test NAME, never by a forwarded argument (CPU-5's own note
-// gives the measured reason: CTest does not forward arguments after `--`, so
-// each registration carries `--group <name>` in its COMMAND). Design section
-// 18.2, design section 20.1, plan section 11.2.
+// the registered test name, never by a forwarded argument, because CTest does
+// not forward arguments after `--`, so each registration carries
+// `--group <name>` in its COMMAND.
 //
-// WHAT THE RUNNER IS. One executable, built from this one translation unit,
-// linked against the `mcf5307` static library through the C ABI
-// (`include/mcf5307.h`). It reads the committed corpus, replays each case
-// against the core, and compares the resulting register state with the
-// expected state. The five registered tests select the group:
+// One executable, built from this one translation unit, linked against the
+// `mcf5307` static library through the C ABI (`include/mcf5307.h`). It reads
+// the committed corpus, replays each case against the core, and compares the
+// resulting register state with the expected state. The registered tests
+// select the group:
 //
 //   `mcf5307_conformance_move`     runner --group move
 //   `mcf5307_conformance_alu`      runner --group alu
 //   `mcf5307_conformance_logic`    runner --group logic
 //   `mcf5307_conformance_control`  runner --group control
-//   `mcf5307_conformance_all`      runner            (all four groups)
+//   `mcf5307_conformance_all`      runner            (every group)
 //
-// WHAT A CASE HAS TO SATISFY. Three things, and the first one is newer than
-// the other two: the core must not be halted or faulted after the case's one
-// instruction, every register the case's `expected` state names must match,
-// and every memory word it names must match. THE RUN-STATE CHECK COMES FIRST
-// BECAUSE A TRAP LEAVES THE OPERANDS ALONE - a case that traps and expects a
-// register to be unchanged satisfies the value comparison exactly, and passed
-// this runner until `mcf5307_halted`/`mcf5307_faulted` were added to
-// `include/mcf5307.h`. See the note above the three checks in `runCase`.
+// What a case has to satisfy: the core must not be halted or faulted after
+// the case's one instruction, every register the case's `expected` state
+// names must match, and every memory word it names must match. The run-state
+// check comes first because a trap leaves the operands alone - a case that
+// traps and expects a register to be unchanged satisfies the value comparison
+// exactly. See the note above the three checks in `runCase`.
 //
-// THE ONE REGISTER BRIDGE. The corpus contract (conformance/generate.py,
-// CPU-4) requires the runner to set the `initial` registers and read back the
-// `expected` registers. CPU-7 added the register file to the core and the two
-// accessors `mcf5307_set_reg`/`mcf5307_get_reg` to the contract
-// (`include/mcf5307.h`), and the two bodies below are that wiring. THIS
-// SECTION IS THE RUNNER'S SINGLE INTEGRATION POINT FOR REGISTER ACCESS: it
-// isolates the one thing the harness needs that the contract's lifecycle
-// calls do not promise, so that a later change to the access touches exactly
-// this section and nothing else.
-//
-// Clean-room note (AGENTS.md section 4.2): none of this is copied from any
-// GPL or LGPL implementation. The JSON parse is a small hand-written
-// recursive-descent parser for the fixed, machine-generated surface the
-// project's own generator emits (see the docstring of
-// `conformance/generate.py`), all of it in this one translation unit.
+// The corpus contract (conformance/generate.py) requires the runner to set
+// the `initial` registers and read back the `expected` registers, through
+// `mcf5307_set_reg`/`mcf5307_get_reg`. That section is the runner's single
+// integration point for register access, so a later change to the access
+// touches exactly it and nothing else.
 
 #include <cstdint>
 #include <cstring>
@@ -95,8 +60,8 @@ namespace {
 //   state  = { "regs":{name:int}, "mem":[ { "addr":int, "size":int,
 //              "value":int } ] }
 //
-// The same recursive-descent parser that `conformance/parse_check.cpp`
-// (CPU-4) uses, so the two agree on what the generator writes.
+// The same recursive-descent parser that `conformance/parse_check.cpp` uses,
+// so the two agree on what the generator writes.
 
 struct Value;
 using ValuePtr = std::unique_ptr<Value>;
@@ -466,7 +431,7 @@ Group loadGroup(const std::string& path, const std::string& expectedGroup) {
 //
 // The encoding of each case is placed at the case's program counter, and the
 // case's `initial` and `expected` `mem` writes go through the same array, so
-// a memory case CPU-7..10 adds has a place without a second mechanism. A read
+// a memory case has a place without a second mechanism. A read
 // of an address no case wrote answers zero and MCF5307_BUS_OK.
 
 struct MemBoard {
@@ -506,16 +471,13 @@ extern "C" void boardIack(void* user, int level, uint8_t vector) {
 }
 
 // ---------------------------------------------------------------------------
-// THE REGISTER BRIDGE.
+// The register bridge.
 //
-// See the file top comment. This is the runner's single integration point for
-// setting the `initial` registers and reading the `expected` registers. CPU-7
-// added the register file to the core and `mcf5307_set_reg`/`mcf5307_get_reg`
-// to the contract, and the two bodies below are that wiring; the paragraph
-// that stood here described the state BEFORE that and contradicted the file's
-// own top comment.
+// This is the runner's single integration point for setting the `initial`
+// registers and reading the `expected` registers, through
+// `mcf5307_set_reg`/`mcf5307_get_reg`.
 //
-// `sr` IS INDEX 16 AND IT GOES THROUGH THIS BRIDGE IN BOTH DIRECTIONS. That
+// `sr` is index 16 and it goes through this bridge in both directions. That
 // is the whole mechanism by which a case asserts a condition code: a case
 // names `sr` in `initial` to fix the incoming flags and in `expected` to
 // assert the outgoing ones, and the comparison below is the same equality it
@@ -525,7 +487,7 @@ extern "C" void boardIack(void* user, int level, uint8_t vector) {
 // condition codes. `conformance/generate.py` documents which cases do so and
 // why the incoming word is deliberately dirty.
 //
-// `pc` (index 17) is READ-ONLY through this bridge: `mcf5307_set_reg` refuses
+// `pc` (index 17) is read-only through this bridge: `mcf5307_set_reg` refuses
 // it and `runCase` routes an initial `pc` through `mcf5307_reset` instead.
 
 std::string registerBridgeError = "no register bridge";
@@ -584,34 +546,29 @@ struct CaseRun {
 };
 
 // ---------------------------------------------------------------------------
-// THE CYCLE BUDGET IS ONE, AND THAT IS WHAT MAKES THE RUN STATE READABLE.
+// The cycle budget is one, and that is what makes the run state readable.
 //
-// A corpus case is ONE instruction, and the runner has to judge THAT
+// A corpus case is one instruction, and the runner has to judge that
 // instruction. `mcf5307_exec` is a loop: it keeps stepping while the budget
-// lasts and the core has not halted. With the generous budget this runner used
-// before, the loop walked off the end of the case's encoding into the board's
-// zero fill, `0x0000` decoded as an illegal instruction, and the core ended
-// EVERY case halted and faulted. Measured, `moveq #42,%d0` with a budget of
-// 4096 returns 6 cycles and leaves `mcf5307_faulted` at 1 - the fault belongs
-// to the zero word after the case, not to the case. Asserting the run state
-// after such a run would fail all 41 committed cases, including the 33 that
-// are correct, and report nothing true about any of them.
+// lasts and the core has not halted. Under a generous budget the loop walks
+// off the end of the case's encoding into the board's zero fill, `0x0000`
+// decodes as an illegal instruction, and the core ends every case halted and
+// faulted - the fault belonging to the zero word after the case, not to the
+// case.
 //
-// A BUDGET OF ONE EXECUTES EXACTLY ONE INSTRUCTION. `mcf5307_exec` tests the
+// A budget of one executes exactly one instruction. `mcf5307_exec` tests the
 // budget before it steps, so it always starts the first instruction; it
 // completes that instruction whatever the instruction costs, and then the
 // budget is spent and the loop ends. The run state read afterwards is
-// therefore the state the CASE'S OWN INSTRUCTION left behind, which is the
-// only state this runner has any business asserting.
+// therefore the state the case's own instruction left behind.
 //
 // The returned cycle count stops carrying information under this budget - a
 // completed instruction reports the budget and a halted core reports zero - so
 // it is read as "did an instruction complete" and never as a cost. The corpus
-// asserts no cycle count (`conformance/generate.py`), and CPU-6's own note
-// says the per-instruction costs are nominal until the clock question is
-// settled.
+// asserts no cycle count (`conformance/generate.py`), and the per-instruction
+// costs are nominal until the clock question is settled.
 //
-// A CORE THAT REFUSED TO START AN INSTRUCTION IT COULD NOT AFFORD would return
+// A core that refused to start an instruction it could not afford would return
 // zero here, and `runCase` fails a case that completed no instruction. This
 // budget cannot decay into a case that passes without running.
 const uint32_t kBudget = 1;
@@ -663,40 +620,33 @@ CaseRun runCase(const Case& cs) {
   const uint32_t cycles = mcf5307_exec(ctx, kBudget);
 
   // ---------------------------------------------------------------------
-  // THE RUN STATE, ASSERTED BEFORE ANY VALUE IS COMPARED.
+  // The run state, asserted before any value is compared.
   //
-  // This is the assertion the runner did not have. It judged a case purely
-  // by the registers and memory the case named, so a case whose instruction
-  // TRAPPED still passed whenever those named values happened to match -
-  // which is every case that expects a register to be UNCHANGED, because a
-  // trap leaves the operands exactly as it found them. Measured on this
-  // runner before the assertion existed: `divu.l %d1,%d0` with `d1` zero
-  // divides by zero, the core halts with `fault`, `d0` and `d1` are
-  // untouched, and the case reported `1 cases, 0 failed`.
+  // Judging a case purely by the registers and memory it names lets a case
+  // whose instruction trapped pass whenever those named values happen to
+  // match - which is every case that expects a register to be unchanged,
+  // because a trap leaves the operands exactly as it found them.
+  // `divu.l %d1,%d0` with `d1` zero divides by zero, the core halts with
+  // `fault`, and `d0` and `d1` are untouched.
   //
-  // `tests/t_alu.nim` and `tests/t_move.nim` assert the same property
-  // through `ctx.fault`, because they are Nim and reach the context
-  // directly. This runner goes through the C ABI, and the ABI published no
-  // way to see either bit. `mcf5307_halted` and `mcf5307_faulted`
-  // (`include/mcf5307.h`) are that channel, and the three checks below are
-  // the whole reason they exist.
+  // This runner goes through the C ABI, so it reads the two bits through
+  // `mcf5307_halted` and `mcf5307_faulted` (`include/mcf5307.h`).
   //
-  // THE THREE CHECKS ARE ORDERED FROM THE MOST SPECIFIC REASON TO THE
-  // LEAST, so the message names WHY the case is wrong rather than a
-  // register value that a trap made meaningless.
+  // The checks are ordered from the most specific reason to the least, so
+  // the message names why the case is wrong rather than a register value
+  // that a trap made meaningless.
   //
   //   faulted   the instruction trapped: a bus error, an illegal
   //             instruction word, an illegal effective address for the
   //             opcode, an illegal operand size, or a divide by zero.
   //   halted    the core stopped and did not fault. On this core that is a
-  //             valid opcode whose semantics a later task owns.
+  //             valid opcode that has no executor yet.
   //   cycles    no instruction completed at all.
   //
-  // THE CYCLE CHECK IS NO LONGER CONDITIONAL ON THE EXPECTED REGISTERS.
-  // It used to apply only when `expected.regs` was empty, so naming any
-  // register silently removed the runner's only "it ran" assertion.
-  // `conformance/generate.py`'s `nop` case carries a comment about exactly
-  // that hazard. All three checks below run for every case.
+  // The cycle check is not conditional on the expected registers: applying
+  // it only when `expected.regs` is empty would let naming any register
+  // silently remove the runner's only "it ran" assertion. All three checks
+  // below run for every case.
   if (mcf5307_faulted(ctx) != 0) {
     out.ran = true;
     out.ok = false;

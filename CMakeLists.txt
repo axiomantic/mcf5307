@@ -21,36 +21,36 @@ project(mcf5307
 # tree with an empty registration list.
 enable_testing()
 
-# The relaxation that keeps a CONSUMER's compiler flags from failing THIS
+# The relaxation that keeps a consumer's compiler flags from failing this
 # project's own test targets.
 #
 # `tests/tests_cpu.cmake` and `conformance/conformance_cpu.cmake` compile their
 # executables with `-Wall -Wextra -pedantic -Werror`, and that `-Werror` is
-# correct: a warning in code this project WROTE must stop the build.
+# correct: a warning in code this project wrote must stop the build.
 #
 # A consumer that adds this project with `FetchContent` also gives it the
 # consumer's own `CMAKE_C_FLAGS_RELEASE` and `CMAKE_CXX_FLAGS_RELEASE`.
 # Measured: `gearmulator` appends `-Ofast`, and a current Apple clang answers
 # `-Ofast` with `argument '-Ofast' is deprecated; use '-O3 -ffast-math'
-# [-Wdeprecated-ofast]`. That diagnostic is about the COMMAND LINE the consumer
+# [-Wdeprecated-ofast]`. That diagnostic is about the command line the consumer
 # built and not about one line of this project's source, so `-Werror` promotes
-# it to an error and seven registered tests become Not Run. The same warning is
-# printed about a hundred times elsewhere in that build and is harmless there,
-# because only these targets carry `-Werror`.
+# it to an error and the registered tests become Not Run. The same warning is
+# printed elsewhere in that build and is harmless there, because only these
+# targets carry `-Werror`.
 #
-# THE DEMOTION NAMES ONE DIAGNOSTIC AND NOT ALL OF THEM. `-Wno-error` (the flag
-# `cmake/Nim.cmake` uses for Nim-GENERATED C, which this project does not write)
-# would disarm every warning in code this project DOES write, and `-w` would
+# The demotion names one diagnostic and not all of them. `-Wno-error` (the flag
+# `cmake/Nim.cmake` uses for Nim-generated C, which this project does not write)
+# would disarm every warning in code this project does write, and `-w` would
 # hide them. `-Wno-error=deprecated-ofast` leaves every other warning fatal:
 # only the one diagnostic a consumer's flag can produce becomes a warning
 # again, and it is still printed.
 #
-# THE FLAG IS PROBED AND NEVER ASSUMED. `deprecated-ofast` is a clang
+# The flag is probed and never assumed. `deprecated-ofast` is a clang
 # diagnostic name. GCC rejects `-Wno-error=` for a warning it does not have,
 # and MSVC has no such spelling at all, so an unconditional append would break
 # the Linux and Windows builds this project also targets.
 # `check_cxx_compiler_flag` answers for the compiler actually in use, and the
-# variable stays EMPTY when the answer is no.
+# variable stays empty when the answer is no.
 #
 # Standalone this appends nothing observable: no flag in this project's own
 # configure emits `-Wdeprecated-ofast`, so the relaxation has nothing to demote

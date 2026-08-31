@@ -1,41 +1,35 @@
 ## `t_sign_extend` - the sign-extension helpers of `mcf5307/machine`.
 ##
-## TEN CASES, AND EACH ONE CAN FAIL. `s16` and `s8` turn a displacement or an
-## immediate value from the instruction stream into the signed 32-bit value
-## the address arithmetic adds. The four boundary values of each helper are
-## asserted with their exact results:
+## `s16` and `s8` turn a displacement or an immediate value from the
+## instruction stream into the signed 32-bit value the address arithmetic
+## adds. The boundary values of each helper are asserted with their exact
+## results:
 ##
 ##   s16  0x0000 -> 0        the low end of the positive half
 ##        0x7FFF -> 32767    the largest positive value
-##        0x8000 -> -32768   THE FIRST NEGATIVE VALUE
+##        0x8000 -> -32768   the first negative value
 ##        0xFFFF -> -1       the last negative value
 ##
 ##   s8   0x00 -> 0, 0x7F -> 127, 0x80 -> -128, 0xFF -> -1, and the same
 ##        again for the two values above with a high byte that `s8` must
 ##        ignore.
 ##
-## WHY THE NEGATIVE HALF IS THE POINT. Sign extension REINTERPRETS the bits of
-## an unsigned value as a two's-complement signed value of the same width. A
+## The negative half is the point. Sign extension reinterprets the bits of an
+## unsigned value as a two's-complement signed value of the same width. A
 ## checked narrowing conversion (`int16(x)`, `int8(x)`) does something
 ## different: it rejects each value that the signed type cannot hold. Every
-## input from 0x8000 to 0xFFFF - that is, EVERY NEGATIVE DISPLACEMENT - is
+## input from 0x8000 to 0xFFFF - that is, every negative displacement - is
 ## such a value. The library is built with `--panics:on -d:release`, so a
 ## checked conversion there does not raise a catchable error; it ends the
-## process with a `RangeDefect`. This test compiles with THE LIBRARY'S OWN
-## FLAG SET, thus a helper that went back to a checked conversion kills this
-## program on case 3 and the driver reports the failure.
+## process with a `RangeDefect`. This test compiles with the library's own
+## flag set, thus a helper that went back to a checked conversion kills this
+## program and the driver reports the failure.
 ##
-## The positive cases are the POSITIVE CONTROL. Without them a helper that
+## The positive cases are the positive control. Without them a helper that
 ## returned a constant 0, or a program that cannot run at all, would not be
 ## separable from a helper that extends the sign correctly.
 ##
-## THE HELPERS FOLLOWED THE CODE THEY SERVE. CPU-7 wrote `s16` and `s8` inside
-## `mcf5307/move`; CPU-8 lifted them, with the rest of the machine substrate,
-## into `mcf5307/machine`, so this file includes that module instead. The
-## boundary values it pins are unchanged, and the reason it pins them is
-## unchanged.
-##
-## They are not part of the C ABI and no C caller names
+## The helpers are not part of the C ABI and no C caller names
 ## them. This file uses `include` and not `import`: `include` puts
 ## the module's text in this program, which gives the test the private names
 ## WITHOUT adding an export to the module under test. Exporting the two
@@ -45,8 +39,6 @@
 ## `include` compiles a second copy of the module into this program alone. The
 ## copy carries the module's `exportc` register accessors, which is harmless
 ## here: this program is an executable and links nothing else.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 include mcf5307/machine
 

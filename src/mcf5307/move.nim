@@ -1,21 +1,14 @@
 ## `move` - the data-movement instruction group of the ColdFire ISA_A core.
-## Task CPU-7 creates this file. Design section 6.1.
 ##
 ## This module executes MOVE, MOVEA, MOVEQ, MOVEM, LEA, PEA, LINK and UNLK,
-## AND NOTHING ELSE.
+## and nothing else. The register file, the condition-code bits, the board
+## accesses and the effective-address evaluation live in `mcf5307/machine`,
+## which sits at the `decode_types` level and which both this module and
+## `alu.nim` import.
 ##
-## CPU-7 also owned the register file, the condition-code bits, the board
-## accesses and the effective-address evaluation, because `move` was then the
-## only executor. CPU-8 LIFTED all of those into `mcf5307/machine`, which sits
-## at the `decode_types` level and which both this module and `alu.nim` import.
-## `alu.nim` importing `move.nim` for them would have put one executor under
-## another - the same inversion, one layer down, that CPU-7 spent three commits
-## removing between the decoder and this module. What is left here is the
-## data-movement SEMANTICS alone.
-##
-## The decoder (`mcf5307/decode`, CPU-6) recognizes the instruction words and
+## The decoder (`mcf5307/decode`) recognizes the instruction words and
 ## supplies the effective address in bits 5..0 of the word; this module
-## executes them. THIS MODULE AND THE DECODER ARE SIBLINGS. Both read the
+## executes them. This module and the decoder are siblings. Both read the
 ## shared types from `mcf5307/decode_types`, and neither imports the other.
 ## `mcf5307/cpu` sits above both: it owns `step`, and `step` is the one
 ## procedure that calls the decoder and then calls `moveFamily` below.
@@ -25,16 +18,12 @@
 ## operand evaluation walks them. The MOVEM mask precedes the EA extension
 ## words, so the mask is fetched before the EA's own words.
 ##
-## CYCLES ARE NOMINAL. The per-instruction cycle budget on serial MCF5307
-## silicon needs the clock work of open question 6 in AGENTS.md; until it is
-## settled no exact cost is asserted anywhere (cpu.nim carries the same
-## note). A later task replaces the constants when the clock is settled.
+## Cycles are nominal. The per-instruction cycle budget on serial MCF5307
+## silicon is not settled, so no exact cost is asserted anywhere.
 ##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
-## semantics, register numbering and addressing-mode behaviour are facts
-## about Motorola silicon; they are taken from the ColdFire Family
-## Programmer's Reference Manual and the MCF5307 User's Manual (AGENTS.md
-## section 11) and from this project's own measurements.
+## Instruction semantics, register numbering and addressing-mode behaviour are
+## taken from the ColdFire Family Programmer's Reference Manual and the
+## MCF5307 User's Manual, and from this project's own measurements.
 
 import std/bitops
 import mcf5307/decode_types

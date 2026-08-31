@@ -1,45 +1,37 @@
 ## `cpu` - the core lifecycle and the instruction dispatch of the ColdFire
-## ISA_A core. Design section 6.1.
+## ISA_A core.
 ##
-## THIS MODULE IS THE TOP OF THE CORE. It owns the part of the `mcf5307_*`
+## This module is the top of the core. It owns the part of the `mcf5307_*`
 ## ABI that runs the machine: the lifecycle calls `mcf5307_create`,
 ## `mcf5307_destroy` and `mcf5307_reset`, the private `step` procedure, and
 ## `mcf5307_exec` itself.
 ##
-## THE LAYERING. `step` decodes one word and then calls the executor of the
+## `step` decodes one word and then calls the executor of the
 ## instruction group that the word belongs to. It is therefore the one place
 ## that must know both the decoder and every executor:
 ##
 ##     decode_types            the shared types and the EA legality table
 ##        ^          ^
-##     decode      move (and later alu, logic, control)
+##     decode      move, alu
 ##        ^          ^
 ##            cpu               this module
 ##
-## `decode` and `move` are level-2 siblings. Neither imports the other.
-## Before this module existed, `decode` held `step` and therefore imported
-## `move`, which made the decoder depend on an executor. That inversion adds
-## one import to the decoder for each new instruction group.
+## `decode` and the executors are level-2 siblings. Neither imports the other.
 ##
-## TO ADD AN INSTRUCTION GROUP (tasks CPU-9 and CPU-10): write the new
-## executor module beside `move.nim` and `alu.nim`, add one `import` line
-## here, and add one arm to the `case decoded.op` below. `decode.nim` gets the
-## new opcodes in its own `case` when the group is decoded, but it does not
-## get a new dependency. CPU-8 IS THE PROOF THAT THE SHAPE HOLDS: adding the
-## integer-arithmetic group cost exactly one module, one import here and one
-## arm below, and `decode.nim`'s import list is still `{decode_types, ea}`.
-## The shared helpers that a second executor needed went DOWN into
+## To add an instruction group: write the new executor module beside
+## `move.nim` and `alu.nim`, add one `import` line here, and add one arm to
+## the `case decoded.op` below. `decode.nim` gets the new opcodes in its own
+## `case` when the group is decoded, but it does not get a new dependency.
+## Shared helpers that a second executor needs go down into
 ## `mcf5307/machine`, not sideways into `move.nim`.
 ##
-## THE ONE A7. There is no supervisor and user stack split on ISA_A, so the
-## context holds a single address register 7. `sp` is that one register.
-## The context type lives in `decode_types` with the other shared types.
+## There is no supervisor and user stack split on ISA_A, so the context holds
+## a single address register 7. `sp` is that one register. The context type
+## lives in `decode_types` with the other shared types.
 ##
-## MIT licensed and clean-room with respect to GPL and LGPL code. The
-## exception layout and the reset values are facts about Motorola silicon;
-## they are taken from the ColdFire Family Programmer's Reference Manual and
-## the MCF5307 User's Manual (AGENTS.md section 11) and from this project's
-## own measurements.
+## The exception layout and the reset values are taken from the ColdFire
+## Family Programmer's Reference Manual and the MCF5307 User's Manual, and
+## from this project's own measurements.
 
 import mcf5307/decode_types
 import mcf5307/decode
@@ -49,11 +41,9 @@ import mcf5307/alu
 # ---------------------------------------------------------------------------
 # The instruction-cycle costs.
 #
-# THESE ARE NOMINAL. The per-instruction cycle budget on serial MCF5307
-# silicon needs the clock work of open question 6 in AGENTS.md; until it is
-# settled no exact cost is asserted anywhere. The only property the CPU-6
-# check asserts is that `mcf5307_exec` returns a non-zero count. A later
-# task replaces the constants when the clock is settled.
+# These are nominal. The per-instruction cycle budget on serial MCF5307
+# silicon is not settled, so no exact cost is asserted anywhere. The only
+# property asserted is that `mcf5307_exec` returns a non-zero count.
 
 const
   fetchCycles = 2'u32   ## one 16-bit instruction fetch
@@ -63,15 +53,15 @@ const
 # Core lifecycle.
 #
 # The context is opaque to every caller: C sees `mcf5307_ctx` and never its
-# layout. It is a Nim `ref` because `mcf5307_create` allocates it and the
-# design (design section 5.6, CPU-19) requires that allocation happen ONLY
-# inside `mcf5307_create`, never inside `mcf5307_exec`.
+# layout. It is a Nim `ref` because `mcf5307_create` allocates it, and
+# allocation happens only inside `mcf5307_create`, never inside
+# `mcf5307_exec`.
 
 proc mcf5307_create*(user: pointer; rd: Mcf5307ReadFn; wr: Mcf5307WriteFn;
                      iack: Mcf5307IackFn): MCF5307Ctx
     {.exportc: "mcf5307_create", cdecl, dynlib.} =
   ## Allocate the context and store the board callbacks. This is the one
-  ## place the core allocates (design section 5.6, CPU-19).
+  ## place the core allocates.
   new(result)
   result.user = user
   result.readFn = rd
@@ -110,7 +100,7 @@ proc step(ctx: MCF5307Ctx): uint32 =
   ## Execute one instruction: fetch, decode, and either execute it or halt.
   ## Returns the cycles spent. Halts with `fault` set on a bus fault or an
   ## illegal instruction; halts without `fault` on a recognized opcode whose
-  ## semantics a later instruction-group task owns.
+  ## semantics are not yet implemented.
   if ctx.readFn.isNil:
     ctx.fault = true
     ctx.halted = true
@@ -130,7 +120,7 @@ proc step(ctx: MCF5307Ctx): uint32 =
   of opNop:
     result = fetchCycles + nopCycles
   of opMove, opMovea, opMoveq, opMovem, opLea, opPea, opLink, opUnlk:
-    # The data-movement group (CPU-7). `moveFamily` executes the instruction
+    # `moveFamily` executes the instruction
     # and halts the context with `fault` on an illegal encoding or an
     # illegal effective address.
     result = fetchCycles + moveFamily(ctx, opWord, decoded)
@@ -139,7 +129,7 @@ proc step(ctx: MCF5307Ctx): uint32 =
      opAddi, opSubi, opAddx, opSubx,
      opClr, opExt, opExtb, opNeg, opNegx,
      opMulu, opMuls, opDivu, opDivs:
-    # The integer-arithmetic group (CPU-8). `aluFamily` executes the
+    # `aluFamily` executes the
     # instruction and halts the context with `fault` on an illegal size, an
     # illegal effective address or a divide by zero.
     result = fetchCycles + aluFamily(ctx, opWord, decoded)
@@ -149,12 +139,9 @@ proc step(ctx: MCF5307Ctx): uint32 =
      opTas, opNbcd,
      opScc,
      opBcc, opBra:
-    # The `Operation` enum names every opcode the later instruction-group
-    # tasks decode. Their execution semantics arrive with those tasks
-    # (CPU-9 and CPU-10), which add one executor import and one arm above.
-    # Until then exec halts rather than pretend to have executed them.
-    # `halted` is set and `fault` is not, because the encoding is valid and
-    # only the semantics are absent.
+    # These opcodes decode but have no executor yet, so exec halts rather
+    # than pretend to have executed them. `halted` is set and `fault` is not,
+    # because the encoding is valid and only the semantics are absent.
     ctx.halted = true
     result = 0
   of opIllegal:
@@ -166,8 +153,8 @@ proc mcf5307_exec*(ctx: MCF5307Ctx; maxCycles: uint32): uint32
     {.exportc: "mcf5307_exec", cdecl, dynlib.} =
   ## Run at most `max_cycles` cycles and return the cycles actually spent.
   ## The loop stops when the budget is exhausted, or earlier when the machine
-  ## halts (a fault, an illegal instruction, or an opcode this task has
-  ## recognized but not yet executed).
+  ## halts (a fault, an illegal instruction, or a recognized opcode that has
+  ## no executor yet).
   if ctx.isNil or ctx.halted:
     return 0
   var spent = 0'u32

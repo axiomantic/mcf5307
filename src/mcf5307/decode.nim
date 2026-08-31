@@ -1,53 +1,38 @@
-## `decode` - the instruction decoder for ColdFire ISA_A. Task CPU-6 creates
-## this file. Design section 6.1.
+## `decode` - the instruction decoder for ColdFire ISA_A.
 ##
-## THIS MODULE DOES ONE THING. It turns a 16-bit instruction word into an
-## `Operation` plus its effective address. It executes nothing, it holds no
-## machine state, and it calls no instruction-group executor.
+## This module turns a 16-bit instruction word into an `Operation` plus its
+## effective address. It executes nothing, it holds no machine state, and it
+## calls no instruction-group executor.
 ##
-## THE LAYERING. The decoder is a level-2 module beside the executors
-## (`move.nim`, and later `alu.nim`, `logic.nim`, `control.nim`). Both levels
-## read the shared types from `decode_types`, and neither imports the other:
+## The decoder is a level-2 module beside the executors. Both levels read the
+## shared types from `decode_types`, and neither imports the other:
 ##
 ##     decode_types            the shared types and the EA legality table
 ##        ^          ^
-##     decode      move (and later alu, logic, control)
+##     decode      move, alu
 ##        ^          ^
 ##            cpu               `step`, the dispatch, and the lifecycle ABI
 ##
 ## `cpu.nim` owns `step` and the `mcf5307_*` lifecycle calls, because `step`
-## is the one procedure that needs both the decoder and every executor. This
-## module held `step` before, and therefore imported `move`. That inversion
-## made the decoder depend on an executor and it added one import for each
-## new instruction group. A new group (CPU-8 to CPU-10) now adds one module,
-## one import in `cpu.nim` and one `case` arm there. It adds no dependency
-## here.
+## is the one procedure that needs both the decoder and every executor. A new
+## instruction group adds one module, one import in `cpu.nim` and one `case`
+## arm there, and no dependency here.
 ##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Opcode
-## encoding and the addressing-mode placement are facts about Motorola
-## silicon; they are taken from the ColdFire Family Programmer's Reference
-## Manual and the MCF5307 User's Manual (AGENTS.md section 11) and from this
-## project's own measurements.
+## Opcode encoding and the addressing-mode placement are taken from the
+## ColdFire Family Programmer's Reference Manual and the MCF5307 User's
+## Manual, and from this project's own measurements.
 
 import mcf5307/decode_types
 import mcf5307/ea
 
 # ---------------------------------------------------------------------------
 # The decoder.
-#
-# CPU-6 recognizes the instruction families that carry the effective-address
-# legality demonstration, together with the two instructions that have no
-# effective address. The full opcode table with per-group semantics is the
-# work of CPU-7 to CPU-12; the decoder is structured so those tasks extend
-# the `case` below and the legality table rather than rewrite it.
-
 
 proc sizeField(word: uint16): uint8 =
   ## The size field of the ordinary two-bit encoding in bits 7..6:
   ## 00 byte, 01 word, 10 long. 11 is not a size, and every opcode below that
-  ## carries this field either refuses 11 outright (so the encoding stays
-  ## available to the task that owns it) or reports it as 0, which no
-  ## executor accepts.
+  ## carries this field either refuses 11 outright or reports it as 0, which
+  ## no executor accepts.
   case (word shr 6) and 0x3'u16
   of 0: 1'u8
   of 1: 2'u8
@@ -99,7 +84,7 @@ proc decodeWord*(word: uint16): Decoded =
   ## address in the low six bits, which is the canonical placement. The
   ## extension words (displacements, index words, immediates, and the MOVEM
   ## register mask) are NOT fetched here; they live in the instruction
-  ## stream after this word and the executor (CPU-7 `move.nim`) consumes
+  ## stream after this word and the executor consumes
   ## them as it walks the operand.
   if word == 0x4E71'u16:
     return Decoded(op: opNop)
@@ -133,7 +118,7 @@ proc decodeWord*(word: uint16): Decoded =
                    destReg: destReg, destMode: destMode)
   elif (word and 0xFFF8'u16) == 0x4880'u16:
     # EXT.W Dn: sign-extend the low byte into the low word. The register is
-    # the low three bits. THIS TEST COMES BEFORE MOVEM: `0x4880 | <ea>` is
+    # the low three bits. This test comes before MOVEM: `0x4880 | <ea>` is
     # MOVEM.W on the 68000, which this part does not have, and `0x48C0 | <ea>`
     # with a mode of 000 is EXT.L and not the MOVEM.L below.
     return Decoded(op: opExt, ea: decodeEa(word), size: 2'u8,
@@ -161,7 +146,7 @@ proc decodeWord*(word: uint16): Decoded =
   elif (word and 0xFFC0'u16) == 0x4CC0'u16:
     return Decoded(op: opMovem, ea: decodeEa(word), memDir: true)
   elif (word and 0xFFC0'u16) == 0x4C00'u16:
-    # MULU.L / MULS.L <ea>,Dl. THE SECOND WORD DECIDES SIGNEDNESS, and the
+    # MULU.L / MULS.L <ea>,Dl. The second word decides signedness, and the
     # decoder sees one word. Bit 11 of that word selects MULS over MULU and
     # bit 10 selects the 68020 64-bit product, which this part does not have.
     # The executor reads the word and makes both calls; this branch says only
@@ -170,15 +155,13 @@ proc decodeWord*(word: uint16): Decoded =
   elif (word and 0xFFC0'u16) == 0x4C40'u16:
     # DIVU.L / DIVS.L / REMU.L / REMS.L <ea>,Dr:Dq. The second word names Dq
     # in bits 15..12 and Dr in bits 2..0, and selects signedness in bit 11.
-    # EQUAL REGISTERS ARE THE DIVIDE and unequal ones are the remainder; the
+    # Equal registers are the divide and unequal ones are the remainder; the
     # executor makes that call for the same reason as the multiply above.
     return Decoded(op: opDivu, ea: decodeEa(word), size: 4'u8)
   elif (word and 0xFF00'u16) == 0x4200'u16 and sizeField(word) != 0'u8:
     # CLR.B/.W/.L <data-alterable-ea>. This part keeps all three sizes, which
     # `m68k-elf-as -mcpu=5307` confirms by accepting `clr.b` and `clr.w`.
-    # SIZE 11 IS NOT DECODED HERE: `0x42C0 | <ea>` is MOVE from CCR, which
-    # belongs to another task, and claiming it as a CLR whose size is wrong
-    # would take the encoding away from that task.
+    # Size 11 is not decoded here: `0x42C0 | <ea>` is MOVE from CCR.
     return Decoded(op: opClr, ea: decodeEa(word), size: sizeField(word))
   elif (word and 0xFF00'u16) == 0x4400'u16 and sizeField(word) != 0'u8:
     return Decoded(op: opNeg, ea: decodeEa(word), size: sizeField(word))
@@ -190,7 +173,7 @@ proc decodeWord*(word: uint16): Decoded =
   elif (word and 0xFF00'u16) == 0x0400'u16 and sizeField(word) != 0'u8:
     return Decoded(op: opSubi, ea: decodeEa(word), size: sizeField(word))
   elif (word and 0xF100'u16) == 0x5000'u16:
-    # ADDQ.<sz> #data,<ea>. THE DATA FIELD 000 MEANS EIGHT: the value one to
+    # ADDQ.<sz> #data,<ea>. The data field 000 means eight: the value one to
     # seven encodes itself and zero would be a no-operation, so the encoding
     # spends that slot on the eighth value.
     let data = (word shr 9) and 0x7'u16

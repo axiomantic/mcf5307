@@ -1,54 +1,39 @@
-## `t_alu` - the integer-arithmetic instruction group. Task CPU-8 creates this
-## file. Design section 6.1.
+## `t_alu` - the integer-arithmetic instruction group.
 ##
-## WHY THIS FILE EXISTS BESIDE THE CONFORMANCE CORPUS. The CPU-8 Check: line is
-## `mcf5307_conformance_alu`, and that corpus asserted REGISTER RESULTS ALONE.
-## Measured on the committed corpus at CPU-8's start: not one case in any of
-## the four groups named `sr` in its `expected` state, and the runner asserts
-## only the registers a case names. THE CONDITION CODES WERE THEREFORE
-## INVISIBLE TO THE CORPUS. A core that computed every arithmetic result
-## correctly and set no flag at all reported 9 of 9.
+## This file exists beside `mcf5307_conformance_alu` because it carries the
+## sticky-Z rule of ADDX/SUBX/NEGX, the trap cases for encodings this part
+## does not have, and the direct reads of `eaIsLegalFor`, none of which the
+## corpus expresses. Redundancy between a generated corpus and a hand-written
+## case is not duplication to remove.
 ##
-## THE CORPUS NOW NAMES `sr` AND THIS FILE STAYS. `conformance/generate.py`
-## gives every `move` and `alu` case a dirty incoming `sr` and an exact
-## expected word, and five mutations that previously left the group green -
-## ADD's carry-out, ADD's signed overflow, SUB's and NEG's borrow, the
-## multiply's V, and the ADDQ 000 data field - are each caught there now. This
-## file is deliberately NOT reduced to match: it carries the sticky-Z rule of
-## ADDX/SUBX/NEGX, the trap cases for encodings this part does not have, and
-## the direct reads of `eaIsLegalFor`, none of which the corpus expresses.
-## Redundancy between a generated corpus and a hand-written case is not
-## duplication to remove.
-##
-## Half of this instruction group IS the condition codes: `ADDX`, `SUBX` and
+## Half of this instruction group is the condition codes: `ADDX`, `SUBX` and
 ## `NEGX` read X, the sticky-Z rule of those three is a rule about Z alone, and
 ## the overflow of `MULS.L` is observable in V and nowhere else. This file is
-## where those are asserted, and it asserts them THROUGH THE SAME ENTRY POINT
+## where those are asserted, and it asserts them through the same entry points
 ## the corpus uses - `mcf5307_reset`, `mcf5307_set_reg`, `mcf5307_exec`,
 ## `mcf5307_get_reg` - so that a pass here is a pass of the shipped path and
 ## not of an internal helper reached around the back.
 ##
-## EVERY CASE ASSERTS A COMPLETE TUPLE, never one field. A case that changes a
+## Every case asserts a complete tuple, never one field. A case that changes a
 ## register asserts (that register, the whole status register, `fault`), so a
 ## result that is right with a flag that is wrong fails, and a flag that is
-## right with a result that is wrong fails. A case that must TRAP asserts
+## right with a result that is wrong fails. A case that must trap asserts
 ## (the register it must not have changed, `fault`, `halted`, the cycle
 ## return), so "it trapped" is separable from "it executed and wrote nothing".
 ##
-## THE TRAP CASES ARE THE GREEN-MIRAGE CONTROL of the group. Byte and word
+## The trap cases are the green-mirage control of the group. Byte and word
 ## arithmetic does not exist on this part, and neither does an `ADDI` to
 ## memory, a `NEG` to memory, a PC-relative `ADDQ` destination or a 64-bit
 ## `MULU.L`. The instruction encodings for all of those exist and a permissive
 ## core executes them silently. Each one below was checked against
-## `m68k-elf-as -mcpu=5307`, which REJECTS every one of them; the assembler is
+## `m68k-elf-as -mcpu=5307`, which rejects every one of them; the assembler is
 ## the ground truth for what the part has, and the corresponding encodings are
 ## asserted here to trap.
 ##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
-## semantics, the condition-code rules and the encodings are facts about
-## Motorola silicon; they are taken from the ColdFire Family Programmer's
-## Reference Manual and the MCF5307 User's Manual (AGENTS.md section 11) and
-## from this project's own measurements with the pinned cross assembler.
+## Instruction semantics, the condition-code rules and the encodings are taken
+## from the ColdFire Family Programmer's Reference Manual and the MCF5307
+## User's Manual, and from this project's own measurements with the pinned
+## cross assembler.
 
 import mcf5307/cpu
 import mcf5307/decode_types
@@ -148,12 +133,12 @@ proc runIns(words: openArray[uint16];
     discard mcf5307_set_reg(ctx, cint(i), d[i])
   for i in 0 .. 6:
     discard mcf5307_set_reg(ctx, cint(8 + i), a[i])
-  # The status register is set LAST: `mcf5307_reset` writes it, so an earlier
+  # The status register is set last: `mcf5307_reset` writes it, so an earlier
   # write would be overwritten and every X-reading case would silently run
   # with X clear.
   discard mcf5307_set_reg(ctx, 16, sr)
 
-  # ONE INSTRUCTION, AND THE BUDGET IS WHAT STOPS THE LOOP AFTER IT. The
+  # One instruction, and the budget is what stops the loop after it. The
   # memory after the encoding is zero, and 0x0000 is not an instruction this
   # part has, so a generous budget would fetch it, halt with `fault`, and make
   # every case here report a fault that its own instruction did not cause.
@@ -202,13 +187,13 @@ block:
   expectD(runIns([0xD280'u16], d = [1'u32, 2, 0, 0, 0, 0, 0, 0]),
     1, 3'u32, srBase, "add.l d0,d1 = 3, CCR clear")
 
-  # The carry out of bit 31 sets BOTH C and X, and the zero result sets Z.
+  # The carry out of bit 31 sets both C and X, and the zero result sets Z.
   expectD(runIns([0xD280'u16], d = [1'u32, 0xFFFFFFFF'u32, 0, 0, 0, 0, 0, 0]),
     1, 0'u32, srBase or ccrC or ccrX or ccrZ,
     "add.l carry out sets C, X and Z")
 
   # Signed overflow: 0x7FFFFFFF + 1 crosses into the negative half. V and N
-  # are set and C is NOT: the unsigned sum did not carry.
+  # are set and C is not: the unsigned sum did not carry.
   expectD(runIns([0xD280'u16], d = [1'u32, 0x7FFFFFFF'u32, 0, 0, 0, 0, 0, 0]),
     1, 0x80000000'u32, srBase or ccrV or ccrN,
     "add.l signed overflow sets V and N and leaves C clear")
@@ -223,7 +208,7 @@ block:
     1, 7'u32, srBase, "add.l a0,d1 reads the address register")
 
 block:
-  # add.l %d1,(%a0)+ = d398. THE POSTINCREMENT HAPPENS ONCE. A read-modify-
+  # add.l %d1,(%a0)+ = d398. The postincrement happens once. A read-modify-
   # write that evaluates the effective address twice increments a0 twice and
   # writes to the wrong address; both are visible here.
   let o = runIns([0xD398'u16], d = [0'u32, 5, 0, 0, 0, 0, 0, 0],
@@ -235,7 +220,7 @@ block:
     $got, $want)
 
 block:
-  # adda.l %d0,%a1 = d3c0. ADDA DOES NOT TOUCH THE CONDITION CODES: the whole
+  # adda.l %d0,%a1 = d3c0. ADDA does not touch the condition codes: the whole
   # CCR is set on entry and must come back untouched, and the sum 0 would
   # otherwise have set Z and cleared N.
   let dirty = srBase or ccrC or ccrV or ccrZ or ccrN or ccrX
@@ -258,7 +243,7 @@ block:
   expectD(runIns([0x5281'u16], d = [0'u32, 6, 0, 0, 0, 0, 0, 0]),
     1, 7'u32, srBase, "addq.l #1,d1 = 7")
 
-  # addq.l #8,%d1 = 5081. THE DATA FIELD 000 MEANS EIGHT, NOT ZERO. A decoder
+  # addq.l #8,%d1 = 5081. The data field 000 means eight, not zero. A decoder
   # that reads the field literally adds nothing and this case is the only one
   # that separates the two.
   expectD(runIns([0x5081'u16], d = [0'u32, 6, 0, 0, 0, 0, 0, 0]),
@@ -277,8 +262,8 @@ block:
                  sr = srBase or ccrX or ccrZ),
     1, 4'u32, srBase, "addx.l adds X, and a non-zero result clears Z")
 
-  # THE STICKY Z. ADDX CLEARS Z ON A NON-ZERO RESULT AND LEAVES IT ALONE
-  # OTHERWISE. It never SETS Z. These two cases differ only in the incoming Z
+  # The sticky Z. ADDX clears Z on a non-zero result and leaves it alone
+  # otherwise. It never sets Z. These two cases differ only in the incoming Z
   # and they must differ in the outgoing Z, which is what separates the sticky
   # rule from the ordinary "Z = result is zero" rule of ADD.
   expectD(runIns([0xD380'u16], d = zero8, sr = srBase or ccrZ),
@@ -335,7 +320,7 @@ block:
 # NEG, NEGX, CLR.
 
 block:
-  # neg.l %d0 = 4480. C IS SET WHENEVER THE RESULT IS NON-ZERO, which is the
+  # neg.l %d0 = 4480. C is set whenever the result is non-zero, which is the
   # rule that separates NEG from a plain subtraction from zero.
   expectD(runIns([0x4480'u16], d = [5'u32, 0, 0, 0, 0, 0, 0, 0]),
     0, 0xFFFFFFFB'u32, srBase or ccrC or ccrX or ccrN,
@@ -357,14 +342,14 @@ block:
     0, 0'u32, srBase or ccrZ, "negx.l zero result keeps an incoming Z set")
 
 block:
-  # clr.l %d0 = 4280. N, Z, V and C take fixed values and X IS UNTOUCHED.
+  # clr.l %d0 = 4280. N, Z, V and C take fixed values and X is untouched.
   expectD(runIns([0x4280'u16], d = [0x12345678'u32, 0, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrX or ccrN or ccrV or ccrC),
     0, 0'u32, srBase or ccrX or ccrZ,
     "clr.l sets Z, clears N, V and C, and leaves X alone")
 
   # clr.w and clr.b exist on this part (the assembler accepts both) and each
-  # clears ITS OWN WIDTH ALONE. A core that cleared the whole register would
+  # clears its own width alone. A core that cleared the whole register would
   # pass a long-only test and corrupt the upper half here.
   expectD(runIns([0x4240'u16], d = [0x12345678'u32, 0, 0, 0, 0, 0, 0, 0]),
     0, 0x12340000'u32, srBase or ccrZ, "clr.w clears the low word alone")
@@ -383,8 +368,8 @@ block:
 # EXT and EXTB.
 
 block:
-  # ext.w %d0 = 4880: the low byte becomes the low word, and THE UPPER HALF IS
-  # UNTOUCHED. N comes from bit 15 of the 16-bit result, not from bit 31.
+  # ext.w %d0 = 4880: the low byte becomes the low word, and the upper half is
+  # untouched. N comes from bit 15 of the 16-bit result, not from bit 31.
   expectD(runIns([0x4880'u16], d = [0x12345680'u32, 0, 0, 0, 0, 0, 0, 0]),
     0, 0x1234FF80'u32, srBase or ccrN, "ext.w extends the byte into the word")
 
@@ -409,7 +394,7 @@ block:
   expectD(runIns([0x4C00'u16, 0x1000'u16], d = [3'u32, 4, 0, 0, 0, 0, 0, 0]),
     1, 12'u32, srBase, "mulu.l 3 * 4 = 12")
 
-  # V REPORTS THAT THE 32-BIT RESULT IS NOT THE WHOLE PRODUCT. 0x10000 squared
+  # V reports that the 32-bit result is not the whole product. 0x10000 squared
   # is 0x1_0000_0000, whose low 32 bits are zero: without V this case is
   # indistinguishable from a multiply by zero.
   expectD(runIns([0x4C00'u16, 0x1000'u16],
@@ -417,7 +402,7 @@ block:
     1, 0'u32, srBase or ccrV or ccrZ,
     "mulu.l overflow sets V with the truncated result")
 
-  # muls.l %d0,%d1 = 4c00 1800. THE SIGNED FLAG IS BIT 11 OF THE SECOND WORD.
+  # muls.l %d0,%d1 = 4c00 1800. The signed flag is bit 11 of the second word.
   # -1 * 3 is -3 unsigned-wrong and signed-right, so a core that ignores the
   # bit gives 0xFFFFFFFD here too - which is why the overflow case below is
   # the one that separates them.
@@ -426,13 +411,13 @@ block:
     1, 0xFFFFFFFD'u32, srBase or ccrN, "muls.l -1 * 3 = -3")
 
   # -0x10000 * 0x10000 is -0x1_0000_0000, which does not fit a signed 32-bit
-  # result: V is set. The same operands read as UNSIGNED overflow too, so the
+  # result: V is set. The same operands read as unsigned overflow too, so the
   # separating case is the pair below.
   expectD(runIns([0x4C00'u16, 0x1800'u16],
                  d = [0xFFFF0000'u32, 0x10000'u32, 0, 0, 0, 0, 0, 0]),
     1, 0'u32, srBase or ccrV or ccrZ, "muls.l overflow sets V")
 
-  # THE ONE CASE THAT SEPARATES SIGNED FROM UNSIGNED OVERFLOW. -1 * -1 is 1,
+  # The one case that separates signed from unsigned overflow. -1 * -1 is 1,
   # which fits a signed 32-bit result, so MULS sets no V. The same two words
   # read as unsigned are 0xFFFFFFFF * 0xFFFFFFFF, a 64-bit product, so MULU
   # sets V. Same operands, same low 32 bits, opposite V.
@@ -450,22 +435,22 @@ block:
   expectD(runIns([0x4C40'u16, 0x1001'u16], d = [3'u32, 17, 0, 0, 0, 0, 0, 0]),
     1, 5'u32, srBase, "divu.l 17 / 3 = 5")
 
-  # divs.l %d0,%d1 = 4c40 1801. THE SIGNED QUOTIENT TRUNCATES TOWARD ZERO:
+  # divs.l %d0,%d1 = 4c40 1801. The signed quotient truncates toward zero:
   # 17 / -3 is -5 and not -6. A core that used a flooring division gives -6.
   expectD(runIns([0x4C40'u16, 0x1801'u16],
                  d = [0xFFFFFFFD'u32, 17, 0, 0, 0, 0, 0, 0]),
     1, 0xFFFFFFFB'u32, srBase or ccrN,
     "divs.l 17 / -3 truncates toward zero to -5")
 
-  # The same two words read as UNSIGNED: 17 / 0xFFFFFFFD is 0. Same operands,
+  # The same two words read as unsigned: 17 / 0xFFFFFFFD is 0. Same operands,
   # opposite result, so this separates the signed bit from a coincidence.
   expectD(runIns([0x4C40'u16, 0x1001'u16],
                  d = [0xFFFFFFFD'u32, 17, 0, 0, 0, 0, 0, 0]),
     1, 0'u32, srBase or ccrZ, "divu.l of the same two words is 0")
 
 block:
-  # remu.l %d0,%d2:%d1 = 4c40 1002. Dq is d1 and Dr is d2. COLDFIRE'S REMx.L
-  # PRODUCES THE REMAINDER ONLY: d2 takes the remainder and d1 IS UNCHANGED.
+  # remu.l %d0,%d2:%d1 = 4c40 1002. Dq is d1 and Dr is d2. ColdFire's REMx.L
+  # produces the remainder only: d2 takes the remainder and d1 is unchanged.
   # A core that wrote the quotient into Dq as the 68020 DIVUL does fails on
   # the d1 half of this tuple.
   let o = runIns([0x4C40'u16, 0x1002'u16], d = [5'u32, 17, 0, 0, 0, 0, 0, 0])
@@ -475,7 +460,7 @@ block:
     $got, $want)
 
   # rems.l %d0,%d2:%d1 = 4c40 1802. The signed remainder takes the sign of the
-  # DIVIDEND: -17 rem 5 is -2, not +3.
+  # dividend: -17 rem 5 is -2, not +3.
   let os = runIns([0x4C40'u16, 0x1802'u16],
                   d = [5'u32, 0xFFFFFFEF'u32, 0, 0, 0, 0, 0, 0])
   let gotS = (d1: os.d[1], d2: os.d[2], sr: os.sr, fault: os.fault)
@@ -486,15 +471,15 @@ block:
 
 block:
   # The one signed division overflow: the most negative value divided by -1
-  # has no positive quotient. V is set and THE OPERANDS ARE UNCHANGED.
+  # has no positive quotient. V is set and the operands are unchanged.
   expectD(runIns([0x4C40'u16, 0x1801'u16],
                  d = [0xFFFFFFFF'u32, 0x80000000'u32, 0, 0, 0, 0, 0, 0]),
     1, 0x80000000'u32, srBase or ccrV,
     "divs.l of the most negative value by -1 sets V and writes nothing")
 
-  # A DIVISION BY ZERO IS A TRAP. There is no exception model yet (CPU-14), so
-  # the core halts with `fault` rather than divide. It must NOT return a
-  # quotient of any kind.
+  # A division by zero is a trap. There is no exception model yet, so the core
+  # halts with `fault` rather than divide. It must not return a quotient of
+  # any kind.
   expectTrapD(runIns([0x4C40'u16, 0x1001'u16],
                      d = [0'u32, 17, 0, 0, 0, 0, 0, 0]),
     1, 17'u32, "divu.l by zero traps")
@@ -503,9 +488,9 @@ block:
     1, 17'u32, "divs.l by zero traps")
 
 # ---------------------------------------------------------------------------
-# THE ENCODINGS THIS PART DOES NOT HAVE. Every one below was offered to
-# `m68k-elf-as -mcpu=5307` and REJECTED. A permissive core executes them and
-# hides a real firmware fault (design section 17 row 7.10).
+# The encodings this part does not have. Every one below was offered to
+# `m68k-elf-as -mcpu=5307` and rejected. A permissive core executes them and
+# hides a real firmware fault.
 
 block:
   # Byte and word arithmetic. The size field is the only difference from the
@@ -569,29 +554,27 @@ block:
     "the memory form of addx.l traps")
 
 # ---------------------------------------------------------------------------
-# THE DECLARED OPERAND MASKS, READ DIRECTLY.
+# The declared operand masks, read directly.
 #
-# WHY THESE ARE NOT REDUNDANT WITH THE TRAP CASES ABOVE, and the measurement
-# that says so. Widening the ADDQ mask back to data addressing - which is what
-# it was before this task - and re-running every case above changes NOTHING:
+# These are not redundant with the trap cases above. Widening the ADDQ mask to
+# data addressing and re-running every case above changes nothing:
 # `addq.l #1,(4,%pc)` still traps, because `eaResolve` in `mcf5307/machine`
 # resolves no operand it cannot write and rejects the same three mode-7
 # sub-variants a second time. Defence in depth is correct and it also makes
-# the two defences INDISTINGUISHABLE from the outside.
+# the two defences indistinguishable from the outside.
 #
-# `eaIsLegalFor` is a declaration that other code reads - `t_ea_masks` reads
-# it, and CPU-13's negative corpus will - so it has to be right on its own
-# terms and not only right where a second check happens to cover it. These
-# assertions read it directly. Each mask carries a NEGATIVE case and a
-# POSITIVE control, because a mask that rejected everything would report the
+# `eaIsLegalFor` is a declaration that other code reads, so it has to be right
+# on its own terms and not only right where a second check happens to cover
+# it. These assertions read it directly. Each mask carries a negative case and
+# a positive control, because a mask that rejected everything would report the
 # negative case as a pass.
 
 proc checkMask(got: bool; want: bool; label: string) =
   check(got == want, label, $got, $want)
 
 block:
-  # ADDQ and SUBQ: alterable. An address register is IN, and a PC-relative or
-  # an immediate destination is OUT.
+  # ADDQ and SUBQ: alterable. An address register is in, and a PC-relative or
+  # an immediate destination is out.
   checkMask(eaIsLegalFor(opAddq, decodeEa(0x00'u16)), true,
     "the ADDQ mask admits Dn")
   checkMask(eaIsLegalFor(opAddq, decodeEa(0x09'u16)), true,
@@ -629,7 +612,7 @@ block:
     checkMask(eaIsLegalFor(opx, decodeEa(0x3C'u16)), false,
       "the " & name & " mask rejects an immediate")
 
-  # The `<ea>,Dn` direction of ADD and SUB reads data addressing, which DOES
+  # The `<ea>,Dn` direction of ADD and SUB reads data addressing, which does
   # admit an immediate and a PC-relative source.
   checkMask(eaIsLegalFor(opAdd, decodeEa(0x3C'u16)), true,
     "the ADD source mask admits an immediate")

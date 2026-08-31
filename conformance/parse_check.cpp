@@ -1,12 +1,9 @@
-// conformance/parse_check.cpp - the CPU-4 conformance corpus parse check.
+// conformance/parse_check.cpp - the conformance corpus parse check.
 //
-// The Check: line for CPU-4 is split by platform. On macOS arm64 and Windows
-// x86-64 there is no m68k cross assembler, so this is the check: it loads
-// the committed corpus and asserts the corpus parses and is complete.
-//
-//   the corpus has every group CPU-7 to CPU-10 name, and
-//   every case carries an instruction, an initial state and an expected
-//   final state.
+// On macOS arm64 and Windows x86-64 there is no m68k cross assembler, so this
+// is the check: it loads the committed corpus and asserts the corpus parses
+// and is complete - every required group is present, and every case carries
+// an instruction, an initial state and an expected final state.
 //
 // This is a pure-C++ program. It links nothing but the C and C++ runtimes,
 // it needs no Nim, and it needs no cross assembler. It is the registered
@@ -29,10 +26,6 @@
 // outside that subset loudly enough to name the file, the case and the
 // field.
 //
-// Clean-room note (AGENTS.md section 4.2): none of this is copied from any
-// GPL or LGPL JSON implementation. It is a small hand-written parser for a
-// fixed-format, machine-generated document, and all the code lives in this
-// one translation unit.
 
 #include <cstdint>
 #include <fstream>
@@ -390,7 +383,7 @@ int main(int argc, char** argv) {
   const std::string corpus_dir = argv[1];
   const std::string suffix = "_00.json";
 
-  // The four groups CPU-7 to CPU-10 name. The parse must find every one.
+  // The parse must find every one of these groups.
   const std::vector<std::string> kRequiredGroups = {
       "move", "alu", "logic", "control"};
 

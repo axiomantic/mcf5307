@@ -1,32 +1,25 @@
 ## `machine` - the machine substrate every instruction group executes against.
-## Task CPU-8 creates this file by LIFTING the shared helpers out of
-## `move.nim`. Design section 6.1.
 ##
-## THIS MODULE HAS ONE JOB: given a context, read and write the machine's
-## state. The register file, the condition-code bits, the board accesses, the
+## Given a context, this module reads and writes the machine's state. The
+## register file, the condition-code bits, the board accesses, the
 ## instruction-stream extension words and the effective-address evaluation are
-## all "how the machine is touched". What each opcode MEANS is the job of the
-## instruction-group modules (`move.nim`, `alu.nim`, and later `logic.nim` and
-## `control.nim`), and none of that is here.
+## all "how the machine is touched". What each opcode means is the job of the
+## instruction-group modules, and none of that is here.
 ##
-## WHY IT EXISTS. CPU-7 wrote these helpers inside `move.nim` because `move`
-## was the only executor. CPU-8 adds a second executor that needs the same
-## register file, the same board accesses and the same effective-address
-## evaluation. `alu.nim` importing `move.nim` for them would put an executor
-## under another executor, which is the SAME SHAPE as the decoder-under-
-## executor cycle that CPU-7 spent three commits unwinding, and it is bad at
-## two siblings and worse at four. The helpers are pure functions over the
-## shared types, so `~/Desktop/avoiding-cycles.md` puts them beside those
-## types, not beside one caller.
+## The helpers live here rather than in one executor because a second executor
+## needs the same register file, the same board accesses and the same
+## effective-address evaluation. `alu.nim` importing `move.nim` for them would
+## put an executor under another executor. The helpers are pure functions over
+## the shared types, so they belong beside those types, not beside one caller.
 ##
-## THE LAYERING. This module sits at the `decode_types` level. It reads the
-## shared types and it names no executor and no decoder:
+## This module sits at the `decode_types` level. It reads the shared types and
+## it names no executor and no decoder:
 ##
 ##     ea
 ##      ^
 ##     decode_types            the shared types and the EA legality table
 ##      ^        ^
-##     machine   |             THIS MODULE: the state, and how to touch it
+##     machine   |             this module: the state, and how to touch it
 ##      ^  ^     |
 ##      |  |   decode          the instruction word -> Operation + EA
 ##      |  |     ^
@@ -34,18 +27,12 @@
 ##      ^   ^    ^
 ##          cpu               `step`, the dispatch, and the lifecycle ABI
 ##
-## `decode` DOES NOT IMPORT THIS MODULE and must not: a decoder that reaches
-## machine state is the inversion CPU-7 removed.
+## `decode` does not import this module and must not: a decoder that reaches
+## machine state inverts the layering.
 ##
-## THE CASTS IN `s16`/`s8` ARE CORRECT AND A CONVERSION IS NOT. See the note
-## above them; `tests/t_sign_extend.nim` pins their boundaries and follows them
-## here from `move.nim`.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Register
-## numbering, the condition-code bit positions and addressing-mode behaviour
-## are facts about Motorola silicon; they are taken from the ColdFire Family
-## Programmer's Reference Manual and the MCF5307 User's Manual (AGENTS.md
-## section 11) and from this project's own measurements.
+## Register numbering, the condition-code bit positions and addressing-mode
+## behaviour are taken from the ColdFire Family Programmer's Reference Manual
+## and the MCF5307 User's Manual, and from this project's own measurements.
 
 import mcf5307/decode_types
 import mcf5307/ea
@@ -117,17 +104,15 @@ proc sizeMask*(size: uint8): uint32 =
   else: (1'u32 shl (8 * size)) - 1'u32
 
 proc mergeSized*(old: uint32; value: uint32; size: uint8): uint32 =
-  ## A SIZED WRITE TO A REGISTER REPLACES THE LOW size BYTES AND NOTHING ELSE.
-  ## `MOVE.B` and `MOVE.W` into `Dn` leave the rest of `Dn` untouched, and so do
-  ## `CLR.B`, `CLR.W` and the low half of `EXT.W`. A size of 4 masks to all ones
-  ## and this reduces to the value, which is why the long forms need no case of
-  ## their own.
+  ## A sized write to a register replaces the low `size` bytes and nothing
+  ## else. `MOVE.B` and `MOVE.W` into `Dn` leave the rest of `Dn` untouched,
+  ## and so do `CLR.B`, `CLR.W` and the low half of `EXT.W`. A size of 4 masks
+  ## to all ones and this reduces to the value, which is why the long forms
+  ## need no case of their own.
   ##
-  ## THERE IS ONE COPY OF THIS RULE AND EVERY SIZED REGISTER WRITE GOES THROUGH
-  ## IT. `eaWrite` and `eaRefWrite` each carried their own copy, they disagreed,
-  ## and the disagreement was a live defect: `eaWrite` REPLACED the whole
-  ## register, so `move.b %d0,%d1` with d1 = 0x12345678 and d0 = 0xAA gave
-  ## 0x000000AA where the part gives 0x123456AA. `tests/t_move.nim` asserts it.
+  ## There is one copy of this rule and every sized register write goes through
+  ## it. `move.b %d0,%d1` with d1 = 0x12345678 and d0 = 0xAA gives 0x123456AA,
+  ## not 0x000000AA.
   (old and not sizeMask(size)) or (value and sizeMask(size))
 
 proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
@@ -177,10 +162,10 @@ proc fetchExt*(ctx: MCF5307Ctx): uint16 =
 
 # Sign extension of a displacement or an immediate value.
 #
-# THE CASTS ARE CORRECT AND A CONVERSION IS NOT. Sign extension REINTERPRETS
+# The casts are correct and a conversion is not. Sign extension reinterprets
 # the bits of an unsigned value as a two's-complement signed value of the same
 # width. It does not narrow the value, so there is no range to check. A
-# conversion `int16(x)` is a CHECKED narrowing conversion: the library is
+# conversion `int16(x)` is a checked narrowing conversion: the library is
 # built with `--panics:on -d:release`, thus every `x` from 0x8000 to 0xFFFF -
 # that is, every negative displacement - ends the process with a `RangeDefect`
 # that no caller can catch. `cast` keeps the bit pattern and gives the signed
@@ -228,7 +213,7 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
     of ea7AbsW:
       result = uint32(s16(fetchExt(ctx)))
     of ea7AbsL:
-      # THE FIRST EXTENSION WORD IS THE HIGH HALF. ColdFire Family
+      # The first extension word is the high half. ColdFire Family
       # Programmer's Reference Manual, Rev. 3, section 2.2.11 and Figure 2-13:
       # "The first extension word contains the high-order part of the address;
       # the second contains the low-order part." The two `fetchExt` calls are
@@ -279,8 +264,8 @@ proc eaRead*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
       result = 0
 
 proc eaWrite*(ctx: MCF5307Ctx; ea: EA; size: uint8; value: uint32) =
-  ## Write the operand of an alterable effective address. A Dn write REPLACES
-  ## THE LOW size BYTES AND KEEPS THE REST of the register; memory modes write
+  ## Write the operand of an alterable effective address. A Dn write replaces
+  ## the low `size` bytes and keeps the rest of the register; memory modes write
   ## through the board; PC-relative and immediate mode-7 sub-variants are not
   ## alterable and trap.
   case ea.mode
@@ -301,18 +286,18 @@ proc eaWrite*(ctx: MCF5307Ctx; ea: EA; size: uint8; value: uint32) =
     discard
 
 # ---------------------------------------------------------------------------
-# A destination resolved ONCE.
+# A destination resolved once.
 #
 # `eaRead` followed by `eaWrite` on the same operand evaluates the effective
-# address TWICE. For (An)+ and -(An) that applies the adjustment twice and
+# address twice. For (An)+ and -(An) that applies the adjustment twice and
 # writes to the wrong address, and for (d16,An) and the absolute modes it
 # consumes the extension words twice and desynchronises the program counter
-# from the instruction stream. Every read-modify-write instruction - which is
-# most of the arithmetic group - therefore resolves the destination once and
-# reads and writes THROUGH THE RESOLVED REFERENCE.
+# from the instruction stream. Every read-modify-write instruction therefore
+# resolves the destination once and reads and writes through the resolved
+# reference.
 #
-# `move.nim` needs none of this: MOVE writes its destination and never reads
-# it. The pair below arrived with CPU-8 for that reason.
+# MOVE writes its destination and never reads it, so `move.nim` needs none of
+# this.
 
 type
   EaRefKind* = enum
@@ -364,15 +349,9 @@ proc eaRefWrite*(ctx: MCF5307Ctx; r: EaRef; size: uint8; value: uint32) =
 
 # ---------------------------------------------------------------------------
 # The register access the conformance harness needs. The C ABI in
-# `include/mcf5307.h` (CPU-0) declares these; the runner's register bridge
-# (CPU-5) is the only caller today. `index` 0..7 is d0..d7, 8..14 is a0..a6,
+# `include/mcf5307.h` declares these. `index` 0..7 is d0..d7, 8..14 is a0..a6,
 # 15 is a7 (the single stack pointer), 16 is the status register, and 17 is
 # the program counter (read-only through this call).
-#
-# THEY LIVE BESIDE THE REGISTER FILE. CPU-7 put them in `move.nim` because the
-# register file was there; CPU-8 moved the file here and they came with it.
-# The two names, the two signatures and the pragma set are unchanged, which is
-# what the step 4a ABI gate measures.
 
 proc mcf5307_set_reg*(ctx: MCF5307Ctx; index: cint; value: uint32): cint
     {.exportc: "mcf5307_set_reg", cdecl, dynlib.} =
@@ -389,19 +368,17 @@ proc mcf5307_get_reg*(ctx: MCF5307Ctx; index: cint): uint32
   regFileGet(ctx, int(index))
 
 # ---------------------------------------------------------------------------
-# The run state the conformance harness needs. `include/mcf5307.h` (CPU-0)
-# declares these two beside the register accessors, and for the same reason:
-# the harness goes through the C ABI and the ABI published no way to see them.
+# The run state the conformance harness needs.
 #
-# THEY ARE TWO CALLS AND NOT ONE, BECAUSE `halted` AND `fault` ARE TWO BITS.
-# `cpu.nim`'s `step` sets `halted` alone for a valid opcode whose semantics a
-# later task owns, and it sets BOTH for a bus error, an illegal instruction
-# word, an illegal effective address, an illegal size or a divide by zero.
-# Folding them into one call would make "this instruction trapped" and "this
-# instruction is not written yet" the same answer, and the conformance runner
-# has to separate exactly those two.
+# They are two calls and not one, because `halted` and `fault` are two bits.
+# `cpu.nim`'s `step` sets `halted` alone for a valid opcode with no executor
+# yet, and it sets both for a bus error, an illegal instruction word, an
+# illegal effective address, an illegal size or a divide by zero. Folding them
+# into one call would make "this instruction trapped" and "this instruction is
+# not written yet" the same answer, and the conformance runner has to separate
+# exactly those two.
 #
-# THEY REPORT AND THEY DO NOT CLEAR. `mcf5307_reset` is what clears both bits,
+# They report and they do not clear. `mcf5307_reset` is what clears both bits,
 # so a reader may ask twice and get the same answer. A nil context answers 0
 # to both: a caller with no context has no halted core and no faulted one.
 

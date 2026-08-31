@@ -1,25 +1,15 @@
 ## `ea` - effective-address decoding and the per-opcode legality masks for
-## ColdFire ISA_A. Task CPU-6 owns this file. Design section 6.1.
+## ColdFire ISA_A.
 ##
 ## An effective address occupies the low six bits of the instruction word that
 ## carries it: the mode in bits 5..3 and the register in bits 2..0. For mode 7
 ## the register field selects the sub-variant (absolute, PC-relative,
 ## immediate, or the reserved/invalid encodings).
 ##
-## EACH OPCODE CARRIES ITS OWN LEGALITY MASK. The mask is a set of modes and,
-## for mode 7, a set of sub-variants, that the opcode accepts. An effective
-## address whose mode is outside the mask is illegal and must trap. Design
-## section 6.1 makes this a mandatory property of the core: a permissive core
-## hides a firmware fault by executing an addressing mode the silicon rejects.
-## The instruction-specific negative cases (a memory shift, byte and word
-## arithmetic, `MOVEM -(An)`, ...) are CPU-13's, and this module provides the
-## mechanism they assert through.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code. The
-## addressing-mode encoding and the classes below are facts about Motorola
-## silicon; they are taken from the ColdFire Family Programmer's Reference
-## Manual (AGENTS.md section 11) and from this project's own measurements.
-## No expression was taken from any copyleft source.
+## Each opcode carries its own legality mask: a set of modes and, for mode 7,
+## a set of sub-variants, that the opcode accepts. An effective address whose
+## mode is outside the mask is illegal and must trap. A permissive core hides
+## a firmware fault by executing an addressing mode the silicon rejects.
 
 type
   EAMode* = enum

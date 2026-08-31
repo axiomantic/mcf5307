@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """The ColdFire ISA_A conformance corpus generator.
 
-Task CPU-4. Its Check: line has two halves; this script is the Linux half.
-
   Linux x86-64 : `python3 conformance/generate.py --out conformance/corpus`
                  must regenerate the committed corpus byte-identical.
   macOS arm64, Windows x86-64 : the parse check `t0_corpus_parses` runs
@@ -13,7 +11,7 @@ assembler and writes a deterministic JSON corpus. Both the script and the
 generated corpus are committed, so no cross toolchain is needed at test time
 on any platform.
 
-## Determinism (plan work item M-9)
+## Determinism
 
 "Byte-identical regeneration" is only meaningful if the writer is
 deterministic. Every decision that could vary the output is fixed here:
@@ -24,7 +22,7 @@ deterministic. Every decision that could vary the output is fixed here:
   * the per-group file names are fixed (`<group>_00.json`);
   * the case order is the order the CASES table lists, which is fixed.
 
-The one non-deterministic input is the ASSEMBLER: a different binutils
+The one non-deterministic input is the assembler: a different binutils
 version can emit different bytes for the same source. That is why the
 assembler version is pinned in `docs/toolchain.md`. Regenerating under the
 pinned version is byte-identical; the CI job installs exactly that version.
@@ -32,8 +30,7 @@ pinned version is byte-identical; the CI job installs exactly that version.
 ## The corpus schema
 
 One file per group, `conformance/corpus/<group>_00.json`, where `<group>` is
-one of the four groups CPU-7 to CPU-10 name: `move`, `alu`, `logic`,
-`control`.
+one of `move`, `alu`, `logic`, `control`.
 
 Each file is an object with:
 
@@ -59,25 +56,21 @@ Each case is an object with:
                           "regs"  object  register name -> expected value
                           "mem"   array   expected writes to memory
 
-A register name is "d0".."d7", "a0".."a7", "sr" or "pc". The runner (CPU-5)
+A register name is "d0".."d7", "a0".."a7", "sr" or "pc". The runner
 sets the `initial` registers, executes the case's encoding, and asserts each
 `expected` register equals its value. Registers the `expected` object does
 not name are not asserted: a case that affects only one register does not
 have to state every other one.
 
-## THE CONDITION CODES ARE ASSERTED THROUGH `sr`, AND THE WHOLE WORD IS
-## ASSERTED
+## The condition codes are asserted through `sr`, and the whole word is
+## asserted
 
-`sr` IS A REGISTER LIKE ANY OTHER, in `initial` and in `expected` both. The
+`sr` is a register like any other, in `initial` and in `expected` both. The
 runner sets it through the same bridge as `d0` and asserts it by the same
-equality. This was true of the runner from CPU-5 and NO CASE USED IT: measured
-on the committed corpus before this change, not one case in any of the four
-files named `sr` in its expected state, so every condition-code rule in every
-group was invisible to conformance. Dropping ADD's carry-out, dropping its
-signed overflow, dropping SUB's and NEG's borrow, and making the multiply
-never report V each left `mcf5307_conformance_alu` at 9 of 9.
+equality. A corpus that names `sr` in no case leaves every condition-code
+rule in every group invisible to conformance.
 
-THE VALUE IS THE WHOLE 16-BIT STATUS REGISTER AND NOT A CONDITION-CODE MASK.
+The value is the whole 16-bit status register and not a condition-code mask.
 `0x2700` is the reset value: supervisor set, interrupt mask 7, every condition
 code clear. A case that expects `0x2718` therefore asserts three things at
 once - that X and N are set, that C, V and Z are clear, AND that the executor
@@ -85,39 +78,33 @@ left the supervisor bit and the interrupt mask alone. `tests/t_alu.nim` and
 `tests/t_move.nim` assert the same whole word, so the two views of one rule
 cannot drift apart.
 
-THE INCOMING `sr` IS DELIBERATELY DIRTY. A case whose instruction must CLEAR
+The incoming `sr` is deliberately dirty. A case whose instruction must clear
 a flag proves nothing when that flag was already clear on entry, exactly as a
 sized MOVE proves nothing into a zero destination. Every flag-asserting case
 below therefore starts from `SR_DIRTY` (0x271F: every condition code set) and
 names the exact word the instruction must leave behind. A case whose
-instruction must not touch the condition codes AT ALL - MOVEA, LEA, PEA, LINK,
+instruction must not touch the condition codes at all - MOVEA, LEA, PEA, LINK,
 UNLK, MOVEM - expects `SR_DIRTY` back unchanged, which is an assertion a clean
 incoming `sr` cannot make.
 
-WHERE THE MANUAL LEAVES A FLAG UNDEFINED, NO `sr` IS ASSERTED. The equality is
+Where the manual leaves a flag undefined, no `sr` is asserted. The equality is
 over the whole word, so a case cannot assert four flags and decline the fifth.
 A case whose rule is not defined for every bit carries no `sr` at all rather
-than pin an accident of this implementation. `docs/toolchain.md` is not the
-authority here; the ColdFire Family Programmer's Reference Manual is
-(AGENTS.md section 11).
+than pin an accident of this implementation. The authority here is the
+ColdFire Family Programmer's Reference Manual.
 
-EVERY CASE IS JUDGED ON THE CORE'S RUN STATE BEFORE ANY VALUE IS COMPARED.
+Every case is judged on the core's run state before any value is compared.
 `conformance/runner.cpp` asserts `mcf5307_faulted`, then `mcf5307_halted`,
 then a non-zero cycle return, for every case and whatever registers the case
-names. A case whose instruction TRAPS therefore fails even when the registers
+names. A case whose instruction traps therefore fails even when the registers
 it names hold the expected values - which is the whole class of case that
-expects a register to be UNCHANGED, because a trap leaves its operands alone.
-
-That check used to exist only as a cycle-count fallback that applied when
-`expected.regs` was EMPTY, so naming any register silently removed it. `nop`
-carried the scar: it named no register at all, not even `sr`, because an `sr`
-expectation of "unchanged" would have been satisfied by a NOP that never
-executed. The fallback is now unconditional and `nop` names `sr` like every
-other case whose instruction must not touch the condition codes.
+expects a register to be unchanged, because a trap leaves its operands alone.
+That check is unconditional, so `nop` names `sr` like every other case whose
+instruction must not touch the condition codes.
 
 "mem" is a list of `{"addr": int, "size": int, "value": int}` writes. The
 seed corpus carries only register cases, so every "mem" array in it is empty;
-the field exists so the memory-based cases CPU-7 to CPU-10 add have a place.
+the field exists so that later memory-based cases have a place.
 A caller that writes no memory follows the same rule as the registers: omit
 it.
 
@@ -161,9 +148,8 @@ GROUPS = ("move", "alu", "logic", "control")
 # part comes out of reset with: supervisor set, interrupt mask 7, every
 # condition code clear.
 #
-# These are facts about Motorola silicon (AGENTS.md section 11), and they are
-# the same five bit positions `src/mcf5307/machine.nim` names and the same
-# `srBase` `tests/t_alu.nim` and `tests/t_move.nim` name.
+# These are the same five bit positions `src/mcf5307/machine.nim` names, and
+# the same `srBase` `tests/t_alu.nim` and `tests/t_move.nim` name.
 
 SR_BASE = 0x2700      # supervisor, interrupt mask 7, every condition code clear
 CCR_C = 0x01
@@ -172,8 +158,8 @@ CCR_Z = 0x04
 CCR_N = 0x08
 CCR_X = 0x10
 
-# THE INCOMING STATUS REGISTER OF EVERY FLAG-ASSERTING CASE. Every condition
-# code is SET on entry, so that an instruction which must CLEAR a flag is
+# The incoming status register of every flag-asserting case. Every condition
+# code is set on entry, so that an instruction which must clear a flag is
 # separable from one that never wrote the flag at all. A clean incoming `sr`
 # cannot make that distinction, for the same reason a zero destination register
 # cannot separate a merging sized write from a replacing one.
@@ -182,15 +168,11 @@ SR_DIRTY = SR_BASE | CCR_C | CCR_V | CCR_Z | CCR_N | CCR_X
 # ---------------------------------------------------------------------------
 # The destination seeds.
 #
-# A SIZED WRITE TO A DATA REGISTER REPLACES THE LOW size BYTES AND KEEPS THE
-# REST. A destination that starts at zero cannot tell that rule from a write
+# A sized write to a data register replaces the low `size` bytes and keeps the
+# rest. A destination that starts at zero cannot tell that rule from a write
 # that replaces the whole register, because both leave the same value behind.
-# That is not hypothetical: `eaWrite` in `src/mcf5307/machine.nim` replaced the
-# whole register on a `MOVE.B` for days and `mcf5307_conformance_move` stayed at
-# 18 of 18 throughout, because BOTH of its sized cases started the destination
-# at zero.
 #
-# EVERY BYTE OF THESE SEEDS DIFFERS. A palindromic or repeating seed (0x11111111,
+# Every byte of these seeds differs. A palindromic or repeating seed (0x11111111,
 # 0x12341234) survives a wrong byte lane, a wrong word half or a byte-swapped
 # store and still compares equal. 0x12345678 is the value the hand-written
 # `tests/t_move.nim` uses and it is used here for the same reason.
@@ -240,30 +222,28 @@ def assemble_to_words(instruction):
 # condition-code rule is defined for every bit of the word; every other
 # register is not asserted.
 #
-# TWO RULES GOVERN EVERY CASE BELOW, and both exist because the corpus could
-# not see what it was supposed to be measuring.
+# Two rules govern every case below, and both exist so that the corpus can see
+# what it is supposed to be measuring.
 #
-#   1. THE DESTINATION NEVER STARTS AT ZERO where a sized write could merge
+#   1. The destination never starts at zero where a sized write could merge
 #      into it. `DIRTY_D` and `DIRTY_A` are the seeds; see their definition.
-#   2. THE INCOMING `sr` IS `SR_DIRTY` wherever the case asserts flags at all,
+#   2. The incoming `sr` is `SR_DIRTY` wherever the case asserts flags at all,
 #      so that "the instruction cleared this flag" is separable from "the
 #      instruction never wrote this flag".
 #
-# The seed corpus is deliberately modest. CPU-7 to CPU-10 own their group's
-# `*_*.json` files and add the full instruction set there; this table is the
-# generator's living source for the cases it emits. Editing a case is done
-# here, never in the committed JSON.
+# This table is the generator's source for the cases it emits. Editing a case
+# is done here, never in the committed JSON.
 
 CASES = {
-    # THE CONDITION-CODE RULES OF THIS GROUP. `MOVE` sets N and Z from the
-    # value moved AT THE OPERAND SIZE, clears V and C, and LEAVES X ALONE.
+    # The condition-code rules of this group. `MOVE` sets N and Z from the
+    # value moved at the operand size, clears V and C, and leaves X alone.
     # `MOVEQ` does the same over the sign-extended long. `MOVEA`, `LEA`,
-    # `PEA`, `LINK`, `UNLK` and `MOVEM` AFFECT NO CONDITION CODE AT ALL, and
+    # `PEA`, `LINK`, `UNLK` and `MOVEM` affect no condition code at all, and
     # each of those expects `SR_DIRTY` straight back.
     "move": [
         {
-            # THE CONTROL AGAINST AN OVER-FIX of the two sized cases below. A
-            # long write REPLACES the whole register: none of the seed
+            # The control against an over-fix of the sized cases below. A
+            # long write replaces the whole register: none of the seed
             # survives. A core that merged at every size passes both sized
             # cases and fails here.
             "name": "move_l_d0_to_d1",
@@ -276,7 +256,7 @@ CASES = {
         },
         {
             # `move.l %a0,%a1` is MOVEA.L: destination mode 001. It writes the
-            # whole register and TOUCHES NO CONDITION CODE, which is why the
+            # whole register and touches no condition code, which is why the
             # dirty `sr` comes back unchanged.
             "name": "move_l_a0_to_a1",
             "mnemonic": "move.l",
@@ -308,10 +288,10 @@ CASES = {
             "expected": {"regs": {"a1": 0x1004, "sr": SR_DIRTY}},
         },
         {
-            # THE WORD MERGE. The low word is replaced and THE UPPER WORD OF
-            # THE SEED SURVIVES; a replacing write gives 0x00001234 here. The
+            # The word merge. The low word is replaced and the upper word of
+            # the seed survives; a replacing write gives 0x00001234 here. The
             # source carries 0xFFFF above its low word and none of it may
-            # reach the destination, and N comes from BIT 15 of the word
+            # reach the destination, and N comes from bit 15 of the word
             # written (0) and not from bit 31 of the source (1).
             "name": "move_w_d0_to_d1",
             "mnemonic": "move.w",
@@ -321,8 +301,7 @@ CASES = {
             "expected": {"regs": {"d1": 0x12341234, "sr": SR_BASE | CCR_X}},
         },
         {
-            # THE BYTE MERGE, and the case the repaired `eaWrite` defect was
-            # measured on: 0xAA over the low byte of 0x12345678 is 0x123456AA
+            # The byte merge: 0xAA over the low byte of 0x12345678 is 0x123456AA
             # and a replacing write gives 0x000000AA. Bit 7 of the byte is
             # set, so N is set.
             "name": "move_b_d0_to_d1",
@@ -354,9 +333,8 @@ CASES = {
                                   "value": 0xDEADBEEF}]},
         },
         {
-            # THE BYTE MERGE FROM MEMORY. The load path and the register-to-
-            # register path are different code, so the merge is asserted on
-            # both; this one started the destination at zero too.
+            # The byte merge from memory. The load path and the register-to-
+            # register path are different code, so the merge is asserted on both.
             "name": "move_b_mem_to_d1",
             "mnemonic": "move.b",
             "instruction": "move.b (0,%a0),%d1",
@@ -367,8 +345,8 @@ CASES = {
                                   "sr": SR_BASE | CCR_X | CCR_N}},
         },
         {
-            # MOVEA.W SIGN-EXTENDS INTO THE WHOLE REGISTER. It is the one
-            # word-sized write in this group that does NOT merge, so the seed
+            # MOVEA.W sign-extends into the whole register. It is the one
+            # word-sized write in this group that does not merge, so the seed
             # must not survive any part of it.
             "name": "movea_w_imm_signext",
             "mnemonic": "movea.w",
@@ -408,9 +386,9 @@ CASES = {
                          ]},
         },
         {
-            # THE LOADED REGISTERS START DIRTY. MOVEM.L replaces each register
+            # The loaded registers start dirty. MOVEM.L replaces each register
             # whole; a load that wrote a half-register would leave part of the
-            # seed behind, and every one of these started at zero.
+            # seed behind.
             "name": "movem_l_mem_to_a0_a3",
             "mnemonic": "movem.l",
             "instruction": "movem.l (%a1),%a0-%a3",
@@ -458,17 +436,16 @@ CASES = {
         },
     ],
 
-    # THE CONDITION-CODE RULES OF THIS GROUP. `ADD`, `SUB`, `ADDQ`, `SUBQ`,
-    # `ADDI` and `NEG` set N and Z from the result, V from the SIGNED overflow,
-    # and C AND X TOGETHER from the carry or the borrow out of bit 31 - X is
-    # RECOMPUTED by these, not preserved. `CLR` sets Z, clears N, V and C, and
-    # LEAVES X ALONE. `EXT` and the 32-bit multiply set N and Z from the
+    # The condition-code rules of this group. `ADD`, `SUB`, `ADDQ`, `SUBQ`,
+    # `ADDI` and `NEG` set N and Z from the result, V from the signed overflow,
+    # and C and X together from the carry or the borrow out of bit 31 - X is
+    # recomputed by these, not preserved. `CLR` sets Z, clears N, V and C, and
+    # leaves X alone. `EXT` and the 32-bit multiply set N and Z from the
     # result, clear C, and leave X alone; the multiply's V reports that the 32
     # bits written are not the whole product.
     #
-    # HALF OF THIS GROUP IS THE FLAGS, AND THE FLAGS WERE NOT ASSERTED. Every
-    # `sr` below was measured against a mutation that the corpus previously
-    # could not see; the four the task names are marked.
+    # Half of this group is the flags. Every `sr` below was measured against a
+    # mutation the corpus would otherwise not see.
     "alu": [
         {
             "name": "add_l_d0_to_d1",
@@ -478,9 +455,9 @@ CASES = {
             "expected": {"regs": {"d1": 3, "sr": SR_BASE}},
         },
         {
-            # THE CARRY OUT OF BIT 31 SETS BOTH C AND X, and the result is
-            # zero, so Z is set too. DROPPING ADD'S CARRY-OUT IS INVISIBLE
-            # WITHOUT THIS CASE: `add.l` of 1 and 2 carries nothing, and the
+            # The carry out of bit 31 sets both C and X, and the result is
+            # zero, so Z is set too. Dropping ADD's carry-out is invisible
+            # without this case: `add.l` of 1 and 2 carries nothing, and the
             # register result 0 is the same either way.
             "name": "add_l_carry_out",
             "mnemonic": "add.l",
@@ -491,9 +468,9 @@ CASES = {
                                   "sr": SR_BASE | CCR_C | CCR_X | CCR_Z}},
         },
         {
-            # THE SIGNED OVERFLOW IS A DIFFERENT QUESTION FROM THE CARRY, and
+            # The signed overflow is a different question from the carry, and
             # this case is where the two disagree: 0x7FFFFFFF + 1 crosses into
-            # the negative half, so V and N are set and C IS CLEAR. A core that
+            # the negative half, so V and N are set and C is clear. A core that
             # reported the carry as the overflow fails here and a core that
             # dropped V altogether fails here; the register result is right in
             # both.
@@ -513,7 +490,7 @@ CASES = {
             "expected": {"regs": {"d1": 1, "sr": SR_BASE}},
         },
         {
-            # THE BORROW SETS C AND X. 1 - 2 is -1, which a core that dropped
+            # The borrow sets C and X. 1 - 2 is -1, which a core that dropped
             # the borrow still computes correctly.
             "name": "sub_l_borrow",
             "mnemonic": "sub.l",
@@ -523,7 +500,7 @@ CASES = {
                                   "sr": SR_BASE | CCR_C | CCR_X | CCR_N}},
         },
         {
-            # NEG SETS C WHENEVER A BORROW LEFT THE WORD, which for a negation
+            # NEG sets C whenever a borrow left the word, which for a negation
             # is exactly "the operand was not zero". The register result -5 is
             # the same with or without that rule.
             "name": "neg_l_d0",
@@ -534,7 +511,7 @@ CASES = {
                                   "sr": SR_BASE | CCR_C | CCR_X | CCR_N}},
         },
         {
-            # CLR LEAVES X ALONE. It is the one instruction in this group that
+            # CLR leaves X alone. It is the one instruction in this group that
             # does, and a dirty incoming X is the only way to say so: from a
             # clear X, "preserved" and "cleared" are the same answer.
             "name": "clr_l_d0",
@@ -551,10 +528,10 @@ CASES = {
             "expected": {"regs": {"d1": 7, "sr": SR_BASE}},
         },
         {
-            # THE ADDQ DATA FIELD 000 MEANS EIGHT, NOT ZERO. One to seven
+            # The ADDQ data field 000 means eight, not zero. One to seven
             # encode themselves and zero would be a no-operation, so the
-            # encoding spends that slot on the eighth value. NO OTHER CASE
-            # SEPARATES THE TWO READINGS: every other ADDQ here uses #1.
+            # encoding spends that slot on the eighth value. No other case
+            # separates the two readings: every other ADDQ here uses #1.
             "name": "addq_l_8_to_d1",
             "mnemonic": "addq.l",
             "instruction": "addq.l #8,%d1",
@@ -583,10 +560,10 @@ CASES = {
             "expected": {"regs": {"d1": 12, "sr": SR_BASE | CCR_X}},
         },
         {
-            # V REPORTS THAT THE 32 BITS WRITTEN ARE NOT THE WHOLE PRODUCT.
+            # V reports that the 32 bits written are not the whole product.
             # 0x10000 squared is 0x1_0000_0000, whose low 32 bits are zero:
-            # WITHOUT V THIS CASE IS INDISTINGUISHABLE FROM A MULTIPLY BY
-            # ZERO, so the register expectation alone cannot catch a core that
+            # without V this case is indistinguishable from a multiply by
+            # zero, so the register expectation alone cannot catch a core that
             # never reports the overflow.
             "name": "mulu_l_overflow_sets_v",
             "mnemonic": "mulu.l",
@@ -597,7 +574,7 @@ CASES = {
                                   "sr": SR_BASE | CCR_V | CCR_Z | CCR_X}},
         },
         {
-            # EXT.L REPLACES THE WHOLE REGISTER from its low word, so the seed
+            # EXT.L replaces the whole register from its low word, so the seed
             # above that word must not survive. N comes from bit 31 of the
             # extended long, and X is untouched.
             "name": "ext_l_d0_word",
@@ -609,15 +586,11 @@ CASES = {
         },
     ],
 
-    # THIS GROUP CARRIES NO `sr` EXPECTATION, AND THAT IS A DELIBERATE GAP.
-    # `mcf5307_conformance_logic` is 0 of 8 because no executor for the group
-    # exists yet; CPU-9 writes it and owns these cases. The shift rules - what
-    # ASL's V reports, what a shift count of zero does to C, and which shifts
-    # write X - are the substance of that task, and pinning them here from a
-    # group with nothing to measure against would pin a guess rather than a
-    # rule. The mechanism is proven on `move` and `alu`; CPU-9 adds `"sr"` to
-    # these cases the same way, and the same two rules at the head of this
-    # table apply.
+    # This group carries no `sr` expectation, and that is a deliberate gap.
+    # No executor for the group exists yet. The shift rules - what ASL's V
+    # reports, what a shift count of zero does to C, and which shifts write
+    # X - cannot be measured against anything here, and pinning them from a
+    # group with no executor would pin a guess rather than a rule.
     "logic": [
         {
             "name": "and_l_d0_d1",
@@ -677,18 +650,13 @@ CASES = {
         },
     ],
 
-    # `nop` NOW NAMES `sr`, AND THE REASON IT DID NOT IS GONE.
+    # `nop` names `sr`.
     #
-    # It used to name no register at all - not even `sr` - because the runner
-    # judged a register-less case by its cycle return and applied that
-    # judgement ONLY when `expected.regs` was empty. Naming `sr` therefore
-    # REMOVED the case's only assertion instead of adding one: an `sr`
-    # expectation of "unchanged" is satisfied by a NOP that never executed,
-    # since an instruction that never ran changes nothing.
-    #
-    # `conformance/runner.cpp` no longer works that way. It asserts
+    # An `sr` expectation of "unchanged" is satisfied by a NOP that never
+    # executed, since an instruction that never ran changes nothing. What
+    # makes the expectation safe is that `conformance/runner.cpp` asserts
     # `mcf5307_faulted`, then `mcf5307_halted`, then a non-zero cycle return,
-    # for EVERY case and before it compares one register. A NOP that never
+    # for every case and before it compares one register. A NOP that never
     # executed cannot reach the comparison: the core either faulted, halted or
     # completed no instruction, and each of those fails the case on its own.
     # Measured on the mutation "the encoding word is 0000 instead of 4e71" -
