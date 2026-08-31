@@ -4325,6 +4325,33 @@ add_test(NAME t0_no_local_paths
         -P "${CMAKE_CURRENT_BINARY_DIR}/t0_no_local_paths_driver.cmake")
 
 # ---------------------------------------------------------------------------
+# `t0_test_set_builds_what_it_runs` - the t0 BUILD preset produces every
+# executable the t0 TEST preset runs.
+#
+# The two presets are joined by one thing only: `--target mcf5307_tests`. A test
+# the T0 pattern selects whose COMMAND names an executable target is therefore
+# reachable only through an `add_dependencies(mcf5307_tests <target>)` line, and
+# `conformance/conformance_cpu.cmake` registered `t0_corpus_parses` without one.
+# `cmake/run_t0_build_set.cmake` carries the rule, the parser, and the account of
+# why three existing mechanisms all passed over the omission.
+#
+# THE PATTERN HERE IS A COPY, NOT THE SOURCE. `.github/workflows/ci.yml` carries
+# it as `T0_PATTERN` together with the written roster of what it excludes, and
+# nothing in a CMake list file can read that. `CMakePresets.json` already keeps a
+# second copy for the same reason. Read the roster in `ci.yml`.
+#
+# THE SOURCE DIRECTORY IS PASSED, NOT A LIST OF FILES. The script sweeps every
+# CMake list file under it for registrations, so a fourth file that registers a
+# test is covered without an edit here. A written list of files would be a roster
+# that stops covering the tree the day somebody adds to it.
+add_test(NAME t0_test_set_builds_what_it_runs
+    COMMAND "${CMAKE_COMMAND}"
+        "-DT0_PATTERN=^t0_|^t_"
+        "-DT0_AGGREGATE=mcf5307_tests"
+        "-DT0_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        -P "${PROJECT_SOURCE_DIR}/cmake/run_t0_build_set.cmake")
+
+# ---------------------------------------------------------------------------
 # Put every test this list registered behind the build gate.
 #
 # This call belongs at the end of the list and nowhere else: it reads the

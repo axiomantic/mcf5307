@@ -119,17 +119,28 @@ alters the published C ABI needs it too: the consumer that links this library is
   body. It is registered only when `PROJECT_IS_TOP_LEVEL`, so a consumer's tree
   has no gate and no fixture requirement — verified: a consumer configure lists
   `t0_abi_gate_on` and nothing else.
-- **`cmake --build --preset t0` still does not build `t0_corpus_parses`; the
-  gate does.** The t0 build preset carries `--target mcf5307_tests`;
-  `t0_corpus_parses` is a separate `add_executable` in
-  `conformance/conformance_cpu.cmake` that the `^t0_|^t_` test pattern matches,
-  so a clean clone used to report it `***Not Run`. The gate builds the tree's
-  default target rather than a roster of targets, so the executable exists by
-  the time any test runs. MEASURED: deleting
-  `<build>/conformance/t0_corpus_parses` and running `ctest --preset t0` brings
-  it back and the test passes. The consequence is that `ctest --preset t0` is
-  now wider than the t0 BUILD preset — a break in `conformance/runner.cpp`,
-  which that preset never compiles, turns the t0 run red.
+- **THE T0 BUILD PRESET BUILDS EVERY EXECUTABLE THE T0 TEST PRESET RUNS, AND
+  `t0_test_set_builds_what_it_runs` IS WHAT KEEPS IT THAT WAY.** The build
+  preset carries `--target mcf5307_tests` and nothing else, so a T0-selected
+  test whose `COMMAND` names an executable target reaches it only through an
+  `add_dependencies(mcf5307_tests <target>)` line — the convention the root
+  `CMakeLists.txt` states where it creates the aggregate. `t0_corpus_parses` was
+  registered in `conformance/conformance_cpu.cmake` without one, and three
+  mechanisms hid that at once: `--no-tests=error` only catches a `-R` pattern
+  that selects nothing; `t0_build_is_current` builds the tree's DEFAULT target,
+  so it produced the binary before any test ran and MASKED the omission; and
+  `ci.yml` builds with `cmake --build build --parallel`, the default target
+  again, so no CI job has ever run the t0 build preset. MEASURED on a deleted
+  build tree: before, `cmake --build --preset t0` left
+  `<build>/conformance/t0_corpus_parses` absent; after, it is built by that
+  command. The check reads the registration lists as text — CMake has no
+  readable `COMMAND` test property, and directory-scoped test properties need
+  3.28, above the 3.20 floor. It refuses any COMMAND shape other than
+  `"${CMAKE_COMMAND}"` or a bare target name rather than guessing at a third.
+  `ctest --preset t0` is still WIDER than the t0 build preset in one direction
+  that is deliberate: the gate builds the default target, so a break in
+  `conformance/runner.cpp`, which the build preset never compiles, turns the t0
+  run red.
 - **Never configure this repository's own build tree with
   `-DMCF5307_ABI_GATE=OFF`.** The switch exists for a host that cannot run a
   symbol reader; it disarms step 4a whole, and the cache entry then persists

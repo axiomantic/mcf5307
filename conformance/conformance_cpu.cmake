@@ -36,6 +36,19 @@ endif()
 add_test(NAME t0_corpus_parses
     COMMAND t0_corpus_parses "${PROJECT_SOURCE_DIR}/conformance/corpus")
 
+# THE T0 BUILD PRESET BUILDS `mcf5307_tests` AND NOTHING ELSE, so a test the T0
+# pattern selects reaches `ctest --preset t0` only if its executable is attached
+# here. The root `CMakeLists.txt` states that convention where it creates the
+# aggregate; this list registered a T0 name without it, and the omission was
+# invisible because `t0_build_is_current` builds the tree's DEFAULT target and so
+# produced the binary anyway. `t0_test_set_builds_what_it_runs` is the check that
+# makes the next omission of this line a named failure rather than a masked one.
+#
+# `mcf5307_conformance` deliberately gets NO such line. Its registered names are
+# `mcf5307_conformance_*`, which the T0 pattern does not select, and attaching it
+# would put the corpus runner into every narrow build.
+add_dependencies(mcf5307_tests t0_corpus_parses)
+
 # The conformance runner and its registered tests.
 #
 # One executable, `conformance/runner.cpp`, with one test per group plus the
