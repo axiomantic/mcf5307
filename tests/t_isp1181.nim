@@ -1380,15 +1380,14 @@ check(emptyIn == wantEmptyIn,
       $emptyIn, $wantEmptyIn)
 
 # ---------------------------------------------------------------------------
-# BLOCK 12. THE CONFIGURATION RECORD, AND THE TWO FACTS ONE BYTE COULD NOT
-# CARRY.
+# Block 12. The configuration record, and the two facts one byte could not
+# carry.
 #
 # Every DcEndpointConfiguration byte resets to `0x00` and `0x00` is also a byte
-# the firmware may write. So a reader of `endpointConfig` alone answers "the
-# firmware never reached this slot" and "the firmware disabled this slot" with
-# the same value, and those are different facts about the firmware. The case
-# below is written so that IT CANNOT PASS ON THE BYTE: the two slots hold the
-# SAME byte and the case turns entirely on the other half of the record.
+# the firmware may write, so a reader of `endpointConfig` alone answers "never
+# reached this slot" and "disabled this slot" with the same value. The case
+# below cannot pass on the byte: the two slots hold the SAME byte and the case
+# turns entirely on the other half of the record.
 type ConfigRecord = tuple[writtenZero: bool, valueZero: uint8,
                           untouched: bool, valueUntouched: uint8]
 
@@ -1408,10 +1407,9 @@ check(configRecord == wantConfigRecord and
         "never reached hold the SAME byte and are told apart anyway",
       $configRecord, $wantConfigRecord)
 
-# A RESET TAKES THE WRITTEN FLAG WITH THE BYTE. `clearState` puts every
+# A reset takes the written flag with the byte. `clearState` puts every
 # configuration byte back to `0x00`, and a record that kept claiming the slot
-# was written would describe a configuration that no longer exists - the byte
-# and the claim would disagree, and the claim is the one nothing else checks.
+# was written would describe a configuration that no longer exists.
 type ConfigAfterReset = tuple[before: bool, after: bool, value: uint8,
                               ordinalAfter: int]
 
@@ -1431,14 +1429,12 @@ check(configAfterReset == wantConfigAfterReset,
         "byte, so no slot claims a configuration the device no longer holds",
       $configAfterReset, $wantConfigAfterReset)
 
-# THE SEQUENCE NUMBERS PLACE A SILENT WRITE BETWEEN TWO LOGGED ONES, and that
-# is the whole reason they exist. An ACCEPTED configuration write leaves a
-# register byte and NO log line; a command the model cannot honour leaves a log
-# line. Neither record on its own says which came first, so a firmware trace
-# that mixes them could not be ordered at all - which is exactly the question
-# `0x03` and `0x63` against slots `0x20` to `0x24` left open.
+# The sequence numbers place a silent write between two logged ones. An
+# accepted configuration write leaves a register byte and NO log line; a
+# command the model cannot honour leaves a log line. Neither record on its own
+# says which came first.
 #
-# THE DRIVE IS CHOSEN SO THAT THE MIDDLE EVENT IS INVISIBLE IN THE LOG. Slot
+# The drive is chosen so that the middle event is invisible in the log: slot
 # `0x23` writes no line. If the ordinals were derived from the log the middle
 # write could not appear between the two lines at all, and the case would fail.
 type EventOrder = tuple[cfg5: int, line0: int, cfg3: int, cfg6: int,
@@ -1463,9 +1459,8 @@ check(eventOrder == wantEventOrder and
         "against the lines on either side of it",
       $eventOrder, $wantEventOrder)
 
-# THE RANGE CHECK ANSWERS FALSE AND ZERO AND DOES NOT REACH THE ARRAY. A slot
-# argument out of range is the caller's error, and the model's answer to it is
-# the same as its answer for a slot inside the range that was never written -
+# The range check answers false and zero and does not reach the array. Its
+# answer is the same as for a slot inside the range that was never written;
 # `isp1181_config_slot` is where a C caller gets the third answer.
 type ConfigRange = tuple[lowW: bool, lowV: uint8, highW: bool, highV: uint8,
                          lastW: bool]

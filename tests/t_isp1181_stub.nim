@@ -948,19 +948,15 @@ check(overflow == wantOverflow,
       $overflow, $wantOverflow)
 
 # ---------------------------------------------------------------------------
-# THE CONFIGURATION DOOR AND THE REPORT DOOR.
+# The configuration door and the report door.
 #
 # The three calls below are what a consumer reads the model's account through
-# WITHOUT editing its own source. Before they existed the only route was a loop
-# over `isp1181_log_line`, the endpoint configuration had no route at all, and
-# the one consumer that needed both got them by an out-of-tree patch applied
-# and reverted by hand on every run.
+# without editing its own source.
 
 const configSentinel = 0xA5'u8
-  ## A byte NO CASE BELOW WRITES INTO A SLOT. It is what proves that
+  ## A byte no case below writes into a slot. It is what proves that
   ## `isp1181_config_slot` left `value` alone: a call that stored the reset
-  ## value would replace it with `0x00`, and `0x00` is exactly the plausible
-  ## wrong answer the three-way return exists to prevent.
+  ## value would replace it with `0x00`.
 
 proc configSlotAt(handle: ISP1181Ctx; slot: int): tuple[rc: int, value: uint8] =
   var seen = configSentinel
@@ -984,17 +980,17 @@ proc readReport(handle: ISP1181Ctx): string =
   buffer.setLen(int(needed) - 1)
   buffer
 
-# THE SLOT COUNT IS A CALL AND NOT A MACRO, so nothing can hold a second copy
-# of it that goes stale. This case is what holds the published figure against
-# the model's own.
+# The slot count is a call and not a macro, so nothing can hold a second copy
+# of it that goes stale. This case holds the published figure against the
+# model's own.
 check(int(isp1181_config_slots()) == 16 and
       int(isp1181_config_slots()) == configSlotCount,
       "configuration: the published slot count is sixteen and is the model's " &
         "own figure rather than a second copy of it",
       $int(isp1181_config_slots()), $configSlotCount)
 
-# THE THREE ANSWERS, AND THE ONE THE BYTE COULD NOT GIVE. Slot 3 is written
-# with `0x00` and slot 4 is left alone. BOTH REGISTERS NOW HOLD `0x00`, so a
+# The three answers, and the one the byte could not give. Slot 3 is written
+# with `0x00` and slot 4 is left alone, so both registers hold `0x00` and a
 # door that reported only the byte would answer both the same way. The return
 # separates them, and the sentinel proves `value` was not touched on the slot
 # that was never written.
@@ -1030,10 +1026,9 @@ check(configDoor == wantConfigDoor and
         "reads out of the raw byte",
       $configDoor, $wantConfigDoor)
 
-# THE THIRD ANSWER. No such slot and no handle are neither "written" nor "not
-# written" - they are questions about a slot that does not exist, and folding
-# them into 0 would report a real slot the firmware never reached and a typo
-# with one word.
+# The third answer. No such slot and no handle are neither "written" nor "not
+# written", and folding them into 0 would report a real slot the firmware never
+# reached and a typo with one word.
 type ConfigRefusal = tuple[pastEnd: int, pastEndValue: uint8,
                            nilRc: int, nilValue: uint8, lastRc: int]
 
@@ -1059,10 +1054,10 @@ check(configRefusal == wantConfigRefusal,
         "is inside the range",
       $configRefusal, $wantConfigRefusal)
 
-# THE REPORT SIZES ITSELF THE WAY A LOG LINE DOES, and for the same reason: a
-# return that was the size COPIED would let a caller read a report that ends
-# early and looks whole. The sentinel past the capacity is what proves nothing
-# was written beyond what the call was given.
+# The report sizes itself the way a log line does: a return that was the size
+# COPIED would let a caller read a report that ends early and looks whole. The
+# sentinel past the capacity proves nothing was written beyond what the call
+# was given.
 type ReportSize = tuple[needed: uint, short: uint, kept: string, tail: char,
                         nilHandle: uint]
 
@@ -1090,9 +1085,9 @@ check(reportSize == wantReportSize and reportSize.needed > 8'u,
         "handle answers 0",
       $reportSize, $wantReportSize)
 
-# WHAT THE REPORT SAYS ABOUT A CONFIGURATION. Slot 2 is written with EPDIR set,
-# slot 3 with `0x00`, and slot 4 is left alone. THE THREE SENTENCES ARE THREE
-# DIFFERENT SENTENCES, and the last of them names no byte at all.
+# What the report says about a configuration. Slot 2 is written with EPDIR set,
+# slot 3 with `0x00`, and slot 4 is left alone. The three sentences are three
+# different sentences, and the last of them names no byte at all.
 type ReportConfig = tuple[fenced: bool, complete: bool, epdirIn: bool,
                           writtenZero: bool, neverWritten: bool,
                           slotLines: int]
@@ -1129,12 +1124,11 @@ check(reportConfig == wantReportConfig,
         "is reported as never written and carries no byte",
       $reportConfig, $wantReportConfig)
 
-# TRUNCATION IS VISIBLE IN THE REPORT AND NOT ONLY IN THE ARITHMETIC. The drive
+# Truncation is visible in the report and not only in the arithmetic. The drive
 # is the same one `driveOverflow` uses: one refusal past the retention bound.
-# The report has to carry the three figures AND say in words that lines are
-# missing, because a reader who never subtracts is exactly the reader this
-# whole account was built for. AND THE FIRST LINE RETAINED IS THE FIRST LINE
-# WRITTEN: a ring would have dropped it and kept the tail.
+# The report carries the three figures AND says in words that lines are
+# missing. The first line retained is the first line written: a ring would have
+# dropped it and kept the tail.
 type ReportTruncation = tuple[counters: bool, truncated: bool,
                               saysFirst: bool, complete: bool,
                               firstLine: bool, lineCount: int]
@@ -1172,14 +1166,13 @@ check(reportTruncation == wantReportTruncation,
       $reportTruncation, $wantReportTruncation)
 
 # ---------------------------------------------------------------------------
-# THE TEARDOWN HOOK, AND THE CONTROL THAT SAYS IT COSTS NOTHING WHEN IT IS NOT
-# ASKED FOR.
+# The teardown hook, and the control that says it costs nothing when it is not
+# asked for.
 #
-# THE TWO DRIVES BELOW ARE THE SAME DRIVE. The only difference between them is
+# The two drives below are the same drive. The only difference between them is
 # whether `MCF5307_ISP1181_REPORT` is set, and every observable of the handle
-# is captured and compared across the pair. A trigger that changed what the
-# model did when it was not asked for would be a worse defect than the friction
-# it removes, so the unset case is measured and not assumed.
+# is captured and compared across the pair, so the unset case is measured and
+# not assumed.
 
 const teardownPath = "mcf5307-isp1181-teardown-report.txt"
 
@@ -1210,20 +1203,19 @@ proc driveTeardown(): TeardownWalk =
   let target = dir / teardownPath
   removeFile(target)
 
-  # UNSET. Nothing may be created anywhere and the drive must be unchanged.
+  # Unset: nothing may be created anywhere and the drive must be unchanged.
   delEnv(reportEnvVar)
   let quiet = driveForTeardown()
   result.unsetWroteNothing = not fileExists(target)
 
-  # EMPTY IS THE SAME AS UNSET. An empty value is a variable the caller cleared,
-  # not a request for a report at a path spelled "".
+  # Empty is the same as unset: an empty value is a variable the caller
+  # cleared, not a request for a report at a path spelled "".
   putEnv(reportEnvVar, "")
   discard driveForTeardown()
   result.emptyWroteNothing = not fileExists(target)
 
-  # SET. Two handles are destroyed, and the file has to hold BOTH accounts:
-  # a truncating open would leave only the second, which is the silent loss
-  # this door exists to prevent.
+  # Set: two handles are destroyed, and the file has to hold BOTH accounts.
+  # A truncating open would leave only the second.
   putEnv(reportEnvVar, target)
   let loud = driveForTeardown()
   discard driveForTeardown()

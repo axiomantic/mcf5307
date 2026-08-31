@@ -212,13 +212,11 @@ type
       ## it. A retained log alone answers "what did the model say" with no way
       ## to ask "and was that all of it".
     configWritten: array[configSlotCount, bool]
-      ## Whether the firmware has written the slot beside it SINCE THE LAST
-      ## RESET. `endpointConfig` alone cannot say: its reset value is `0x00`
+      ## Whether the firmware has written the slot beside it since the last
+      ## reset. `endpointConfig` alone cannot say: its reset value is `0x00`
       ## and `0x00` is also a byte the firmware may write, so a reader of the
       ## register file cannot tell a slot the firmware configured OUT with
-      ## every feature disabled from a slot the firmware never reached. THOSE
-      ## ARE DIFFERENT FACTS and one answer for both is the defect this model
-      ## exists to expose, so the second half is kept here.
+      ## every feature disabled from a slot the firmware never reached.
     configOrdinal: array[configSlotCount, int]
       ## The event number of the write that set the slot, or 0 when the slot
       ## was never written. See `events`.
@@ -228,13 +226,13 @@ type
       ## A monotonic count of the recorded events - each line `note` wrote and
       ## each configuration slot the firmware set - in the order they happened.
       ##
-      ## IT EXISTS TO ORDER TWO RECORDS AGAINST EACH OTHER. An accepted
+      ## It exists to order two records against each other. An accepted
       ## configuration write leaves a register byte and no log line, and a
       ## refused command leaves a log line and no register byte, so neither
-      ## record alone can say which came first. Stamping both from one counter
-      ## is what makes the sequence readable; it adds no line and drops none.
+      ## record alone can say which came first. Both are stamped from this one
+      ## counter.
       ##
-      ## IT SURVIVES `clearState` for the reason `written` does: a reset clears
+      ## It survives `clearState` for the reason `written` does: a reset clears
       ## the device, not the account of what the device was asked to do.
 
 const
@@ -439,18 +437,17 @@ proc logOrdinal*(m: ISP1181; index: int): int =
 
 proc configSlotWritten*(m: ISP1181; slot: int): bool =
   ## Whether the firmware has written this configuration slot since the last
-  ## reset. A slot that was never written and a slot written with `0x00` READ
-  ## THE SAME out of `configSlotValue`, and this is the call that tells them
+  ## reset. A slot that was never written and a slot written with `0x00` read
+  ## the same out of `configSlotValue`, and this is the call that tells them
   ## apart. A slot outside the range answers false, which is the same answer a
-  ## slot inside it and never written gives - the range check belongs to the
-  ## caller, and `isp1181_config_slot` is where a C caller gets it as a third
-  ## answer rather than a second.
+  ## slot inside it and never written gives; `isp1181_config_slot` is where a C
+  ## caller gets the range as a third answer rather than a second.
   if m.isNil or slot < 0 or slot >= configSlotCount: false
   else: m.configWritten[slot]
 
 proc configSlotValue*(m: ISP1181; slot: int): uint8 =
-  ## The raw DcEndpointConfiguration byte the slot holds. IT IS ONLY A
-  ## CONFIGURATION WHEN `configSlotWritten` SAYS SO; otherwise it is the reset
+  ## The raw DcEndpointConfiguration byte the slot holds. It is only a
+  ## configuration when `configSlotWritten` says so; otherwise it is the reset
   ## value and describes nothing the firmware did.
   if m.isNil or slot < 0 or slot >= configSlotCount: 0'u8
   else: m.endpointConfig[slot]
@@ -1092,10 +1089,9 @@ proc commitOperand(m: ISP1181) =
         m.pending - int(epConfigBase) < m.endpointConfig.len:
       let slot = m.pending - int(epConfigBase)
       m.endpointConfig[slot] = uint8(m.latch)
-      # THE SLOT IS NOW WRITTEN AND THE BYTE ALONE COULD NOT SAY SO. The
-      # accepted write leaves no log line - that is what makes the register
-      # file the only record of it - so the record has to carry its own
-      # "this happened" and its own place in the sequence.
+      # The accepted write leaves no log line, so the register file is the only
+      # record of it and has to carry its own "this happened" and its own place
+      # in the sequence.
       m.configWritten[slot] = true
       inc m.events
       m.configOrdinal[slot] = m.events

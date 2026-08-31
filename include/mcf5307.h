@@ -451,14 +451,12 @@ MCF5307_MUST_USE size_t isp1181_log_line(const isp1181_ctx* ctx, size_t index,
 
 /* ------------------------------- how the firmware configured the endpoints
  *
- * THE REGISTER FILE ALONE CANNOT SAY WHETHER A SLOT WAS CONFIGURED. Every
+ * The register file alone cannot say whether a slot was configured. Every
  * DcEndpointConfiguration byte resets to `0x00`, and `0x00` is also a byte the
- * firmware may write - a slot configured OUT with the FIFO disabled. A call
- * that returned only the byte would answer "never reached" and "deliberately
- * disabled" with the same `0x00`, and those are different facts about the
- * firmware. So the answer is the RETURN and the byte is secondary.
+ * firmware may write - a slot configured OUT with the FIFO disabled. So the
+ * answer is the RETURN and the byte is secondary.
  *
- * THE SLOT ORDER IS ISP1362 Rev. 06 section 15.1.1 p.107: slot 0 is control
+ * The slot order is ISP1362 Rev. 06 section 15.1.1 p.107: slot 0 is control
  * OUT, slot 1 is control IN, and slot k for k >= 2 is endpoint k - 1, up to
  * endpoint 14. The command code that writes slot k is `0x20 + k`. */
 MCF5307_MUST_USE size_t isp1181_config_slots(void);
@@ -467,11 +465,11 @@ MCF5307_MUST_USE size_t isp1181_config_slots(void);
  * last reset, 0 when it has not, and -1 when there is no such slot or no
  * handle.
  *
- * `*value` IS WRITTEN IF AND ONLY IF THIS RETURNS 1. On 0 and on -1 there is
- * no configuration byte to report and `value` is left exactly as the caller
- * left it. `value` may be NULL, and then the return is still the answer.
+ * `*value` is written if and only if this returns 1. On 0 and on -1 `value` is
+ * left exactly as the caller left it. `value` may be NULL, and then the return
+ * is still the answer.
  *
- * EPDIR IS BIT 6 OF THE BYTE, mask `0x40`: 0 is OUT and 1 is IN. ISP1362
+ * EPDIR is bit 6 of the byte, mask `0x40`: 0 is OUT and 1 is IN. ISP1362
  * Rev. 06 Table 110 p.107 places it and Table 111 p.107 gives its meaning. The
  * same table places FIFOEN at bit 7, DBLBUF at bit 5, FFOISO at bit 4 and
  * FFOSZ[3:0] in the low nibble. Every bit resets to 0. */
@@ -486,35 +484,24 @@ MCF5307_MUST_USE int isp1181_config_slot(const isp1181_ctx* ctx, size_t slot,
  * WRITTEN - and every retained log line with its place in the recorded
  * sequence.
  *
- * WHY A SINGLE CALL EXISTS BESIDE THE THREE LOG CALLS. Assembling the account
- * from `isp1181_log_written`, `isp1181_log_retained` and a loop over
- * `isp1181_log_line` is a loop every consumer had to write, and the consumer
- * that needed it most could only reach it by patching its own source on each
- * run. A report the library assembles is one the caller gets without an edit.
- *
- * THE SEQUENCE NUMBERS ARE WHAT ORDERS THE TWO RECORDS AGAINST EACH OTHER. An
+ * The sequence numbers are what orders the two records against each other. An
  * accepted configuration write leaves a register byte and no log line, and a
  * refused command leaves a log line and no register byte, so neither record on
  * its own says which happened first. Both carry an event number from one
  * counter, and the report prints it beside each.
  *
- * RETURNS THE SIZE THE REPORT NEEDS, IN BYTES, INCLUDING THE TERMINATOR - not
+ * Returns the size the report NEEDS, in bytes, including the terminator - not
  * the size that was copied, and for `isp1181_log_line`'s reason: a return
- * GREATER THAN `capacity` is a report the buffer could not hold, and a caller
- * that reads the buffer without comparing has an account that ends early and
- * looks whole.
+ * greater than `capacity` is a report the buffer could not hold.
  *
- * `dst` MAY BE NULL, or `capacity` may be 0, and then nothing is copied and
+ * `dst` may be NULL, or `capacity` may be 0, and then nothing is copied and
  * the size is still returned. Nothing is written past `capacity` bytes.
- * RETURNS 0 ONLY FOR A NIL HANDLE - a live handle always has a report, and the
- * report of a handle that was never driven says so.
+ * Returns 0 only for a NULL handle - a live handle always has a report.
  *
- * THE SAME REPORT IS WRITTEN AT TEARDOWN WITHOUT ANY CALL AT ALL when the
+ * The same report is written at teardown without any call at all when the
  * environment variable `MCF5307_ISP1181_REPORT` names a file: `isp1181_destroy`
- * APPENDS the report to it. UNSET OR EMPTY CHANGES NOTHING - no file is
- * created, no default path is used and nothing is written anywhere. That is
- * how a consumer that never asked for a report can still produce one, with no
- * edit of its own and no rebuild of anything but this library. */
+ * APPENDS the report to it. Unset or empty changes nothing - no file is
+ * created, no default path is used and nothing is written anywhere. */
 MCF5307_MUST_USE size_t isp1181_report(const isp1181_ctx* ctx, char* dst,
                                        size_t capacity);
 
