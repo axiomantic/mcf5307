@@ -271,12 +271,12 @@ void isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
 /* The implementation standing behind `isp1181_read`, `isp1181_write` and
  * `isp1181_rx`.
  *
- * THE STUB IS THE DEFAULT AND A FRESH HANDLE SELECTS IT. The stub is a device
+ * The stub is the default and a fresh handle selects it. The stub is a device
  * that is present in the CS3 window and inert: every read answers 0x00,
  * nothing a write leaves becomes readable, no interrupt is raised and neither
- * callback is ever called. THE FULL MODEL IS A DIFFERENT DEVICE - it answers
+ * callback is ever called. The full model is a different device - it answers
  * reads from its register file, keeps the packets `isp1181_rx` delivers, and
- * may call back. Select it deliberately; nothing selects it for you. */
+ * may call back. */
 #define MCF5307_ISP1181_BACKEND_STUB 0
 #define MCF5307_ISP1181_BACKEND_FULL_MODEL 1
 

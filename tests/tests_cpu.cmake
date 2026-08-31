@@ -3088,10 +3088,6 @@ mcf5307_check_case_sites("t_isp1181_command_set"
 # driven-count inside the expected value, so a sweep that stopped iterating
 # fails on that count rather than on this figure. What this figure catches is
 # a whole case removed.
-# MOVED 24 -> 26 WITH THE DATA-FLOW COMMANDS. The two added cases are the
-# illegal class - the four codes ISP1362 Rev. 06 Table 109 parenthesises and
-# forbids - and the one accepted command that legitimately speaks on a fresh
-# handle, which block 1 exempts and this case asserts.
 mcf5307_check_case_total("t_isp1181_command_set" "${isp_cmd_run_out}" 26)
 
 ]==])
@@ -3218,10 +3214,6 @@ mcf5307_check_case_sites("t_isp1181"
 # driven-count inside the expected value, so a sweep that stopped iterating
 # fails on that count rather than on this figure. What this figure catches is
 # a whole case removed.
-# MOVED 19 -> 23 WITH THE DATA-FLOW COMMANDS. The four added cases are BLOCK 6:
-# the read-out-and-clear round trip through the ports, its refused-endpoint
-# control on the same handle, the write-then-validate IN path, and the four
-# codes the authority parenthesises as illegal.
 mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 23)
 
 ]==])

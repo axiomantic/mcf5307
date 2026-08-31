@@ -5,18 +5,15 @@
 ## implements and then asserted that it implements them would pass against any
 ## table at all.
 ##
-## THERE ARE FOUR CLASSES AND EACH NAMES A DIFFERENT FINDING. `ccImplemented`
+## There are four classes and each names a different finding. `ccImplemented`
 ## and `ccNotImplemented` are decisions this project took. `ccIllegal` is a
-## byte the authority NUMBERS AND FORBIDS. `ccUnspecified` is a byte no source
-## on this machine describes at all, and it did not go away when the six
-## data-flow commands were numbered - 111 bytes are still in it.
+## byte the authority numbers and forbids. `ccUnspecified` is a byte no source
+## on this machine describes at all.
 ##
-## THE DATA-FLOW OPCODES ARE INHERITED. They are typed here from Table 109 of
+## The data-flow opcodes are inherited. They are typed here from Table 109 of
 ## the ISP1362 data sheet, Rev. 06, which states that it integrates the
-## ISP1181B peripheral controller - a claim of INTEGRATION, not of a
+## ISP1181B peripheral controller - a claim of integration, not of a
 ## byte-identical command map. The ISP1181B data sheet itself was not read.
-## `docs/sources.md` carries the limit; this suite would go red against a part
-## whose map differs, which is the point of typing the literals out.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code.
 
@@ -205,9 +202,9 @@ const notImplemented: array[100, tuple[opcode: uint8, name: string]] = [
   (0x8E'u8, "endpoint 13 unstall"),
   (0x8F'u8, "endpoint 14 unstall")]
 
-# THE ILLEGAL LIST, HAND-WRITTEN. The authority parenthesises these four codes
+# The illegal list, hand-written. The authority parenthesises these four codes
 # and gives each a reason: two endpoints have a direction that forbids the
-# access, and two operations it documents as UNPREDICTABLE. They are numbered
+# access, and two operations it documents as unpredictable. They are numbered
 # and forbidden, which is a different finding from unnumbered, so they get a
 # list and a class of their own rather than falling to the unspecified sweep.
 const illegalCommands: array[4, tuple[opcode: uint8, name: string,
@@ -219,10 +216,10 @@ const illegalCommands: array[4, tuple[opcode: uint8, name: string,
   (0x71'u8, "clear control IN buffer",
    "clearing an IN buffer is unpredictable")]
 
-# THE IMPLEMENTED COMMANDS THAT SPEAK ON A FRESH HANDLE. Block 1 asserts that
+# The implemented commands that speak on a fresh handle. Block 1 asserts that
 # an accepted command is silent, and one accepted command is legitimately not:
 # a validate with no buffer write staged for it is a firmware fault the model
-# reports. It is listed here WITH ITS LINE rather than exempted, so the
+# reports. It is listed here with its line rather than exempted, so the
 # exception is asserted and not merely skipped.
 const speaksOnFreshHandle: array[1, tuple[opcode: uint8, want: string]] = [
   (0x61'u8, "isp1181: a validate for endpoint 0 IN found no buffer write " &
@@ -357,10 +354,9 @@ check(unspecified == wantUnspecified,
       "unspecified: every unnumbered opcode answers benignly and logs one line",
       $unspecified, $wantUnspecified)
 
-# THE FOUR ILLEGAL CODES ANSWER BENIGNLY AND NAME THE PROHIBITION. The line
-# says a THIRD thing: not "not implemented" (a decision this project took) and
-# not "not in the specified command set" (a gap in the sources), but that the
-# authority numbers the byte and forbids it.
+# The four illegal codes answer benignly and name the prohibition, which is a
+# third thing: not "not implemented" (a decision this project took) and not
+# "not in the specified command set" (a gap in the sources).
 var illegalRows: seq[tuple[opcode: uint8, want: string]]
 for row in illegalCommands:
   illegalRows.add((opcode: row.opcode,
@@ -374,7 +370,7 @@ check(illegalDriven == wantIllegal,
         "the prohibition",
       $illegalDriven, $wantIllegal)
 
-# THE ONE ACCEPTED COMMAND THAT SPEAKS. It is driven here with its line
+# The one accepted command that speaks. It is driven here with its line
 # asserted, so block 1's exemption costs no coverage.
 let speaking = driveRefused(@speaksOnFreshHandle)
 const wantSpeaking: Refused = (firstBad: "0x61 became the pending command",
@@ -405,9 +401,9 @@ check(partition == wantPartition,
 # The six commands the authority names without an opcode are recorded in the
 # model rather than left in a comment, so that the day a datasheet arrives the
 # list to close is a list and not a paragraph.
-# THE LIST IS EMPTY AND THE CHECK IS KEPT. The six it held are numbered from
-# ISP1362 Rev. 06 Table 109; asserting the empty case is what makes a future
-# named-but-unnumbered command show up here as a change rather than as silence.
+# The list is empty and the check is kept: asserting the empty case is what
+# makes a future named-but-unnumbered command show up here as a change rather
+# than as silence.
 const wantUnnumbered: seq[string] = @[]
 check(@unnumberedCommands == wantUnnumbered,
       "gap: no command is left named without an opcode",

@@ -8,23 +8,20 @@
 ## called not-implemented, a real gap in the specification is reported as a
 ## decision somebody took.
 ##
-## THE GAP THAT WAS HERE IS CLOSED, AND THE AUTHORITY THAT CLOSED IT IS NOT AN
-## ISP1181 DOCUMENT. The six commands this file once carried by name and not by
-## opcode - buffer write, buffer read, stall, status, validate and clear - are
-## numbered here from Table 109 of the ISP1362 data sheet, Rev. 06. That
-## document states that it integrates the ISP1181B peripheral controller, which
-## is a claim of INTEGRATION and NOT a statement that the two command maps are
-## byte-identical. THE ISP1181B DATA SHEET ITSELF WAS NOT READ. Every opcode
-## below is therefore INHERITED rather than read from the part this model
-## names, and `docs/sources.md` records it that way. A firmware that disagrees
-## with one of these opcodes is evidence against the inheritance, not a bug in
-## the firmware.
+## The six data-flow commands - buffer write, buffer read, stall, status,
+## validate and clear - are numbered here from Table 109 of the ISP1362 data
+## sheet, Rev. 06. That document states that it integrates the ISP1181B
+## peripheral controller, which is a claim of integration and not a statement
+## that the two command maps are byte-identical, and the ISP1181B data sheet
+## itself was not read. Every opcode below is therefore inherited rather than
+## read from the part this model names. A firmware that disagrees with one of
+## these opcodes is evidence against the inheritance, not a bug in the
+## firmware.
 ##
-## `ccUnspecified` DID NOT GO AWAY. It is still the class of every byte the
-## authority does not number, and the general commands - error code, unlock,
-## scratch - are numbered by Table 109 and NOT adopted here, because closing
-## the data-flow gap is what the firmware needed and adopting a family nothing
-## drives would be inheritance without a consumer.
+## `ccUnspecified` is the class of every byte the authority does not number.
+## The general commands - error code, unlock, scratch - are numbered by Table
+## 109 and not adopted here: adopting a family nothing drives would be
+## inheritance without a consumer.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. Nothing here
 ## is copied from a Philips or NXP document.
@@ -38,11 +35,10 @@ type
     ccImplemented
     ccNotImplemented
     ccIllegal
-      ## A byte the authority NUMBERS AND FORBIDS. It is kept apart from
+      ## A byte the authority numbers and forbids. It is kept apart from
       ## `ccUnspecified` because the two are different findings: one is a byte
       ## no document describes, the other is a byte a document describes as
-      ## having no legal meaning. A model that merged them would report a
-      ## documented prohibition as a gap in its own sources.
+      ## having no legal meaning.
 
   Command* = object
     class*: CommandClass
@@ -52,10 +48,9 @@ type
       ## every other class.
 
 const unnumberedCommands*: seq[string] = @[]
-  ## THE COMMANDS THE AUTHORITY NAMES AND DOES NOT NUMBER. IT IS EMPTY, AND IT
-  ## IS KEPT. The six it used to hold are numbered above; keeping the list means
-  ## the next command that arrives named-but-unnumbered is an edit to a list
-  ## rather than a new mechanism, and it keeps the empty case asserted rather
+  ## The commands the authority names and does not number. It is empty and it
+  ## is kept: a command that arrives named-but-unnumbered is then an edit to a
+  ## list rather than a new mechanism, and the empty case stays asserted rather
   ## than merely absent.
 
 const
@@ -86,10 +81,10 @@ type Family = object
   illegalName: string
   illegalDetail: string
   inOnly: bool
-    ## THE FAMILY ADDRESSES AN IN BUFFER. This model gives endpoint 0 an OUT
-    ## buffer and an IN buffer and gives endpoints 1 to 3 ONE buffer whose
+    ## The family addresses an IN buffer. This model gives endpoint 0 an OUT
+    ## buffer and an IN buffer and gives endpoints 1 to 3 one buffer whose
     ## direction no source on this machine states, so an IN-only family is
-    ## implemented for the control endpoint and NOT for the rest. They are
+    ## implemented for the control endpoint and not for the rest. They are
     ## `ccNotImplemented` and not `ccImplemented`: the byte is numbered by the
     ## authority and this model does not carry the buffer it names.
 
@@ -121,7 +116,7 @@ const families: array[7, Family] = [
 
 proc classifyFamily(opcode: int): (bool, Command) =
   ## The data-flow families of Table 109. `false` means no family claims the
-  ## byte, which is NOT the same as the byte being unspecified: the caller
+  ## byte, which is not the same as the byte being unspecified: the caller
   ## still has the register families and the general commands to try.
   for family in families:
     if family.illegalOpcode == opcode:

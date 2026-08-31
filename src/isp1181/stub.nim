@@ -114,7 +114,7 @@ const
   backendFullModelValue = 1'i32
     ## `MCF5307_ISP1181_BACKEND_FULL_MODEL` in `include/mcf5307.h`.
 
-# THE TWO NUMBERS ABOVE ARE THE CONTRACT'S AND NOT THE ENUM'S. The `case` below
+# The two numbers above are the contract's and not the enum's. The `case` below
 # names each backend explicitly rather than converting the argument to
 # `ISP1181Backend`, so reordering the enum moves the state block's encoding and
 # leaves every existing C caller pointing where it pointed.
@@ -125,16 +125,14 @@ proc isp1181_set_backend*(ctx: ISP1181Ctx; backend: cint): cint
   ## `isp1181_write` and `isp1181_rx`. Returns 1 when the handle moved and 0
   ## when the call was refused.
   ##
-  ## A FRESH HANDLE STILL SELECTS THE STUB, AND THAT IS THE POINT OF ADDING A
-  ## SETTER RATHER THAN MOVING THE DEFAULT. The stub is a device that is
-  ## present in the CS3 window and inert: it answers every read with the benign
-  ## value, keeps nothing a write leaves, raises no interrupt and calls no host
-  ## callback. A caller that wants the core without a USB device depends on all
-  ## four, and changing the default would give it a device that answers from a
-  ## register file and can call back - silently, on a rebuild, with no edit of
-  ## its own.
+  ## A fresh handle still selects the stub: it answers every read with the
+  ## benign value, keeps nothing a write leaves, raises no interrupt and calls
+  ## no host callback. A caller that wants the core without a USB device
+  ## depends on all four, and changing the default would give it a device that
+  ## answers from a register file and can call back - silently, on a rebuild,
+  ## with no edit of its own.
   ##
-  ## A VALUE THE CONTRACT DOES NOT NAME IS REFUSED AND MOVES NOTHING. Falling
+  ## A value the contract does not name is refused and moves nothing. Falling
   ## through to either backend would repoint the handle on a caller's typo and
   ## report a success it did not get.
   if ctx.isNil:

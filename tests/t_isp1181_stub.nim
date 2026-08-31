@@ -519,15 +519,10 @@ isp1181_destroy(counter)
 isp1181_destroy(wrapping)
 
 # ---------------------------------------------------------------------------
-# BLOCK 11. THE SELECTOR C CAN REACH.
+# The selector C can reach.
 #
-# `setBackend` above is Nim's and C has no reach into it. A C caller that
-# cannot select the full model gets the stub's discard on every delivery, and
-# the discard is silent: the handle answers, the callbacks stay quiet, and no
-# byte the host delivered is anywhere.
-#
-# THE TWO VALUES BELOW ARE HAND-WRITTEN LITERALS AND NOT THE MODULE'S
-# CONSTANTS. They are the numbers `include/mcf5307.h` publishes as
+# The two values below are hand-written literals and not the module's
+# constants. They are the numbers `include/mcf5307.h` publishes as
 # `MCF5307_ISP1181_BACKEND_STUB` and `MCF5307_ISP1181_BACKEND_FULL_MODEL`, and
 # a suite that imported them would agree with any renumbering at all - which
 # is exactly the change that would silently repoint every existing C caller.
@@ -560,7 +555,7 @@ check(cSelect == wantCSelect,
         "a delivery through the C entry point then reaches its buffer",
       $cSelect, $wantCSelect)
 
-# A VALUE THE CONTRACT DOES NOT NAME IS REFUSED AND CHANGES NOTHING. A setter
+# A value the contract does not name is refused and changes nothing. A setter
 # that fell through to a default would repoint the handle on a caller's typo,
 # and the caller would read a success it never got.
 type CRefuse = tuple[toStub: cint, afterStub: string, refused: cint,

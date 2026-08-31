@@ -539,21 +539,12 @@ check(negative == wantNegative,
       $negative, $wantNegative)
 
 # ---------------------------------------------------------------------------
-# BLOCK 6. THE DEVICE-TO-HOST PATH AND THE CALLBACK IT OWES.
+# The device-to-host path and the callback it owes.
 #
-# THE HOST INSTALLS A TRANSMIT CALLBACK AT CONSTRUCTION AND IT IS THE ONLY WAY
-# A BYTE LEAVES THIS MODEL. A model that stored the callback and never called
-# it looks exactly like one whose device had nothing to send, from the host's
-# side and from the log's, so the case below drives a packet into the IN buffer
-# and asserts the CALL - its endpoint, its length and every byte of it.
-#
-# EVERY BYTE AND EVERY LOG LINE BELOW IS A HAND-WRITTEN LITERAL.
-#
-# WHAT THE FIRMWARE CANNOT DO HERE, AND WHY IT IS NOT A DEFECT OF THIS BLOCK:
-# `buffer write` and `validate` are two of the six commands the authority names
-# and does not number, so no command byte reaches `queueIn`. The queue is
-# driven directly for the same reason `raiseInterrupt` is - the mechanism is
-# real and the opcode that would reach it is a gap in the specification.
+# A model that stored the transmit callback and never called it looks exactly
+# like one whose device had nothing to send, from the host's side and from the
+# log's, so the case below drives a packet into the IN buffer and asserts the
+# call - its endpoint, its length and every byte of it.
 
 type TxRecord = tuple[calls: int, endpoint: int, bytes: seq[uint8],
                       length: int]
@@ -576,7 +567,7 @@ proc recording(): ISP1181 =
 
 const inPacket: array[4, uint8] = [0xDE'u8, 0xAD'u8, 0xBE'u8, 0xEF'u8]
 
-# A QUEUED PACKET REACHES THE HOST ONCE AND THE BUFFER IS THEN EMPTY. The
+# A queued packet reaches the host once and the buffer is then empty. The
 # second transmit is what separates a buffer that was consumed from one that
 # was copied: a model that left the packet in place would call the host twice
 # with the same bytes and the firmware would never learn the transfer ended.
@@ -606,7 +597,7 @@ check(txWalk == wantTxWalk,
         "leaves the buffer empty",
       $txWalk, $wantTxWalk)
 
-# THE REFUSALS EACH NAME THEIR OWN REASON. An endpoint this model does not
+# The refusals each name their own reason. An endpoint this model does not
 # implement, an endpoint whose single buffer has no stated direction, and an
 # empty packet are three different findings, and a model that answered all
 # three the same way would hide which one a reader met.
@@ -639,7 +630,7 @@ check(txRefusal == wantTxRefusal,
         "reason and calls no host",
       $txRefusal, $wantTxRefusal)
 
-# A HOST THAT INSTALLED NO CALLBACK KEEPS ITS PACKET. Dropping the packet on
+# A host that installed no callback keeps its packet. Dropping the packet on
 # the floor would leave the firmware with a buffer that emptied itself and a
 # transfer that never happened.
 type NilTx = tuple[queued: bool, sent: bool, stillThere: int,
@@ -662,14 +653,14 @@ check(nilTx == wantNilTx,
       $nilTx, $wantNilTx)
 
 # ---------------------------------------------------------------------------
-# BLOCK 6. THE DATA-FLOW COMMANDS, WHICH ARE WHAT THE FIRMWARE ACTUALLY NEEDS.
+# The data-flow commands.
 #
-# THE CHECK THAT MATTERS IS A ROUND TRIP THROUGH THE PORTS AND NOT A CALL OF
+# The check that matters is a round trip through the ports and not a call of
 # `fifoAt`. A packet the host delivered has to leave the model through the same
 # command/data ports the firmware drives, or the model has an OUT FIFO nothing
-# can dequeue - which is the state this block was written to end.
+# can dequeue.
 #
-# THE LENGTH PREFIX IS IN BAND. The authority puts the packet length in the
+# The length prefix is in band. The authority puts the packet length in the
 # first two bytes of the endpoint buffer, lower byte first, so a read of an
 # N-byte packet yields N + 2 bytes. A model that answered the payload alone
 # would hand the firmware a packet two bytes short of what it was told to
@@ -703,7 +694,7 @@ check(readOut == wantReadOut,
         "prefix, survives the read and is consumed by the clear",
       $readOut, $wantReadOut)
 
-# THE CONTROL COMES FROM THE SAME POPULATION AND THE SAME HANDLE. A zero read
+# The control comes from the same population and the same handle. A zero read
 # from an endpoint the model does not carry proves nothing on its own: an
 # implementation that refused EVERY read buffer command would produce it too.
 # `0x16` is read endpoint 5 buffer - numbered by the authority, outside this
@@ -720,11 +711,10 @@ proc driveReadOutControl(): ReadOutControl =
   (readBack: readBack, log: m.logLines[before .. ^1])
 
 let readOutControl = driveReadOutControl()
-# THE TRAILING LINES ARE THE DOCUMENTED SEQUENCING CHOICE AND NOT NOISE. The
-# module head states that a command this model REFUSES leaves a transfer
-# already in progress LIVE, so the six reads after the refused `0x16` are
-# served by the exhausted `0x10` that preceded it. Asserting them here pins
-# that choice at the one place a reader meets its consequence.
+# The trailing lines are the documented sequencing choice and not noise. A
+# command this model refuses leaves a transfer already in progress live, so the
+# six reads after the refused `0x16` are served by the exhausted `0x10` that
+# preceded it.
 let wantReadOutControl: ReadOutControl = (
     readBack: @[benign, benign, benign, benign, benign, benign],
     log: @["isp1181: command 0x16 (endpoint 5 buffer read) is not " &
@@ -746,7 +736,6 @@ check(readOutControl == wantReadOutControl,
         "is refused on the same handle that just answered one",
       $readOutControl, $wantReadOutControl)
 
-# THE IN PATH IS THE OTHER HALF, AND IT IS WHAT `queueIn` WAS WAITING FOR.
 # Write control IN buffer stages the bytes and Validate commits them; only
 # after the validate can `transmit` hand them to the host.
 type WriteIn = tuple[pendingBeforeValidate: int, pendingAfterValidate: int,
@@ -773,9 +762,9 @@ check(writeIn == wantWriteIn,
         "it and only then does it reach the host",
       $writeIn, $wantWriteIn)
 
-# THE ILLEGAL CODES ARE REFUSALS AND NOT NO-OPS. The authority parenthesises
+# The illegal codes are refusals and not no-ops. The authority parenthesises
 # `00`, `11`, `60` and `71` as illegal, and documents validating an OUT buffer
-# and clearing an IN buffer as UNPREDICTABLE. A model that accepted them and
+# and clearing an IN buffer as unpredictable. A model that accepted them and
 # did nothing would be answering a command the hardware does not have.
 type Illegal = tuple[log: seq[string], pending: seq[int]]
 
