@@ -214,6 +214,10 @@ of the alternative.
 
 Never write these in a comment:
 
+- **A plan-task ID or a design-document pointer.** `CPU-nn`, `INT-nn`, `W3-nnnn`,
+  "§24.6 row ...", "task ...", "plan section ...", "step 2 of ...". They point
+  into a ledger that lives in another repository, and they renumber. State the
+  FACT; drop the citation.
 - **A count** — cases, tests, scenarios, mutations, symbols, files, or lines.
   The next change makes it wrong, and nothing catches it.
 - **A present-tense claim about what the tests cover**, or about what a wrong
@@ -256,6 +260,34 @@ layout is also computed in `machine.nim`" earns its place and stays, provided it
 asserts no exclusivity and no sequence. What goes is ONLY, FIRST, NEXT, and
 "does not name": those are the falsifiable forms, and that difference is the
 whole of the rule.
+
+**A DATASHEET CITATION IS NOT A PLAN REFERENCE, and it stays.** "CFPRM Rev. 3
+§2.2.11", "MCF5307 User's Manual §9.4", an ISP1181 register table — these name a
+primary source the reader needs to check the line beside them, they belong to a
+published document that does not renumber under us, and this tree's prose is
+mostly hardware explanation of exactly that kind. **Do not cull them by
+pattern-match against the plan-reference rule.** The plan rule is about pointers
+into our own process; a manual citation is a measured fact with its provenance
+attached.
+
+**A measured fact earns its place only while it stays measured.** A comment
+about the hardware or a format — a register address, a bit position, a field
+width, an endianness — is safe, because the thing it describes cannot change
+under it. A comment about OUR OWN implementation choice rots the moment the
+implementation changes, and it keeps a comment's authority while it does. **When
+you change behaviour, the comment above it is part of the change.**
+
+**A mixed block is split, not judged whole.** One block often holds a
+restatement of the code AND a real why — a hazard, an ordering that is
+load-bearing, a deliberate duplication. Edit inside the block: cut the
+restatement, keep the why. Do not delete a whole block because part of it is
+noise, and do not keep a whole block because part of it is real.
+
+**Prove a prose pass changed no code, mechanically.** Never assert "comments
+only" by eye. For Nim and CMake, that proof is the stripper protocol stated
+below, with its calibration. For a Python helper, the stronger route is to parse
+the file before and after, strip docstrings, and compare `ast.dump`, which also
+proves no string literal and no constant moved.
 
 **An invariant with no mechanism is a comment.** If a property must hold, make
 something go red when it stops holding. If no portable mechanism exists, say so
