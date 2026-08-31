@@ -1,53 +1,39 @@
-## The full model of the Philips ISP1181 USB device controller on CS3. Task
-## CPU-22. Design section 9.2, `AGENTS.md` section 3.8.
+## The full model of the Philips ISP1181 USB device controller on CS3.
 ##
-## THE PORT SPLIT IS THE ONE PIECE OF ADDRESS DECODING THIS MODEL DOES, and it
-## is design section 9.2's own sentence: "The chip's A0 is wired to CPU A4."
-## So bit 4 of the address is the chip's command/data select, the command port
-## is `0x13000010` and the data port is `0x13000000`. Everything coarser than
-## that bit belongs to the board: design section 5.2.1 gives the CS3 window
-## decode to the board, so this model refuses no address.
+## The port split is the one piece of address decoding this model does. The
+## chip's A0 is wired to CPU A4, so bit 4 of the address is the chip's
+## command/data select, the command port is `0x13000010` and the data port is
+## `0x13000000`. Everything coarser than that bit belongs to the board, which
+## owns the CS3 window decode, so this model refuses no address.
 ##
-## EVERY ACCESS THIS MODEL CANNOT ANSWER TRUTHFULLY ANSWERS BENIGNLY AND SAYS
-## SO. The refusal is the point. A device model that answered a command it does
-## not implement, or that truncated a packet, or that wrapped a register at its
-## width, hands the firmware a plausible value with nothing marking it wrong -
-## and a wrong value returned without complaint is the one outcome this project
-## refuses. Every such site here writes exactly one log line.
+## Every access this model cannot answer truthfully answers benignly and says
+## so. A device model that answered a command it does not implement, or that
+## truncated a packet, or that wrapped a register at its width, hands the
+## firmware a plausible value with nothing marking it wrong. Every such site
+## here writes exactly one log line.
 ##
-## MULTI-BYTE REGISTERS ARE LEAST SIGNIFICANT BYTE FIRST, which is design
-## section 9.2's table. The widths that document states are the mode register's
-## eight bits and the interrupt register's thirty-two. The hardware
-## configuration register's sixteen follow from the firmware value `0x2300`
-## the same table records. THE DEVICE ADDRESS AND THE INTERRUPT ENABLE ARE
-## WIDTHS THIS FILE CHOSE: the authority gives the enable's value `0x1F07` and
-## not its width, and an enable narrower than the register it masks could not
-## mask it, so it is the register's width.
+## Multi-byte registers are least significant byte first. The mode register is
+## eight bits and the interrupt register thirty-two. The hardware configuration
+## register's sixteen follow from the firmware value `0x2300`. The device
+## address and the interrupt enable are widths this file chose: the authority
+## gives the enable's value `0x1F07` and not its width, and an enable narrower
+## than the register it masks could not mask it, so it is the register's width.
 ##
-## NO SOURCE ON THIS MACHINE ASSIGNS AN INTERRUPT-REGISTER BIT TO AN EVENT, so
+## No source on this machine assigns an interrupt-register bit to an event, so
 ## this model assigns none and says so on every delivery. The alternative was a
 ## bit chosen here, which the firmware would then obey.
 ##
-## TWO SEQUENCING RULES BELOW ARE THIS FILE'S AND NOT THE AUTHORITY'S, and they
-## are named here because no document on this machine states either way.
-## FIRST, a command this model refuses leaves a transfer already in progress
-## LIVE, so a data byte written after a refusal lands in the earlier command's
-## operand; hardware would more plausibly read any command-port write as a new
-## command and abandon the previous one. SECOND, `peek` reads the FIFO of the
-## endpoint an endpoint-CONFIGURATION command last selected, which couples
-## selection to configuration where nothing here couples them. Both are
-## recorded as choices rather than as findings, and settling either is an
-## operator decision and not a repair.
+## Two sequencing rules below are this file's and not the authority's, because
+## no document on this machine states either way. First, a command this model
+## refuses leaves a transfer already in progress live, so a data byte written
+## after a refusal lands in the earlier command's operand; hardware would more
+## plausibly read any command-port write as a new command and abandon the
+## previous one. Second, `peek` reads the FIFO of the endpoint an
+## endpoint-configuration command last selected, which couples selection to
+## configuration where nothing here couples them.
 ##
-## THE MODEL IS NOT WIRED TO THE FIVE C ENTRY POINTS. `src/isp1181/stub.nim`
-## carries those, and which implementation stands behind them is an OPEN
-## OPERATOR DECISION recorded as plan item W3-51: the design document's only
-## sentence on it names no flag, no identifier, no type, no default and no
-## owner. Choosing one here would answer a question the plan explicitly leaves
-## open, so this file supplies the model and selects nothing.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Nothing here
-## is copied from a Philips or NXP document.
+## The model is not wired to the five C entry points. `src/isp1181/stub.nim`
+## carries those and selects which implementation stands behind them.
 
 import std/strutils
 
@@ -56,10 +42,9 @@ import ./fifo
 
 type
   Isp1181IrqFn* = proc (user: pointer; asserted: cint) {.cdecl.}
-    ## The LOGICAL interrupt state and not the pin state, as
-    ## `include/mcf5307.h` states it. Design section 9.2: the interrupt is
-    ## active-low and level-triggered, and the BOARD owns the inversion. 1
-    ## means the device requests service.
+    ## The logical interrupt state and not the pin state. The interrupt is
+    ## active-low and level-triggered, and the board owns the inversion. 1 means
+    ## the device requests service.
 
   Isp1181TxFn* = proc (user: pointer; endpoint: cint; data: ptr uint8;
                        length: csize_t) {.cdecl.}
@@ -69,11 +54,11 @@ type
     ## state of a command that takes no operand, and a data-port access in that
     ## state is refused rather than guessed at.
     ##
-    ## `tfAbsent` IS A READ WITH NOTHING BEHIND IT, and it is a state rather
-    ## than a refusal at command time because the command WAS accepted: a peek
-    ## of an empty buffer is a legal command whose answer does not exist. The
-    ## report belongs to the read that asks for the byte, not to the command
-    ## that set the read up.
+    ## `tfAbsent` is a read with nothing behind it. It is a state rather than a
+    ## refusal at command time because the command was accepted: a peek of an
+    ## empty buffer is a legal command whose answer does not exist. The report
+    ## belongs to the read that asks for the byte, not to the command that set
+    ## the read up.
     tfNone, tfWrite, tfRead, tfAbsent
 
   ISP1181* = ref object
@@ -99,15 +84,14 @@ type
 
 const
   benignValue* = 0x00'u8
-    ## The byte the model answers when it has nothing true to say. Design
-    ## section 9.1 gives the reason it is zero: the register the firmware reads
-    ## most often is the interrupt register, whose zero means no interrupt is
-    ## pending.
+    ## The byte the model answers when it has nothing true to say. It is zero
+    ## because the register the firmware reads most often is the interrupt
+    ## register, whose zero means no interrupt is pending.
   fifoCount* = 5
   softctBit* = 0x01'u8
-    ## Design section 9.2's mode register bits. The rest - DISGLBL `0x02`,
-    ## DBGMOD `0x04`, INTENA `0x08`, GOSUSP `0x20`, SNDRSU `0x40`, DMAWD `0x80`
-    ## - live in the same byte and need no name here until a task reads one.
+    ## The mode register bits. The rest - DISGLBL `0x02`, DBGMOD `0x04`,
+    ## INTENA `0x08`, GOSUSP `0x20`, SNDRSU `0x40`, DMAWD `0x80` - live in the
+    ## same byte and need no name here until a caller reads one.
   commandSelect = 0x10'u32
   resetCommand = 0xF6'u8
   peekCommand = 0xD2'u8
@@ -121,10 +105,9 @@ const fifoShape: array[fifoCount, tuple[capacity: int, buffers: int]] = [
   (64, 1),   ## endpoint 0 IN
   (16, 2),   ## endpoint 1
   (64, 2),   ## endpoint 2
-  (64, 1)]   ## endpoint 3 - SINGLE. `AGENTS.md` section 3.8 marks
-             ## double-buffering where it exists and leaves EP3 unmarked, and
-             ## CPU-22's block states that the design document's "double" for
-             ## this row is the error.
+  (64, 1)]   ## endpoint 3 - single, deliberately. The design document says
+             ## "double" for this row and that is the error: the endpoint table
+             ## marks double-buffering where it exists and leaves EP3 unmarked.
 
 const outFifoOfEndpoint: array[4, int] = [0, 2, 3, 4]
   ## The buffer a packet from the host lands in. Endpoint 0 is the only
@@ -140,9 +123,9 @@ proc note(m: ISP1181; line: string) =
   m.log.add(line)
 
 proc updateIrq(m: ISP1181) =
-  ## THE LINE IS LEVEL-TRIGGERED AND THE CALLBACK REPORTS CHANGES. Design
-  ## section 9.2 makes the line level-triggered and active-low at the pin; the
-  ## board owns the inversion, so what travels here is the logical state.
+  ## The line is level-triggered and active-low at the pin; the board owns the
+  ## inversion, so what travels here is the logical state. The callback reports
+  ## changes only.
   let want = (m.interruptRegister and m.interruptEnable) != 0
   if want == m.asserted:
     return
@@ -179,7 +162,7 @@ proc newISP1181*(user: pointer; irq: Isp1181IrqFn;
   result.clearState()
 
 proc lastCommand*(m: ISP1181): int =
-  ## The opcode of the last ACCEPTED command, or -1 when none has been
+  ## The opcode of the last accepted command, or -1 when none has been
   ## accepted. A refused command never becomes this.
   if m.isNil: -1 else: m.pending
 
@@ -190,18 +173,17 @@ proc irqAsserted*(m: ISP1181): bool =
   if m.isNil: false else: m.asserted
 
 proc softct*(m: ISP1181): bool =
-  ## Design section 9.2 names the SOFTCT bit as state the model needs, so it is
-  ## readable as itself and not only as a bit of the mode byte.
+  ## SOFTCT is state the model needs, so it is readable as itself and not only
+  ## as a bit of the mode byte.
   (not m.isNil) and (m.mode and softctBit) != 0
 
 proc fifoAt*(m: ISP1181; index: int): Fifo =
   m.fifos[index]
 
 proc raiseInterrupt*(m: ISP1181; mask: uint32) =
-  ## THE ONLY WAY A BIT OF THE INTERRUPT REGISTER IS EVER SET, and no command
-  ## in the implemented set calls it: the authority names no event-to-bit
-  ## assignment, so the model exposes the register and leaves the assignment to
-  ## whichever task acquires a source for it.
+  ## The only way a bit of the interrupt register is ever set, and no command in
+  ## the implemented set calls it: the authority names no event-to-bit
+  ## assignment, so the model exposes the register and assigns nothing.
   if m.isNil:
     return
   m.interruptRegister = m.interruptRegister or mask
@@ -242,10 +224,9 @@ proc beginTransfer(m: ISP1181; opcode: uint8; kind: Transfer; width: int;
 
 proc writeCommand(m: ISP1181; opcode: uint8) =
   let command = classify(opcode)
-  # BOTH REFUSALS BELOW RETURN WITHOUT TOUCHING `pending`, `transfer`, `width`
+  # Both refusals below return without touching `pending`, `transfer`, `width`
   # or `index`, so a transfer already in progress survives the refusal. That
-  # sequencing is this file's choice where the authority is silent, and the
-  # head block names it.
+  # sequencing is this file's choice where the authority is silent.
   case command.class
   of ccNotImplemented:
     m.note("isp1181: command 0x" & toHex(opcode) & " (" & command.name &
@@ -277,9 +258,9 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
   of 0xC3'u8: m.beginTransfer(opcode, tfRead, 4, m.interruptEnable)
   of 0xC0'u8: m.beginTransfer(opcode, tfRead, 4, m.interruptRegister)
   of peekCommand:
-    # `m.selected` IS SET ONLY BY AN ENDPOINT-CONFIGURATION COMMAND, so this
+    # `m.selected` is set only by an endpoint-configuration command, so this
     # couples the peek target to configuration. That coupling is this file's
-    # choice where the authority is silent, and the head block names it.
+    # choice where the authority is silent.
     let index = outFifoOfEndpoint[m.selected]
     let head = m.fifos[index].peek()
     if head.ok:
@@ -289,9 +270,8 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
         " found no packet; the read answers 0x00"
       m.beginTransfer(opcode, tfAbsent, 1, 0)
   else:
-    # `0xF4` acknowledge setup. THE AUTHORITY GIVES THE OPCODE AND NO EFFECT,
-    # so the model accepts it and changes nothing. An effect invented here is
-    # exactly what CPU-22's check line calls a silent invention.
+    # `0xF4` acknowledge setup. The authority gives the opcode and no effect, so
+    # the model accepts it and changes nothing.
     m.beginTransfer(opcode, tfNone, 0, 0)
 
 proc commitOperand(m: ISP1181) =
@@ -348,9 +328,8 @@ proc readData(m: ISP1181): uint8 =
   inc m.index
 
 proc portWrite*(m: ISP1181; address: uint32; value: uint8) =
-  ## A nil handle is answered rather than aborted, for design section 5.6's
-  ## reason: the caller is a plugin's host and an abort destroys a session that
-  ## has nothing to do with this model.
+  ## A nil handle is answered rather than aborted: the caller is a plugin's host
+  ## and an abort destroys a session that has nothing to do with this model.
   if m.isNil:
     return
   if isCommandPort(address):
@@ -362,9 +341,9 @@ proc portRead*(m: ISP1181; address: uint32): uint8 =
   if m.isNil:
     return benignValue
   if isCommandPort(address):
-    # THE COMMAND PORT ANSWERS BENIGNLY AND SILENTLY. Design section 9.2 makes
-    # it write-only - the firmware issues commands there and reads operands at
-    # the data port - and a model that echoed the last command byte would be
-    # presenting a register the chip does not have.
+    # The command port answers benignly and silently. It is write-only - the
+    # firmware issues commands there and reads operands at the data port - and a
+    # model that echoed the last command byte would be presenting a register the
+    # chip does not have.
     return benignValue
   m.readData()

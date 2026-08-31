@@ -219,15 +219,8 @@ proc step(ctx: MCF5307Ctx): uint32 =
     # one of the four the part writes.
     result = fetchCycles + controlFamily(ctx, opWord, decoded)
   of opMovec:
-    # `MOVEC` (CPU-11). `movecFamily` fetches the extension word, takes the
-    # privilege violation in user state, and halts the context WITHOUT `fault`
-    # on a control-register number this part does not carry.
-    #
-    # THIS ARM IS THE IMPORT EDGE AS WELL AS THE DISPATCH. `src/mcf5307.nim`
-    # imports this module and this module imports `movec`, so the executor
-    # reaches the archive through chain A and the entry module needs no edge
-    # of its own - which is what `mcf5307/control.nim` already demonstrates
-    # from the same position.
+    # `movecFamily` halts the context without setting `fault` on a
+    # control-register number this part does not carry.
     result = fetchCycles + movecFamily(ctx, opWord, decoded)
   of opExg, opTas, opNbcd:
     # `halted` is set and `fault` is not, because the encoding is valid and

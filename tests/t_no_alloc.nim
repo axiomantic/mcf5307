@@ -1,53 +1,50 @@
 ## `t_no_alloc` - the core allocates only inside `mcf5307_create`, and
-## `mcf5307_exec` allocates nothing however long it runs. Task CPU-19.
-## Design section 5.6.
+## `mcf5307_exec` allocates nothing however long it runs.
 ##
-## WHY THE PROPERTY IS WORTH A SUITE. The delivery form is an audio plugin, so
+## The delivery form is an audio plugin, so
 ## `mcf5307_exec` may be entered from a real-time thread, where one call into
 ## the system allocator is a missed buffer rather than a slow frame. Nothing
 ## about that failure is visible in an exit status, in a register comparison or
 ## in a cycle count, so no other suite in this directory can go red on it.
 ##
-## THE INSTRUMENT IS `getAllocStats`, AND IT IS SILENT WHEN IT IS NOT ENABLED.
+## The instrument is `getAllocStats`, and it is silent when it is not enabled.
 ## `system/memalloc.nim` compiles the counters only under `-d:nimAllocStats`;
 ## without that define `getAllocStats()` still compiles, still returns an
-## `AllocStats`, and returns a DEFAULT one. A suite that asserted zero against
+## `AllocStats`, and returns a default one. A suite that asserted zero against
 ## that build would report a pass it had not measured - a zero from a counter
 ## that was never wired reads exactly like a zero from a core that does not
 ## allocate. The driver in `tests/tests_cpu.cmake` adds the define and states
-## why it departs from the library's own flag set; THE CASE BELOW ON
-## `mcf5307_create` IS WHAT MAKES THE DEPARTURE SELF-ENFORCING, because the
+## why it departs from the library's own flag set; the case below on
+## `mcf5307_create` is what makes the departure self-enforcing, because the
 ## define going missing turns that case red rather than turning this suite into
 ## a green mirage.
 ##
-## THE COUNTER IS READ THROUGH A CAST, AND THE CAST IS CHECKED. `AllocStats`
+## The counter is read through a cast, and the cast is checked. `AllocStats`
 ## exports its type and not its two fields, so `stats.allocCount` does not
 ## compile outside `system`. The public reader is `$`. The cast below reads the
 ## same two words positionally, and the first case holds it against `$` so that
 ## a layout this cast no longer matches is red rather than silently
 ## misreported.
 ##
-## THE BOARD MIRRORS ONE PAGE OF NOPs OVER THE WHOLE ADDRESS SPACE, and that is
+## The board mirrors one page of NOPs over the whole address space, and that is
 ## a deliberate choice over a branch back to the top. Under mirroring the
-## program counter advances monotonically for the whole run, so the FINAL
-## PROGRAM COUNTER is a witness of how many instructions ran that does not share
+## program counter advances monotonically for the whole run, so the final
+## program counter is a witness of how many instructions ran that does not share
 ## a path with this file's own fetch counter. A branch-back loop would return
 ## the program counter to the top of the loop and leave the fetch counter as the
 ## only witness.
 ##
-## WHY THE EXECUTION WITNESSES ARE HERE AT ALL. A core that halted on its first
+## Why the execution witnesses are here at all. A core that halted on its first
 ## instruction satisfies "allocates nothing" perfectly, and so does one whose
 ## `mcf5307_exec` returns without executing. The fetch counter, the last fetch
 ## address, the final program counter and the halt and fault flags are asserted
 ## beside every allocation figure so that a zero means the run happened.
 ##
-## THE TWO CALL SHAPES ARE SEPARATE CASES because they fail differently. Ten
-## million calls each carrying one instruction find an allocation taken ONCE PER
-## CALL; one call carrying many instructions finds an allocation taken ONCE PER
-## INSTRUCTION inside the loop. Either shape alone passes against the other's
+## The two call shapes are separate cases because they fail differently. Ten
+## million calls each carrying one instruction find an allocation taken once per
+## call; one call carrying many instructions finds an allocation taken once per
+## instruction inside the loop. Either shape alone passes against the other's
 ## defect.
-##
-## MIT licensed. Nothing here is a fact about Motorola silicon.
 
 import mcf5307/cpu
 import mcf5307/decode_types
@@ -97,7 +94,7 @@ const noneTaken: AllocCounts = (allocCount: 0, deallocCount: 0)
 # ---------------------------------------------------------------------------
 # The board. One page of NOP, mirrored, and a counter on each callback.
 #
-# EVERY MEASURED VALUE IS TAKEN INTO A `let` BEFORE ANY CASE RUNS. `check` is a
+# Every measured value is taken into a `let` before any case runs. `check` is a
 # template and `checkImpl` echoes, and an echo allocates; a measurement window
 # that contained a case would be measuring this file rather than the core.
 
@@ -165,8 +162,8 @@ let afterRegisters = counts()
 # ---------------------------------------------------------------------------
 # Ten million instructions, one per call.
 #
-# A BUDGET OF ONE CYCLE RUNS EXACTLY ONE INSTRUCTION whatever that instruction
-# costs, because `mcf5307_exec` saturates AFTER the step rather than declining
+# A budget of one cycle runs exactly one instruction whatever that instruction
+# costs, because `mcf5307_exec` saturates after the step rather than declining
 # to take it. It is the budget `conformance/runner.cpp` passes.
 
 let beforeExec = counts()
@@ -189,12 +186,12 @@ let afterDestroy = counts()
 # ---------------------------------------------------------------------------
 # Many instructions inside one call.
 #
-# THE BUDGET IS EXACT AND NOT GENEROUS. At `nopCycles` a NOP the budget below
+# The budget is exact and not generous. At `nopCycles` a NOP the budget below
 # is spent to the cycle on the last instruction, so the run ends because the
 # budget ran out and not because the loop saturated.
 #
-# THE RETURN OF `mcf5307_exec` IS NOT ASSERTED, AND THAT IS A LIMIT RATHER THAN
-# AN OVERSIGHT. The loop saturates at its budget, so a non-halting run returns
+# The return of `mcf5307_exec` is not asserted. The loop saturates at its
+# budget, so a non-halting run returns
 # the budget whatever it cost - an assertion on it would compare the budget to
 # itself.
 
@@ -221,11 +218,11 @@ check(sampledText,
       ", deallocCount: " & $sampledByCast.deallocCount & ")",
       "the cast reads the counter the public `$` prints")
 
-# THE POSITIVE CONTROL, AND THE WHOLE SUITE RESTS ON IT. Every case below
-# asserts a ZERO, and a zero is what a dead counter reports. `mcf5307_create`
+# The positive control, and the whole suite rests on it. Every case below
+# asserts a zero, and a zero is what a dead counter reports. `mcf5307_create`
 # is the one entry point the design allows to allocate - it takes the context
 # out of the heap - so it is the call that proves the counter moves in the same
-# run that reports the zeros. The figure is ONE because the context is one
+# run that reports the zeros. The figure is one because the context is one
 # `ref` object and nothing else on that path reaches the allocator; a build
 # without `-d:nimAllocStats` reports zero here and is red.
 check(taken(beforeCreate, afterCreate), (allocCount: 1, deallocCount: 0),
@@ -238,11 +235,11 @@ check((taken: taken(beforeRegisters, afterRegisters), readBack: readBack),
       (taken: noneTaken, readBack: seedD0),
       "mcf5307_set_reg and mcf5307_get_reg allocate nothing")
 
-# THE PROPERTY THE TASK EXISTS FOR.
+# The property under test.
 check(taken(beforeExec, afterExec), noneTaken,
       "mcf5307_exec allocates nothing over ten million instructions")
 
-# THE EXECUTION WITNESS FOR THE RUN ABOVE. Its fields are what separate a core
+# The execution witness for the run above. Its fields are what separate a core
 # that ran ten million instructions from one that halted on the first and
 # reported the same zero. The last fetch address and the program counter are
 # derived from the instruction count by multiplication; the core reaches them
@@ -274,7 +271,7 @@ check(bursted,
        fault: false),
       "the single call ran its whole budget of instructions")
 
-# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this program reports
+# The registry lines. They are data and not a verdict: this program reports
 # what its text declares and what its run adjudicated, and the registered
 # test's driver is what compares them. A verdict printed here would be a
 # self-assessment, and a run that stopped early would simply not print one.

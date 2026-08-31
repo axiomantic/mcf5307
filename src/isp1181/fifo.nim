@@ -1,19 +1,14 @@
-## The ISP1181's endpoint buffers. Task CPU-22. Design section 9.2,
-## `AGENTS.md` section 3.8.
+## The ISP1181's endpoint buffers.
 ##
-## A BUFFER COUNT IS A BEHAVIOUR AND NOT A SIZE, which is why it is a field
-## here rather than a comment. A single-buffered endpoint holds ONE packet and
-## refuses the next until the first is taken; a double-buffered one holds two.
-## CPU-22's block states the consequence of getting it wrong in the generous
-## direction: a model with one buffer too many accepts a second packet the
-## hardware would have NAKed, and the firmware then sees a transfer the device
-## never made.
+## A buffer count is a behaviour and not a size, which is why it is a field here
+## rather than a comment. A single-buffered endpoint holds one packet and
+## refuses the next until the first is taken; a double-buffered one holds two. A
+## model with one buffer too many accepts a second packet the hardware would
+## have NAKed, and the firmware then sees a transfer the device never made.
 ##
-## A PACKET IS ACCEPTED WHOLE OR REFUSED WHOLE. Truncating an oversized packet
+## A packet is accepted whole or refused whole. Truncating an oversized packet
 ## to the buffer's size would hand the firmware a short packet with nothing to
-## mark it short, which is the plausible wrong answer this model refuses.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
+## mark it short.
 
 type
   Fifo* = object

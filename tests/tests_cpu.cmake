@@ -1333,31 +1333,25 @@ add_test(NAME t_control
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_control_driver.cmake")
 
-# -------------------------------------------------------------------- CPU-11
+# ---------------------------------------------------------------------------
 # `t_movec` - the `MOVEC` encoding and the control-register map.
 #
-# ONE REGISTERED NAME, AND NO CORPUS BESIDE IT. The blocks above register a
-# unit test beside a conformance corpus of the same group. This task has none,
-# and the reason is the same one CPU-14's block gives one step further on: a
-# positive corpus executes an encoding and compares the machine state after
-# it, and `MOVEC` writes a control register this core does not keep. There is
+# No corpus beside it. A positive corpus executes an encoding and compares the
+# machine state after it, and `MOVEC` writes a control register this core does
+# not keep. There is
 # no state for a corpus case to read back, so a corpus case would assert that
 # the instruction decoded and nothing about which register it named - which is
 # the one thing this task exists to pin.
 #
-# THE HAZARD IS SILENT IN BOTH DIRECTIONS AND THAT IS WHY THE MAP IS TESTED
-# NUMBER BY NUMBER. Design section 6.1 calls the 68k collision the number one
-# hazard: `0x004` and `0x005` are ACR0 and ACR1 here and ITT0 and ITT1 on the
+# The hazard is silent in both directions and that is why the map is tested
+# number by number. The 68k collision: `0x004` and `0x005` are ACR0 and ACR1 here and ITT0 and ITT1 on the
 # 68040, and `0x800` is USP on the 68040 and names no register of this part. A
 # decoder carrying the wrong map writes a real register with a real value and
 # reports nothing, so no exit status anywhere can catch it.
 #
-# THE FLAG SET IS THE LIBRARY'S OWN, taken exactly as `t_ea_masks` and
-# `t_sign_extend` above take it, and for the reason those blocks give.
-#
-# THE COMPILE HAPPENS INSIDE THE TEST AND NOT IN THE BUILD, for the reason the
-# blocks above give: a `ctest` run over a tree whose build had failed would
-# otherwise run a STALE binary of an earlier build and pass.
+# The compile happens inside the test and not in the build: a `ctest` run over a
+# tree whose build had failed would otherwise run a stale binary of an earlier
+# build and pass.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
     message(FATAL_ERROR
@@ -1470,29 +1464,25 @@ add_test(NAME t_movec
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_movec_driver.cmake")
 
-# -------------------------------------------------------------------- CPU-12
+# ---------------------------------------------------------------------------
 # `t_lines` - the line-A and line-F opcode spaces.
 #
-# ONE REGISTERED NAME, AND NO CORPUS BESIDE IT. A positive corpus executes an
-# encoding and compares the machine state after it, and the whole subject of
-# this task is encodings that MUST NOT execute. The negative corpus is CPU-13's
-# and it names the removed 68000 instructions; the two line spaces are not
-# removed instructions but opcode space this core declines to claim, and the
-# refusal has to be asserted over the WHOLE of each space rather than at
-# sampled encodings a corpus could carry.
+# No corpus beside it. A positive corpus executes an encoding and compares the
+# machine state after it, and the whole subject here is encodings that must not
+# execute. `t_negative` names the removed 68000 instructions; the two line
+# spaces are not removed instructions but opcode space this core declines to
+# claim, and the refusal has to be asserted over the whole of each space rather
+# than at sampled encodings a corpus could carry.
 #
-# THE SWEEP IS EXHAUSTIVE AND NOT SAMPLED, AND THAT IS WHAT THIS SUITE ADDS.
-# The two spaces reach no operation because no arm of `decodeWord` matches
-# them, which is a property of an ABSENCE. An absence is the one thing a
+# The sweep is exhaustive and not sampled. The two spaces reach no operation
+# because no arm of `decodeWord` matches them, which is a property of an
+# absence. An absence is the one thing a
 # sampled case cannot pin: it holds for every word of the space or it does not
 # hold at all, so the assertion is written over every word of it.
 #
-# THE FLAG SET IS THE LIBRARY'S OWN, taken exactly as the blocks above take it,
-# and for the reason those blocks give.
-#
-# THE COMPILE HAPPENS INSIDE THE TEST AND NOT IN THE BUILD, for the reason the
-# blocks above give: a `ctest` run over a tree whose build had failed would
-# otherwise run a STALE binary of an earlier build and pass.
+# The compile happens inside the test and not in the build: a `ctest` run over a
+# tree whose build had failed would otherwise run a stale binary of an earlier
+# build and pass.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
     message(FATAL_ERROR
@@ -1606,39 +1596,35 @@ add_test(NAME t_lines
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_lines_driver.cmake")
 
-# -------------------------------------------------------------------- CPU-13
+# ---------------------------------------------------------------------------
 # `t_negative` - the negative corpus.
 #
-# ONE REGISTERED NAME, AND THE CORPUS IS BOUND INTO THE PROGRAM RATHER THAN
-# PASSED TO IT. `tests/t_negative.nim` reads
-# `conformance/corpus/negative_00.json` with `staticRead`, so the corpus
-# arrives at COMPILE time and this block forwards no corpus path. A path
+# The corpus is bound into the program rather than passed to it.
+# `tests/t_negative.nim` reads `conformance/corpus/negative_00.json` with
+# `staticRead`, so the corpus arrives at compile time and this block forwards no
+# corpus path. A path
 # forwarded at run time that pointed nowhere would leave the suite
 # adjudicating an empty table and reporting a pass, and an empty negative
 # corpus passes against any core at all.
 #
-# IT IS NOT REGISTERED IN `conformance/conformance_cpu.cmake` BESIDE THE FOUR
-# POSITIVE GROUPS, AND THE REASON IS THE RUNNER RATHER THAN THE FILE. That
+# It is not registered in `conformance/conformance_cpu.cmake` beside the four
+# positive groups, and the reason is the runner rather than the file. That
 # runner takes a `<group>_00.json` and compares a machine state after the
-# encoding EXECUTES; these cases are encodings that must not execute, and the
+# encoding executes; these cases are encodings that must not execute, and the
 # comparison it makes has nothing to read. `conformance/parse_check.cpp` names
 # its four required groups explicitly, so this file is invisible to it too and
 # `t0_corpus_parses` is unaffected either way.
 #
-# THE GROUND IT DIVIDES WITH `t_lines` IS CPU-12's OWN SPLIT, stated in that
-# block above: the line-A and line-F spaces are opcode space this core
-# declines to claim and are swept exhaustively there, and this suite is the
-# REMOVED 68000 INSTRUCTIONS, which live in lines the core does claim and
-# decode. No encoding in the corpus is in either of those two lines.
+# The ground it divides with `t_lines`: the line-A and line-F spaces are opcode
+# space this core declines to claim and are swept exhaustively there, and this
+# suite is the removed 68000 instructions, which live in lines the core does
+# claim and decode. No encoding in the corpus is in either of those two lines.
 #
-# THE FLAG SET IS THE LIBRARY'S OWN, taken exactly as the blocks above take
-# it, and for the reason those blocks give.
-#
-# THE COMPILE HAPPENS INSIDE THE TEST AND NOT IN THE BUILD, for the reason the
-# blocks above give: a `ctest` run over a tree whose build had failed would
-# otherwise run a STALE binary of an earlier build and pass. It carries a
-# second weight here, because the corpus is a compile-time input: a corpus
-# edited without a recompile would be tested in its previous state.
+# The compile happens inside the test and not in the build: a `ctest` run over a
+# tree whose build had failed would otherwise run a stale binary of an earlier
+# build and pass. It carries a second weight here, because the corpus is a
+# compile-time input: a corpus edited without a recompile would be tested in its
+# previous state.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
     message(FATAL_ERROR
@@ -2008,17 +1994,15 @@ add_test(NAME t_bus_fault
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_bus_fault_driver.cmake")
 
-# -------------------------------------------------------------------- CPU-16
-# `t_bus_fault_write` - the IMPRECISE stacked program counter of an operand
+# ---------------------------------------------------------------------------
+# `t_bus_fault_write` - the imprecise stacked program counter of an operand
 # write fault.
 #
-# ONE REGISTERED NAME, AND NO CORPUS BESIDE IT, for the reason the CPU-15 block
-# above gives: the corpus runner executes ASSEMBLED encodings, and a bus fault
-# is raised by a board rather than by an instruction, so there is no encoding to
-# assemble. The whole of the evidence for this task is the registered name
-# below.
+# No corpus beside it: the corpus runner executes assembled encodings, and a bus
+# fault is raised by a board rather than by an instruction, so there is no
+# encoding to assemble.
 #
-# THE FLAG SET IS THE LIBRARY'S OWN, taken from the compile command this
+# The flag set is the library's own, taken from the compile command this
 # configure built for the library itself, so that the modules this test asserts
 # about are built the way the library builds them. The tail anchor is
 # `[1-9][0-9]*`, which rejects a run of zero cases.
@@ -2143,8 +2127,7 @@ add_test(NAME t_bus_fault_write
 # ---------------------------------------------------------------------------
 # `t_irq` - the interrupt model.
 #
-# One registered name, and no corpus beside it, for the reason the exception
-# block above gives: the corpus runner executes assembled encodings, and an
+# No corpus beside it: the corpus runner executes assembled encodings, and an
 # interrupt has no encoding.
 #
 # It exercises a module the library does carry. `src/mcf5307/cpu.nim` imports
@@ -2153,8 +2136,6 @@ add_test(NAME t_bus_fault_write
 # source. That import also carries `src/mcf5307/exception.nim` into the library,
 # because `irq.nim` imports it for `autovectorFor`.
 #
-# THE FLAG SET, THE COMPILE INSIDE THE TEST and the two-part failure check are
-# taken from the `t_exception` block above, for the reasons that block gives.
 # The tail anchor is `[1-9][0-9]*`, which rejects a run of zero cases.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
@@ -2409,14 +2390,14 @@ add_test(NAME t_state
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_state_driver.cmake")
 
 
-# -------------------------------------------------------------------- CPU-21
+# ---------------------------------------------------------------------------
 # `t_isp1181_stub` - the CS3 stub of the ISP1181 USB device controller.
 #
-# ONE REGISTERED NAME, AND NO CORPUS BESIDE IT. The corpus runner executes
-# ASSEMBLED encodings, and a device model answers a bus access rather than an
-# instruction, so there is no encoding to assemble.
+# No corpus beside it: the corpus runner executes assembled encodings, and a
+# device model answers a bus access rather than an instruction, so there is no
+# encoding to assemble.
 #
-# THE FLAG SET IS THE LIBRARY'S OWN, taken from the compile command this
+# The flag set is the library's own, taken from the compile command this
 # configure built for the library itself, so that the module this test asserts
 # about is built the way the library builds it. The tail anchor is
 # `[1-9][0-9]*`, which rejects a run of zero cases.
@@ -2546,14 +2527,13 @@ add_test(NAME t_isp1181_stub
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_stub_driver.cmake")
 
 
-# -------------------------------------------------------------------- CPU-22
+# ---------------------------------------------------------------------------
 # `t_isp1181_command_set` - the command set of the full ISP1181 model.
 #
-# ONE REGISTERED NAME, AND NO CORPUS BESIDE IT, for the reason CPU-21's block
-# above gives: the corpus runner executes assembled encodings and a device
-# model answers a bus access rather than an instruction.
+# No corpus beside it: the corpus runner executes assembled encodings and a
+# device model answers a bus access rather than an instruction.
 #
-# THE FLAG SET IS THE LIBRARY'S OWN, taken from the compile command this
+# The flag set is the library's own, taken from the compile command this
 # configure built for the library itself, so that the modules this test asserts
 # about are built the way the library builds them.
 
@@ -2673,14 +2653,13 @@ add_test(NAME t_isp1181_command_set
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_command_set_driver.cmake")
 
 
-# -------------------------------------------------------------------- CPU-23
+# ---------------------------------------------------------------------------
 # `t_isp1181` - the ISP1181 model driven by synthetic transactions.
 #
-# ONE REGISTERED NAME, AND NO CORPUS BESIDE IT, for the reason CPU-21's block
-# above gives: the corpus runner executes assembled encodings and a device
-# model answers a bus access rather than an instruction.
+# No corpus beside it: the corpus runner executes assembled encodings and a
+# device model answers a bus access rather than an instruction.
 #
-# THE FLAG SET IS THE LIBRARY'S OWN, taken from the compile command this
+# The flag set is the library's own, taken from the compile command this
 # configure built for the library itself, so that the modules this test asserts
 # about are built the way the library builds them.
 
@@ -2799,14 +2778,13 @@ add_test(NAME t_isp1181
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_driver.cmake")
 
 
-# -------------------------------------------------------------------- CPU-24
+# ---------------------------------------------------------------------------
 # `t_isp1181_state` - the SOF tick and the ISP1181 state block.
 #
-# ONE REGISTERED NAME, AND NO CORPUS BESIDE IT, for the reason CPU-21's block
-# above gives: a device model answers a bus access rather than an instruction,
-# so there is no encoding to assemble.
+# No corpus beside it: a device model answers a bus access rather than an
+# instruction, so there is no encoding to assemble.
 #
-# THE FLAG SET IS THE LIBRARY'S OWN, taken from the compile command this
+# The flag set is the library's own, taken from the compile command this
 # configure built for the library itself.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)

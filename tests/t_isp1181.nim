@@ -1,37 +1,25 @@
-## `t_isp1181` - the ISP1181 model driven by synthetic transactions. Task
-## CPU-23. Design sections 9.2 and 18.2.
+## `t_isp1181` - the ISP1181 model driven by synthetic transactions.
 ##
-## WHAT CPU-23's `Check:` ASKS OF THIS SUITE, in its own words: synthetic
-## transactions drive "the command state machine, the five FIFOs, the interrupt
-## register and the SOFTCT bit", and a negative case sends "a command the model
-## does not implement" and asserts "a log line and a benign value, never a
-## silent invention".
+## The subject is what a command byte leaves behind. Whether a byte is accepted
+## is settled elsewhere; what is settled here is what an accepted command does
+## to the transfer already in flight, what a refused one does to it, and what
+## the data port carries afterwards. Those are the sites where a plausible wrong
+## answer is cheapest to produce: a latch that survives a re-issued command, a
+## refusal that half-cancels a transfer, and a data port that answers zero
+## without saying why all look like ordinary behaviour from the firmware's side.
 ##
-## THE COMMAND STATE MACHINE IS WHAT A COMMAND BYTE LEAVES BEHIND, and that is
-## the subject this suite takes. Whether a byte is accepted is settled
-## elsewhere; what is settled HERE is what an accepted command does to the
-## transfer already in flight, what a REFUSED one does to it, and what the data
-## port carries afterwards. Those are the sites where a plausible wrong answer
-## is cheapest to produce: a latch that survives a re-issued command, a refusal
-## that half-cancels a transfer, and a data port that answers zero without
-## saying why all look like ordinary behaviour from the firmware's side.
+## Every opcode and every log line below is a hand-written literal. A suite that
+## asked the model which opcodes it implements, or that built an expected log
+## line by calling the code that writes it, would pass against any table and any
+## wording at all.
 ##
-## EVERY OPCODE AND EVERY LOG LINE BELOW IS A HAND-WRITTEN LITERAL. A suite
-## that asked the model which opcodes it implements, or that built an expected
-## log line by calling the code that writes it, would pass against any table
-## and any wording at all.
-##
-## THE INTERRUPT REGISTER IS DRIVEN AS FAR AS IT IS ASSIGNED AND NO FURTHER. No
-## source on this machine names the interrupt-register bit for any event, so
-## there is no event whose bit this suite could assert. What IS assertable is
+## No source on this machine names the interrupt-register bit for any event, so
+## there is no event whose bit this suite could assert. What is assertable is
 ## the register itself - its width, its byte order, that a clear is per bit,
-## and that NOTHING in the model lights a bit on its own. The last of those is
+## and that nothing in the model lights a bit on its own. The last of those is
 ## the one that would silently become false the day somebody picks a bit, so it
 ## is written as a sweep with a positive control beside it: a model whose
 ## register were stuck at zero would satisfy the sweep and fails the control.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Nothing here
-## is copied from a Philips or NXP document.
 
 import std/strutils
 
@@ -57,15 +45,15 @@ proc checkImpl(site: int; ok: bool; label: string; got: string; want: string) =
 
 
 template check(ok: bool; label: string; got: string; want: string) =
-  ## The call site is recorded at COMPILE TIME into `declaredSites` and at RUN
-  ## TIME into `executedSites`. `tests/case_sites.nim` states what the pair is
+  ## The call site is recorded at compile time into `declaredSites` and at run
+  ## time into `executedSites`. `tests/case_sites.nim` states what the pair is
   ## for.
   const site = instantiationInfo(-1).line
   static: declaredSites.add(site)
   checkImpl(site, ok, label, got, want)
 
 # ---------------------------------------------------------------------------
-# The window, from design section 9.2's table.
+# The window.
 
 const
   dataPort = 0x13000000'u32
@@ -92,9 +80,9 @@ proc readVia(m: ISP1181; opcode: uint8; width: int): seq[uint8] =
     result.add(m.portRead(dataPort))
 
 # ---------------------------------------------------------------------------
-# BLOCK 1. WHAT A COMMAND BYTE DOES TO THE TRANSFER ALREADY IN FLIGHT.
+# Block 1. What a command byte does to the transfer already in flight.
 
-# AN OPERAND THAT NEVER COMPLETED COMMITS NOTHING. The firmware writes a
+# An operand that never completed commits nothing. The firmware writes a
 # command and then its operand bytes as separate bus accesses, so a command
 # that arrives between the two is an ordinary interleaving and not a fault. A
 # model that committed the half-built operand would hand back a register value
@@ -116,7 +104,7 @@ check(abandoned == wantAbandoned,
       "state machine: an operand cut short by a new command commits nothing",
       $abandoned, $wantAbandoned)
 
-# A RE-ISSUED COMMAND STARTS ITS OPERAND FROM ZERO. The operand is built by
+# A re-issued command starts its operand from zero. The operand is built by
 # OR-ing each byte into a latch, so a latch carried over from the abandoned
 # attempt would leave the bits of a byte the firmware wrote once and then
 # replaced. The two writes here are the same command with different operands,
@@ -136,10 +124,10 @@ check(reissued == wantReissued,
       "state machine: a re-issued command builds its operand from zero",
       $reissued, $wantReissued)
 
-# A REFUSED COMMAND IS INERT AND NOT HALF-ACCEPTED. Both refusing classes are
+# A refused command is inert and not half-accepted. Both refusing classes are
 # driven into the middle of a live transfer: the command the documents name and
 # do not implement, and the byte no document numbers at all. The transfer has
-# to complete across both of them, and the two have to say DIFFERENT things - a
+# to complete across both of them, and the two have to say different things - a
 # reader who meets the second has found a gap in the specification rather than
 # a decision somebody took, and a single shared line would hide which one it is.
 type Inert = tuple[hw: seq[uint8], log: seq[string]]
@@ -163,9 +151,9 @@ check(inert == wantInert,
       "state machine: a refused command disturbs no transfer and names its class",
       $inert, $wantInert)
 
-# A COMMAND THAT TAKES NO OPERAND LEAVES THE DATA PORT WITH NOTHING TO CARRY,
+# A command that takes no operand leaves the data port with nothing to carry,
 # and that is a different state from the one a model has before any command at
-# all. The command IS recorded here, so a data port that answered from the
+# all. The command is recorded here, so a data port that answered from the
 # latch would be answering with the previous command's operand.
 type NoOperand = tuple[value: uint8, last: int, log: seq[string]]
 
@@ -185,8 +173,8 @@ check(noOperand == wantNoOperand,
       "state machine: a command taking no operand carries nothing on the data port",
       $noOperand, $wantNoOperand)
 
-# THE PORT SPLIT IS ONE ADDRESS BIT AND NOT AN ADDRESS. Design section 9.2:
-# the chip's A0 is wired to CPU A4, so bit 4 selects command from data and
+# The port split is one address bit and not an address. The chip's A0 is wired
+# to CPU A4, so bit 4 selects command from data and
 # every coarser bit belongs to the board's CS3 decode. A model that compared
 # whole addresses would answer the two the firmware happens to use and would
 # refuse every other access in the window with no way to see it here.
@@ -211,9 +199,9 @@ check(aliased == wantAliased,
       $aliased, $wantAliased)
 
 # ---------------------------------------------------------------------------
-# BLOCK 2. THE FIVE FIFOs.
+# Block 2. The five FIFOs.
 
-# WHICH BUFFER A PACKET LANDS IN IS ASSERTED BY ITS CONTENT AND NOT BY A COUNT.
+# Which buffer a packet lands in is asserted by its content and not by a count.
 # A distinct first byte goes to each endpoint and is read back through the
 # selector the authority gives this model, so a mapping that put two endpoints
 # in one buffer is separated from one that is correct. The endpoint 0 IN buffer
@@ -241,7 +229,7 @@ check(mapping == wantMapping,
       "fifos: each endpoint's packet lands in its own buffer and none in EP0 IN",
       $mapping, $wantMapping)
 
-# A REFUSED ENDPOINT-CONFIGURATION COMMAND MOVES NO SELECTION. The selector and
+# A refused endpoint-configuration command moves no selection. The selector and
 # the refusal share an opcode family, so a model that selected before it
 # classified would take the endpoint number out of a command it had just
 # refused - and the number is outside the range the model carries buffers for.
@@ -268,7 +256,7 @@ check(selection == wantSelection,
       "fifos: a refused endpoint-configuration command leaves the selection alone",
       $selection, $wantSelection)
 
-# THE BUFFER'S OWN SIZE IS ACCEPTED AND ONE BYTE MORE IS NOT. A refusal at the
+# The buffer's own size is accepted and one byte more is not. A refusal at the
 # exact capacity and a refusal one byte past it are the same outcome from the
 # firmware's side, so only driving both separates the boundary this model
 # carries from one placed a byte early.
@@ -298,13 +286,13 @@ check(boundary == wantBoundary,
       "fifos: a packet of exactly the buffer's size fits and one byte more does not",
       $boundary, $wantBoundary)
 
-# THE TWO REFUSALS ARE TOLD APART BY THE FIGURES THE LINE CARRIES. A full
+# The two refusals are told apart by the figures the line carries. A full
 # buffer is ordinary flow control and an oversized packet is a fault in
 # whatever produced it, and a reader separates them by the packet's size and
 # the buffer's occupancy rather than by two different sentences. The full-buffer
-# refusal is driven on endpoint 3, which holds ONE packet: the design document
-# reads double there and `AGENTS.md` section 3.8, which marks double-buffering
-# where it exists, leaves that endpoint unmarked. A buffer too many would
+# refusal is driven on endpoint 3, which holds one packet: the design document
+# reads double there and the endpoint table, which marks double-buffering where
+# it exists, leaves that endpoint unmarked. A buffer too many would
 # accept the second packet, so the refusal is the assertion and the count is
 # not.
 type Refusals = tuple[full: seq[string], oversize: seq[string]]
@@ -333,7 +321,7 @@ check(refusals == wantRefusals,
       "fifos: a full buffer and an oversized packet are separated by the figures",
       $refusals, $wantRefusals)
 
-# A DELIVERY TO AN ENDPOINT THIS MODEL DOES NOT CARRY IS DROPPED AND SAID SO.
+# A delivery to an endpoint this model does not carry is dropped and said so.
 # The endpoints beyond the five buffers are the ones the documents place in the
 # not-needed list, and a negative endpoint is what a caller's own arithmetic
 # produces when it goes wrong. Both answer the same way and neither is silent.
@@ -362,9 +350,9 @@ check(unimplemented == wantUnimplemented,
       $unimplemented, $wantUnimplemented)
 
 # ---------------------------------------------------------------------------
-# BLOCK 3. THE INTERRUPT REGISTER.
+# Block 3. The interrupt register.
 
-# THE REGISTER IS THIRTY-TWO BITS AND IT READS LEAST SIGNIFICANT BYTE FIRST.
+# The register is thirty-two bits and it reads least significant byte first.
 # The two bits driven are the lowest and the highest, so a register narrowed to
 # any smaller width drops one of them, and a byte order reversed at the port
 # swaps them. The line stays low throughout because the enable is zero, which
@@ -384,7 +372,7 @@ check(register == wantRegister,
       "interrupt register: thirty-two bits, read least significant byte first",
       $register, $wantRegister)
 
-# A CLEAR TAKES THE BITS OF ITS MASK AND LEAVES THE REST. A clear that emptied
+# A clear takes the bits of its mask and leaves the rest. A clear that emptied
 # the register would satisfy any case that cleared its only set bit, so two
 # bits are set and taken away one at a time.
 type Cleared = tuple[before: seq[uint8], after: seq[uint8],
@@ -407,13 +395,13 @@ check(cleared == wantCleared,
       "interrupt register: a clear takes its mask's bits and leaves the others",
       $cleared, $wantCleared)
 
-# NO COMMAND BYTE LIGHTS A BIT OF THE INTERRUPT REGISTER. No source on this
+# No command byte lights a bit of the interrupt register. No source on this
 # machine assigns a bit to an event, so a bit that appeared would be a number
 # somebody picked, and the firmware would obey it. Every command byte is driven
 # and the register is read after each.
 #
-# THE CONTROL IS IN THE SAME CASE BECAUSE THE SWEEP ALONE CANNOT FAIL FOR THE
-# RIGHT REASON. A register that could never hold anything satisfies a sweep
+# The control is in the same case because the sweep alone cannot fail for the
+# right reason. A register that could never hold anything satisfies a sweep
 # looking for zero, so the control raises a bit and reads it back: without it
 # this case passes against a model that does nothing at all.
 type Quiet = tuple[firstBad: string, driven: int, control: seq[uint8]]
@@ -440,8 +428,8 @@ check(quiet == wantQuiet,
       "interrupt register: no command byte lights a bit, and a bit can be lit",
       $quiet, $wantQuiet)
 
-# A DELIVERY RAISES NOTHING AT ANY ENDPOINT AND SAYS WHY, AND IT SAYS IT UNDER
-# THE ENABLE THE FIRMWARE ACTUALLY WRITES. The interrupt enable is driven to
+# A delivery raises nothing at any endpoint and says why, and it says it under
+# the enable the firmware actually writes. The interrupt enable is driven to
 # `0x1F07` first, so every bit the firmware arms is armed while the packets
 # arrive. A model that had picked a bit for a delivery would light the line
 # here, which is the direction this case wants: the silence is the assertion.
@@ -473,10 +461,10 @@ check(deliveries == wantDeliveries,
       $deliveries, $wantDeliveries)
 
 # ---------------------------------------------------------------------------
-# BLOCK 4. THE SOFTCT BIT.
+# Block 4. The SOFTCT bit.
 
-# SOFTCT IS BIT 0 OF THE MODE BYTE AND NOTHING ELSE. `AGENTS.md` section 3.8
-# gives the mode register's bits and puts SOFTCT at `0x01`, with six other bits
+# SOFTCT is bit 0 of the mode byte and nothing else. The mode register puts
+# SOFTCT at `0x01`, with six other bits
 # beside it in the same byte. The rows that matter are the ones where the bit
 # and the byte disagree: `0xFE` is every other bit set with SOFTCT clear, and
 # `0x80` is a single unrelated bit. A model reading the byte's truth rather
@@ -508,17 +496,17 @@ check(softctCase == wantSoftct,
       $softctCase, $wantSoftct)
 
 # ---------------------------------------------------------------------------
-# BLOCK 5. THE NEGATIVE CASE.
+# Block 5. The negative case.
 
-# A COMMAND THIS MODEL DOES NOT IMPLEMENT ANSWERS BENIGNLY, WRITES ONE LINE,
-# AND CHANGES NOTHING. The model is driven into a state where every field it
-# carries holds something other than its reset value FIRST, so that "changes
+# A command this model does not implement answers benignly, writes one line,
+# and changes nothing. The model is driven into a state where every field it
+# carries holds something other than its reset value first, so that "changes
 # nothing" is an assertion about a live model rather than a restatement of what
 # a fresh one reads. The read that follows the refusal reports itself too: a
 # read that answered zero in silence is the one outcome that would let the
 # firmware take the benign value for an answer.
 #
-# THE COMMAND LEFT PENDING IS THE ONE ACCEPTED BEFORE THE REFUSAL, and that is
+# The command left pending is the one accepted before the refusal, and that is
 # the two-sided form of inertness: the refused byte does not become the pending
 # command, and it does not take away the command that was.
 type Negative = tuple[refusal: seq[string], value: uint8, port: uint8,
@@ -561,7 +549,7 @@ check(negative == wantNegative,
       "negative: an unimplemented command answers benignly, logs, and changes nothing",
       $negative, $wantNegative)
 
-# THE REGISTRY LINES. They are DATA AND NOT A VERDICT.
+# The registry lines. They are data and not a verdict.
 const declaredCaseSites = declaredSites
 const declaredOffGreenPathSites = offGreenPathSites
 echo caseSiteLine("declared", "t_isp1181", declaredCaseSites)

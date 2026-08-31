@@ -1,17 +1,13 @@
-## `t_bus_fault_write` - the IMPRECISE stacked program counter of an operand
-## write fault. Task CPU-16 owns this file. Design section 5.2.1.
+## `t_bus_fault_write` - the imprecise stacked program counter of an operand
+## write fault.
 ##
-## THE DOCUMENTS THIS FILE CITES ARE OUTSIDE THIS REPOSITORY and each is named
-## in full, so that a citation can be checked without knowing this project.
+## The citations below are to Motorola, "MCF5307 ColdFire Integrated
+## Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998. Each
+## names its section, table and folio page, and each was read as a rendered page
+## image rather than from any transcription.
 ##
-##   THE MCF5307 USER'S MANUAL: Motorola, "MCF5307 ColdFire Integrated
-##   Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998. Every
-##   citation below names its section, table and folio page, and each was read
-##   as a rendered PAGE IMAGE rather than from any transcription.
-##
-## WHAT THIS SUITE ASSERTS, AND THE OMISSION IS THE POINT RATHER THAN A GAP.
-## It asserts that the fault was TAKEN and that the write instruction's
-## register write-back COMPLETED. It does NOT assert the stacked program
+## This suite asserts that the fault was taken and that the write instruction's
+## register write-back completed. It does not assert the stacked program
 ## counter, and no expected value in this file carries one.
 ##
 ## User's Manual section 3.5.1, folio 3-15, verbatim, on an access error taken
@@ -23,8 +19,8 @@
 ## programming model updates associated with the write instruction are
 ## completed."
 ##
-## SO A PINNED PROGRAM COUNTER WOULD BE A DEFECT IN THIS FILE AND NOT A
-## MEASUREMENT. Table 3-1, folio 3-13, gives vector 2 a stacked program counter
+## So a pinned program counter would be a defect in this file and not a
+## measurement. Table 3-1, folio 3-13, gives vector 2 a stacked program counter
 ## of "Fault", which its own footnote defines as "the PC of the instruction
 ## that caused the exception" - and folio 3-15 withdraws exactly that for the
 ## write direction. A case that held the frame's second longword to any literal
@@ -32,21 +28,17 @@
 ## pipeline, which is behaviour the manual permits; the reader would then be
 ## told a correct core is broken.
 ##
-## THE OMISSION IS MADE NON-VACUOUS RATHER THAN LEFT AS SILENCE. The same
-## faulting instruction runs at TWO program addresses and the asserted outcome
-## is ONE constant for both, so the outcome is measured to be independent of a
+## The omission is made non-vacuous rather than left as silence. The same
+## faulting instruction runs at two program addresses and the asserted outcome
+## is one constant for both, so the outcome is measured to be independent of a
 ## stacked program counter that provably moved between the runs; and the runner
-## returns that program counter OUTSIDE the asserted tuple, so a later edit
+## returns that program counter outside the asserted tuple, so a later edit
 ## cannot fold it back in without deleting a field.
 ##
-## EVERY EXPECTED VALUE BELOW IS A HAND-DERIVED LITERAL, written beside the bit
-## string or the manual row it came from, and NOT a second call of the
+## Every expected value below is a hand-derived literal, written beside the bit
+## string or the manual row it came from, and not a second call of the
 ## procedure under test. Every opcode is the output of `m68k-elf-as -mcpu=5307`
 ## on the mnemonic printed beside it.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code. The fault
-## status encodings and the reporting rules are facts about Motorola silicon,
-## from the User's Manual named above.
 
 import std/strutils
 
@@ -73,8 +65,8 @@ proc checkImpl(site: int; ok: bool; label: string; got: string; want: string) =
 
 
 template check(ok: bool; label: string; got: string; want: string) =
-  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
-  ## `declaredSites` by the `static` below, and once at RUN TIME into
+  ## The call site is recorded twice - once at compile time into
+  ## `declaredSites` by the `static` below, and once at run time into
   ## `executedSites`, by the implementation and only when it reaches a verdict.
   ## `tests/case_sites.nim` states what the pair is for. The template exists
   ## for `instantiationInfo`: a proc cannot see where it was called from.
@@ -83,17 +75,17 @@ template check(ok: bool; label: string; got: string; want: string) =
   checkImpl(site, ok, label, got, want)
 
 # ---------------------------------------------------------------------------
-# THE BOARD. One flat byte array, big-endian, which REFUSES exactly one
+# The board. One flat byte array, big-endian, which refuses exactly one
 # longword and reports `MCF5307_BUS_FAULT` for it.
 #
-# THE REFUSED ROW IS THE ONE THAT IS REAL SILICON. User's Manual section 3.5.1,
+# The refused row is the one that is real silicon. User's Manual section 3.5.1,
 # folio 3-14, verbatim: "For the MCF5307 processor, access errors are only
 # reported in conjunction with an attempted store to a write-protected memory
 # space. Thus, access errors associated with instruction fetch or operand read
 # accesses are not possible." A store to write-protected space is therefore the
 # only access this suite can drive that a real MCF5307 would also fault on.
 #
-# AN ACCESS PAST THE ARRAY IS COUNTED AND NOT ONLY REFUSED. The count separates
+# An access past the array is counted and not only refused. The count separates
 # a run that stacked its frame on the board from one that did not, without
 # reading any address the frame occupies.
 
@@ -162,8 +154,8 @@ proc freshBoard() =
     board.bytes[i] = 0'u8
 
 # ---------------------------------------------------------------------------
-# THE RUNNER. THE STACKED PROGRAM COUNTER IS RETURNED BESIDE THE ASSERTED
-# TUPLE AND NOT INSIDE IT, which is this file's rule expressed as a type: a
+# The runner. The stacked program counter is returned beside the asserted
+# tuple and not inside it, which is this file's rule expressed as a type: a
 # case can compare two runs' program counters with each other, and no expected
 # constant can carry one.
 
@@ -200,34 +192,34 @@ proc runWrite(opcode: uint16; at: uint32; a0Init: uint32;
   mcf5307_destroy(ctx)
 
 # ---------------------------------------------------------------------------
-# BLOCK 1. THE FAULT IS TAKEN AND THE WRITE INSTRUCTION'S REGISTER WRITE-BACK
-# COMPLETES.
+# Block 1. The fault is taken and the write instruction's register write-back
+# completes.
 #
-# THE FRAME'S FIRST LONGWORD IS HAND-DERIVED FROM THE BIT POSITIONS AND NOT
-# FROM A SECOND CALL OF THE ENCODER. A7 is 0x800 with its low two bits 00, so
-# Table 3-2, folio 3-14, gives FORMAT 4 and a frame at 0x800 - 8. The vector is
+# The frame's first longword is hand-derived from the bit positions and not
+# from a second call of the encoder. A7 is 0x800 with its low two bits 00, so
+# Table 3-2, folio 3-14, gives format 4 and a frame at 0x800 - 8. The vector is
 # 2. `FS` is `1001`, Table 3-3's "Attempted write to write-protected space",
 # and its two halves land in two non-adjacent fields of Figure 3-7:
 #   0100 | 10 | 00000010 | 01 | 0010011100000000 -> 0x48092700
-# THIS LONGWORD CARRIES NO PROGRAM COUNTER. Figure 3-7, folio 3-13, puts the
-# program counter in the SECOND longword, which is the one this suite reads
+# This longword carries no program counter. Figure 3-7, folio 3-13, puts the
+# program counter in the second longword, which is the one this suite reads
 # outside its asserted tuple.
 #
-# THE LIVE STATUS REGISTER IS 0x2708 AND THE FRAME'S COPY IS 0x2700, AND THE
-# DIFFERENCE IS THE ASSERTION RATHER THAN A TOLERANCE. `takeException` copies
+# The live status register is 0x2708 and the frame's copy is 0x2700, and the
+# difference is the assertion rather than a tolerance. `takeException` copies
 # the status register before it changes it - section 3.3, folio 3-11 - so the
 # frame carries 0x2700. The write instruction then sets N from its source,
-# which is negative here, and that update lands AFTER the faulting access.
+# which is negative here, and that update lands after the faulting access.
 # That is folio 3-15's "All programming model updates associated with the write
 # instruction are completed", observed on the one register the manual's
 # sentence reaches without an addressing mode.
 #
-# THE ADDRESS REGISTER IS THE SECOND HALF OF THE SAME SENTENCE. `(%a0)+`
+# The address register is the second half of the same sentence. `(%a0)+`
 # updates A0, and the updated value survives the fault rather than being rolled
 # back to the pre-instruction one.
 #
-# THE STORE ITSELF DID NOT COMMIT, AND `stored` IS WHAT SEPARATES THAT FROM THE
-# REGISTER UPDATES. The board refused the longword, so memory keeps its zero
+# The store itself did not commit, and `stored` is what separates that from the
+# register updates. The board refused the longword, so memory keeps its zero
 # while A0 and the condition codes both moved - which is the asymmetry the
 # manual describes and which a core that simply completed the write would not
 # show.
@@ -242,8 +234,8 @@ check(post.outcome == wantFaultedPost,
       "a refused store takes the access fault and completes its write-back",
       $post.outcome, $wantFaultedPost)
 
-# THE SAME INSTRUCTION AT A DIFFERENT PROGRAM ADDRESS IS HELD TO THE SAME
-# CONSTANT. Nothing in the expected value above mentions where the program sat,
+# The same instruction at a different program address is held to the same
+# constant. Nothing in the expected value above mentions where the program sat,
 # so this run is the measurement that the asserted outcome does not depend on
 # it.
 let postAlt = runWrite(opMovePost, execBaseAlt, protectedWord, protectedWord)
@@ -252,19 +244,19 @@ check(postAlt.outcome == wantFaultedPost,
       $postAlt.outcome, $wantFaultedPost)
 
 # ---------------------------------------------------------------------------
-# BLOCK 2. THE STACKED PROGRAM COUNTER MOVED BETWEEN THOSE TWO RUNS, AND
-# NEITHER VALUE IS PINNED.
+# Block 2. The stacked program counter moved between those two runs, and
+# neither value is pinned.
 #
-# THIS IS THE ONE CASE THAT READS THE FRAME'S SECOND LONGWORD, AND IT COMPARES
-# THE TWO RUNS WITH EACH OTHER RATHER THAN EITHER WITH A LITERAL. Folio 3-15
+# This is the one case that reads the frame's second longword, and it compares
+# the two runs with each other rather than either with a literal. Folio 3-15
 # fixes the stacked value only as "the location in the program when the access
 # error was signaled", so an implementation may report at more than one point
 # in its write pipeline and every such choice is correct. What the manual does
-# NOT permit is a value unrelated to where the program was: two runs of one
+# not permit is a value unrelated to where the program was: two runs of one
 # instruction placed 0x40 apart must not stack the same location.
 #
-# WITHOUT THIS CASE THE OMISSION ABOVE WOULD BE INDISTINGUISHABLE FROM AN
-# OVERSIGHT. The two runs are asserted against one constant, and a core that
+# Without this case the omission above would be indistinguishable from an
+# oversight. The two runs are asserted against one constant, and a core that
 # stacked nothing at all in either run would satisfy that constant just as
 # well; this case is what requires the program counter to have been stacked and
 # to have moved.
@@ -274,11 +266,11 @@ check(post.stackedPc != postAlt.stackedPc,
       "two different values")
 
 # ---------------------------------------------------------------------------
-# BLOCK 3. THE OTHER AUTO-ADDRESSING DIRECTION, so that the surviving register
+# Block 3. The other auto-addressing direction, so that the surviving register
 # update is measured with its sign reversed rather than once.
 #
-# `-(%a0)` DECREMENTS BEFORE THE ACCESS, so A0 starts one longword above the
-# refused address and ends ON it. A core that rolled the addressing-mode update
+# `-(%a0)` decrements before the access, so A0 starts one longword above the
+# refused address and ends on it. A core that rolled the addressing-mode update
 # back on a fault would leave A0 at its pre-instruction value, which is the
 # value this case's start is chosen to make distinguishable from the expected
 # one.
@@ -294,11 +286,11 @@ check(pre.outcome == wantFaultedPre,
       $pre.outcome, $wantFaultedPre)
 
 # ---------------------------------------------------------------------------
-# BLOCK 4. THE NEGATIVE CONTROL: the same instruction, the same board, an
+# Block 4. The negative control: the same instruction, the same board, an
 # address the board accepts.
 #
-# WITHOUT IT EVERY CASE ABOVE WOULD PASS AGAINST A CORE THAT FAULTED ON EVERY
-# WRITE. This run pins that the fault is caused by the refusal and not by the
+# Without it every case above would pass against a core that faulted on every
+# write. This run pins that the fault is caused by the refusal and not by the
 # instruction shape: no frame is stacked, the stack pointer does not move, the
 # program counter reaches the next instruction rather than the handler, and the
 # longword arrives in memory. The register write-back is the same in both, and
@@ -315,7 +307,7 @@ check(accepted.outcome == wantAccepted,
       "the same store to an accepted address takes no fault at all",
       $accepted.outcome, $wantAccepted)
 
-# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this program reports
+# The registry lines. They are data and not a verdict: this program reports
 # what its text declares and what its run adjudicated, and the registered
 # test's driver is what compares them. A verdict printed here would be a
 # self-assessment, and a run that stopped early would simply not print one.

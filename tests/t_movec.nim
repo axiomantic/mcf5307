@@ -1,39 +1,33 @@
 ## `t_movec` - the `MOVEC` encoding and the control-register map of
-## `mcf5307/movec`. Task CPU-11. Design sections 6.1, 6.2 and 6.3.
+## `mcf5307/movec`.
 ##
-## WHAT THIS SUITE ASSERTS, AND WHY EACH GROUP EXISTS.
-##
-##   THE ENCODING. `MOVEC` is one opcode word and one extension word. The
+##   The encoding. `MOVEC` is one opcode word and one extension word. The
 ##   opcode word is asserted whole rather than under a mask, and two
-##   neighbouring line-4 words are asserted NOT to be it. The extension word is
+##   neighbouring line-4 words are asserted not to be it. The extension word is
 ##   asserted field by field with the neighbouring fields set to ones, because
 ##   the failure this catches is a field that reads its neighbour's bits: a
 ##   control field taken as the low 16 bits rather than the low 12 would carry
 ##   the A/D bit and the source register into the register number.
 ##
-##   THE PRIVILEGE. `MOVEC` is supervisor-only. The status register is asserted
+##   The privilege. `MOVEC` is supervisor-only. The status register is asserted
 ##   with the interrupt mask both set and clear on each side of the S-bit, so
 ##   that a test of the wrong bit is red rather than green by coincidence.
 ##
-##   THE REGISTER NUMBERS. This is the group the task exists for.
-##   `AGENTS.md` section 4.2 gives the complete set the firmware writes and
+##   The register numbers. The complete set the firmware writes is recorded and
 ##   each one has its own case. ACR1 has its own case beside them: the firmware
 ##   does not write it and the part implements it, so a map that answers only
 ##   the numbers the firmware uses would pass every other case here.
 ##
-##   THE ALIASED NUMBERS. `0x004`, `0x005` and `0x800` are the numbers a 68k
+##   The aliased numbers. `0x004`, `0x005` and `0x800` are the numbers a 68k
 ##   decoder reads differently, and they are asserted through
 ##   `movecControlField` from a whole extension word rather than from a bare
 ##   register number. That composition is the claim the identity cases above do
 ##   not make: it is the field extraction and the map agreeing, which is the
 ##   path a real instruction takes.
 ##
-## WHERE THE EXPECTED VALUES COME FROM. They are read from the two manuals as
-## page images, at the folios `src/mcf5307/movec.nim` names beside each
-## constant. The markdown transcription under `MCF5307UM-md/` is not a source
-## for any value here.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
+## The expected values are read from the two manuals as page images, at the
+## folios `src/mcf5307/movec.nim` names beside each constant. The markdown
+## transcription under `MCF5307UM-md/` is not a source for any value here.
 
 import mcf5307/movec
 import mcf5307/machine
@@ -56,8 +50,8 @@ proc checkImpl[T](site: int; got: T; want: T; label: string) =
     executedSites.add(site)
 
 template check(got: untyped; want: untyped; label: string) =
-  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
-  ## `declaredSites` by the `static` below, and once at RUN TIME into
+  ## The call site is recorded twice - once at compile time into
+  ## `declaredSites` by the `static` below, and once at run time into
   ## `executedSites`, by the implementation and only when it reaches a
   ## verdict. `tests/case_sites.nim` states what the pair is for and
   ## `tests/case_sites.cmake` states the rules the driver applies.
@@ -71,7 +65,7 @@ template check(got: untyped; want: untyped; label: string) =
 # The opcode word. CFPRM Rev. 3 folio 8-13 prints the sixteen bits
 # `0100 1110 0111 1011` over the instruction format, which is `0x4E7B`.
 #
-# THE TWO NEGATIVE CASES ARE NOT DECORATION. `0x4E7A` is the word
+# The two negative cases are not decoration. `0x4E7A` is the word
 # `tests/t_control.nim` asserts is illegal on this part, and `0x4E73` is `RTE`,
 # which `decode.nim` already answers. A recogniser written as a mask over
 # line 4 rather than as an equality claims both of them.
@@ -84,7 +78,7 @@ check(isMovec(0x4E73'u16), false, "isMovec(0x4E73) - RTE is not MOVEC")
 # The extension word fields. CFPRM folio 8-13: bit 15 is A/D, bits 14 to 12 are
 # the source register Ry, and bits 11 to 0 are the control register Rc.
 #
-# EACH FIELD IS READ TWICE, once with its neighbours clear and once with them
+# Each field is read twice, once with its neighbours clear and once with them
 # set, so that a field taken one bit too wide is red rather than green.
 
 check(movecControlField(0x0801'u16), 0x801'u16,
@@ -108,7 +102,7 @@ check(movecSourceRegister(0x8801'u16), 0'u8,
 # The privilege. CFPRM folio 8-13 gives the operation as "If Supervisor State
 # Then Ry -> Rc Else Privilege Violation Exception".
 #
-# THE INTERRUPT MASK IS SET IN ONE CASE OF EACH PAIR. A predicate that read the
+# The interrupt mask is set in one case of each pair. A predicate that read the
 # wrong status-register bit would answer both of the S-clear cases correctly by
 # accident if every other bit were clear in both.
 
@@ -122,9 +116,9 @@ check(movecPrivilegeViolation(0x2700'u32), false,
     "movecPrivilegeViolation(supervisor state, interrupt mask set)")
 
 # ---------------------------------------------------------------------------
-# The control registers the firmware writes. `AGENTS.md` section 4.2 is the
-# complete list and it is the authority for which numbers appear here; the two
-# manuals are the authority for what each number names.
+# The control registers the firmware writes. The firmware's own set is the
+# authority for which numbers appear here; the two manuals are the authority for
+# what each number names.
 
 check(controlRegisterFor(0x002'u16), crCacr,    "0x002 is CACR")
 check(controlRegisterFor(0x004'u16), crAcr0,    "0x004 is ACR0")
@@ -144,10 +138,10 @@ check(controlRegisterFor(0x005'u16), crAcr1, "0x005 is ACR1")
 # ---------------------------------------------------------------------------
 # The aliased numbers, read through the extension word. These are the numbers
 # a decoder that kept the 68k map answers with a different register, and the
-# design calls the collision the number one hazard.
+# collision is the number one hazard.
 #
 #   0x004 and 0x005 are ITT0 and ITT1 on the 68040 and ACR0 and ACR1 here.
-#   0x800 is USP on the 68040 and NAMES NO REGISTER OF THIS PART.
+#   0x800 is USP on the 68040 and names no register of this part.
 
 check(controlRegisterFor(movecControlField(0x0004'u16)), crAcr0,
     "extension word 0x0004 selects ACR0 and not ITT0")
@@ -167,10 +161,10 @@ check(controlRegisterFor(0x006'u16), crUnimplemented,
     "0x006 is ACR2 on the family and is not implemented here")
 
 # ---------------------------------------------------------------------------
-# THE INSTRUCTION DRIVEN THROUGH THE SHIPPED PATH.
+# The instruction driven through the shipped path.
 #
-# EVERY CASE ABOVE IS A FUNCTION OF ITS ARGUMENTS AND NOT ONE OF THEM REACHES A
-# MACHINE. A suite that calls `controlRegisterFor` directly answers the same way
+# Every case above is a function of its arguments and not one of them reaches a
+# machine. A suite that calls `controlRegisterFor` directly answers the same way
 # whether or not any instruction can reach it, so a full pass of those cases
 # alone is consistent with `MOVEC` decoding to nothing and trapping as an
 # illegal opcode. The cases below run the encoding through `mcf5307_reset`,
@@ -178,8 +172,8 @@ check(controlRegisterFor(0x006'u16), crUnimplemented,
 # `include/mcf5307.h` publishes - so that the map above is asserted on the path
 # a boot loader takes.
 #
-# THIS SUITE STILL COMPILES THE CORE FROM SOURCE THROUGH `--path:src` AND NEVER
-# LINKS `libmcf5307.a`, so it cannot see a module that the entry module's import
+# This suite still compiles the core from source through `--path:src` and never
+# links `libmcf5307.a`, so it cannot see a module that the entry module's import
 # graph fails to reach. `conformance/runner.cpp` is what links the archive.
 
 const
@@ -230,7 +224,7 @@ proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
 
 type Outcome = object
   cycles: uint32
-    ## `mcf5307_exec(ctx, 1)` SATURATES AT ITS BUDGET, so this is 1 for an
+    ## `mcf5307_exec(ctx, 1)` saturates at its budget, so this is 1 for an
     ## instruction that ran and 0 for one that halted before spending
     ## anything. `cpu.nim`'s header block says why it is not a cycle count.
   fault: bool
@@ -243,7 +237,7 @@ type Outcome = object
 
 proc runIns(words: openArray[uint16]; sr: uint32;
             mem: seq[(uint32, uint32)] = @[]): Outcome =
-  ## Place `words` at `execBase`, seed d0 and a0, run ONE `mcf5307_exec`, and
+  ## Place `words` at `execBase`, seed d0 and a0, run one `mcf5307_exec`, and
   ## report the whole machine state.
   for i in 0 ..< memSize:
     board.bytes[i] = 0'u8
@@ -256,7 +250,7 @@ proc runIns(words: openArray[uint16]; sr: uint32;
   mcf5307_reset(ctx, stackBase, execBase)
   discard mcf5307_set_reg(ctx, 0, dirtyD)
   discard mcf5307_set_reg(ctx, 8, dirtyA)
-  # The status register is set LAST, because `mcf5307_reset` writes it and an
+  # The status register is set last, because `mcf5307_reset` writes it and an
   # earlier write would be overwritten - which would run every user-state case
   # in supervisor state and pass.
   discard mcf5307_set_reg(ctx, 16, sr)
@@ -271,8 +265,8 @@ proc runIns(words: openArray[uint16]; sr: uint32;
   result.a7 = mcf5307_get_reg(ctx, 15)
 
 proc ranAndConsumedBothWords(o: Outcome): auto =
-  ## The shape every ACCEPTED `MOVEC` must produce. The program counter is the
-  ## discriminating field: `MOVEC` is TWO words, so a core that consumed only
+  ## The shape every accepted `MOVEC` must produce. The program counter is the
+  ## discriminating field: `MOVEC` is two words, so a core that consumed only
   ## the opcode word would leave the pc at `execBase + 2` and decode the
   ## extension word as the next instruction.
   (cycles: o.cycles, fault: o.fault, halted: o.halted, pc: o.pc,
@@ -281,14 +275,13 @@ proc ranAndConsumedBothWords(o: Outcome): auto =
 const accepted = (cycles: 1'u32, fault: false, halted: false,
                   pc: execBase + 4'u32, d0: dirtyD, a0: dirtyA,
                   sr: srSuper, a7: stackBase)
-  ## NOTHING ARCHITECTURAL CHANGES. The control registers this part carries are
+  ## Nothing architectural changes. The control registers this part carries are
   ## not modelled by this core, so an accepted `MOVEC` advances the program
-  ## counter and touches no register the ABI can read. `src/mcf5307/movec.nim`
-  ## states the limitation and why it is not this task's to remove.
+  ## counter and touches no register the ABI can read.
 
-# The six numbers `AGENTS.md` section 4.2 records the firmware writing, plus
-# ACR1, each driven as a whole instruction rather than as a bare register
-# number. THE PAIR OF LISTS IS THE POINT: the identity cases above assert what
+# The numbers the firmware writes, plus ACR1, each driven as a whole instruction
+# rather than as a bare register number. The pair of lists is the point: the
+# identity cases above assert what
 # the map says, and these assert that the machine consults it.
 
 check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0002'u16], srSuper)),
@@ -304,8 +297,8 @@ check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0C05'u16], srSuper)),
 check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0C0F'u16], srSuper)),
     accepted, "movec %d0,MBAR (0xC0F) executes")
 
-# THE A/D BIT IS EXERCISED ONCE, AND IT IS EXERCISED THROUGH THE MACHINE. The
-# extension word `0x8C04` names ADDRESS register 0 as the source. The identity
+# The A/D bit is exercised once, and it is exercised through the machine. The
+# extension word `0x8C04` names address register 0 as the source. The identity
 # cases above assert that `movecSourceIsAddressRegister` reads bit 15; this
 # asserts that an instruction carrying that bit still executes rather than
 # being refused as a malformed encoding.
@@ -313,14 +306,13 @@ check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0C0F'u16], srSuper)),
 check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x8C04'u16], srSuper)),
     accepted, "movec %a0,RAMBAR0 (0xC04) executes with A/D set")
 
-# A NUMBER THIS PART DOES NOT CARRY HALTS THE CORE, AND IT HALTS WITHOUT A
-# FAULT. CFPRM folio 8-13: "Attempted access to undefined or unimplemented
+# A number this part does not carry halts the core, and it halts without a
+# fault. CFPRM folio 8-13: "Attempted access to undefined or unimplemented
 # control register space produces undefined results." The encoding is a valid
 # `MOVEC` and only the destination is absent from this part, which is the
 # `opExg`/`opTas`/`opNbcd` shape `cpu.nim` already states: `halted` set and
 # `fault` clear. A core that accepted these instead would run on with a
-# register write that reached nothing, which is the permissive failure design
-# section 17 row 7.10 names.
+# register write that reached nothing.
 
 const refused = (cycles: 0'u32, fault: false, halted: true,
                  pc: execBase + 4'u32, d0: dirtyD, a0: dirtyA,
@@ -329,22 +321,22 @@ const refused = (cycles: 0'u32, fault: false, halted: true,
 check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0006'u16], srSuper)),
     refused, "movec %d0,0x006 halts: ACR2 is not on this part")
 
-# `0x800` IS THE MEASUREMENT THIS TASK ALREADY MADE AND THIS CASE PINS IT TO
-# THE MACHINE. CFPRM Table 8-3's processor group, folio 8-14, runs VBR `0x801`
-# then PC `0x80F` and assigns NOTHING to `0x800`; MCF5307 User's Manual Table
+# `0x800` is pinned to the machine here. CFPRM Table 8-3's processor group,
+# folio 8-14, runs VBR `0x801`
+# then PC `0x80F` and assigns nothing to `0x800`; MCF5307 User's Manual Table
 # B-2, folio B-5, does not carry it either. A fork that restored the 68k
 # reading would make this number a register and this case is what goes red.
 
 check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0800'u16], srSuper)),
     refused, "movec %d0,0x800 halts: it names no register of this part")
 
-# THE PRIVILEGE, TAKEN AS AN EXCEPTION AND NOT AS A HALT. CFPRM folio 8-13
+# The privilege, taken as an exception and not as a halt. CFPRM folio 8-13
 # gives the operation as "If Supervisor State Then Ry -> Rc Else Privilege
 # Violation Exception", and MCF5307 User's Manual Table 3-1, folio 3-13,
-# assigns VECTOR 8 at offset `$020` to "Privilege violation" with a STACKED
-# PROGRAM COUNTER column of "Fault" - which that table's own footnote defines
+# assigns vector 8 at offset `$020` to "Privilege violation" with a stacked
+# program counter column of "Fault" - which that table's own footnote defines
 # as "the PC of the instruction that caused the exception". So the stacked
-# value is `execBase` and NOT the address after either word: an `RTE` from the
+# value is `execBase` and not the address after either word: an `RTE` from the
 # handler re-executes the whole instruction.
 
 block:
@@ -354,8 +346,8 @@ block:
              sr: o.sr, a7: o.a7, d0: o.d0,
              fv: boardReadValue(board, stackBase - 8'u32, 4),
              stackedPc: boardReadValue(board, stackBase - 4'u32, 4))
-  # `fv` is FORMAT 4 (A7 was already longword aligned), FS 0 (this is not an
-  # access error), VECTOR 8, and the status register AS IT WAS BEFORE the
+  # `fv` is format 4 (A7 was already longword aligned), FS 0 (this is not an
+  # access error), vector 8, and the status register as it was before the
   # exception changed it. The handler runs with S set and T clear.
   let want = (cycles: 1'u32, fault: false, halted: false, pc: handlerBase,
               sr: 0x2700'u32, a7: stackBase - 8'u32, d0: dirtyD,
@@ -363,7 +355,7 @@ block:
               stackedPc: execBase)
   check(got, want, "movec in user state takes the vector-8 privilege violation")
 
-# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
+# The registry lines. They are data and not a verdict: this
 # program reports what its text declares and what its run adjudicated,
 # and the registered test's driver is what compares them - and what
 # compares the declared count against the call sites in this file.

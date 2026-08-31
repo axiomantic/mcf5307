@@ -1,29 +1,20 @@
-## `t_isp1181_state` - the SOF tick and the ISP1181 state block. Task CPU-24
-## owns this file. Design sections 9.4 and 5.2.
+## `t_isp1181_state` - the SOF tick and the ISP1181 state block.
 ##
-## THE TICK'S SPECIFICATION IS CPU-24's `Check:` LINE AS AMENDED 2026-08-17.
 ## `isp1181_tick(ctx, sof_frames)` advances the USB frame counter by
 ## `sof_frames` Start-of-Frame frames of 1 ms each, wrapping at 2048 because the
 ## counter is 11 bits wide; a call with `sof_frames` of 5 advances the counter
 ## exactly as five calls with 1 do; a counter at 2047 advanced by 1 reads 0; and
 ## the model never reads a wall clock.
 ##
-## NOTHING HERE ADVANCES A SOFTCT TIMER. SOFTCT is a BIT of the full model's
-## mode byte and plan item W3-139 carries the ruling. No case below drives one
-## and no case below asserts one exists.
+## The state block is a fixed size, no pointer, a magic word, a version word,
+## the payload width, the payload and a checksum, with every check preceding the
+## decode so that a refusal leaves the handle with the state it had.
 ##
-## THE STATE BLOCK FOLLOWS THE CPU-18 SHAPE: a fixed size, no pointer, a magic
-## word, a version word, the payload width, the payload and a checksum, with
-## every check preceding the decode so that a refusal leaves the handle with the
-## state it had.
-##
-## EVERY EXPECTED VALUE BELOW IS A HAND-WRITTEN LITERAL and never a second call
+## Every expected value below is a hand-written literal and never a second call
 ## of the procedure under test. The one computed expectation is the checksum,
-## and it is computed by THIS FILE's OWN FNV-1a written out below rather than by
+## and it is computed by this file's own FNV-1a written out below rather than by
 ## the module's - an independent implementation of a published algorithm, which
 ## is not the module agreeing with itself.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import std/algorithm
 import std/strutils
@@ -74,7 +65,7 @@ var hostToken = 0xC0FFEE
 proc fresh(): ISP1181Ctx =
   isp1181_create(addr hostToken, recordIrq, recordTx)
 
-# THE MODULUS IS THIS FILE's OWN HAND-WRITTEN LITERAL and never the module's
+# The modulus is this file's own hand-written literal and never the module's
 # constant. A test that imported the constant would move with it under mutation
 # and would assert that the code agrees with itself.
 const frameModulus = 2048
@@ -82,11 +73,11 @@ const frameModulus = 2048
 # ---------------------------------------------------------------------------
 # BLOCK 1. The tick advances the USB frame counter.
 #
-# THE COUNTER'S NO-OP VALUE IS ZERO, WHICH IS WHY A FIRST-MISMATCH ASSERTION IS
-# NOT ENOUGH ON ITS OWN. A tick that never advanced reads 0, and so does one
+# The counter's no-op value is zero, which is why a first-mismatch assertion is
+# not enough on its own. A tick that never advanced reads 0, and so does one
 # that completed a full cycle. The cycle case therefore asserts the value at
-# EVERY tick against the tick index, the highest value seen, and the NUMBER OF
-# TICKS TAKEN - so a tick that stood still, one whose loop stopped early and one
+# every tick against the tick index, the highest value seen, and the number of
+# ticks taken - so a tick that stood still, one whose loop stopped early and one
 # that ran past its width are three different reds. An assertion on the first
 # mismatch alone passes vacuously over an empty range; the count is what closes
 # that.
@@ -120,7 +111,7 @@ check(cycle == wantCycle,
         "tick and ends where it began",
       $cycle, $wantCycle)
 
-# THE WRAP ON ITS OWN, because the cycle case passes its own start and end value
+# The wrap on its own, because the cycle case passes its own start and end value
 # through the same wrap and a reader should not have to take the discriminating
 # step on trust.
 type Wrap = tuple[before: uint16, after: uint16]
@@ -135,8 +126,8 @@ check(wrapSeen == wantWrap,
       "tick: a counter at 2047 advanced by one frame reads 0",
       $wrapSeen, $wantWrap)
 
-# THE COUNT FORM AND THE REPEATED FORM AGREE, which is the property a state
-# restore and a fast-forward both need. EVERY `want` BELOW IS HAND-WRITTEN:
+# The count form and the repeated form agree, which is the property a state
+# restore and a fast-forward both need. Every `want` below is hand-written:
 # comparing the two forms against each other alone would pass for any modulus
 # they happened to share, including no modulus at all.
 type BulkRow = tuple[start: uint32, frames: uint32, want: uint16]
@@ -181,8 +172,8 @@ check(bulkOutcome == wantBulk,
       "tick: one call of N frames equals N calls of one, at and across the wrap",
       $bulkOutcome, $wantBulk)
 
-# THE MODEL NEVER READS A WALL CLOCK, ASSERTED AGAINST MEASURED ELAPSED TIME AND
-# NOT AGAINST A SLEEP. The loop spins until the clock has visibly moved and
+# The model never reads a wall clock, asserted against measured elapsed time and
+# not against a sleep. The loop spins until the clock has visibly moved and
 # ticks zero frames throughout; the elapsed figure is asserted to be non-zero,
 # because a case that spun for no measurable time would pass over a model that
 # does read the clock.
@@ -207,9 +198,8 @@ check(wallClockSeen == wantWallClock,
         "counter where the frames left it",
       $wallClockSeen, $wantWallClock)
 
-# A NIL HANDLE IS ANSWERED AND IS NOT AN ABORT. Design section 5.6 refuses an
-# abort inside a plugin, because it destroys a session that has nothing to do
-# with this model.
+# A nil handle is answered and is not an abort: an abort inside a plugin
+# destroys a session that has nothing to do with this model.
 type NilTick = tuple[counter: uint16, irq: int, tx: int]
 
 let nilHandle: ISP1181Ctx = nil
@@ -224,12 +214,12 @@ check(nilTick == wantNilTick,
 # ---------------------------------------------------------------------------
 # BLOCK 2. The block's size and its layout.
 #
-# THE SIZE IS ASSERTED AGAINST A HAND-WRITTEN TOTAL AND THE LAYOUT AGAINST A
-# HAND-WRITTEN LIST. Either alone is weak: a size that agreed with a payload
+# The size is asserted against a hand-written total and the layout against a
+# hand-written list. Either alone is weak: a size that agreed with a payload
 # whose fields had moved would pass the first, and a layout that summed to a
 # different total would pass the second.
 #
-# `model` CARRIES ZERO BYTES AND THAT IS THE DECLARED, VISIBLE EXCLUSION. The
+# `model` carries zero bytes and that is the declared, visible exclusion. The
 # full model's own fields are a string, a sequence of strings, an enum and an
 # array of FIFOs holding sequences of bytes, and a sequence of strings has no
 # bound at all - so no fixed-size block can carry it and this one does not
@@ -255,7 +245,7 @@ check(layoutSeen == wantLayout,
 # ---------------------------------------------------------------------------
 # BLOCK 3. The bytes the save writes.
 #
-# THE WHOLE BLOCK IS COMPARED AND NOT A FIELD OF IT. A save that wrote nothing
+# The whole block is compared and not a field of it. A save that wrote nothing
 # and a load that read nothing round-trip perfectly against each other, so the
 # round trip below is not evidence on its own; only the bytes are.
 
@@ -266,7 +256,7 @@ proc blockHex(buf: openArray[uint8]): string =
   parts.join(" ")
 
 proc fnv1a(buf: openArray[uint8]; upTo: int): uint32 =
-  ## THIS FILE's OWN FNV-1a, written out here rather than imported. An
+  ## This file's own FNV-1a, written out here rather than imported. An
   ## independent implementation of a published algorithm is not the module
   ## agreeing with itself.
   result = 2166136261'u32
@@ -304,12 +294,12 @@ check(blockHex(savedBlock) == blockHex(wantBlock),
       blockHex(savedBlock), blockHex(wantBlock))
 
 # ---------------------------------------------------------------------------
-# BLOCK 4. The round trip goes through the byte buffer and into a DIFFERENT
+# Block 4. The round trip goes through the byte buffer and into a different
 # handle.
 #
-# A ROUND TRIP THAT COMPARED A HANDLE AGAINST ITSELF WOULD PROVE NOTHING. The
-# destination below is a second handle carrying a DIFFERENT backend and a
-# DIFFERENT counter before the load, so a load that did nothing leaves those
+# A round trip that compared a handle against itself would prove nothing. The
+# destination below is a second handle carrying a different backend and a
+# different counter before the load, so a load that did nothing leaves those
 # values in place and is red.
 
 type Restored = tuple[backend: string, counter: uint16, status: string]
@@ -356,8 +346,8 @@ proc runTrips(): TripOutcome =
   var firstBad = ""
   var rows = 0
   for row in tripRows:
-    # THE DESTINATION IS ALWAYS THE OTHER BACKEND AND A COUNTER THAT IS NOT THE
-    # SOURCE'S, so no row can pass by the destination happening to agree.
+    # The destination is always the other backend and a counter that is not the
+    # source's, so no row can pass by the destination happening to agree.
     let dest = if row.src == Stub: FullModel else: Stub
     let seen = roundTrip(row.src, row.frames, dest, 999'u32)
     inc rows
@@ -374,13 +364,13 @@ check(tripsOutcome == wantTrips,
       $tripsOutcome, $wantTrips)
 
 # ---------------------------------------------------------------------------
-# BLOCK 5. A perturbed block is refused BY NAME and changes nothing.
+# Block 5. A perturbed block is refused by name and changes nothing.
 #
-# EVERY BYTE OF THE BLOCK IS MUTATED, ONE AT A TIME, AND THE SWEEP ASSERTS ITS
-# OWN ITERATION COUNT. A sweep that stopped after the header would otherwise
+# Every byte of the block is mutated, one at a time, and the sweep asserts its
+# own iteration count. A sweep that stopped after the header would otherwise
 # report the same clean result as one that covered the payload and the checksum.
 #
-# THE HANDLE IS INSPECTED AFTER EVERY REFUSAL. A load that validated correctly
+# The handle is inspected after every refusal. A load that validated correctly
 # and then decoded anyway refuses by name and mutates the handle, and only the
 # post-state separates it from one that refuses without touching anything.
 
@@ -427,7 +417,7 @@ check(perturbation == wantPerturbation,
         "name and leaves the handle exactly as it was",
       $perturbation, $wantPerturbation)
 
-# THE C ENTRY POINT DROPS THE NAME AND MUST STILL REFUSE. `include/mcf5307.h`
+# The C entry point drops the name and must still refuse. `include/mcf5307.h`
 # gives `isp1181_state_load` no result and no out-parameter, so what a C caller
 # is left with is the state it already had - which is the strongest report a
 # `void` signature admits, and it is only true if the refusal precedes the
@@ -455,9 +445,9 @@ check(cRefusal == wantCRefusal,
         "touching the handle",
       $cRefusal, $wantCRefusal)
 
-# A BLOCK WHOSE VERSION IS A DIFFERENT WHOLE NUMBER IS REFUSED BY VERSION AND
-# NOT BY CHECKSUM. The sweep above flips one byte and the checksum catches most
-# of what it produces; this case rewrites the version AND repairs the checksum,
+# A block whose version is a different whole number is refused by version and
+# not by checksum. The sweep above flips one byte and the checksum catches most
+# of what it produces; this case rewrites the version and repairs the checksum,
 # so only the version check can refuse it.
 proc driveWrongVersion(): string =
   let source = fresh()
@@ -482,11 +472,11 @@ check(wrongVersion == wantWrongVersion,
         "is refused by version",
       wrongVersion, wantWrongVersion)
 
-# A PAYLOAD BYTE THAT NAMES NO ENUMERATOR IS REFUSED BEFORE THE DECODE. The
+# A payload byte that names no enumerator is refused before the decode. The
 # checksum is repaired, so this case reaches the field validation and nothing
 # else can turn it back. A model that wrote the byte into the selector anyway
 # would hold a value the enum has no name for, which `--panics:on` turns into an
-# abort inside a plugin host - the one outcome design section 5.6 refuses.
+# abort inside a plugin host.
 proc driveBadBackend(): tuple[status: string, backend: string] =
   let source = fresh()
   isp1181_tick(source, 9'u32)
@@ -545,7 +535,7 @@ isp1181_destroy(cycleCtx)
 isp1181_destroy(wrapCtx)
 isp1181_destroy(bytesCtx)
 
-# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this program reports what
+# The registry lines. They are data and not a verdict: this program reports what
 # its text declares and what its run adjudicated, and the registered test's
 # driver is what compares them.
 const declaredCaseSites = declaredSites

@@ -49,27 +49,25 @@ type
     opBsr
     opJmp, opJsr, opRts, opRte, opTrap
     opCmp, opCmpa, opCmpi
-    # CPU-11 appends here, under the same rule CPU-8, CPU-9 and CPU-10
-    # followed: immediately before `opIllegal` and nowhere else. `MOVEC` is a
-    # group of ONE - it shares no encoding shape, no size field and no
-    # effective address with any member above, and `src/mcf5307/movec.nim` is
-    # its executor.
+    # A new member appends immediately before `opIllegal` and nowhere else.
+    # `MOVEC` is a group of one: it shares no encoding shape, no size field and
+    # no effective address with any member above. `src/mcf5307/movec.nim` is its
+    # executor.
     opMovec
     opIllegal
 
-  # A VALUE AND NOT A `ref`, WHICH IS THE OPPOSITE CHOICE FROM `MCF5307Ctx`
-  # BELOW AND IS DELIBERATE. One of these is produced for each instruction
+  # A value and not a `ref`, which is the opposite choice from `MCF5307Ctx`
+  # below and is deliberate. One of these is produced for each instruction
   # decoded and none of them outlives the dispatch that reads it, so a `ref`
-  # would put an allocation and a free on the execute path - which design
-  # section 5.6 keeps clear of the allocator, because the delivery form may
-  # enter it from a real-time thread. This type carries no identity to share
-  # and no state to mutate through, so a copy loses nothing a reader could
-  # observe. The context below is the opposite on every count.
+  # would put an allocation and a free on the execute path, which must stay
+  # clear of the allocator because the delivery form may enter it from a
+  # real-time thread. This type carries no identity to share and no state to
+  # mutate through, so a copy loses nothing a reader could observe.
   #
-  # THE ZERO VALUE IS A REACHABLE RESULT AND IT IS NOT A TRAP VALUE: it reads
+  # The zero value is a reachable result and it is not a trap value: it reads
   # as `opNop`, which the enum above pins at ordinal 0 for this reason. A `ref`
   # would answer nil there and fault on the first field read. So a decoder arm
-  # that must refuse a word has to SAY SO with `opIllegal`; leaving a branch
+  # that must refuse a word has to say so with `opIllegal`; leaving a branch
   # without naming a result is silent under this declaration and loud under a
   # `ref`.
   Decoded* = object

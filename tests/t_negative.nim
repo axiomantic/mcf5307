@@ -1,62 +1,55 @@
-## `t_negative` - the negative corpus. Encodings the core must REFUSE, and the
-## legal neighbours it must still execute. Task CPU-13. Design sections 6.1,
-## 18.2, 18.7.
+## `t_negative` - the negative corpus. Encodings the core must refuse, and the
+## legal neighbours it must still execute.
 ##
-## WHAT THIS SUITE ASSERTS, AND WHY EACH GROUP EXISTS.
-##
-##   THE REFUSED ENCODINGS. The task's own row names them: `DBRA`, `EXG`,
+##   The refused encodings: `DBRA`, `EXG`,
 ##   `ROL`, a memory shift, `MOVEM -(An)`, byte arithmetic, word arithmetic
 ##   apart from `MULS.W`, `MULU.W`, `DIVS.W` and `DIVU.W`, and `Bcc` with an
 ##   8-bit displacement of `0xFF`. Each is placed at the reset program counter
-##   and run through the shipped path, and the WHOLE machine state is compared
+##   and run through the shipped path, and the whole machine state is compared
 ##   rather than the fault bit alone.
 ##
-##   THE LEGAL NEIGHBOURS, AND WHY A NEGATIVE CORPUS IS WORTHLESS WITHOUT
-##   THEM. "This encoding is refused" is satisfied by a core that refuses
-##   EVERYTHING, so a corpus of refusals alone passes against a decoder that
+##   The legal neighbours, and why a negative corpus is worthless without
+##   them. "This encoding is refused" is satisfied by a core that refuses
+##   everything, so a corpus of refusals alone passes against a decoder that
 ##   is broadly broken, and passes in exactly the way it passes when the core
-##   is right. Every refused encoding here therefore names a NEIGHBOUR: a
+##   is right. Every refused encoding here therefore names a neighbour: a
 ##   legal encoding one field away from it, which the core must still execute.
 ##   A decoder that over-refuses reddens on the neighbour in the same run that
 ##   it stays green on the refusal.
 ##
-##   THE FOUR 16-BIT MULTIPLY AND DIVIDE FORMS are neighbours of exactly this
-##   kind and the task's row names them for it: they are carved out of the
-##   same "word arithmetic must trap" clause that puts `ADD.W` in the trap
-##   set, so they are the sharpest available control on that clause. The row
-##   states the standard they enforce - a negative case that asserts a trap
-##   for a LEGAL instruction pins a defect - and `MULS.W`, `MULU.W`, `DIVS.W`
-##   and `DIVU.W` are where that standard bites.
+##   The four 16-bit multiply and divide forms are neighbours of exactly this
+##   kind: they are carved out of the same "word arithmetic must trap" clause
+##   that puts `ADD.W` in the trap set, so they are the sharpest available
+##   control on that clause. A negative case that asserts a trap for a legal
+##   instruction pins a defect, and `MULS.W`, `MULU.W`, `DIVS.W` and `DIVU.W`
+##   are where that standard bites.
 ##
-##   THE PAIRING AND THE ORACLE ARE THEMSELVES ASSERTED, not left to
+##   The pairing and the oracle are themselves asserted, not left to
 ##   convention. A refusal added without a neighbour, and a case whose
 ##   recorded assembler evidence contradicts its own expected outcome, are
 ##   both adjudicated below. Without those two the corpus could drift back
 ##   into a list of refusals whose only oracle is what somebody believed.
 ##
-## WHERE THE EXPECTED VALUES COME FROM, AND WHY THEY ARE NOT TRANSCRIBED. Each
-## encoding in `conformance/corpus/negative_00.json` was EMITTED by
+## The expected values are not transcribed. Each
+## encoding in `conformance/corpus/negative_00.json` was emitted by
 ## `m68k-elf-as`, not hand-assembled, and the same tool decides which class a
 ## case belongs to: every refused encoding assembles for `-m68000` (or, for
-## the `0xFF` displacement, `-mcpu=68020`) and is REJECTED for `-mcpu=5307`,
+## the `0xFF` displacement, `-mcpu=68020`) and is rejected for `-mcpu=5307`,
 ## and every neighbour is accepted for `-mcpu=5307`. The partition is the
 ## assembler's and not this project's, which is what keeps the corpus from
 ## being a transcription of a belief about the part.
 ##
-## WHAT THIS SUITE DOES NOT ASSERT, STATED SO ITS SILENCE IS NOT READ AS
-## COVERAGE. A neighbour is adjudicated on WHETHER IT WAS REFUSED and never on
+## What this suite does not assert, stated so its silence is not read as
+## coverage. A neighbour is adjudicated on whether it was refused and never on
 ## what it computed. The arithmetic and the condition codes of these
 ## instructions belong to `t_alu`, `t_logic`, `t_move` and the positive
 ## corpora, and repeating them here would be a second home for a fact with an
 ## owner.
 ##
-## HOW THE GROUND IS DIVIDED WITH `t_lines`. That suite owns the line-A and
-## line-F opcode SPACES, exhaustively, and CPU-12's own registration block
-## states the split: those two lines are space this core declines to claim,
-## and this suite is the removed 68000 INSTRUCTIONS, which live in lines the
-## core does claim and decode. No encoding here is in line A or line F.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
+## How the ground is divided with `t_lines`: that suite owns the line-A and
+## line-F opcode spaces, exhaustively - space this core declines to claim - and
+## this suite is the removed 68000 instructions, which live in lines the core
+## does claim and decode. No encoding here is in line A or line F.
 
 import std/json
 import std/strutils
@@ -83,8 +76,8 @@ proc checkImpl[T](site: int; got: T; want: T; label: string) =
     executedSites.add(site)
 
 template check(got: untyped; want: untyped; label: string) =
-  ## The call site is recorded twice - once at COMPILE TIME into
-  ## `declaredSites` by the `static` below, and once at RUN TIME into
+  ## The call site is recorded twice - once at compile time into
+  ## `declaredSites` by the `static` below, and once at run time into
   ## `executedSites`, by the implementation and only when it reaches a
   ## verdict. `tests/case_sites.nim` states what the pair is for and
   ## `tests/case_sites.cmake` states the rules the driver applies.
@@ -95,10 +88,10 @@ template check(got: untyped; want: untyped; label: string) =
 # ---------------------------------------------------------------------------
 # The corpus.
 #
-# IT IS READ AT COMPILE TIME AND NAMED IN FULL. A glob resolved at run time
+# It is read at compile time and named in full. A glob resolved at run time
 # that matched nothing would leave this suite adjudicating an empty table and
 # reporting a pass, which is the one failure shape a negative corpus must not
-# have. `staticRead` of a named path fails the COMPILE when the file is
+# have. `staticRead` of a named path fails the compile when the file is
 # absent, so the loud form is the one that costs nothing here.
 
 const corpusText = staticRead("../conformance/corpus/negative_00.json")
@@ -181,14 +174,14 @@ proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
 
 # ---------------------------------------------------------------------------
 # The runner. It is `tests/t_lines.nim`'s, for the reason that file gives: a
-# pass here has to be a pass of the SHIPPED path - `mcf5307_reset`,
+# pass here has to be a pass of the shipped path - `mcf5307_reset`,
 # `mcf5307_set_reg`, `mcf5307_exec`, `mcf5307_get_reg` - and not of an
 # internal helper reached around the back.
 #
-# THE ADDRESS REGISTER POINTS AT REAL MEMORY, AND THAT IS LOAD-BEARING RATHER
-# THAN INCIDENTAL. Two of the refused encodings take an operand through `(A0)`
+# The address register points at real memory, and that is load-bearing rather
+# than incidental. Two of the refused encodings take an operand through `(A0)`
 # - the memory shift and the predecrement `MOVEM`. Seeded with an unmapped
-# address, a core that WRONGLY EXECUTED either of them would take a bus fault,
+# address, a core that wrongly executed either of them would take a bus fault,
 # arrive at `fault` and `halted` by the wrong road, and satisfy the trap
 # assertion. A mapped A0 removes that road, so the only way to reach the
 # expected state is the refusal this suite is about.
@@ -225,7 +218,7 @@ proc runCase(c: Case): Outcome =
   discard mcf5307_set_reg(ctx, 0, seedD0)
   discard mcf5307_set_reg(ctx, 1, seedD1)
   discard mcf5307_set_reg(ctx, 8, seedA0)
-  # The status register is set LAST: `mcf5307_reset` writes it, so an earlier
+  # The status register is set last: `mcf5307_reset` writes it, so an earlier
   # write would be overwritten.
   discard mcf5307_set_reg(ctx, 16, srBase)
 
@@ -241,15 +234,15 @@ proc runCase(c: Case): Outcome =
   mcf5307_destroy(ctx)
 
 # ---------------------------------------------------------------------------
-# The decoder's answer, asked of the LEGAL encodings only. The asymmetry is
+# The decoder's answer, asked of the legal encodings only. The asymmetry is
 # deliberate and it is the one place this suite declines to make a claim.
 #
-# REFUSAL IN THIS CORE IS NOT DECIDED IN ONE PLACE, WHICH IS MEASURED AND NOT
-# ASSUMED. Of the eight refused encodings here, `decodeWord` returns
-# `opIllegal` for ONE. The other seven reach an operation and are refused by
+# Refusal in this core is not decided in one place, which is measured and not
+# assumed. Of the refused encodings here, `decodeWord` returns
+# `opIllegal` for one. The others reach an operation and are refused by
 # an executor arm instead - `cpu.nim` documents that contract for each group,
 # naming an illegal size, an illegal effective address and the 32-bit branch
-# displacement - and two of them are refused under an ALIAS, the encoding
+# displacement - and two of them are refused under an alias, the encoding
 # being read as a legal opcode at a size this part does not have. So "which
 # layer refuses this encoding" is a fact about how the core is built, and a
 # per-case expectation for it would be a transcription of the implementation
@@ -257,7 +250,7 @@ proc runCase(c: Case): Outcome =
 # requirement, which is that the encoding does not execute, and the machine
 # runs below are where it does that.
 #
-# THE CONVERSE IS A REQUIREMENT AND IS ASSERTED. A legal encoding must reach
+# The converse is a requirement and is asserted. A legal encoding must reach
 # an operation, whatever later does with it, and a decoder that answered
 # `opIllegal` for one has refused it at the first layer and cannot execute it
 # at any. That claim needs no knowledge of the core's internal division, so
@@ -270,13 +263,13 @@ for c in cases:
           (name: c.name, reachesAnOperation: true),
           "the decoder reaches an operation for " & c.instruction)
 
-# THE WHOLE MACHINE IS COMPARED FOR A REFUSAL AND NOT THE FAULT BIT. An
+# The whole machine is compared for a refusal and not the fault bit. An
 # encoding that executed would write a register, move the stack pointer or set
 # a condition code, and those are the fields this tuple carries. The seeds are
 # non-zero for the same reason: a register compared at zero against zero
 # asserts nothing.
 #
-# THE PROGRAM COUNTER IS PAST THE FIRST WORD. The core advances it over the
+# The program counter is past the first word. The core advances it over the
 # word it fetched before it decides what the word was, so a refused encoding
 # leaves the machine pointing at the next word and halted, and never at a
 # branch target - which is what separates a refused `DBRA` or `Bcc` from an
@@ -295,7 +288,7 @@ for c in cases:
           wantTrap,
           "the machine refuses " & c.instruction)
 
-# THE NEIGHBOUR IS ADJUDICATED ON REFUSAL ALONE. `executed` is the cycle count
+# The neighbour is adjudicated on refusal alone. `executed` is the cycle count
 # having moved: a refusal spends none. The three fields together are the whole
 # of the distinction between "the core ran this" and "the core declined it",
 # which is the only question this suite asks of a legal encoding.
@@ -311,7 +304,7 @@ for c in cases:
 # The pairing. Every refusal names a legal neighbour, and the neighbour is in
 # this corpus and is itself adjudicated as executing.
 #
-# WITHOUT THIS THE PAIRING IS A CONVENTION AND A CONVENTION DECAYS SILENTLY. A
+# Without this the pairing is a convention and a convention decays silently. A
 # refusal added with no neighbour leaves the corpus one control short and
 # nothing else in this file would notice: its own case would pass, the case
 # total would rise by one as an addition should, and the suite would report a
@@ -341,14 +334,13 @@ check((unpaired: unpaired, dangling: dangling, paired: paired),
 # ---------------------------------------------------------------------------
 # The oracle, held against the outcome each case claims.
 #
-# THIS IS THE CHECK THAT REFUSES TO PIN A DEFECT. The task's row states the
-# standard: a negative case that asserts a trap for a legal instruction is not
-# a weak case, it is a case that pins a defect. The assembler's verdict is
+# This is the check that refuses to pin a defect. A negative case that asserts
+# a trap for a legal instruction is not a weak case, it is a case that pins a
+# defect. The assembler's verdict is
 # recorded per case, so the corpus can be held to that standard mechanically -
-# an encoding `-mcpu=5307` ACCEPTS may not be labelled a refusal, and an
-# encoding it REJECTS may not be labelled a neighbour. Relabelling `MULS.W` as
-# a refusal, which is the exact mistake the row was written to prevent, is red
-# here on its own evidence.
+# an encoding `-mcpu=5307` accepts may not be labelled a refusal, and an
+# encoding it rejects may not be labelled a neighbour. Relabelling `MULS.W` as
+# a refusal is red here on its own evidence.
 
 const part = "-mcpu=5307"
 
@@ -369,7 +361,7 @@ check((traps: trapCount, executes: executeCount, violations: oracleViolations),
       (traps: 8, executes: 11, violations: 0),
       "the assembler's verdict agrees with the outcome every case claims")
 
-# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this program reports
+# The registry lines. They are data and not a verdict: this program reports
 # what its text declares and what its run adjudicated, and the registered
 # test's driver is what compares them - and what compares the declared count
 # against the call sites in this file. A verdict printed here would be a

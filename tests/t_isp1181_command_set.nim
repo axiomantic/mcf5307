@@ -1,25 +1,16 @@
-## `t_isp1181_command_set` - the command set of the full ISP1181 model. Task
-## CPU-22 owns this file. Design section 9.2.
+## `t_isp1181_command_set` - the command set of the full ISP1181 model.
 ##
-## WHAT CPU-22's `Check:` ASKS OF THIS SUITE, in its own words: it drives
-## "every command in the implemented list" and asserts each is accepted, then
-## drives "every command in the not-implemented list" and asserts each returns
-## the benign value and writes one log line - "never a silent invention".
+## The opcode lists below are hand-written literals, and never a second call of
+## the table under test. A suite that asked `commands.nim` which opcodes it
+## implements and then asserted that it implements them would pass against any
+## table at all.
 ##
-## THE OPCODE LISTS BELOW ARE HAND-WRITTEN LITERALS TAKEN FROM THE PLAN AND THE
-## DESIGN DOCUMENT, and never a second call of the table under test. A suite
-## that asked `commands.nim` which opcodes it implements and then asserted that
-## it implements them would pass against any table at all.
-##
-## THE THIRD CLASS IS NOT AN INVENTION OF THIS SUITE, IT IS A GAP IN THE
-## AUTHORITY. Design section 9.2 names six commands - buffer write, buffer
-## read, stall, status, validate and clear - and gives an opcode for NONE of
-## them. No ISP1181 datasheet and no ISP1362 driver header exists on this
-## machine. So the model carries no opcode for those six, and every opcode the
-## authority does not number answers benignly and says so. `commands.nim`
-## states the gap where it lives.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
+## The third class is not an invention of this suite, it is a gap in the
+## authority, which names buffer write, buffer read, stall, status, validate and
+## clear and gives an opcode for none of them. No ISP1181 datasheet and no
+## ISP1362 driver header exists on this machine. So the model carries no opcode
+## for those six, and every opcode the authority does not number answers
+## benignly and says so.
 
 import std/strutils
 
@@ -76,12 +67,12 @@ const implementedOpcodes: array[16, uint8] = [
   0xC2'u8, 0xC3'u8,                           # interrupt enable
   0xF4'u8]                                    # acknowledge setup
 
-# THE NOT-IMPLEMENTED LIST, HAND-WRITTEN, with the name each document gives it.
-# `scratch`, `unlock` and `isochronous` are named by the documents WITHOUT an
+# The not-implemented list, hand-written, with the name each document gives it.
+# `scratch`, `unlock` and `isochronous` are named by the documents without an
 # opcode and so cannot appear here either - and they cost nothing, because an
 # opcode the authority does not number falls to the unspecified class below,
 # which answers benignly and logs. The gap is only expensive on the
-# IMPLEMENTED side.
+# implemented side.
 const notImplemented: array[17, tuple[opcode: uint8, name: string]] = [
   (0xF0'u8, "DMA"), (0xF1'u8, "DMA"), (0xF2'u8, "DMA"), (0xF3'u8, "DMA"),
   (0xB5'u8, "chip identifier"),
@@ -108,10 +99,10 @@ proc fresh(): ISP1181 =
   newISP1181(addr hostToken, ignoreIrq, ignoreTx)
 
 # ---------------------------------------------------------------------------
-# BLOCK 1. Every command in the implemented list is ACCEPTED.
+# Block 1. Every command in the implemented list is accepted.
 #
-# ACCEPTED IS DEFINED AS AN OBSERVABLE AND NOT AS A FEELING: the model records
-# the opcode as its last accepted command, and it writes NO log line. The two
+# Accepted is defined as an observable: the model records the opcode as its last
+# accepted command, and it writes no log line. The two
 # halves are asserted together because either alone passes a model that does
 # the wrong one - a model that logged every command would still record it, and
 # a model that recorded nothing would still be silent.
@@ -140,10 +131,10 @@ check(accepted == wantAccepted,
       $accepted, $wantAccepted)
 
 # ---------------------------------------------------------------------------
-# BLOCK 2. Every command in the not-implemented list answers benignly and
-# writes ONE log line.
+# Block 2. Every command in the not-implemented list answers benignly and
+# writes one log line.
 #
-# THE LINE'S TEXT IS ASSERTED AND NOT ONLY ITS COUNT. A model that logged the
+# The line's text is asserted and not only its count. A model that logged the
 # wrong opcode, or logged a line that named no opcode at all, would satisfy a
 # count and would leave a reader unable to tell which command was refused.
 
@@ -174,7 +165,7 @@ proc driveRefused(rows: openArray[tuple[opcode: uint8, want: string]]): Refused 
     elif m.lastCommand != -1:
       result.firstBad = "0x" & toHex(row.opcode) & " became the pending command"
 
-# THE COMMAND'S NAME IS PART OF THE ASSERTED LINE. A log that named only the
+# The command's name is part of the asserted line. A log that named only the
 # opcode would leave a reader with a number and no way to tell a refused DMA
 # transfer from a refused chip-identifier read.
 var notImplementedRows: seq[tuple[opcode: uint8, want: string]]
@@ -190,13 +181,13 @@ check(refused == wantRefused,
       $refused, $wantRefused)
 
 # ---------------------------------------------------------------------------
-# BLOCK 3. Every opcode the authority does not number at all.
+# Block 3. Every opcode the authority does not number at all.
 #
-# THE SET IS DERIVED AS THE COMPLEMENT of the two hand-written lists, so it
+# The set is derived as the complement of the two hand-written lists, so it
 # needs no third list to maintain and it cannot disagree with them. It is the
-# class that carries the six commands design section 9.2 names without an
-# opcode, and its log line says a different thing from block 2's on purpose: a
-# reader who hits it has found a gap in the SPECIFICATION and not a decision.
+# class that carries the six commands the authority names without an opcode,
+# and its log line says a different thing from block 2's on purpose: a reader
+# who hits it has found a gap in the specification and not a decision.
 
 var unspecifiedRows: seq[tuple[opcode: uint8, want: string]]
 for value in 0 .. 255:
@@ -218,7 +209,7 @@ check(unspecified == wantUnspecified,
       "unspecified: every unnumbered opcode answers benignly and logs one line",
       $unspecified, $wantUnspecified)
 
-# THE THREE CLASSES PARTITION THE BYTE. Without this the three sweeps above
+# The three classes partition the byte. Without this the three sweeps above
 # could each be green over a set that left opcodes untouched.
 type Partition = tuple[implemented: int, refused: int, unspecified: int,
                        total: int]
@@ -233,7 +224,7 @@ check(partition == wantPartition,
       "partition: the three classes cover all 256 opcodes and none twice",
       $partition, $wantPartition)
 
-# THE SIX COMMANDS THE AUTHORITY NAMES WITHOUT AN OPCODE are recorded in the
+# The six commands the authority names without an opcode are recorded in the
 # model rather than left in a comment, so that the day a datasheet arrives the
 # list to close is a list and not a paragraph.
 const wantUnnumbered = @["buffer write", "buffer read", "stall", "status",
@@ -243,14 +234,13 @@ check(@unnumberedCommands == wantUnnumbered,
       $(@unnumberedCommands), $wantUnnumbered)
 
 # ---------------------------------------------------------------------------
-# BLOCK 4. ACCEPTED HAS TO MEAN SOMETHING, so the paired commands are driven
+# Block 4. Accepted has to mean something, so the paired commands are driven
 # through the data port and read back.
 #
-# THE BYTE ORDER IS DESIGN SECTION 9.2's TABLE: "Multi-byte registers are least
-# significant byte first." Every expected sequence below is written out in that
-# order by hand.
+# Multi-byte registers are least significant byte first. Every expected sequence
+# below is written out in that order by hand.
 #
-# THE TWO KNOWN FIRMWARE VALUES ARE THE ONES DRIVEN - HwConfig `0x2300` and
+# The two known firmware values are the ones driven - HwConfig `0x2300` and
 # Interrupt Enable `0x1F07` - because a round trip that used a value the
 # firmware never writes would leave the one case that matters untested.
 
@@ -278,7 +268,7 @@ check(hwConfig == wantHwConfig,
       "hardware configuration: 0x2300 round trips least significant byte first",
       $hwConfig, $wantHwConfig)
 
-# THE SOFTCT BIT IS NAMED STATE and not merely a value inside the mode byte,
+# The SOFTCT bit is named state and not merely a value inside the mode byte,
 # so the case drives it on and off and reads the model's own answer for it.
 type ModeCase = tuple[readBack: seq[uint8], logged: int, onWhenSet: bool,
                       onWhenClear: bool]
@@ -313,8 +303,8 @@ check(enable == wantEnable,
       "interrupt enable: 0x1F07 round trips across four bytes",
       $enable, $wantEnable)
 
-# THE INTERRUPT REGISTER READS ZERO ON A FRESH MODEL, and that is asserted
-# rather than assumed: design section 9.1 makes the zero the benign answer, so
+# The interrupt register reads zero on a fresh model, and that is asserted
+# rather than assumed: zero is the benign answer, so
 # a register that came up holding anything else would change what a boot reads.
 let freshInterrupt = fresh().readVia(0xC0'u8, 4)
 let wantFreshInterrupt = @[0x00'u8, 0x00'u8, 0x00'u8, 0x00'u8]
@@ -322,7 +312,7 @@ check(freshInterrupt == wantFreshInterrupt,
       "interrupt register: a fresh model reads four zero bytes",
       $freshInterrupt, $wantFreshInterrupt)
 
-# RESET CLEARS THE REGISTERS AND IS DRIVEN AFTER THEY ARE ALL NON-ZERO, so a
+# Reset clears the registers and is driven after they are all non-zero, so a
 # reset that cleared only the register a narrower case looked at is separated
 # from one that clears them all.
 type AfterReset = tuple[hw: seq[uint8], mode: seq[uint8], address: seq[uint8],
@@ -349,11 +339,10 @@ check(reset == wantReset,
       "reset: 0xF6 clears every register this model carries",
       $reset, $wantReset)
 
-# `0xF4` ACKNOWLEDGE SETUP IS ACCEPTED AND CHANGES NOTHING, and the case exists
-# because the authority gives the command an opcode and NO effect. A model that
-# invented one would go red here, which is the direction this suite wants: an
-# effect that appears without a source is the silent invention CPU-22's own
-# check line refuses.
+# `0xF4` acknowledge setup is accepted and changes nothing, and the case exists
+# because the authority gives the command an opcode and no effect. A model that
+# invented one would go red here: an effect that appears without a source is a
+# silent invention.
 type AfterAck = tuple[interrupt: seq[uint8], mode: seq[uint8], logged: int]
 
 proc afterAck(): AfterAck =
@@ -371,9 +360,9 @@ check(ack == wantAck,
       $ack, $wantAck)
 
 # ---------------------------------------------------------------------------
-# BLOCK 5. THE DATA PORT SAYS SO WHEN IT HAS NOTHING TRUE TO CARRY.
+# Block 5. The data port says so when it has nothing true to carry.
 #
-# EACH OF THESE FOUR COULD BE MADE SILENT AND PLAUSIBLE, which is why they are
+# Each of these could be made silent and plausible, which is why they are
 # cases. An over-long transfer that wrapped would corrupt a register the
 # firmware then reads back; an un-commanded access that answered zero would be
 # indistinguishable from the stub.
@@ -440,12 +429,12 @@ check(strayRead == wantStrayRead,
       $strayRead, $wantStrayRead)
 
 # ---------------------------------------------------------------------------
-# BLOCK 6. THE FIVE FIFOs.
+# Block 6. The five FIFOs.
 #
-# THE GEOMETRY TABLE IS THE CASE THAT PINS THE EP3 CORRECTION. CPU-22's block
-# states that the design document's "double" for endpoint 3 is wrong and that
-# `AGENTS.md` section 3.8 is authoritative: it marks double-buffering where it
-# exists and leaves EP3 unmarked. A model with one buffer too many accepts a
+# The geometry table is the case that pins the EP3 correction. The design
+# document's "double" for endpoint 3 is wrong: the endpoint table marks
+# double-buffering where it exists and leaves EP3 unmarked. A model with one
+# buffer too many accepts a
 # second packet the hardware would have NAKed, so the row below is a behaviour
 # and not a size.
 
@@ -467,7 +456,7 @@ check(geometry == wantGeometry,
       "fifos: the five buffers carry design section 9.2's sizes, EP3 single",
       $geometry, $wantGeometry)
 
-# THE SECOND PACKET IS THE WHOLE POINT OF THE BUFFER COUNT, so it is driven on
+# The second packet is the whole point of the buffer count, so it is driven on
 # a single-buffered endpoint and on a double-buffered one in the same case.
 type SecondPacket = tuple[ep1First: bool, ep1Second: bool, ep1Pending: int,
                           ep3First: bool, ep3Second: bool, ep3Pending: int]
@@ -490,7 +479,7 @@ check(second == wantSecond,
       "fifos: endpoint 1 takes a second packet and endpoint 3 NAKs it",
       $second, $wantSecond)
 
-# A PACKET LARGER THAN THE BUFFER IS REFUSED WHOLE AND NEVER TRUNCATED. A
+# A packet larger than the buffer is refused whole and never truncated. A
 # model that stored the first 16 bytes would present the firmware with a short
 # packet it has no way to recognise as short.
 type Oversize = tuple[accepted: bool, pending: int]
@@ -508,7 +497,7 @@ check(big == wantBig,
       "fifos: a packet larger than the buffer is refused and not truncated",
       $big, $wantBig)
 
-# PEEK READS AND DOES NOT CONSUME, which is the whole difference between it and
+# Peek reads and does not consume, which is the whole difference between it and
 # a buffer read. The endpoint it reads is the one the last accepted
 # `0x20+idx` selected, because that is the only endpoint selector the authority
 # gives this model.
@@ -532,7 +521,7 @@ check(peeked == wantPeeked,
       "peek: 0xD2 reads the selected endpoint's head byte and consumes none",
       $peeked, $wantPeeked)
 
-# PEEKING AN EMPTY BUFFER ANSWERS BENIGNLY AND SAYS SO. A zero returned in
+# Peeking an empty buffer answers benignly and says so. A zero returned in
 # silence is the answer a full buffer holding a zero byte would give.
 type EmptyPeek = tuple[value: uint8, log: seq[string]]
 
@@ -549,7 +538,7 @@ check(emptyPeek == wantEmptyPeek,
       "peek: an empty buffer answers benignly and logs",
       $emptyPeek, $wantEmptyPeek)
 
-# RESET EMPTIES THE BUFFERS TOO, and the case drives a packet into every one of
+# Reset empties the buffers too, and the case drives a packet into every one of
 # the five first so that a reset which cleared a subset is separated from one
 # that clears them all.
 type ResetFifos = tuple[before: seq[int], after: seq[int]]
@@ -573,13 +562,13 @@ check(fifoReset == wantFifoReset,
       $fifoReset, $wantFifoReset)
 
 # ---------------------------------------------------------------------------
-# BLOCK 7. THE IRQ3 LINE.
+# Block 7. The IRQ3 line.
 #
-# NO SOURCE ON THIS MACHINE ASSIGNS AN INTERRUPT-REGISTER BIT TO AN EVENT, so
-# the model assigns none and says so once per delivery. THAT SILENCE IS THE
-# THING THE CASE PINS: a model whose interrupt simply never fired would be
-# indistinguishable from CPU-21's stub, and this suite has to be able to tell
-# them apart.
+# No source on this machine assigns an interrupt-register bit to an event, so
+# the model assigns none and says so once per delivery. That silence is what the
+# case pins: a model whose interrupt simply never fired would be
+# indistinguishable from the stub, and this suite has to be able to tell them
+# apart.
 
 type Delivery = tuple[accepted: bool, pending: int, interrupt: seq[uint8],
                       asserted: bool, log: seq[string]]
@@ -601,10 +590,10 @@ check(delivered == wantDelivered,
       "irq: a delivery raises no interrupt and names the missing assignment",
       $delivered, $wantDelivered)
 
-# THE DERIVATION ITSELF IS TESTED WITH A MASK THIS SUITE CHOOSES, so that the
+# The derivation itself is tested with a mask this suite chooses, so that the
 # level-triggered rule is exercised without any claim about which event owns
-# which bit. Design section 9.2: the line is level-triggered, and the callback
-# carries the LOGICAL state, so the board's inversion is not this model's.
+# which bit. The line is level-triggered and the callback carries the logical
+# state, so the board's inversion is not this model's.
 
 var irqTrace: seq[int]
 
@@ -630,7 +619,7 @@ check(irqRun == wantIrqRun,
       "irq: the line follows the enabled bits and reports each change once",
       $irqRun, $wantIrqRun)
 
-# THE REGISTRY LINES. They are DATA AND NOT A VERDICT.
+# The registry lines. They are data and not a verdict.
 const declaredCaseSites = declaredSites
 const declaredOffGreenPathSites = offGreenPathSites
 echo caseSiteLine("declared", "t_isp1181_command_set", declaredCaseSites)

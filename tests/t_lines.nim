@@ -1,42 +1,38 @@
 ## `t_lines` - the line-A and line-F opcode spaces of `mcf5307/lines`, and the
-## core's refusal to execute either of them. Task CPU-12. Design section 6.1.
+## core's refusal to execute either of them.
 ##
-## WHAT THIS SUITE ASSERTS, AND WHY EACH GROUP EXISTS.
-##
-##   THE TWO SPACES. `mcf5307/lines` is the one place that says which words
+##   The two spaces. `mcf5307/lines` is the one place that says which words
 ##   belong to the two unimplemented-line spaces. Each space is asserted at its
 ##   first word, at its last word, and at the word immediately outside each
 ##   end - line 9 and line B around line-A, line E around line-F. A mask
 ##   written one bit too wide claims a neighbouring line, and the neighbours
 ##   are lines other tasks own and execute.
 ##
-##   THE FOUR NAMED ENCODINGS. The task's own row names MAC, EMAC and `MOV3Q`
-##   as instructions this core must not decode, and calls line-F cache and
-##   debug. Each of the encodings below is built from the bit diagram its
-##   folio prints, and is asserted BOTH to be in the space this module claims
-##   AND to reach no operation in the decoder. The two are separate claims:
+##   The four named encodings. MAC, EMAC and `MOV3Q` are instructions this core
+##   must not decode, and line-F is cache and debug. Each of the encodings below
+##   is built from the bit diagram its folio prints, and is asserted both to be
+##   in the space this module claims and to reach no operation in the decoder.
+##   The two are separate claims:
 ##   one is about this module's classification and one is about the decoder's
 ##   answer, and neither implies the other.
 ##
-##   THE SWEEP. Every word of the two spaces is decoded. The case asserts the
-##   SIZE of the swept set beside the absence of an escape, because neither
+##   The sweep. Every word of the two spaces is decoded. The case asserts the
+##   size of the swept set beside the absence of an escape, because neither
 ##   field alone identifies the set: a predicate that claims nothing has no
 ##   escape, and a predicate that claims the right number of the wrong words
 ##   has the right size.
 ##
-##   THE CORE PATH. A line-A word and a line-F word are each placed at the
+##   The core path. A line-A word and a line-F word are each placed at the
 ##   reset program counter and run through `mcf5307_reset`, `mcf5307_set_reg`
 ##   and `mcf5307_exec`, which is the path a board takes. The whole machine
 ##   state is compared rather than the fault bit alone, because an instruction
 ##   that executed leaves its mark in the register file, the stack pointer and
 ##   the status register and not in that bit.
 ##
-## WHERE THE EXPECTED VALUES COME FROM. The encodings are read from the
-## ColdFire Family Programmer's Reference Manual, Rev. 3, as page images, at
-## the folios named beside each one. The markdown transcription under
-## `MCF5307UM-md/` is not a source for any value here.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
+## The encodings are read from the ColdFire Family Programmer's Reference
+## Manual, Rev. 3, as page images, at the folios named beside each one. The
+## markdown transcription under `MCF5307UM-md/` is not a source for any value
+## here.
 
 import ./lines
 import mcf5307/cpu
@@ -60,8 +56,8 @@ proc checkImpl[T](site: int; got: T; want: T; label: string) =
     executedSites.add(site)
 
 template check(got: untyped; want: untyped; label: string) =
-  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
-  ## `declaredSites` by the `static` below, and once at RUN TIME into
+  ## The call site is recorded twice - once at compile time into
+  ## `declaredSites` by the `static` below, and once at run time into
   ## `executedSites`, by the implementation and only when it reaches a
   ## verdict. `tests/case_sites.nim` states what the pair is for and
   ## `tests/case_sites.cmake` states the rules the driver applies.
@@ -74,7 +70,7 @@ template check(got: untyped; want: untyped; label: string) =
 # ---------------------------------------------------------------------------
 # The two spaces, at each end and one word outside each end.
 #
-# THE NEIGHBOURS ARE NOT DECORATION. Line 9 is the SUB family, line B is CMP
+# The neighbours are not decoration. Line 9 is the SUB family, line B is CMP
 # and EOR, and line E is the shifts; all three are decoded and executed by
 # other tasks in this group. A predicate that reached one of them would take a
 # working instruction away from the core, and the boundary words are the ones
@@ -106,8 +102,8 @@ check(isLineA(0xF000'u16), false, "line-F is not line-A")
 #   WDEBUG  CFPRM folio 8-18. `1111 1011 11 <ea 5-0>`. With a source of (A0)
 #           that is 0xFBD0.
 #
-# EMAC IS NAMED BY THE TASK ROW AND HAS NO ENCODING CASE, AND THE REASON IS
-# THE PART RATHER THAN THIS SUITE. The MCF5307 User's Manual carries no EMAC
+# EMAC has no encoding case, and the reason is the part rather than this
+# suite. The MCF5307 User's Manual carries no EMAC
 # anywhere, so there is no encoding of this part's for a case to be built from.
 
 check(isLineA(0xA001'u16), true, "MAC is a line-A word")
@@ -126,7 +122,7 @@ check(decodeWord(0xFBD0'u16).op, opIllegal, "WDEBUG reaches no operation")
 # The sweep. Every word of the whole 16-bit opcode space is offered to the two
 # predicates, and every word either accepts is decoded.
 #
-# THE SIZE IS ASSERTED BESIDE THE ESCAPE AND THAT PAIRING IS THE POINT. The
+# The size is asserted beside the escape and that pairing is the point. The
 # absence of an escape is satisfied by a predicate that claims nothing, and the
 # size is satisfied by a predicate that claims as many of the wrong words.
 # The size is two lines of 4096 words, which is what the two `Unimplemented
@@ -188,7 +184,7 @@ proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
 
 # ---------------------------------------------------------------------------
 # The runner. It is `tests/t_control.nim`'s, for the reason that file gives: a
-# pass here has to be a pass of the SHIPPED path - `mcf5307_reset`,
+# pass here has to be a pass of the shipped path - `mcf5307_reset`,
 # `mcf5307_set_reg`, `mcf5307_exec`, `mcf5307_get_reg` - and not of an internal
 # helper reached around the back.
 
@@ -220,7 +216,7 @@ proc runWord(word: uint16): Outcome =
   mcf5307_reset(ctx, stackBase, execBase)
   discard mcf5307_set_reg(ctx, 0, seedD0)
   discard mcf5307_set_reg(ctx, 8, seedA0)
-  # The status register is set LAST: `mcf5307_reset` writes it, so an earlier
+  # The status register is set last: `mcf5307_reset` writes it, so an earlier
   # write would be overwritten.
   discard mcf5307_set_reg(ctx, 16, srBase)
 
@@ -234,13 +230,13 @@ proc runWord(word: uint16): Outcome =
   result.pc = mcf5307_get_reg(ctx, 17)
   mcf5307_destroy(ctx)
 
-# THE WHOLE MACHINE IS COMPARED AND NOT THE FAULT BIT. A line-A word decoded
+# The whole machine is compared and not the fault bit. A line-A word decoded
 # as some 68000 instruction would write a register, move the stack pointer or
 # set a condition code, and those are the fields this tuple carries. The seeds
 # are non-zero for the same reason: a register compared at zero against zero
 # asserts nothing.
 #
-# THE PROGRAM COUNTER IS PAST THE OPCODE WORD. The core advances it over the
+# The program counter is past the opcode word. The core advances it over the
 # word it fetched before it decides what the word was, so a refused word leaves
 # the machine pointing at the next one and halted rather than at the word that
 # refused.
@@ -261,7 +257,7 @@ check((cycles: lineFOutcome.cycles, fault: lineFOutcome.fault,
        a7: lineFOutcome.a7, sr: lineFOutcome.sr, pc: lineFOutcome.pc),
       wantTrap, "a line-F word traps through mcf5307_exec")
 
-# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this program reports
+# The registry lines. They are data and not a verdict: this program reports
 # what its text declares and what its run adjudicated, and the registered
 # test's driver is what compares them - and what compares the declared count
 # against the call sites in this file. A verdict printed here would be a
