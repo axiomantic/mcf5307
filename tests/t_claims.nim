@@ -1,5 +1,5 @@
 ## `t_claims` - the OBSERVER half of the check that turns an unobservability
-## claim into something a run can refute. Task CPU-28. Design section 5.2.2.
+## claim into something a run can refute.
 ##
 ## WHAT A CLAIM OF UNOBSERVABILITY IS, AND WHY PROSE CANNOT CARRY ONE. A test
 ## file may record that some change to the core "changes no reachable state",

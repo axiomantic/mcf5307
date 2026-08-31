@@ -112,8 +112,8 @@ proc mergeSized*(old: uint32; value: uint32; size: uint8): uint32 =
   ## to all ones and this reduces to the value, which is why the long forms
   ## need no case of their own.
   ##
-  ## THERE IS ONE COPY OF THIS RULE AND EVERY SIZED REGISTER WRITE GOES THROUGH
-  ## IT.
+  ## There is one copy of this rule and every sized register write goes through
+  ## it.
   (old and not sizeMask(size)) or (value and sizeMask(size))
 
 proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
@@ -134,27 +134,25 @@ proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
 # A bus fault anywhere in an operand access halts the context with `fault`
 # set; the callers check `ctx.halted` after each step and unwind.
 
-# AN ABSENT CALLBACK IS A REFUSED ACCESS AND NOT AN ABORT. `mcf5307_create`
+# An absent callback is a refused access and not an abort. `mcf5307_create`
 # (`include/mcf5307.h`) forbids no argument, so a context whose board callbacks
-# are all nil is a context a caller may build, and `step` in `cpu.nim` opens by
-# faulting on a nil `readFn` rather than calling it - the core's own statement
-# that such a context is a state it survives. Design section 11.4, CPU-15, is
-# the requirement behind that statement: "Nothing aborts the process. An abort
-# inside a plugin destroys the host's session."
+# are all nil is one a caller may build, and nothing here may abort the host
+# process.
 #
-# THE GUARD IS HERE AND NOT ONLY AT THE HEAD OF `step` BECAUSE THIS IS WHERE THE
-# CALL HAPPENS. `step`'s guard answers for the paths that run THROUGH `step`;
-# `takeException` runs at the instruction boundary, ahead of the first fetch,
-# and reaches these two procedures without passing it. A guard at each caller
-# would be one guard per path and would be missing from the next path added.
+# The guard is here and not only at the head of `step` because this is where
+# the call happens. `step`'s guard answers for the paths that run through
+# `step`; `takeException` runs at the instruction boundary, ahead of the first
+# fetch, and reaches these two procedures without passing it. A guard at each
+# caller would be one guard per path and would be missing from the next path
+# added.
 #
-# A NIL CALLBACK REPORTS THE SAME FAULT A BOARD'S REFUSAL REPORTS, which is the
+# A nil callback reports the same fault a board's refusal reports, which is the
 # behaviour the callers are already written for: every caller of these two
 # checks `ctx.halted` and unwinds. Inventing a second failure mode would give
 # each of them a second thing to check.
 #
-# `fetchExt` BELOW CALLS `ctx.readFn` WITHOUT SUCH A GUARD, AND IT IS NOT
-# REACHED WITH A NIL ONE. Its call sites are the effective-address evaluator in
+# `fetchExt` below calls `ctx.readFn` without such a guard, and it is not
+# reached with a nil one. Its call sites are the effective-address evaluator in
 # this module and the executor modules, and each of those runs only from
 # `step`, whose first statement faults on a nil `readFn`.
 
@@ -178,12 +176,12 @@ proc boardWrite(ctx: MCF5307Ctx; address: uint32; size: uint8; value: uint32;
     return
   ctx.writeFn(ctx.user, address, cint(size), value and sizeMask(size), addr st)
 
-# THE TWO LAYERS DIFFER IN WHAT A NON-OK STATUS MEANS AND IN NOTHING ELSE. On
-# an executor's path it is an ACCESS FAULT and takes a vector; inside an
-# exception ENTRY the same status is a DOUBLE FAULT and halts. Design section
-# 5.2.1 rule 5 requires the second and requires that it not recurse.
+# The two layers differ in what a non-ok status means and in nothing else. On
+# an executor's path it is an access fault and takes a vector; inside an
+# exception entry the same status is a double fault and halts, and it must not
+# recurse.
 #
-# THE BOUND ON THE RECURSION IS THE CALL GRAPH AND NOT A FLAG ON THE CONTEXT.
+# The bound on the recursion is the call graph and not a flag on the context.
 # `takeException` reaches the board only through `stackingRead` and
 # `stackingWrite`, neither of which can re-enter it, so there is no state to
 # set, to clear, or to leave set on a path that returned early.
@@ -203,38 +201,37 @@ proc stackingWrite(ctx: MCF5307Ctx; address: uint32; size: uint8;
     ctx.fault = true
     ctx.halted = true
 
-# THE READ PATH HALTS AND DOES NOT TAKE A VECTOR, AND AN UNWIND BLOCKS IT
-# RATHER THAN A PREFERENCE. Design section 5.2.1 rule 4 requires that a fault be
-# taken "before it commits any register or memory side effect of the faulting
-# instruction", and `ctx.halted` is the ONLY signal that unwinds a
-# part-completed instruction: every executor checks it after each step. An
-# access fault must NOT halt - the handler has to run - so a read that took a
-# vector here would return to an executor that carried on with a zero operand
-# and committed it. MEASURED: `move.l 0x1000,%d1` against a board that reports
-# `busUnmapped` left `d1` zeroed over its previous value.
+# The read path halts and does not take a vector, and an unwind blocks it
+# rather than a preference. A fault must be taken before it commits any
+# register or memory side effect of the faulting instruction, and `ctx.halted`
+# is the only signal that unwinds a part-completed instruction: every executor
+# checks it after each step. An access fault must not halt - the handler has to
+# run - so a read that took a vector here would return to an executor that
+# carried on with a zero operand and committed it. Measured: `move.l
+# 0x1000,%d1` against a board that reports `busUnmapped` left `d1` zeroed over
+# its previous value.
 #
-# TAKING IT AT THE INSTRUCTION BOUNDARY IS THE FIX AND IT IS NOT WRITABLE FROM
-# THIS MODULE: it needs either a pending-fault field on `MCF5307Ctx`, which
+# Taking it at the instruction boundary is the fix and it is not writable from
+# this module: it needs either a pending-fault field on `MCF5307Ctx`, which
 # `decode_types.nim` holds, or a check after the executor returns, which
-# `cpu.nim`'s `step` holds. `tests/t_bus_fault.nim` pins the present behaviour
-# so that wiring the read path is a deliberate change and not a silent one.
+# `cpu.nim`'s `step` holds.
 #
-# THE WRITE PATH NEEDS NO UNWIND, WHICH IS WHY IT IS WIRED AND THE READ IS NOT.
-# Rule 4's one named exception is the operand write, and User's Manual section
-# 3.5.1, folio 3-14, is why: "All programming model updates associated with the
-# write instruction are completed." An executor that carries on after a write
-# fault is doing what the manual requires. That the only access error this part
-# raises is a store to write-protected space puts the real case on this side too.
+# The write path needs no unwind, which is why it is wired and the read is not.
+# The one exception to that unwind rule is the operand write, and User's Manual
+# section 3.5.1, folio 3-14, is why: "All programming model updates associated
+# with the write instruction are completed." An executor that carries on after
+# a write fault is doing what the manual requires. That the only access error
+# this part raises is a store to write-protected space puts the real case on
+# this side too.
 #
-# IT DOES NEED THE VECTOR TO BE TAKEN AFTER THE INSTRUCTION RATHER THAN INSIDE
-# IT, AND THAT IS THE SAME SENTENCE READ TO ITS END. An instruction whose
+# It does need the vector to be taken after the instruction rather than inside
+# it, which is the same sentence read to its end. An instruction whose
 # remaining updates are required to complete cannot have section 3.3's four
 # exception-processing steps run in the middle of it: those steps assign A7 and
 # the program counter, and the updates that must still complete would then be
 # computed from, or would overwrite, the handler's state. `writeMem` therefore
-# RECORDS the fault on the context and `cpu.nim`'s `step` takes it at the
-# instruction boundary. `decode_types.nim` carries the manual's own words for
-# the deferral and the measurement of what the immediate take did.
+# records the fault on the context and `cpu.nim`'s `step` takes it at the
+# instruction boundary.
 
 proc readMem*(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
   stackingRead(ctx, address, size)
@@ -243,8 +240,8 @@ proc writeMem*(ctx: MCF5307Ctx; address: uint32; size: uint8; value: uint32) =
   var st = Mcf5307BusStatus.busOk
   boardWrite(ctx, address, size, value, st)
   if st != Mcf5307BusStatus.busOk and not ctx.pendingWriteFault:
-    # THE FIRST FAULTED STORE OF AN INSTRUCTION IS THE ONE REPORTED, AND THE
-    # MANUAL SETTLES NEITHER THIS NOR ITS ALTERNATIVE. Section 3.5.1 says the
+    # The first faulted store of an instruction is the one reported, and the
+    # manual settles neither this nor its alternative. Section 3.5.1 says the
     # reporting is imprecise and names the NOP instruction as the way to
     # collect a write error; it says nothing about a second faulted store
     # before that collection. `movem.l` writing a register list into refused
@@ -314,7 +311,7 @@ proc indexOperand*(ctx: MCF5307Ctx; ext: uint16): uint32 =
   ## in every encoding this core can legally be given and the narrowing branch
   ## below is unreachable from assembled code.
   ##
-  ## THAT ADDRESS ERROR IS NOT RAISED HERE. This procedure narrows a word
+  ## That address error is not raised here. This procedure narrows a word
   ## index rather than faulting on one, and it applies a scale of 8 rather than
   ## faulting on that. See the uncertainty note in `eaAddr` below.
   let isAn = (ext and 0x8000'u16) != 0'u16
@@ -529,8 +526,8 @@ proc eaRefWrite*(ctx: MCF5307Ctx; r: EaRef; size: uint8; value: uint32) =
 
 # User's Manual section 3.2.2.1, folio 3-10, prints the whole 16-bit status
 # register over its bit numbers: T at 15, S at 13, M at 12 and I[2:0] at bits
-# 10 to 8. THE THREE NAMED HERE ARE THE ONES THIS MODULE'S OWN `takeException`
-# WRITES OR PRESERVES, and `srMaster` sits with them because a status-register
+# 10 to 8. The three named here are the ones this module's own `takeException`
+# writes or preserves, and `srMaster` sits with them because a status-register
 # bit position is a fact about the register and not about the exception that
 # happens to clear it.
 const
@@ -560,12 +557,10 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## Stack a two-longword exception frame, then load the program counter from
   ## the vector table.
   ##
-  ## THE COPY OF THE STATUS REGISTER IS A PARAMETER RATHER THAN A READ OF
-  ## `ctx.sr`, AND ONE CALLER IN THIS TREE NEEDS THAT. Section 3.3's copy is
-  ## taken as exception processing begins, and for every exception whose
-  ## processing begins where it is detected the two are the same word -
-  ## `takeException` below passes exactly that and is what TRAP and the
-  ## interrupt reach. The deferred access error of a faulted store is the one
+  ## The copy of the status register is a parameter rather than a read of
+  ## `ctx.sr`. Section 3.3's copy is taken as exception processing begins, and
+  ## for every exception whose processing begins where it is detected the two
+  ## are the same word. The deferred access error of a faulted store is the one
   ## exception this core detects at one point and processes at another, and
   ## section 3.5.1 requires the faulting instruction's remaining
   ## programming-model updates to run in between; the word it passes is the one
@@ -618,37 +613,26 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   if ctx.halted:
     return
   ctx.pc = handler
-  # THE HANDLER'S FIRST INSTRUCTION HAS NOT RUN, AND THAT IS A FACT ABOUT THE
-  # MACHINE THAT OUTLIVES THIS CALL. MCF5307 User's Manual Table 3-1, closing
+  # The handler's first instruction has not run, and that is a fact about the
+  # machine that outlives this call. MCF5307 User's Manual Table 3-1, closing
   # paragraph, folio 3-13: "ColdFire processors inhibit sampling for interrupts
   # during the first instruction of all exception handlers." `mcf5307_exec`
-  # reads this field at its sample and clears it; `decode_types.nim` states why
-  # it is a field of the context.
+  # reads this field at its sample and clears it.
   #
-  # IT IS WRITTEN HERE, AFTER THE PROGRAM COUNTER, AND THAT POSITION IS THE
-  # WHOLE OF THE RULE'S REACH. Every exception this core takes ends on this
+  # It is written here, after the program counter, and that position is the
+  # whole of the rule's reach. Every exception this core takes ends on this
   # line, so no exception path can acquire the rule and none can be forgotten
-  # by it. A flag set by `execTrap` instead would be a rule about TRAP.
+  # by it. A flag set by `execTrap` instead would be a rule about TRAP. The
+  # reset is not a counterexample: it does not run through this procedure at
+  # all, it writes the field itself, and `cpu.nim` says why.
   #
-  # RE-MEASURED 2026-08-13 AGAINST THIS TREE - the one where `mcf5307_reset`
-  # SETS `atHandlerEntry` for the reset exception's own first instruction and
-  # GUARDS a nil context, and where `t_irq` carries 37 cases: moving this line
-  # out of here and into `execTrap` leaves every one of those cases GREEN,
-  # because TRAP is still the only exception an INSTRUCTION of this tree can
-  # take and the two spellings agree on every path that exists. THE RESET IS
-  # NOT A COUNTEREXAMPLE: it does
-  # not run through this procedure at all, it writes the field itself, and
-  # `cpu.nim` says why. The funnel is a reason and not a measurement until a
-  # SECOND path into this procedure from inside `step` exists; CPU-15's
-  # bus-fault exception is that path.
-  #
-  # A TAKE THAT FAULTED DOES NOT SET IT, because each early return above is
+  # A take that faulted does not set it, because each early return above is
   # ahead of this line and a machine that never reached a handler is not at
   # one.
   ctx.atHandlerEntry = true
 
-# THE `FS` ARGUMENT IS DEFAULTED, AND THE DEFAULT IS THE MANUAL'S ANSWER RATHER
-# THAN THIS MODULE'S CONVENIENCE. User's Manual section 3.4, folio 3-14, of the
+# The `FS` argument is defaulted, and the default is the manual's answer rather
+# than this module's convenience. User's Manual section 3.4, folio 3-14, of the
 # fault status field: "This field is defined for access and address errors only
 # and written as zeros for all other types of exceptions." The two callers
 # outside this module - `control.nim`'s `TRAP` and `irq.nim`'s interrupt - are
@@ -668,12 +652,12 @@ proc takePendingWriteFault*(ctx: MCF5307Ctx) =
   ## boundary. `cpu.nim`'s `step` is the one caller, and `writeMem` above
   ## carries the manual reading that puts the take here.
   ##
-  ## THE FOUR FIELDS ARE CLEARED WHETHER OR NOT THE VECTOR IS TAKEN, AND A
-  ## SNAPSHOT IS WHY. `state.nim` encodes every context field, so a machine
+  ## The capture fields are cleared whether or not the vector is taken, and a
+  ## snapshot is why. `state.nim` encodes every context field, so a machine
   ## that left a spent capture behind would save a block that differs from the
   ## block of a machine in the same architectural state reached another way.
   ##
-  ## A HALTED CORE TAKES NOTHING. The executor stopped for a reason of its own -
+  ## A halted core takes nothing. The executor stopped for a reason of its own -
   ## an illegal encoding, an illegal effective address, a nil callback - and a
   ## machine that is not going to run its next instruction is not going to run
   ## a handler's first one either.

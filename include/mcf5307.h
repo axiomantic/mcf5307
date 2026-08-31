@@ -82,72 +82,63 @@ typedef void (*mcf5307_write_fn)(void* user, uint32_t addr, int size,
  * latch when it takes the interrupt. */
 typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
 
-/* WHAT A BOARD MAY CALL BACK INTO WHILE THE CORE IS INSIDE ITS CALLBACKS, AND
- * WHAT `mcf5307_reset` DOES TO INTERRUPT STATE.
+/* What a board may call back into while the core is inside its callbacks, and
+ * what `mcf5307_reset` does to interrupt state.
  *
- * THE ACKNOWLEDGE CALLBACK MAY CALL `mcf5307_get_reg` AND `mcf5307_set_irq`,
+ * The acknowledge callback may call `mcf5307_get_reg` and `mcf5307_set_irq`,
  * which is what a chained controller needs. The frame is already stacked when
  * it runs, so the registers it reads are the machine as the handler will find
- * it: a7 holding the ADDRESS OF the 8-byte frame and not an address below it -
+ * it: a7 holding the address OF the 8-byte frame and not an address below it -
  * the frame's first longword is AT a7 and the stacked program counter at
  * `a7+4`, which is what Figure 3-7 draws - the program counter register at the
  * handler's first instruction, and the status register already carrying the
  * interrupt priority mask raised to the level being acknowledged.
  *
- * THE LEVEL-7 ARM IS DECIDED AGAINST THE PRESENTATION THE CALL HAS NOT YET
- * OVERWRITTEN. `mcf5307_set_irq` arms an edge only on a transition to level 7
+ * The level-7 arm is decided against the presentation the call has not yet
+ * overwritten. `mcf5307_set_irq` arms an edge only on a transition to level 7
  * from a lower presented level, and the level it compares against is the one
  * in effect at entry to that call - the board's own last presentation, which
- * TAKING an interrupt does not disturb. A board that presents level 7 while
- * level 7 is already the presented level therefore arms nothing, from a
- * callback or from anywhere else; to raise a fresh edge it must present a
- * lower level, or `MCF5307_IRQ_NONE`, and then level 7.
+ * taking an interrupt does not disturb. A board that presents level 7 while
+ * level 7 is already the presented level therefore arms nothing; to raise a
+ * fresh edge it must present a lower level, or `MCF5307_IRQ_NONE`, and then
+ * level 7.
  *
- * THE WRITE CALLBACK MAY CALL `mcf5307_set_irq` AS WELL, and the core reaches
+ * The write callback may call `mcf5307_set_irq` as well, and the core reaches
  * that callback while it is stacking the exception frame. An edge armed there
- * arrives BEFORE THE FRAME IS COMPLETE and SURVIVES THE TAKE IN PROGRESS, for
- * a different reason on each side of the level split: a take OF LEVEL 7 clears
+ * arrives before the frame is complete and survives the take in progress, for
+ * a different reason on each side of the level split: a take of level 7 clears
  * its own edge latch before it begins stacking, so an edge armed during the
- * stacking is later than that clear; a take OF LEVELS 1 TO 6 never touches the
+ * stacking is later than that clear; a take of levels 1 to 6 never touches the
  * latch at all. It is taken at the next instruction boundary, which is after
  * the first handler instruction has executed, and it carries the vector and
  * the autovector flag of the presentation that armed it.
  *
- * `mcf5307_reset` INHIBITS INTERRUPT SAMPLING FOR THE FIRST INSTRUCTION AT
+ * `mcf5307_reset` inhibits interrupt sampling for the first instruction at
  * `initial_pc`. Reset is an exception, and sampling is inhibited during the
- * first instruction of every exception handler - and this one is a DEDUCTION
- * FROM QUOTED PREMISES rather than a quotation of the conclusion. Both
- * premises are printed exactly as cited: User's Manual Table 3-1, closing
- * paragraph, folio 3-13, and the reset exception's own entry at section
- * 3.5.11, folio 3-17. Neither states the conclusion - Table 3-1 carries no
- * reset row, and section 3.5.11 never calls the reset program counter a
- * handler - so the step between them is this header's: the instruction at
- * `initial_pc` is the first instruction of an exception handler, and the
- * sentence about all exception handlers therefore governs it.
+ * first instruction of every exception handler. That is a deduction rather
+ * than a quotation: User's Manual Table 3-1, closing paragraph, folio 3-13,
+ * carries no reset row, and the reset exception's own entry at section 3.5.11,
+ * folio 3-17, never calls the reset program counter a handler.
  *
- * `mcf5307_reset` ALSO RAISES THE INTERRUPT PRIORITY MASK TO 7, and THAT one
- * is a citation: section 3.5.11, folio 3-17, "sets the processor's interrupt
- * priority mask in the SR to the highest level (level 7)". A board that
- * presents a LEVEL 1 TO 6 interrupt immediately after `mcf5307_reset` does not
- * get it taken at the reset program counter, nor at the boundary after that
- * instruction, nor at any boundary at all: the mask inhibits every level at or
- * below itself, so nothing under 7 is taken until the program lowers the mask
- * itself. LEVEL 7 IS THEREFORE THE ONLY INTERRUPT THE INHIBITION ABOVE CAN
- * DEFER, because it is the only one a mask of 7 leaves takeable at all: it is
- * nonmaskable, and `mcf5307_reset` re-arms it as the paragraph below states.
- * That is the one a board sees held off the reset program counter and taken at
- * the boundary after that instruction.
+ * `mcf5307_reset` also raises the interrupt priority mask to 7 - section
+ * 3.5.11, folio 3-17, "sets the processor's interrupt priority mask in the SR
+ * to the highest level (level 7)". A board that presents a level 1 to 6
+ * interrupt immediately after `mcf5307_reset` does not get it taken at any
+ * boundary at all: the mask inhibits every level at or below itself, so
+ * nothing under 7 is taken until the program lowers the mask itself. Level 7
+ * is therefore the only interrupt the inhibition above can defer, because it
+ * is the only one a mask of 7 leaves takeable at all.
  *
- * `mcf5307_reset` ALSO CLEARS THE LATCHED LEVEL-7 EDGE AND THEN RE-OBSERVES
- * THE BOARD'S LAST PRESENTATION - and this one is an INFERENCE and not a
- * citation, because the manual set is silent on reset against a latched edge.
- * The argument for it is that a level 7 request must be held until the second
- * interrupt-acknowledge bus cycle has begun (section 7.6.1, folio 7-24), so an
- * edge whose pin has since been released has nothing left to acknowledge. The
- * presentation itself survives the call: it is the board's state and reset has
- * no newer answer for it. A level 7 STILL PRESENTED across `mcf5307_reset` is
- * armed again, carrying the vector and the autovector flag of that
- * presentation; one the board had already lowered is not. */
+ * `mcf5307_reset` also clears the latched level-7 edge and then re-observes
+ * the board's last presentation. That is an inference and not a citation: the
+ * manual set is silent on reset against a latched edge. The argument for it is
+ * that a level 7 request must be held until the second interrupt-acknowledge
+ * bus cycle has begun (section 7.6.1, folio 7-24), so an edge whose pin has
+ * since been released has nothing left to acknowledge. The presentation itself
+ * survives the call: it is the board's state and reset has no newer answer for
+ * it. A level 7 still presented across `mcf5307_reset` is armed again, carrying
+ * the vector and the autovector flag of that presentation; one the board had
+ * already lowered is not. */
 
 /* Runs the Nim runtime's initialiser once. It is idempotent, and it is what
  * a C++ caller calls instead of ever naming `NimMain`. */

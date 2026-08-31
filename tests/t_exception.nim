@@ -1,6 +1,5 @@
 ## `t_exception` - the exception model of `mcf5307/exception`, and the frame
-## the shipped core actually writes. Task CPU-14 owns this file. Design
-## sections 6.1 and 5.2.1.
+## the shipped core actually writes.
 ##
 ## THE DOCUMENTS THIS FILE CITES ARE OUTSIDE THIS REPOSITORY and each is named
 ## in full, as `tests/t_control.nim` and `tests/t_logic.nim` name theirs.
@@ -336,13 +335,12 @@ runTrapAndRte(0x800'u32, 0xA700'u32, 0x4080A700'u32, "A7 0x800, T set")
 # BLOCK 6. The access error and the address error are NOT the same exception.
 #
 # Table 3-1 gives vector 2 at $008 to the access error and vector 3 at $00C to
-# the address error, and design section 5.2.1 states in bold that the core must
-# not conflate them. Neither has a producer in the core yet - CPU-15 owns the
-# bus-fault channel and no path raises an address error - so both are raised
-# through `takeException`, which is the procedure every producer will call.
+# the address error, and the core must not conflate them. Neither has a
+# producer in the core yet, so both are raised through `takeException`, which is
+# the procedure every producer will call.
 #
-# THE TWO SLOTS HOLD DIFFERENT HANDLER ADDRESSES AND THE READ LIST IS ASSERTED
-# EXACTLY.
+# The two slots hold different handler addresses and the read list is asserted
+# exactly.
 
 type Taken = tuple[sp: uint32, pc: uint32, halted: bool, vec: uint8,
                    frame: uint32, framePc: uint32, reads: seq[uint32]]

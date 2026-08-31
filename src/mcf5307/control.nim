@@ -168,7 +168,7 @@
 ##      X bit and not as a per-instruction rule, Table 3-7 gives CMP no flag
 ##      column at all, and this module follows the family rule.
 ##
-##   3. THE EXACT CYCLE COUNT of every instruction in this group. `cpu.nim`
+##   3. The exact cycle count of every instruction in this group. `cpu.nim`
 ##      states the mechanism once, above its cycle constants.
 ##
 ##   4. What an `RTE` with a bad format field should do. Section 3.5.7, "RTE

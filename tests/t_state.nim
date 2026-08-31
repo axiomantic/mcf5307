@@ -1,5 +1,4 @@
-## `t_state` - the snapshot block of `mcf5307/state`. Task CPU-18. Design
-## section 5.3.
+## `t_state` - the snapshot block of `mcf5307/state`.
 ##
 ##   1. THE EXPECTED FIELD LIST IS WRITTEN BY HAND AND `stateLayout` DERIVES
 ##      THE OTHER SIDE FROM `MCF5307Ctx`. Holding a hand-written list against a

@@ -1,5 +1,5 @@
-# `t_claims` - the REGISTRY of the claims this repository's tests make about
-# mutations, and the driver that makes each one executable. Task CPU-28.
+# `t_claims` - the registry of the claims this repository's tests make about
+# mutations, and the driver that makes each one executable.
 #
 # THE DEFECT CLASS THIS EXISTS FOR, named by the round-2 audit of gate 4.4:
 # "claims the evidence does not establish". A test file may state that a change
@@ -294,40 +294,20 @@ set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_FILE "mcf5307/irq.nim")
 set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_FIND "  ctx.irqAutovector = autovector != 0\n")
 set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_REPLACE "  ctx.irqAutovector = autovector != 0\n  ctx.irq7Vector = vector\n")
 
-# --- CPU-17's OWN TWO FIXES, WHICH WENT UNREGISTERED UNTIL 2026-08-13 --------
-# The pass that made `mcf5307_reset` acquire its own interrupt inhibition and
-# re-observe the level-7 pin registered NEITHER of them. Both carry sentences
-# naming a hypothetical wrong core - the marker this project treats as a claim
-# about COVERAGE - and both rested on a count in prose. `t_irq`'s block 19 had
-# already written the rule those two entries needed: "A date alone would go
-# stale the moment this block was weakened - the entry reds instead." It was
-# applied to the older claims and not to the new ones.
+# --- The reset's own interrupt fixes ----------------------------------------
+# The reset does two separable things and the second is itself two halves, and
+# a count is only evidence about the half it moves with. Deleting the whole
+# `resetInterruptEdge` call, keeping the clear without the re-presentation, and
+# keeping the re-presentation without the clear are three different wrong cores
+# with three different signatures, and the two that share a count fail
+# different cases. A single entry would have been satisfied by any core that
+# moved the total to the registered number, which is the shape of measurement
+# this file exists to refuse.
 #
-# THE FAILURE THAT MADE THE CASE, CONSTRUCTED RATHER THAN IMAGINED. MEASURED
-# 2026-08-13: weakening block 22's two assertions from a whole-tuple comparison
-# to `.halted` alone left `t_irq` GREEN at 36 cases, left
-# `mcf5307_check_case_sites` and `mcf5307_check_case_total` green and left the
-# configure clean - and on that weakened tree the inhibition mutation redded
-# FOUR cases where the shipped tree reds SIX. Nothing in the tree complained.
-# The first entry below is what complains: its count moves and it refutes, and
-# it was WATCHED doing so - `reset_inhibit_suite_t_irq` REFUTED at rc 8 on that
-# weakened tree, and again at 5 of 6 when block 23's held pin was weakened
-# instead. An unwatched negative control is a claim and not a mechanism.
-#
-# WHY FOUR ENTRIES AND NOT TWO. The reset does two separable things and the
-# second is itself two halves, and a count is only evidence about the half it
-# moves with. Deleting the whole `resetInterruptEdge` call, keeping the clear
-# without the re-presentation, and keeping the re-presentation without the
-# clear are three different wrong cores with three different signatures - 3, 3
-# and 1 - and the two that agree on 3 fail DIFFERENT cases. A single entry
-# would have been satisfied by any core that moved the total to the registered
-# number, which is the shape of measurement this file exists to refuse.
-#
-# EVERY COUNT BELOW WAS MEASURED AGAINST THIS TREE ON 2026-08-13 by applying
-# the mutation to a copy of `src/` and running the suite, with a no-op control
-# on the same harness reporting 36 passed and 0 red.
+# Every count below is measured by applying the mutation to a copy of `src/`
+# and running the suite, against a no-op control on the same harness.
 # ---------------------------------------------------------------------------
-# THE DEFERRED WRITE FAULT. `src/mcf5307/writeMem` RECORDS an access error on a
+# The deferred write fault. `src/mcf5307/writeMem` records an access error on a
 # store and `cpu.nim`'s `step` takes the vector at the instruction boundary,
 # because User's Manual section 3.5.1, printed page 3-15, requires the faulting
 # instruction's programming-model updates to complete first. THE MUTATION PUTS

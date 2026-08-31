@@ -1,5 +1,4 @@
-## `t_bus_fault` - the bus-fault channel of `mcf5307/bus`. Task CPU-15 owns
-## this file. Design sections 5.2.1, 5.6 and 17 row 7.24.
+## `t_bus_fault` - the bus-fault channel of `mcf5307/bus`.
 ##
 ## THE DOCUMENTS THIS FILE CITES ARE OUTSIDE THIS REPOSITORY and each is named
 ## in full, so that a citation can be checked without knowing this project.
@@ -116,8 +115,8 @@ checkEq(faultStatusFor(Mcf5307BusStatus.busOk, operandWrite),
 # ---------------------------------------------------------------------------
 # BLOCK 2. The class column of the same table, asserted rather than described.
 #
-# Design section 5.2.1 gives each row a class, and only one of the three is
-# silicon behaviour. The class is a value this module answers for, so that a
+# Only one of the three rows is silicon behaviour. The class is a value this
+# module answers for, so that a
 # reader who mistakes an extension for hardware behaviour is contradicted by a
 # case rather than by a comment.
 
@@ -142,11 +141,10 @@ check(isEmulatorExtension(Mcf5307BusStatus.busOk) == false,
 # NEITHER PAIR EVER REPORTS A NON-OK VALUE, which is what makes both of them
 # evidence about the core rather than about a board's decode.
 #
-# AN ACCESS OUTSIDE THE ARRAY RETURNS ZERO AND REPORTS NOTHING. The silent pair
+# An access outside the array returns zero and reports nothing. The silent pair
 # has no channel to report one on, and a pair that indexed the array anyway
-# would end the process under `--panics:on` - which design section 5.6 and this
-# task's own rule forbid, because an abort inside a plugin destroys the host's
-# session.
+# would end the process under `--panics:on`; an abort inside a plugin destroys
+# the host's session.
 
 const
   memSize = 0x1000
@@ -208,10 +206,10 @@ proc freshBoard() =
 # ---------------------------------------------------------------------------
 # BLOCK 3. Silence means success, through the published entry points.
 #
-# Design section 5.2.1 rule 1: the core writes `MCF5307_BUS_OK` into `*status`
-# before every call, "so a board that never writes it therefore behaves exactly
-# as it did before the parameter existed". THE TWO PAIRS OF CALLBACKS DIFFER IN
-# NOTHING ELSE, and each run is held against the same hand-stated outcome
+# The core writes `MCF5307_BUS_OK` into `*status` before every call, so a board
+# that never writes it behaves exactly as it did before the parameter existed.
+# The two pairs of callbacks differ in nothing else, and each run is held
+# against the same hand-stated outcome
 # rather than against the other run: two runs compared only with each other
 # would agree just as well if the core had stopped executing altogether.
 #
@@ -393,11 +391,11 @@ proc runProtectedStore(startSp: uint32; readFrameAt: uint32): FaultOutcome =
             offBoard: offBoardWrites)
   mcf5307_destroy(ctx)
 
-# THE EXPECTED FRAME IS HAND-DERIVED FROM THE BIT POSITIONS AND NOT FROM A
-# SECOND CALL OF THE ENCODER. A7 is 0x800 with its low two bits 00, so Table
+# The expected frame is hand-derived from the bit positions and not from a
+# second call of the encoder. A7 is 0x800 with its low two bits 00, so Table
 # 3-2, folio 3-14, gives FORMAT 4 and a frame at 0x800 - 8. The vector is 2.
-# `FS` is `1001`, design section 5.2.1's row for a write to write-protected
-# space, and its two halves land in two non-adjacent fields:
+# `FS` is `1001`, the code for a write to write-protected space, and its two
+# halves land in two non-adjacent fields:
 #   0100 | 10 | 00000010 | 01 | 0010011100000000 -> 0x48092700
 # The stacked program counter is `ctx.pc`, which the opcode word and the one
 # `(xxx).W` extension word have advanced to execBase + 4.
@@ -423,11 +421,11 @@ check(protectedStore == wantProtected,
 # BLOCK 6. A fault DURING the stacking is a double fault: the core halts and
 # does not recurse.
 #
-# Design section 5.2.1 rule 5: "A fault inside the exception-entry stacking
-# itself is a double fault. The core halts, sets its own fault field, and
-# returns from `mcf5307_exec` with the cycles it spent. It does not recurse."
+# A fault inside the exception-entry stacking itself is a double fault: the
+# core halts, sets its own fault field, and returns from `mcf5307_exec` with the
+# cycles it spent. It does not recurse.
 #
-# A7 IS 0x1008, SO THE FRAME BASE IS 0x1000 AND IS OFF THE BOARD. The same
+# A7 is 0x1008, so the frame base is 0x1000 and is off the board. The same
 # write-protected store faults, the access fault is taken, and the first
 # longword of its frame is refused in turn.
 #
@@ -458,17 +456,16 @@ check(doubleFault == wantDoubleFault,
       $doubleFault, $wantDoubleFault)
 
 # ---------------------------------------------------------------------------
-# BLOCK 7. AN OPERAND READ FAULT STILL HALTS AND TAKES NO VECTOR. THIS CASE
-# PINS A BOUNDARY AND DOES NOT ENDORSE IT.
+# BLOCK 7. An operand read fault still halts and takes no vector. This case
+# pins a boundary and does not endorse it.
 #
-# Design section 5.2.1 and this task's own `Check:` line both ask that a read of
-# unmapped space TAKE AN ACCESS FAULT, and this core does not do that yet. The
-# blocker is design section 5.2.1 rule 4 - a fault is taken "before it commits
-# any register or memory side effect of the faulting instruction" - together
-# with the fact that `ctx.halted` is the only signal that unwinds a
-# part-completed instruction. An access fault must not halt, so a read that took
-# a vector would return into an executor that finished the instruction with a
-# zero operand. MEASURED, with the vector taken: `d1` came back 0 over its
+# A read of unmapped space ought to take an access fault, and this core does not
+# do that yet. The blocker is that a fault must be taken "before it commits any
+# register or memory side effect of the faulting instruction", together with the
+# fact that `ctx.halted` is the only signal that unwinds a part-completed
+# instruction. An access fault must not halt, so a read that took a vector would
+# return into an executor that finished the instruction with a zero operand.
+# Measured, with the vector taken: `d1` came back 0 over its
 # sentinel, and the frame itself was correct - `0x4C082700`, `FS` `1100`.
 #
 # THE FIX IS NOT WRITABLE FROM THE FILES THIS TASK DECLARES. It needs a

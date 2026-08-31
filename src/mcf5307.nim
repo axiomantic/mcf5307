@@ -82,8 +82,8 @@ proc mcf5307_NimMain() {.importc: "mcf5307_NimMain", cdecl.}
 # Windows equivalent and it counts milliseconds since boot.
 #
 # `sched_yield`, or `SwitchToThread` on Windows, hands the core to another
-# thread. The wait loop below calls it. THE WINDOWS BRANCH OF BOTH IS
-# UNMEASURED. This host is macOS and it builds the other branch.
+# thread. The wait loop below calls it. The Windows branch of both is
+# unmeasured; this host is macOS and it builds the other branch.
 
 when defined(windows):
   proc mcf5307TickCount(): uint64 {.

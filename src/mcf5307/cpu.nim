@@ -35,10 +35,10 @@
 
 import mcf5307/decode_types
 import mcf5307/decode
-# `machine` IS AN EDGE THIS MODULE TAKES FOR ONE PROCEDURE, AND IT ADDS NO
-# CYCLE: `machine` is below every executor and imports none of them. The
-# procedure is `takePendingWriteFault`, and `machine.nim`'s `writeMem` states
-# why the take belongs at the instruction boundary, which is here.
+# `machine` is imported for one procedure, `takePendingWriteFault`, and adds no
+# import cycle: `machine` is below every executor and imports none of them.
+# `machine.nim`'s `writeMem` states why the take belongs at the instruction
+# boundary, which is here.
 import mcf5307/machine
 import mcf5307/move
 import mcf5307/alu
@@ -111,12 +111,9 @@ proc mcf5307_reset*(ctx: MCF5307Ctx; initialSp: uint32; initialPc: uint32)
   ## `move.w #$2700,%sr`; `0x2700` is the correct supervisor, full-mask
   ## reset value on this part.
   ##
-  ## THE NIL GUARD IS HERE FOR THE REASON `mcf5307_set_irq` HAS ONE: this is a
-  ## C ABI entry point (`include/mcf5307.h`), so the argument is whatever the
-  ## caller passed and NOT something the type system has vouched for. The
-  ## asymmetry between the two was not deliberate - `mcf5307_set_irq` acquired
-  ## its guard when a case reached for one and this procedure was never asked -
-  ## and an entry point that faults on nil while its neighbour returns is a
+  ## This is a C ABI entry point (`include/mcf5307.h`), so the argument is
+  ## whatever the caller passed and not something the type system has vouched
+  ## for. An entry point that faults on nil while its neighbour returns is a
   ## contract the header cannot state.
   if ctx.isNil:
     return
@@ -125,44 +122,37 @@ proc mcf5307_reset*(ctx: MCF5307Ctx; initialSp: uint32; initialPc: uint32)
   ctx.sr = 0x2700'u32
   ctx.halted = false
   ctx.fault = false
-  # A RESET DISCARDS A STORE'S RECORDED ACCESS ERROR RATHER THAN CARRYING IT
-  # INTO THE RESET HANDLER. The capture names a program counter and a status
+  # A reset discards a store's recorded access error rather than carrying it
+  # into the reset handler. The capture names a program counter and a status
   # register of the program this call has just ended; taking it after the reset
   # would stack a frame describing a machine that no longer exists.
   ctx.pendingWriteFault = false
   ctx.pendingFaultStatus = 0'u32
   ctx.pendingStackedSr = 0'u32
   ctx.pendingStackedPc = 0'u32
-  # THE RESET EXCEPTION IS AN EXCEPTION, SO ITS FIRST INSTRUCTION IS INHIBITED
-  # LIKE EVERY OTHER HANDLER'S. THIS IS A CITATION AND NOT AN INFERENCE. Table
-  # 3-1's closing paragraph, folio 3-13 (PDF page 70): "ColdFire processors
-  # inhibit sampling for interrupts during the first instruction of all
-  # exception handlers." ALL exception handlers - and section 3.5.11, folio 3-17
-  # (PDF page 74), is the RESET EXCEPTION's own entry, so the instruction at
-  # `initialPc` is the first instruction of an exception handler and that
-  # sentence governs it.
+  # The reset exception is an exception, so its first instruction is inhibited
+  # like every other handler's. Table 3-1's closing paragraph, folio 3-13:
+  # "ColdFire processors inhibit sampling for interrupts during the first
+  # instruction of all exception handlers." Section 3.5.11, folio 3-17, is the
+  # reset exception's own entry, so the instruction at `initialPc` is the first
+  # instruction of an exception handler and that sentence governs it.
   #
-  # THE WRITE HAS TO BE HERE BECAUSE THIS CALL DOES NOT ROUTE THROUGH
+  # The write has to be here because this call does not route through
   # `takeException`, which is where every other exception in this core acquires
-  # the field (`machine.nim` states why the write sits on that procedure's last
-  # line).
+  # the field.
   #
-  # `true` AND NOT `false`, AND THE DISTINCTION IS BETWEEN A CARRIED INHIBITION
-  # AND AN ACQUIRED ONE. A STALE inhibition - one skipping a sample on behalf of
-  # a handler this call has already left - would be wrong. This is not one: the
-  # reset acquires its OWN, and the instruction that spends it is the one this
-  # call has just installed. With `false` the core could take an interrupt at
-  # the reset program counter before retiring a single instruction, which is the
-  # state the sentence above forbids. `tests/t_claims.cmake` registers this
-  # line's mutation as `reset_inhibit_suite_t_irq` and refutes when it moves.
+  # `true` and not `false`: the reset acquires its own inhibition, and the
+  # instruction that spends it is the one this call has just installed. With
+  # `false` the core could take an interrupt at the reset program counter
+  # before retiring a single instruction, which is the state the sentence above
+  # forbids.
   ctx.atHandlerEntry = true
-  # THE LEVEL-7 EDGE LATCH IS CLEARED AND THE PIN IS THEN RE-OBSERVED, AND THAT
-  # IS AN INFERENCE RATHER THAN A CITATION. `resetInterruptEdge` in
-  # `mcf5307/irq.nim` carries the whole argument, including what the manuals do
-  # and do not say about it. THE BOARD'S PRESENTATION SURVIVES: it is the board's
-  # state and this call has no newer answer for it. What does not survive is the
-  # core's own edge history, which is why a level 7 still asserted across this
-  # call is armed again and one whose pin has been released is not.
+  # The level-7 edge latch is cleared and the pin is then re-observed;
+  # `resetInterruptEdge` in `mcf5307/irq.nim` carries the argument. The board's
+  # presentation survives - it is the board's state and this call has no newer
+  # answer for it. What does not survive is the core's own edge history, which
+  # is why a level 7 still asserted across this call is armed again and one
+  # whose pin has been released is not.
   resetInterruptEdge(ctx)
 
 # ---------------------------------------------------------------------------
@@ -256,9 +246,9 @@ proc step(ctx: MCF5307Ctx): uint32 =
     ctx.fault = true
     ctx.halted = true
     result = 0
-  # THE INSTRUCTION BOUNDARY. A store that faulted recorded the access error
+  # The instruction boundary. A store that faulted recorded the access error
   # and let the instruction finish; this is where the vector is taken. It sits
-  # after EVERY arm and not inside the arms that write memory, so the rule is a
+  # after every arm and not inside the arms that write memory, so the rule is a
   # property of the boundary rather than a list of executors that remembered
   # it. `machine.nim`'s `writeMem` carries the manual reading.
   takePendingWriteFault(ctx)
@@ -273,8 +263,8 @@ proc mcf5307_exec*(ctx: MCF5307Ctx; maxCycles: uint32): uint32
     return 0
   var spent = 0'u32
   while spent < maxCycles and not ctx.halted:
-    # THE INTERRUPT IS SAMPLED AT AN INSTRUCTION BOUNDARY AND AT NO OTHER
-    # POINT. User's Manual section 7.6, folio 7-23: "The MCF5307 device takes
+    # The interrupt is sampled at an instruction boundary and at no other
+    # point. User's Manual section 7.6, folio 7-23: "The MCF5307 device takes
     # an interrupt exception for a pending interrupt within one instruction
     # boundary after processing any other pending exception with a higher
     # priority. Thus, the MCF5307 device executes at least one instruction in
@@ -283,42 +273,30 @@ proc mcf5307_exec*(ctx: MCF5307Ctx; maxCycles: uint32): uint32
     # rule for every exception handler: "ColdFire processors inhibit sampling
     # for interrupts during the first instruction of all exception handlers."
     #
-    # `atHandlerEntry` IS WHAT IMPLEMENTS BOTH SENTENCES, AND THE SHAPE OF THIS
-    # LOOP IS NOT. `takeException` sets that field on every exception it
+    # `atHandlerEntry` is what implements both sentences, and the shape of this
+    # loop is not. `takeException` sets that field on every exception it
     # completes and the clear below spends it, which buys one instruction of
-    # inhibition per exception and no more. The second sentence needs exactly
-    # that and the loop cannot supply it: an exception taken INSIDE `step`
-    # returns here with the machine at a handler's entry and `halted` false -
-    # `execTrap` in `control.nim` is that path today and CPU-15's bus fault is
-    # the next one - so the sample at the top of the NEXT iteration would land
-    # on an instruction that has not run.
+    # inhibition per exception and no more. The loop cannot supply it: an
+    # exception taken inside `step` returns here with the machine at a
+    # handler's entry and `halted` false, so the sample at the top of the next
+    # iteration would land on an instruction that has not run.
     #
-    # THE SAMPLE AND THE `step` BELOW ARE ONE ITERATION. Making the take
-    # `continue` instead is an equivalent loop rather than a defect: the take's
-    # own `atHandlerEntry` inhibits the sample the extra iteration would make.
-    # What the one iteration still buys is stated at the clear below.
-    #
-    # THE CLEAR SITS BETWEEN THE SAMPLE AND THE `step`, AND EACH OF ITS TWO
-    # NEIGHBOURS IS A REASON FOR THAT POSITION. Ahead of `step` it cannot wipe
+    # The clear sits between the sample and the `step`, and each of its two
+    # neighbours is a reason for that position. Ahead of `step` it cannot wipe
     # the field an exception taken in this iteration is about to set, so the
     # inhibition reaches the iteration that owns it. Behind the sample it also
-    # spends the field that THIS iteration's own take set - which is correct
-    # and not an oversight, because that take's handler runs its first
-    # instruction in the `step` below, IN THIS SAME ITERATION, and inhibiting
-    # the next sample as well would cost the handler a second instruction the
-    # manual does not give it. That is the one thing the single iteration is
-    # still load-bearing for. THE RESET'S OWN INHIBITION IS SPENT BY THIS SAME
-    # CLEAR and does not add a second: the reset installs the instruction that
-    # spends it, so the clear is reached with no take of this iteration's own
-    # to keep.
+    # spends the field that this iteration's own take set - which is correct,
+    # because that take's handler runs its first instruction in the `step`
+    # below, in this same iteration, and inhibiting the next sample as well
+    # would cost the handler a second instruction the manual does not give it.
+    # The reset's own inhibition is spent by this same clear and does not add a
+    # second: the reset installs the instruction that spends it.
     #
-    # IT COSTS NO CYCLES, AND THAT IS A REFUSAL TO CLAIM RATHER THAN A
-    # MEASUREMENT. The block at the head of this file records that no cycle
-    # count in this core came from the manual's timing tables and that no
-    # assertion in the tree reads one; an invented entry cost would be a
-    # number with no source. `takeInterrupt` is bounded by construction: it
-    # raises the mask to the level it took and clears the level-7 latch, so
-    # the next sample of the same presentation returns false.
+    # The take costs no cycles: no cycle count in this core came from the
+    # manual's timing tables, so an invented entry cost would be a number with
+    # no source. `takeInterrupt` is bounded by construction: it raises the mask
+    # to the level it took and clears the level-7 latch, so the next sample of
+    # the same presentation returns false.
     if not ctx.atHandlerEntry:
       if takeInterrupt(ctx):
         if ctx.halted:

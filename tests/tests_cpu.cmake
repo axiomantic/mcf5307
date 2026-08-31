@@ -601,7 +601,7 @@ mcf5307_check_case_sites("t_ea_masks" "@MCF5307_EA_SOURCE@" "${ea_run_out}"
 # states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
 # what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
 # CASE COUNT.
-mcf5307_check_case_total("t_ea_masks" "${ea_run_out}" 444)
+mcf5307_check_case_total("t_ea_masks" "${ea_run_out}" 446)
 
 ]==])
 
@@ -1333,14 +1333,13 @@ add_test(NAME t_control
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_control_driver.cmake")
 
-# -------------------------------------------------------------------- CPU-14
+# ---------------------------------------------------------------------------
 # `t_exception` - the exception model.
 #
-# ONE REGISTERED NAME, AND NO CORPUS BESIDE IT. Every other executor block in
+# One registered name, and no corpus beside it. Every other executor block in
 # this file registers a unit test beside a conformance corpus of the same
-# group. This task has none: the corpus runner executes ASSEMBLED encodings,
-# and neither an access error nor an address error can be assembled. The whole
-# of the evidence for this task is the registered name below.
+# group. This one has none: the corpus runner executes assembled encodings, and
+# neither an access error nor an address error can be assembled.
 #
 # IT COMPILES `src/mcf5307/exception.nim` FOR ITS OWN RUN, with the library's
 # own flag set, so that the module this test asserts about is built the way the
@@ -1462,11 +1461,11 @@ add_test(NAME t_exception
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_exception_driver.cmake")
 
-# -------------------------------------------------------------------- CPU-15
+# ---------------------------------------------------------------------------
 # `t_bus_fault` - the bus-fault channel.
 #
-# ONE REGISTERED NAME, AND NO CORPUS BESIDE IT. The corpus runner executes
-# ASSEMBLED encodings, and a bus fault is raised by a board rather than by an
+# One registered name, and no corpus beside it. The corpus runner executes
+# assembled encodings, and a bus fault is raised by a board rather than by an
 # instruction, so there is no encoding to assemble. The whole of the evidence
 # for this task is the registered name below.
 #
@@ -1587,15 +1586,14 @@ add_test(NAME t_bus_fault
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_bus_fault_driver.cmake")
 
-# -------------------------------------------------------------------- CPU-17
+# ---------------------------------------------------------------------------
 # `t_irq` - the interrupt model.
 #
-# ONE REGISTERED NAME, AND NO CORPUS BESIDE IT, for the reason the CPU-14
-# block above gives: the corpus runner executes ASSEMBLED encodings, and an
-# interrupt has no encoding. The whole of the evidence for this task is the
-# registered name below.
+# One registered name, and no corpus beside it, for the reason the exception
+# block above gives: the corpus runner executes assembled encodings, and an
+# interrupt has no encoding.
 #
-# IT EXERCISES A MODULE THE LIBRARY DOES CARRY. `src/mcf5307/cpu.nim` imports
+# It exercises a module the library does carry. `src/mcf5307/cpu.nim` imports
 # `mcf5307/irq`, so the entry module reaches it transitively and its
 # `mcf5307_set_irq` is in the archive; the test reaches the same module by
 # source. That import also carries `src/mcf5307/exception.nim` into the library,
@@ -1715,15 +1713,15 @@ add_test(NAME t_irq
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_irq_driver.cmake")
 
-# -------------------------------------------------------------------- CPU-18
+# ---------------------------------------------------------------------------
 # `t_state` - the state block, its layout and its refusal of a damaged block.
 #
-# ONE REGISTERED NAME, AND NO CORPUS BESIDE IT, for the reason the CPU-14 and
-# CPU-17 blocks give: the corpus runner executes ASSEMBLED encodings, and a
-# snapshot has no encoding.
+# One registered name, and no corpus beside it, for the reason the blocks above
+# give: the corpus runner executes assembled encodings, and a snapshot has no
+# encoding.
 #
-# WHETHER THE LIBRARY CARRIES THE MODULE THIS SUITE EXERCISES IS NOT ASSERTED
-# HERE, AND THE READER IS POINTED AT WHAT DOES SAY. `cmake/Nim.cmake` step 3
+# Whether the library carries the module this suite exercises is not asserted
+# here. `cmake/Nim.cmake` step 3
 # lists the compile units Nim's own JSON names, so a module NO import chain
 # from `src/mcf5307.nim` reaches is never compiled and its `{.exportc.}` names
 # never become symbols; step 4a then reports those names as NOT YET
@@ -2210,19 +2208,12 @@ foreach(mcf5307_core_source IN LISTS MCF5307_CORE_SOURCES)
 endforeach()
 
 
-# -------------------------------------------------------------------- CPU-28
-# `t_claims` - the claims this repository's tests make about MUTATIONS, made
+# ---------------------------------------------------------------------------
+# `t_claims` - the claims this repository's tests make about mutations, made
 # executable.
 #
-# THE MECHANISM IS ITS OWN TASK AND NOT PART OF CPU-17. This block, both
-# `t_claims` files and both `case_sites` files carried a CPU-17 label until
-# 2026-08-13, which read as though the interrupt task had written its own
-# grader. CPU-17 owns the core and the suite this driver MEASURES; what
-# measures a suite's claims is separable from the suite, and a grader labelled
-# with the task it grades is the arrangement CPU-28 exists to refuse.
-#
-# WHAT IT ADDS THAT NO OTHER REGISTERED NAME CARRIES. Every other test here
-# asserts what the core does. This one asserts what a TEST FILE SAYS about the
+# What it adds that no other registered name carries. Every other test here
+# asserts what the core does. This one asserts what a test file says about the
 # core: that a named mutation is unobservable, or that a named suite does not
 # separate it. Such a sentence cannot be reviewed by reading - a false one
 # reads exactly like a true one - and it cannot be repaired by rewording.

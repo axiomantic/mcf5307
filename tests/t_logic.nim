@@ -343,8 +343,8 @@ const bitDirty = srBase or ccrN or ccrV or ccrC or ccrX
 # Line 1011 carries EOR in opmodes 100, 101 and 110. THE OTHER FIVE OPMODES
 # ARE CPU-10'S: CMP in 000, 001 and 010, CMPA.W in 011 and CMPA.L in 111.
 #
-# THE SENTENCE THESE ROWS ASSERT: the encoding belongs to CPU-10 and not to the
-# logic decoder.
+# The sentence these rows assert: the encoding belongs to the comparison group
+# and not to the logic decoder.
 #
 # Opmode 111 is CMPA.L because the assembler put it there, and not by any
 # inference from `cmpa.w`. `b3c0` is what `m68k-elf-as -mcpu=5307` emitted for
@@ -356,9 +356,9 @@ block:
   expectDecode(0xB280'u16, opCmp,
     "cmp.l %d0,%d1 (b280) is CPU-10's CMP and not this group's EOR")
 
-  # THE POSITIVE CONTROLS. The byte and word EOR opmodes are not instructions
-  # on this part and they trap on the SIZE, which is the channel
-  # `decodeLogicLine` and CPU-13 both use.
+  # The positive controls. The byte and word EOR opmodes are not instructions
+  # on this part and they trap on the size, which is the channel
+  # `decodeLogicLine` uses.
   expectDecode(0xB380'u16, opEor, "eor.l %d1,%d0 (b380) is still an EOR")
   expectDecode(0xB300'u16, opEor, "the byte EOR opmode (b300) is still an EOR")
   expectDecode(0xB340'u16, opEor, "the word EOR opmode (b340) is still an EOR")

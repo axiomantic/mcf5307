@@ -75,7 +75,7 @@
 ##
 ##   N, Z, V AND C ARE WRITTEN ANYWAY - N and Z from the unmoved operand, V
 ##   and C cleared - AND THAT IS THIS MODULE'S CHOICE AND NOT A RULE ANY
-##   DOCUMENT ON THIS MACHINE STATES. It is undecided, the code still has to
+##   document on this machine states. It is undecided, the code still has to
 ##   do something, and what it does is written here so that a reader is not
 ##   left to infer it.
 ##
@@ -88,7 +88,7 @@
 ## and `#xxx` and dashed everywhere else - against the 4 and 6 returned.
 ##
 ## WHAT THIS MODULE DOES NOT KNOW. Five things, and the rule for every one of
-## them is the same: THE IMPLEMENTATION PICKS A BEHAVIOUR.
+## them is the same: the implementation picks a behaviour.
 ##
 ## The ColdFire Family Programmer's Reference Manual is on disk at
 ## `~/Development/datasheets/CFPRM.pdf` (Rev. 3), and its per-instruction pages
@@ -112,7 +112,7 @@
 ##      `CMP <ea>y,Dx` is "Destination - Source" - which an immediate cannot
 ##      be.
 ##
-##      THIS IS THE ONE ENTRY on this list that a future reader may have to
+##      This is the one entry on this list that a future reader may have to
 ##      REVERSE rather than merely fill in.
 ##
 ##   4. The bit number's modulus. `execBitOp` reduces the number modulo the

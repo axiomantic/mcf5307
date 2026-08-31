@@ -1,5 +1,5 @@
-## `case_sites` - the run-time half of the check that a VANISHED CASE fails its
-## suite. Every `t_*` Nim suite in this directory imports it. Task CPU-28.
+## `case_sites` - the run-time half of the check that a vanished case fails its
+## suite. Every `t_*` Nim suite in this directory imports it.
 ##
 ## THE EXPECTATION IS DERIVED, in ways that do not share a path:
 ##

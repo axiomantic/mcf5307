@@ -105,11 +105,11 @@ type
     halted*: bool
     fault*: bool
 
-    # The interrupt input, task CPU-17, design section 5.2.2. `mcf5307/irq`
-    # owns every rule about these six fields; they live here because the
-    # context type lives here and `irq.nim` is above this module.
+    # The interrupt input. `mcf5307/irq` owns every rule about these fields;
+    # they live here because the context type lives here and `irq.nim` is above
+    # this module.
     #
-    # THE SPLIT INTO A PRESENTED LEVEL AND AN ARMED LATCH IS THE WHOLE MODEL,
+    # The split into a presented level and an armed latch is the whole model,
     # and it is what the User's Manual asks for. Section 7.6, folio 7-23,
     # NOTE: "Interrupt levels 1 through 6 are level-sensitive only. Interrupt
     # level 7 is both level sensitive and edge triggered". So the first three
@@ -122,29 +122,29 @@ type
     irqVector*: uint8           ## the presented vector, when not autovectored
     irqAutovector*: bool        ## the presented autovector flag
     irq7Armed*: bool            ## a rising edge to level 7 is latched
-    irq7Vector*: uint8          ## the vector THAT EDGE presented
-    irq7Autovector*: bool       ## the autovector flag THAT EDGE presented
+    irq7Vector*: uint8          ## the vector that edge presented
+    irq7Autovector*: bool       ## the autovector flag that edge presented
 
-    # THE PROGRAM COUNTER IS AT THE ENTRY OF AN EXCEPTION HANDLER WHOSE FIRST
-    # INSTRUCTION HAS NOT RUN. MCF5307 User's Manual Table 3-1, closing
+    # The program counter is at the entry of an exception handler whose first
+    # instruction has not run. MCF5307 User's Manual Table 3-1, closing
     # paragraph, folio 3-13: "ColdFire processors inhibit sampling for
     # interrupts during the first instruction of all exception handlers."
     #
-    # IT IS A FIELD AND NOT A LOCAL OF `mcf5307_exec` BECAUSE THE CALLER OWNS
-    # THE BOUNDARY. A budget can expire on the instruction that takes the
+    # It is a field and not a local of `mcf5307_exec` because the caller owns
+    # the boundary. A budget can expire on the instruction that takes the
     # exception, so the handler's entry and the handler's first instruction
     # can fall in two different calls; a local would forget the inhibition
     # between them and the interrupt would land at the entry after all.
     #
-    # IT IS SET BY `takeException` IN `machine.nim` AND BY NOTHING ELSE, which
-    # is what makes the rule hold for EVERY exception rather than for the one
+    # It is set by `takeException` in `machine.nim` and by nothing else, which
+    # is what makes the rule hold for every exception rather than for the one
     # exception that happens to be implemented. A new exception path inherits
     # the rule by arriving there, and must not set this field itself.
     atHandlerEntry*: bool       ## the next instruction is a handler's first
 
-    # AN ACCESS ERROR ON AN OPERAND WRITE IS RECORDED HERE AND TAKEN AT THE
-    # INSTRUCTION BOUNDARY, AND THE MANUAL IS WHY IT CANNOT BE TAKEN WHERE IT
-    # IS DETECTED. MCF5307 User's Manual section 3.5.1, "Access Error
+    # An access error on an operand write is recorded here and taken at the
+    # instruction boundary, and the manual is why it cannot be taken where it
+    # is detected. MCF5307 User's Manual section 3.5.1, "Access Error
     # Exception", printed page 3-15, of an access error on an operand write:
     # "The ColdFire processor uses an imprecise reporting mechanism for access
     # errors on operand writes. Because the actual write cycle may be decoupled
@@ -153,19 +153,19 @@ type
     # write. ... All programming model updates associated with the write
     # instruction are completed."
     #
-    # SO THE FAULTING INSTRUCTION FINISHES FIRST AND THE EXCEPTION FOLLOWS IT.
+    # So the faulting instruction finishes first and the exception follows it.
     # An exception taken at the store instead runs section 3.3's four steps -
     # which move A7 to the frame base and the program counter to the handler -
-    # in the MIDDLE of an instruction that then completes against the state
-    # those steps left. That is neither ordering the silicon has: MEASURED on
-    # this tree before these fields existed, `jsr` finished at its own target
+    # in the middle of an instruction that then completes against the state
+    # those steps left. That is neither ordering the silicon has: measured,
+    # `jsr` finished at its own target
     # with the handler address discarded, `bsr` at its own branch target, and
     # `link` two bytes into the handler with the handler's `rte` opword added
     # to A7 and the frame base written into An.
     #
-    # THE THREE COMPANION FIELDS CARRY WHAT THE FRAME MUST SAY, TAKEN AT THE
-    # STORE AND NOT AT THE BOUNDARY, so that deferring WHEN the frame is
-    # written does not change WHAT it contains. Section 3.5.1's own sentence is
+    # The companion fields carry what the frame must say, taken at the store
+    # and not at the boundary, so that deferring when the frame is written does
+    # not change what it contains. Section 3.5.1's own sentence is
     # what makes the two differ: the instruction's remaining programming-model
     # updates run between the store and the boundary, so an SR read at the
     # boundary would carry condition codes the store did not see.
@@ -666,7 +666,7 @@ proc eaIsLegalFor*(op: Operation; ea: EA; size: uint8): bool =
   ## with no effective address carries the empty mask and no mode is inside
   ## it.
   ##
-  ## THE EMPTY MASK IS THE TEST, AND NOT A SECOND LIST of the operations
+  ## The empty mask is the test, and not a second list of the operations
   ## `eaLegalityFor` names. Two lists drift: an operation added to the table
   ## above and forgotten in a second list has every effective address
   ## rejected, which reads as "the opcode is strict" and is really "the opcode

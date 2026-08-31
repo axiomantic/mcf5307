@@ -1,191 +1,21 @@
-## `t_irq` - the interrupt model of `mcf5307/irq`. Task CPU-17 owns this file.
-## Design sections 5.2.2 and 17 row 7.25.
+## `t_irq` - the interrupt model of `mcf5307/irq`.
 ##
-## THE DOCUMENTS THIS FILE CITES ARE OUTSIDE THIS REPOSITORY and each is named
-## in full, as `tests/t_exception.nim` and `tests/t_control.nim` name theirs.
+## The MCF5307 User's Manual is Motorola, "MCF5307 ColdFire Integrated
+## Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998. Every
+## citation below names its section and folio page.
 ##
-##   THE MCF5307 USER'S MANUAL: Motorola, "MCF5307 ColdFire Integrated
-##   Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998. Every
-##   citation below names its section and folio page. Read as PAGE IMAGES
-##   2026-08-12.
+## The rising edge itself, and not only its consequence, is pinned. Block 11
+## re-presents level 7 after the take, which is what a board that may call it
+## unconditionally after every recomputation does. Blocks 7 and 8 cannot reach
+## the guard that decides it, because both of their calls happen before the take
+## and a `bool` latch cannot count.
 ##
-##   DESIGN SECTION 5.2.2 is "Interrupts - who owns what, and how a level
-##   source drops" of the NMG2 emulator DESIGN DOCUMENT
-##   (`2026-08-04-nmg2-emulator-design.md`).
-##
-## WHAT THIS FILE PINS, AND WHAT ITS SILENCE WOULD MEAN.
-##
-##   1. THE MASK BOUNDARY, IN BOTH DIRECTIONS. Section 3.2.2.1, folio 3-10:
-##      "Interrupt requests are inhibited for all priority levels less than or
-##      equal to the current priority". Blocks 1 and 2 present the SAME level 3
-##      at mask 3 and at mask 2 and assert not-taken and taken. A masked case
-##      ALONE passes on a core that takes nothing at all, which is why the
-##      paired case is here and not a nicety.
-##
-##   2. THAT NOTHING LATCHES AT LEVELS 1 TO 6. Section 7.6, folio 7-23, NOTE:
-##      "Interrupt levels 1 through 6 are level-sensitive only." Block 3 runs
-##      the whole sequence - assert, take, lower the mask with NO second
-##      `mcf5307_set_irq` call, take AGAIN, then deassert at the source and
-##      assert nothing is taken. A CORE THAT LATCHED WOULD PASS THE FIRST TAKE
-##      AND FAIL ONLY AT THE SECOND, which is the one step a test that stops
-##      at the acknowledge never reaches.
-##
-##   3. THAT THE AUTOVECTOR FLAG IGNORES `vector`. Block 5 passes vector
-##      `0x42` = 66 in BOTH the autovectored and the vectored case and changes
-##      only the flag. 66 is in the user-defined range (Table 3-1, folio 3-13,
-##      gives 64-255 to user-defined interrupts) and its slot holds a DIFFERENT
-##      handler address, so a core that honoured `vector` under the flag lands
-##      somewhere the assertions can see. A zero vector would prove nothing.
-##
-##   4. THE FOUR LEVEL-7 CASES. Section 7.6.1, folio 7-24: a level 7 interrupt
-##      "is a nonmaskable interrupt; therefore, a 7 in the interrupt mask does
-##      not disable a level 7 interrupt", and it is "edge triggered by a
-##      transition from a lower priority request to the level 7 request", so
-##      "if IRQ7 remains asserted, the MCF5307 device will only recognize one
-##      level 7 interrupt". Blocks 6 to 9 carry the four cases design section
-##      5.2.2 rule 2 names.
-##
-##   5. THE RISING EDGE ITSELF, AND NOT ONLY ITS CONSEQUENCE. Block 11
-##      re-presents level 7 AFTER the take, which is what a board that "may
-##      call it unconditionally after every recomputation" does. Blocks 7 and 8
-##      cannot reach the guard that decides it, because both of their calls
-##      happen before the take and a `bool` latch cannot count.
-##
-##   6. THE ACKNOWLEDGE'S POSITION IN THE SEQUENCE. Every `Ack` carries A7, the
-##      program counter, the vector-read count and the status register AT THE
-##      MOMENT OF THE CALL, so that the position design section 5.2.2 fixes -
-##      after the frame, after the mask write, before the first handler
-##      instruction - is a value in an assertion and not a sentence in a
-##      comment.
-##
-##   7. THE DIVERGENCE THIS PROJECT CHOSE. Block 12 runs section 7.6.1's SECOND
-##      sequence - a handler lowering the mask under a held level 7 - and
-##      asserts that NOTHING FURTHER IS TAKEN, which is `irq.nim`'s edge-only
-##      rule and NOT what the manual describes. It pins a choice, not a fact.
-##
-##   8. THE HALTED TAKE. Block 13 faults the frame write, so `takeException`
-##      returns with the context halted. It asserts that no acknowledge and no
-##      vector read happened, that `cpu.nim` stopped, and that the reset which
-##      recovers the machine re-observes the still-asserted level 7 and arms it
-##      again. WHAT IT NO LONGER ASSERTS IS THE STATE OF THE LATCH BEFORE THAT
-##      RESET, and the block says so at length: `mcf5307_reset` now clears the
-##      latch and re-arms it from the presented level, so the latch after a
-##      reset is a function of the pin alone. Nothing in the published ABI can
-##      see the latch a halted take left behind.
-##
-##   9. THE FIRST HANDLER INSTRUCTION. Block 15 has the board raise a level 7
-##      from inside the acknowledge and asserts that the handler's first
-##      instruction runs before it is recognized. A board callback is what
-##      makes a second interrupt pending across one boundary at all, because
-##      the interface presents one level and the take raises the mask to it.
-##
-##  10. WHERE THE LEVEL-7 LATCH IS CLEARED WITHIN THE NON-FAULTING PATH. Block
-##      17 has the board raise a fresh level-7 edge from inside the FRAME
-##      WRITE, which is the second of the two callbacks and the earlier one:
-##      `takeException` stacks through it, so the edge reaches the core while
-##      the take is still in progress. The shipped clear runs before the
-##      stacking and keeps that edge; a clear moved to just after
-##      `takeException` runs after it and wipes it. BLOCK 17 IS NOW THE WHOLE OF
-##      WHAT THIS FILE PINS ABOUT THAT POSITION. Block 13 used to pin the other
-##      side of it - a clear moved after the halted check loses the edge on a
-##      fault - and it could do so only because a reset preserved the latch for
-##      the recovery run to observe. It does not any more, and the loss is
-##      recorded at block 13 rather than left for a reader to notice.
-##
-##  11. THE VECTOR AND THE FLAG THE LEVEL-7 EDGE CARRIED, AND THE FOUR CASES
-##      THAT CARRY THEM. `mcf5307_set_irq` stores the edge's vector and the
-##      edge's flag in fields of their own and `pendingInterrupt` reads THOSE
-##      and not the presented pair. Each of the four blocks below presents a
-##      different arrangement of that rule, and each is described here by WHAT
-##      IT PRESENTS rather than by how much it detects.
-##
-##        Block 9 presents an AUTOVECTORED edge and drops to a VECTORED level
-##        3. Under the flag `vectorFor` returns the autovector without reading
-##        the stored vector, so this arrangement reaches the FLAG and cannot
-##        reach the vector at all.
-##        Block 18 presents ONE VECTORED level 7, taken first, out of a context
-##        nothing has re-entered - the ordinary reading of the rule.
-##        Block 17 presents a VECTORED edge raised from inside the FRAME WRITE,
-##        so the edge arrives while a LOWER level is presented and while a take
-##        is in progress.
-##        Block 19 presents a VECTORED edge and then a DIFFERENT presentation
-##        before the take, which is the one arrangement in which a store
-##        written outside the level-7 guard is overwritten before it is read.
-##
-##      NO SEPARATION COUNT IS PRINTED HERE, AND THE ABSENCE IS DELIBERATE. An
-##      earlier revision of this item said how many mutations of a named set
-##      block 17 separated and how many block 18 did. NOTHING IN THE TREE KEPT
-##      THOSE NUMBERS TRUE: the set was assembled in a report and is not in this
-##      repository, this file has since gained a case, and no run of this suite
-##      re-measures a count of mutations. A number that only a report can check
-##      is the shape of sentence `tests/t_claims.cmake` exists to make
-##      unsayable, and it does not become a different shape by being dated.
-##
-##      WHAT REPLACES THEM IS EXECUTABLE. `tests/t_claims.cmake` registers
-##      `edge_flag_suite_t_irq` and `edge_vector_scope_suite_t_irq`, which
-##      apply the two mutations this item's arrangements exist to separate and
-##      require this suite to go exactly one red for each. BLOCK 18 IS STILL
-##      KEPT FOR WHAT IT DOES NOT DEPEND ON and not for what it detects; its
-##      own comment states that reason.
-##
-##  12. THE HALF OF THE HANDLER-ENTRY RULE THAT IS NOT ABOUT INTERRUPT
-##      HANDLERS. Table 3-1's closing paragraph, folio 3-13, inhibits sampling
-##      "during the first instruction of all exception handlers", and block 15
-##      can only ever reach the interrupt handler: the interrupt is the one
-##      exception `mcf5307_exec` itself takes. Block 20 enters a TRAP handler
-##      and presents a level 3 at its entry, and the second frame's stacked
-##      program counter is what tells `handlerTrap0 + 2` - the handler ran its
-##      first instruction - from `handlerTrap0`, the handler that ran nothing.
-##      Block 22 pins the THIRD exception handler the rule reaches, which is the
-##      one no instruction enters: section 3.5.11, folio 3-17 (PDF page 74),
-##      makes RESET an exception, so the instruction at the reset program
-##      counter is a handler's first instruction and is inhibited like any
-##      other. `mcf5307_reset` does not route through `takeException`, so that
-##      is the one exception whose inhibition is written somewhere else.
-##
-##  13. THAT A CONTEXT WITHOUT BOARD CALLBACKS FAULTS INSTEAD OF ENDING THE
-##      PROCESS. Design section 11.4, CPU-15: "Nothing aborts the process. An
-##      abort inside a plugin destroys the host's session." Block 21 is two
-##      cases because the take reaches two callbacks in order - the frame write
-##      and then the vector read - so a context missing both can only reach the
-##      first, and only a WRITE-ONLY board gets far enough to reach the second.
-##
-## WHAT THIS FILE DOES NOT PIN, STATED SO THAT ITS SILENCE IS NOT READ AS
-## COVERAGE:
-##
-##   - WHAT A DOUBLE FAULT SHOULD DO. Block 13 pins what today's core does when
-##     the stacking faults, which is to stop. CPU-15 owns the exception the
-##     MCF5307 actually takes there, and this file will need a case for it.
-##   - THE CYCLE COST OF A TAKE. `cpu.nim` records that no cycle count in this
-##     core came from the manual's timing tables; nothing here asserts one.
-##   - THAT ITEM 12's RULE IS A RULE ABOUT *EVERY* EXCEPTION TAKEN THROUGH
-##     `takeException` RATHER THAN ABOUT TRAP. `machine.nim` sets
-##     `atHandlerEntry` on that procedure's last line, which is the core's
-##     single INSTRUCTION-driven exception path, so the rule reaches an
-##     exception this file never presents. NOTHING HERE DECIDES THAT: block 20
-##     reaches the rule through TRAP because TRAP is the only exception an
-##     instruction of this tree can take, and RE-MEASURED 2026-08-13 against
-##     this tree - the one where `mcf5307_reset` sets the field itself - moving
-##     the write out of `takeException` and into `execTrap`, which turns the
-##     rule into a rule about one instruction, leaves all 36 cases of this file
-##     GREEN - RE-MEASURED 2026-08-13 against the tree that carries blocks 24
-##     and 25. The funnel is a property of WHERE the line sits and not a
-##     measurement. The case that would separate the two arrives with CPU-15's
-##     bus-fault exception, which is the second path into `takeException` from
-##     inside `step`. BLOCK 22 IS NOT THAT CASE and does not weaken this entry:
-##     the reset exception does not run through `takeException` at all, so
-##     moving that procedure's line cannot change what block 22 observes.
-##
-## THE BOARD LOGS EVERY VECTOR-TABLE READ AND EVERY ACKNOWLEDGE, and every
-## assertion compares the WHOLE outcome tuple. A core that landed on the right
+## The board logs every vector-table read and every acknowledge, and every
+## assertion compares the whole outcome tuple. A core that landed on the right
 ## handler by reading the wrong slot fails on the read list; a core that took
 ## the right vector at the wrong level fails on the acknowledge log; and a core
-## that acknowledged at the wrong POINT fails on the acknowledge's own snapshot
+## that acknowledged at the wrong point fails on the acknowledge's own snapshot
 ## of A7, the program counter, the read count and the status register.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code. The mask
-## rule, the level-7 trigger type and the autovector assignments are facts
-## about Motorola silicon, taken from the manual named above.
 
 import mcf5307/cpu
 import mcf5307/decode_types
@@ -249,11 +79,10 @@ const
   opNopWord = 0x4E71'u16    ## `nop`, m68k-elf-as -mcpu=5307
   opTrapZeroWord = 0x4E40'u16
     ## `trap #0`. `src/mcf5307/decode.nim` records that `m68k-elf-as
-    ## -mcpu=5307` emits `4e40` for it. IT IS THE ONLY EXCEPTION AN
-    ## INSTRUCTION OF THIS TREE CAN TAKE: `takeException` is the whole of
+    ## -mcpu=5307` emits `4e40` for it. It is the only exception an
+    ## instruction of this tree can take: `takeException` is the whole of
     ## the core's exception path and `execTrap` is its one caller from
-    ## inside `step`. CPU-15's bus-fault exception is the second, and it
-    ## does not exist yet.
+    ## inside `step`.
   trapZeroVector = 32'u8
     ## Table 3-1, folio 3-13: vector numbers 32 to 47, at vector offsets
     ## $080 to $0BC, are the "Trap # 0-15 instructions".
@@ -276,16 +105,12 @@ const
   otherVector = 0x43'u8     ## 67
 
 type
-  # AN ACKNOWLEDGE CARRIES WHERE IT HAPPENED AND NOT ONLY THAT IT HAPPENED.
-  # Design section 5.2.2 fixes the acknowledge "after the 8-byte frame is on
-  # the stack and before it fetches the first handler instruction", and the
-  # module header of `src/mcf5307/irq.nim` spends nine lines justifying that
-  # position against section 3.3, folio 3-11, which puts the hardware's
-  # acknowledge cycle SECOND instead. A tuple of level and vector alone
-  # RECORDS NONE OF THAT - MEASURED 2026-08-12, moving the acknowledge to
-  # before `takeException` and moving it to before the mask write each left
-  # all sixteen cases of the previous revision green. The four fields below
-  # are the four things the position is observable through:
+  # An acknowledge carries where it happened and not only that it happened.
+  # The acknowledge is fixed after the 8-byte frame is on the stack and before
+  # the first handler instruction is fetched; `src/mcf5307/irq.nim` justifies
+  # that position against section 3.3, folio 3-11, which puts the hardware's
+  # acknowledge cycle second instead. A tuple of level and vector alone records
+  # none of that. The fields below are what the position is observable through:
   #
   #   `sp`     A7 at the acknowledge. `takeException` assigns the frame base
   #            to A7 only AFTER both frame longwords are written, so an A7 of
@@ -311,9 +136,9 @@ var board: TestBoard
 var vectorReads: seq[uint32]
 var acks: seq[Ack]
 
-# THE CONTEXT THE ACKNOWLEDGE READS ITS SNAPSHOT FROM. The `user` pointer the
-# acknowledge receives is the BOARD, which is what design section 5.2.2 gives
-# it, so the callback cannot reach the core's registers through its own
+# The context the acknowledge reads its snapshot from. The `user` pointer the
+# acknowledge receives is the board, so the callback cannot reach the core's
+# registers through its own
 # arguments. `newCtxSr` publishes the context here and every block in this file
 # creates its context through `newCtxSr`.
 var ackCtx: MCF5307Ctx
@@ -580,9 +405,8 @@ block:
 #   4  deassert at the source with `MCF5307_IRQ_NONE`, lower the mask again,
 #      and take nothing.
 #
-# Design section 5.2.2: "A level source drops when the device model clears its
-# own condition ... Nothing in the emulator drops it on the firmware's
-# behalf."
+# A level source drops when the device model clears its own condition. Nothing
+# in the emulator drops it on the firmware's behalf.
 
 block:
   let ctx = newCtx(0)
@@ -664,10 +488,10 @@ block:
 # ---------------------------------------------------------------------------
 # BLOCK 4. THE CALL IS IDEMPOTENT.
 #
-# Design section 5.2.2: "Two calls with the same arguments have the same
-# effect as one. The board may therefore call it unconditionally after every
-# recomputation." The two runs below differ in the NUMBER OF CALLS and in
-# nothing else, and BOTH are held against the same written-out expectation, so
+# Two calls with the same arguments have the same effect as one, so the board
+# may call it unconditionally after every recomputation. The two runs below
+# differ in the number of calls and in nothing else, and both are held against
+# the same written-out expectation, so
 # two runs broken the same way cannot pass as a pair.
 #
 # THE PRESENTATION IS LEVEL 2 AND NO OTHER BLOCK PRESENTS IT. An earlier
@@ -818,7 +642,7 @@ block:
 # The same sentence of section 7.6.1 read from the other side: the second
 # call presents the level that is already presented, so no transition
 # occurred and no second interrupt is armed. This is also the level-7 half of
-# design section 5.2.2's idempotence rule.
+# the idempotence rule.
 
 block:
   let ctx = newCtx(0)
@@ -843,11 +667,11 @@ block:
 # ---------------------------------------------------------------------------
 # BLOCK 9. THE LEVEL DROPPING BACK BEFORE THE TAKE DOES NOT DISARM IT.
 #
-# Design section 5.2.2 rule 2: "A transition to level 7 arms one non-maskable
-# interrupt; the level dropping back does not disarm it."
+# A transition to level 7 arms one non-maskable interrupt; the level dropping
+# back does not disarm it.
 #
-# THE DROP IS TO A LEVEL THE MASK WOULD ADMIT, AND ITS VECTOR IS VECTORED AND
-# DIFFERENT. Level 3 vectored at 0x42 would land on `handlerVec66` after
+# The drop is to a level the mask would admit, and its vector is vectored and
+# different. Level 3 vectored at 0x42 would land on `handlerVec66` after
 # reading $108. The armed level 7 must land on `handlerAuto7` after reading
 # $07C, and the acknowledge must name level 7. A core that disarmed on the drop
 # takes level 3, and a core that read the PRESENTED PAIR - the level 3's vector
@@ -931,10 +755,10 @@ block:
 # BLOCK 11. THE LEVEL 7 THAT IS RE-PRESENTED AFTER ITS TAKE IS NOT A SECOND
 # EDGE.
 #
-# THIS IS THE BOARD'S DOCUMENTED NORMAL BEHAVIOUR AND NOT AN EXOTIC ONE.
-# Design section 5.2.2: "Two calls with the same arguments have the same effect
-# as one. The board may therefore call it unconditionally after every
-# recomputation." A board that does exactly that, with IRQ7 still asserted,
+# This is the board's normal behaviour and not an exotic one: two calls with
+# the same arguments have the same effect as one, so the board may call it
+# unconditionally after every recomputation. A board that does exactly that,
+# with IRQ7 still asserted,
 # calls `mcf5307_set_irq(7, ...)` again after the core has already taken the
 # level 7 interrupt - which is the sequence below and the one section 7.6.1,
 # folio 7-24, forbids a second recognition for: "if IRQ7 remains asserted, the
@@ -984,12 +808,10 @@ block:
 # recognizes a further level 7 interrupt there "even though no transition has
 # occurred on the interrupt control pins".
 #
-# `src/mcf5307/irq.nim` lines 25 to 35 declare that this project implements the
-# EDGE HALF AND NOT THE LEVEL HALF, because design section 5.2.2's rule 2 is
-# edge-only and the G2 programs no level-7 source. THE DECLARATION HAD NO TEST
-# - MEASURED 2026-08-12, deleting `and level <= 6` from `pendingInterrupt` left
-# all sixteen cases of the previous revision green, and that deletion is
-# exactly the manual's second sequence: the spent level 7 falls through to the
+# `src/mcf5307/irq.nim` declares that this project implements the edge half and
+# not the level half, because the rule here is edge-only and no level-7 source
+# is programmed. Deleting `and level <= 6` from `pendingInterrupt` is exactly
+# the manual's second sequence: the spent level 7 falls through to the
 # level path and is taken again as soon as the mask drops below 7.
 #
 # THE SEQUENCE BELOW IS THAT SECOND SEQUENCE, and the assertion is that
@@ -1027,48 +849,34 @@ block:
 # BLOCK 13. A FAULT INSIDE THE STACKING HALTS THE TAKE, AND THE EDGE IT
 # CONSUMED STAYS CONSUMED.
 #
-# `src/mcf5307/irq.nim` justifies TWO orderings by this case and neither had a
-# test - MEASURED 2026-08-12, deleting the `if ctx.halted: return true` after
-# `takeException`, deleting `cpu.nim`'s halted break, and moving the level-7
-# latch clear to after the halted check each left all sixteen cases of the
-# previous revision green. Every asserted `halted` in this file was `false`, so
-# nothing reached the path at all.
+# `src/mcf5307/irq.nim` justifies two orderings by this case.
 #
-# THE FAULT IS REACHABLE TODAY AND DOES NOT WAIT FOR CPU-15. A7 is set to an
-# address whose frame write is off the end of the board, so `machine.nim`'s
-# `writeMem` reports the refusal and `takeException` returns early with the
-# context halted. What CPU-15 owns is what a DOUBLE FAULT should then DO;
-# what this block pins is only what today's core does, which is: stop.
+# The fault is reachable today. A7 is set to an address whose frame write is
+# off the end of the board, so `machine.nim`'s `writeMem` reports the refusal
+# and `takeException` returns early with the context halted. What this block
+# pins is only what today's core does, which is: stop.
 #
-# THE TWO STEPS ARE SEPARATE ASSERTIONS AND BOTH ARE LOAD-BEARING:
+# The two steps are separate assertions and both are load-bearing:
 #
-#   1  The halted take stacked nothing, read no vector AND DID NOT
-#      ACKNOWLEDGE. `irq.nim` returns before the mask write and before the
+#   1  The halted take stacked nothing, read no vector and did not
+#      acknowledge. `irq.nim` returns before the mask write and before the
 #      acknowledge; a core that ran on would tell the board it had accepted an
 #      interrupt it never entered. `cpu.nim` then breaks out of the loop rather
 #      than executing an instruction on a halted machine.
-#   2  The reset that recovers the machine RE-OBSERVES THE PIN. The level 7 is
+#   2  The reset that recovers the machine re-observes the pin. The level 7 is
 #      still presented across the reset, and the reset's re-sample arms a fresh
 #      edge from it, so the recovered machine takes a level 7 one instruction
 #      after the reset program counter.
 #
-# WHAT STEP 2 USED TO PIN, AND WHY IT CANNOT PIN IT ANY MORE. It read that the
-# latch was cleared BEFORE the stacking began "so that a fault inside the
-# stacking - CPU-15's double fault - does not leave an interrupt armed that the
-# machine has already begun to take", and it could observe that only because
-# `mcf5307_reset` did NOT touch the interrupt fields: the latch survived the
-# reset, so a take that had failed to consume it showed up as an interrupt on
-# the recovery run. `mcf5307_reset` now CLEARS the latch and re-arms it from the
-# presented level, so the latch after a reset is a function of the PIN alone and
-# carries nothing from before. The core publishes no other way to read the
-# latch, and a halted context cannot execute an instruction, so a mutation that
-# leaves the latch armed on the fault path IS NOW UNOBSERVABLE THROUGH THE ABI.
-# That is a LOSS OF COVERAGE and it is recorded here rather than papered over:
-# the clear before the stacking is still the shipped order and `irq.nim` still
-# gives the reason, but no case in this file separates it on the fault path. The
-# NON-fault half of the same position is still pinned, by block 17.
+# A mutation that leaves the latch armed on the fault path is unobservable
+# through the ABI: `mcf5307_reset` clears the latch and re-arms it from the
+# presented level, so the latch after a reset is a function of the pin alone,
+# the core publishes no other way to read it, and a halted context cannot
+# execute an instruction. The clear before the stacking is still the shipped
+# order and `irq.nim` gives the reason, but no case in this file separates it on
+# the fault path. The non-fault half of the same position is pinned by block 17.
 #
-# WHAT STEP 2 PINS INSTEAD is the recovery itself and the reset's re-sample:
+# What step 2 pins instead is the recovery itself and the reset's re-sample:
 # the latch this take consumed is gone, so the interrupt the recovered machine
 # takes can only have been armed by the reset re-observing a pin that is still
 # asserted. A reset that cleared the latch and did NOT re-sample takes nothing
@@ -1522,8 +1330,8 @@ block:
 # BLOCK 21. A CONTEXT WITH NO BOARD CALLBACKS FAULTS AND DOES NOT END THE
 # PROCESS.
 #
-# Design section 11.4, task CPU-15: "Nothing aborts the process. An abort
-# inside a plugin destroys the host's session." `include/mcf5307.h` forbids no
+# Nothing may abort the process: an abort inside a plugin destroys the host's
+# session. `include/mcf5307.h` forbids no
 # argument of `mcf5307_create`, and `step` in `src/mcf5307/cpu.nim` opens with
 # a nil-`readFn` guard that faults and halts - so the core's own code is the
 # statement that a context without callbacks is a state it survives.

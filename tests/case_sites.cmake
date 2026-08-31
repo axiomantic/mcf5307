@@ -1,5 +1,5 @@
-# `case_sites.cmake` - the driver half of the check that a VANISHED CASE fails
-# its suite. Task CPU-28. Every generated `t_*` driver in
+# `case_sites.cmake` - the driver half of the check that a vanished case fails
+# its suite. Every generated `t_*` driver in
 # `tests/tests_cpu.cmake` includes this file and calls BOTH of its functions
 # exactly once:
 # `mcf5307_check_case_sites`, whose rules are stated below, and
