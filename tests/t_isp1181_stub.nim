@@ -1055,17 +1055,14 @@ check(configRefusal == wantConfigRefusal,
       $configRefusal, $wantConfigRefusal)
 
 # ---------------------------------------------------------------------------
-# THE BUFFER-GEOMETRY DOOR. What an endpoint will accept, asked rather than
-# assumed. gearmulator's board carried its own `64` because there was no call
-# to make; the cases below are what make that copy removable.
+# The buffer-geometry door. What an endpoint will accept, asked rather than
+# assumed.
 
 const sizeSentinel = csize_t(0xDEAD)
-  ## A FIGURE NO LEGAL ANSWER CAN BE. ISP1362 Rev. 06 Table 16 p.52 gives the
+  ## A figure no legal answer can be. ISP1362 Rev. 06 Table 16 p.52 gives the
   ## non-isochronous sizes as 8, 16, 32 and 64 and reserves the rest, and no
   ## buffer count in this model is anywhere near it. It is what proves an
-  ## answer of 0 or -1 left both out-parameters alone: a call that stored a
-  ## plausible 64 there would be handing a producer a size nothing backs, which
-  ## is the whole defect this door closes.
+  ## answer of 0 or -1 left both out-parameters alone.
 
 proc slotBufferAt(handle: ISP1181Ctx;
                   slot: int): tuple[rc: int, bytes: uint, buffers: uint] =
@@ -1075,13 +1072,12 @@ proc slotBufferAt(handle: ISP1181Ctx;
                                addr seenBuffers)
   (rc: int(rc), bytes: uint(seenBytes), buffers: uint(seenBuffers))
 
-# THE ANSWER IS PER ENDPOINT AND NOT ONE NUMBER FOR THE DEVICE. Slot 0 is
+# The answer is per endpoint and not one number for the device. Slot 0 is
 # endpoint 0 OUT and slot 2 is endpoint 1, and this model gives them DIFFERENT
 # geometry: 64 bytes single-buffered against 16 bytes double-buffered. A door
 # that answered a single global maximum would pass every other case here and
-# fail this one, and a consumer built on it would have moved the assumption up
-# one level rather than removed it. Both expectations are hand-written literals
-# read off `fifoShape`, never a second call of the procedure under test.
+# fail this one. Both expectations are hand-written literals read off
+# `fifoShape`, never a second call of the procedure under test.
 type BufferShapes = tuple[ep0Out: tuple[rc: int, bytes: uint, buffers: uint],
                           ep1: tuple[rc: int, bytes: uint, buffers: uint]]
 
@@ -1104,11 +1100,11 @@ check(bufferShapes == wantBufferShapes and
         "satisfy this",
       $bufferShapes, $wantBufferShapes)
 
-# A SLOT WITH NO BUFFER IN THIS MODEL IS 0, AND 0 IS NOT A SIZE OF ZERO. Slot 5
+# A slot with no buffer in this model is 0, and 0 is not a size of zero. Slot 5
 # is a real configuration slot - the firmware writes it below and
 # `isp1181_config_slot` answers 1 for it - and this model carries no buffer
-# behind it. There is no geometry to report, and both a 0 and a plausible 64
-# would be inventions a producer would size its packets to.
+# behind it. Both a 0 and a plausible 64 would be inventions a producer would
+# size its packets to.
 type NoBuffer = tuple[configRc: int, bufferRc: int, bytes: uint, buffers: uint]
 
 proc driveNoBuffer(): NoBuffer =
@@ -1131,13 +1127,11 @@ check(noBuffer == wantNoBuffer,
         "figures alone, so no invented size reaches a producer",
       $noBuffer, $wantNoBuffer)
 
-# THE THREE STATES STAY APART, AND NEITHER CALL ALONE KEEPS THEM APART. The
-# pairs below are the table `include/mcf5307.h` prints beside this call, driven
-# rather than quoted. Slot 0 is written and buffered, slot 5 is written with no
-# buffer here, and slot 4 is never written and IS buffered - so `config_slot`
-# alone cannot separate the first from the second and `slot_buffer` alone
-# cannot separate the first from the third. Only the pair does, and this case
-# also states that the three pairs are pairwise different.
+# The three states stay apart, and neither call alone keeps them apart. Slot 0
+# is written and buffered, slot 5 is written with no buffer here, and slot 4 is
+# never written and IS buffered - so `config_slot` alone cannot separate the
+# first from the second and `slot_buffer` alone cannot separate the first from
+# the third. Only the pair does.
 type ThreeStates = tuple[configuredBuffered: tuple[cfg: int, buf: int],
                          configuredUnbuffered: tuple[cfg: int, buf: int],
                          neverWritten: tuple[cfg: int, buf: int]]
@@ -1170,11 +1164,11 @@ check(threeStates == wantThreeStates and
         "call on its own separates all three",
       $threeStates, $wantThreeStates)
 
-# THE THIRD ANSWER, AND THE NIL POINTERS. A slot past the sixteenth and a nil
-# handle are not "no buffer" - they are questions about a slot that does not
-# exist, and folding them into 0 would report a real unbuffered endpoint and a
-# typo with one word. The nil-pointer call is here because the contract says
-# either pointer may be nil and the return is still the answer.
+# The third answer, and the nil pointers. A slot past the sixteenth and a nil
+# handle are not "no buffer", and folding them into 0 would report a real
+# unbuffered endpoint and a typo with one word. The nil-pointer call is here
+# because the contract says either pointer may be nil and the return is still
+# the answer.
 type BufferRefusal = tuple[pastEnd: int, pastEndBytes: uint,
                            nilRc: int, nilBytes: uint, nilPointers: int]
 

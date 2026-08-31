@@ -478,17 +478,12 @@ MCF5307_MUST_USE int isp1181_config_slot(const isp1181_ctx* ctx, size_t slot,
 
 /* --------------------------------- what an endpoint's buffer will hold
  *
- * WHY THIS CALL EXISTS. A producer that hands the device a packet has to know
- * the size the endpoint will accept, and until this call there was no way to
- * ask. gearmulator's board therefore carried its own `64`, copied by hand from
- * this model's `fifoShape`, and nothing compared the two. That copy is correct
- * only for the endpoints this image happens to configure at 64 bytes; a
- * differently configured endpoint breaks it, and it breaks in the expensive
- * direction. Splitting too small still delivers - the frames merely arrive in
- * more pieces than they had to. Splitting too large is refused whole by
- * `isp1181/fifo`, which is the size refusal the split was introduced to end.
+ * A producer that hands the device a packet has to know the size the endpoint
+ * will accept. Splitting too small still delivers - the frames merely arrive
+ * in more pieces than they had to. Splitting too large is refused whole by
+ * `isp1181/fifo`.
  *
- * THE SIZE IS A PROPERTY OF THE CONFIGURATION BYTE AND NOT A CONSTANT. ISP1362
+ * The size is a property of the configuration byte and not a constant. ISP1362
  * Rev. 06 Table 110 p.107 puts it in `FFOSZ[3:0]`, bits 3 to 0 of the byte
  * written by command `0x20 + slot`, and Table 111 p.107 says those bits
  * "select the buffer memory size according to Table 16". Table 16 p.52 gives
@@ -501,35 +496,31 @@ MCF5307_MUST_USE int isp1181_config_slot(const isp1181_ctx* ctx, size_t slot,
  * error code `1011`, "overflow; the received packet was larger than the
  * available buffer space", Table 132 p.118.
  *
- * THE DATASHEET CONTRADICTS ITSELF ON THE BULK AND INTERRUPT BOUND AND IT IS
- * NOT RESOLVED HERE. Table 109 p.105 gives "interrupt/bulk: N <= 64 bytes" for
+ * The datasheet contradicts itself on the bulk and interrupt bound and it is
+ * not resolved here. Table 109 p.105 gives "interrupt/bulk: N <= 64 bytes" for
  * the buffer read and write commands, and Table 110 with Table 111 p.107 reach
  * 64 through `FFOSZ` = `0011`. Section 15.2.1 p.113 writes the same bound as
  * "bulk/interrupt endpoint: N <= 32". Two places say 64 and one says 32. This
  * call states no bound of its own for that reason: it reports the buffer the
  * MODEL carries, and a caller that needs a bound reads it from the answer.
  *
- * RETURNS 1 when this model carries a buffer for `slot`, and then writes
- * `*max_packet_bytes` and `*buffer_count`. RETURNS 0 when the slot exists and
- * this model carries NO buffer behind it. RETURNS -1 when there is no such
+ * Returns 1 when this model carries a buffer for `slot`, and then writes
+ * `*max_packet_bytes` and `*buffer_count`. Returns 0 when the slot exists and
+ * this model carries NO buffer behind it. Returns -1 when there is no such
  * slot - `slot` at or past `isp1181_config_slots` - or no handle.
  *
- * 0 IS NOT A SIZE OF ZERO AND IT IS NOT AN ERROR. The part has 16
+ * 0 is not a size of zero and it is not an error. The part has 16
  * configuration slots and this model implements buffers for the first five;
- * the rest hold a register byte and nothing behind it. There is no geometry to
- * report for those, and reporting 0 bytes or a plausible 64 would both be
- * inventions a producer would then size its packets to.
+ * the rest hold a register byte and nothing behind it. Reporting 0 bytes or a
+ * plausible 64 for those would be an invention a producer would then size its
+ * packets to.
  *
- * BOTH POINTERS MAY BE NULL, and NEITHER IS WRITTEN UNLESS THIS RETURNS 1 -
- * `isp1181_config_slot`'s rule, for its reason. On 0 and on -1 there is no
- * buffer to describe, and leaving a figure behind would hand a caller who
- * skipped the return a size nothing backs.
+ * Both pointers may be NULL, and neither is written unless this returns 1 -
+ * `isp1181_config_slot`'s rule, for its reason.
  *
- * THIS CALL DOES NOT SAY WHETHER THE FIRMWARE CONFIGURED THE SLOT, and it is
- * not an omission. `isp1181_config_slot` says that, and duplicating the answer
- * into a second symbol would be the same defect as the duplicated `64`: one
- * fact in two places with nothing holding them together. THE THREE STATES THE
- * REPORT DISTINGUISHES ARE REACHED BY ASKING BOTH CALLS:
+ * This call does not say whether the firmware configured the slot;
+ * `isp1181_config_slot` says that. The three states the report distinguishes
+ * are reached by asking both calls:
  *
  *   config_slot == 1 and slot_buffer == 1  configured, and buffered here
  *   config_slot == 1 and slot_buffer == 0  configured, no buffer in this model
