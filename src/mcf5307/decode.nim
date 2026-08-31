@@ -85,25 +85,25 @@ proc decodeLogicLine(word: uint16; opBase: Operation): Decoded =
   ##
   ##   opmode 000 001 010   `<ea> op Dn -> Dn`, byte word long
   ##   opmode 100 101 110   `Dn op <ea> -> <ea>`, byte word long
-  ##   opmode 011 111       the WORD multiply and divide of the 68000, which
-  ##                        this part does not have. They are NOT decoded, so
+  ##   opmode 011 111       the word multiply and divide of the 68000, which
+  ##                        this part does not have. They are not decoded, so
   ##                        the encodings stay illegal rather than become a
   ##                        logic operation of the wrong size.
   ##
-  ## THE BYTE AND WORD OPMODES ARE DECODED AND THEY CARRY THEIR OWN SIZE.
+  ## The byte and word opmodes are decoded and they carry their own size.
   ## They are not instructions on this part - `m68k-elf-as -mcpu=5307` rejects
   ## `and.b %d0,%d1` - and the executor traps them on the size, which is the
-  ## same channel `alu.nim` uses for byte and word arithmetic and the one
-  ## CPU-13's negative cases assert through. Decoding them as an unrecognised
-  ## word instead would report "no such instruction" for an encoding that is a
-  ## real AND on a 68000, which says less about why the core refused.
+  ## same channel `alu.nim` uses for byte and word arithmetic. Decoding them
+  ## as an unrecognised word instead would report "no such instruction" for an
+  ## encoding that is a real AND on a 68000, which says less about why the
+  ## core refused.
   ##
-  ## THE 68000 SLOTS INSIDE THE `Dn op <ea>` OPMODES COME OUT AS TRAPS TOO.
+  ## The 68000 slots inside the `Dn op <ea>` opmodes come out as traps too.
   ## `1100 rrr 1 00 00 rrr` is ABCD and `1100 rrr 1 01 00 rrr` is EXG on that
   ## part, and both are byte or word opmodes here, so both trap on the size.
   ## `1100 rrr 1 10 001 rrr` is `EXG Dn,An`, a long opmode whose effective
   ## address is an address register, and the memory-alterable destination mask
-  ## rejects it. EXG is one of CPU-13's negative cases and it traps either way.
+  ## rejects it.
   let opmode = (word shr 6) and 0x7'u16
   if opmode == 3'u16 or opmode == 7'u16:
     return Decoded(op: opIllegal)
@@ -114,25 +114,24 @@ proc decodeLogicLine(word: uint16; opBase: Operation): Decoded =
 proc decodeShift(word: uint16): Decoded =
   ## Line 1110: ASL, ASR, LSL and LSR. Bit 8 is the direction (1 left, 0
   ## right) and bits 4..3 the type: 00 arithmetic, 01 logical, 10 and 11 the
-  ## two ROTATES, which this part does not have. The manual says so in
+  ## two rotates, which this part does not have. The manual says so in
   ## section 3.9 - "the removed instructions include ... logical rotate" - and
   ## `m68k-elf-objdump -m m68k:5307` confirms it by decoding neither `e318`
   ## (`rol.b #1,%d0`) nor `e098` (`ror.l`).
   ##
-  ## THE REGISTER FORM AND THE MEMORY FORM PUT DIFFERENT THINGS IN THE SAME
-  ## BITS, which is why they are decoded apart. In the register form bits 7..6
+  ## The register form and the memory form put different things in the same
+  ## bits, which is why they are decoded apart. In the register form bits 7..6
   ## are the size, bits 11..9 a count or a count register, bit 5 says which of
   ## those two, and bits 2..0 are the destination data register - bits 5..3
-  ## are NOT an effective address, so `decodeEa` must not be asked. In the
+  ## are not an effective address, so `decodeEa` must not be asked. In the
   ## memory form bits 7..6 are 11, bits 10..9 are the type, and the low six
-  ## bits ARE an effective address.
+  ## bits are an effective address.
   ##
-  ## THE MEMORY FORM IS DECODED AND IT TRAPS IN THE EXECUTOR. Every shift on
+  ## The memory form is decoded and it traps in the executor. Every shift on
   ## this part is register-only, and the `{Dn}` mask in `decode_types` is what
   ## refuses the memory operand. Decoding it here rather than calling it an
   ## unrecognised word keeps the "which operands may this opcode reach"
   ## question in the one table that answers it for every other opcode.
-  ## CPU-13 owns the negative case.
   let shiftType = (word shr 3) and 0x3'u16
   let toLeft = (word and 0x0100'u16) != 0'u16
   if (word and 0x00C0'u16) == 0x00C0'u16:
@@ -150,8 +149,8 @@ proc decodeShift(word: uint16): Decoded =
            else: (if toLeft: opLsl else: opLsr)
   let countField = uint8((word shr 9) and 0x7'u16)
   let inRegister = (word and 0x0020'u16) != 0'u16
-  # THE COUNT FIELD 000 MEANS EIGHT, the same spend of the unusable zero slot
-  # that ADDQ and SUBQ make. It applies to the IMMEDIATE form alone: in the
+  # The count field 000 means eight, the same spend of the unusable zero slot
+  # that ADDQ and SUBQ make. It applies to the immediate form alone: in the
   # register form the field names d0 and a count of zero is a real count.
   Decoded(op: op, ea: EA(mode: eaDn, reg: uint8(word and 0x7'u16)),
           size: sizeField(word), destReg: countField,
@@ -163,12 +162,12 @@ proc decodeShift(word: uint16): Decoded =
 proc decodeBitOp(word: uint16): Decoded =
   ## The four bit operations, in both of their forms. Bits 7..6 select the
   ## operation - 00 BTST, 01 BCHG, 10 BCLR, 11 BSET - and bit 8 selects the
-  ## form: 1 is DYNAMIC, whose bit number is in the data register named by
-  ## bits 11..9, and 0 is STATIC, whose bit number is the extension word after
+  ## form: 1 is dynamic, whose bit number is in the data register named by
+  ## bits 11..9, and 0 is static, whose bit number is the extension word after
   ## the opcode. The caller has already established that this is a bit
   ## operation.
   ##
-  ## THE OPERAND SIZE IS DECIDED BY THE OPERAND. A data register is 32 bits
+  ## The operand size is decided by the operand. A data register is 32 bits
   ## wide and every memory operand is 8, which is what the manual's Table 3-7
   ## means by an operand size of "8,32" for all four. The bit number is taken
   ## modulo that width by the executor.
@@ -293,29 +292,28 @@ proc decodeWord*(word: uint16): Decoded =
   elif (word and 0xF000'u16) == 0x9000'u16:
     return decodeAddSub(word, opSub, opSuba, opSubx)
 
-  # ------------------------------------------------------------------- CPU-9
+  # ---------------------------------------------------------------------------
   # The logic, bit-operation and shift lines.
   #
-  # THE LINE-0 BRANCHES SIT AFTER ADDI AND SUBI AND THAT IS SAFE. Line 0 is
+  # The line-0 branches sit after ADDI and SUBI and that is safe. Line 0 is
   # crowded - ORI, ANDI, EORI, SUBI, ADDI and both forms of the bit operations
   # share it - and no two of the tests below can match the same word. The
   # immediate-logic opcodes differ from each other in bits 11..8 (0000 ORI,
   # 0010 ANDI, 0100 SUBI, 0110 ADDI, 1000 the static bit operations, 1010
-  # EORI), and every one of them has bit 8 CLEAR, while a dynamic bit
-  # operation is exactly the line-0 word whose bit 8 is SET.
+  # EORI), and every one of them has bit 8 clear, while a dynamic bit
+  # operation is exactly the line-0 word whose bit 8 is set.
   #
-  # THE MOVE BRANCH ABOVE CANNOT SWALLOW THEM. It requires bits 13..12 to be
-  # non-zero and every word here has them zero, which is the "immediate-logic
-  # group, which is not MOVE" its own comment names.
+  # The MOVE branch above cannot swallow them. It requires bits 13..12 to be
+  # non-zero and every word here has them zero.
   elif (word and 0xF1C0'u16) == 0x0100'u16 or
        (word and 0xF1C0'u16) == 0x0140'u16 or
        (word and 0xF1C0'u16) == 0x0180'u16 or
        (word and 0xF1C0'u16) == 0x01C0'u16:
-    # The DYNAMIC bit operations: `0000 rrr 1 tt <ea>`.
+    # The dynamic bit operations: `0000 rrr 1 tt <ea>`.
     return decodeBitOp(word)
   elif (word and 0xFF00'u16) == 0x0800'u16 and
        ((word shr 6) and 0x3'u16) <= 3'u16:
-    # The STATIC bit operations: `0000 1000 tt <ea>`. All four values of the
+    # The static bit operations: `0000 1000 tt <ea>`. All four values of the
     # two-bit field are operations, so the guard is a statement that the field
     # is fully covered and never a filter.
     return decodeBitOp(word)
@@ -327,8 +325,8 @@ proc decodeWord*(word: uint16): Decoded =
   elif (word and 0xFF00'u16) == 0x0A00'u16 and sizeField(word) != 0'u8:
     return Decoded(op: opEori, ea: decodeEa(word), size: sizeField(word))
   elif (word and 0xFF00'u16) == 0x4600'u16 and sizeField(word) != 0'u8:
-    # NOT.<sz> Dn. SIZE 11 IS NOT DECODED HERE, exactly as it is not for CLR:
-    # `0x46C0 | <ea>` is MOVE to SR, which belongs to another task.
+    # NOT.<sz> Dn. Size 11 is not decoded here, exactly as it is not for CLR:
+    # `0x46C0 | <ea>` is MOVE to SR.
     return Decoded(op: opNot, ea: decodeEa(word), size: sizeField(word))
   elif (word and 0xF000'u16) == 0xC000'u16:
     return decodeLogicLine(word, opAnd)
@@ -336,21 +334,18 @@ proc decodeWord*(word: uint16): Decoded =
     return decodeLogicLine(word, opOr)
   elif (word and 0xF000'u16) == 0xB000'u16 and
        ((word shr 6) and 0x7'u16) in 4'u16 .. 6'u16:
-    # EOR.<sz> Dn,<ea>. THE OTHER OPMODES OF LINE 1011 ARE NOT THIS TASK'S:
-    # 000, 001 and 010 are CMP, 011 is CMPA.W and 111 is CMPA.L, and CPU-10
-    # owns all five. They stay unrecognised here rather than be claimed and
-    # trapped, which would take the encodings away from that task.
+    # EOR.<sz> Dn,<ea>. The other opmodes of line 1011 are CMP (000, 001 and
+    # 010), CMPA.W (011) and CMPA.L (111). They stay unrecognised here rather
+    # than be claimed and trapped.
     #
-    # THE RANGE IS 100 TO 110 AND NOT "100 OR ABOVE". EOR has THREE opmodes -
+    # The range is 100 to 110 and not "100 or above". EOR has three opmodes -
     # byte, word and long - and 111 is the fourth value of that range, which
-    # is CMPA.L. A `>= 4` predicate claimed it, and the claim was SILENT:
-    # `opmodeSize(7)` answers 4, so `cmpa.l %d0,%a1` (`b3c0`) decoded as a
-    # well-formed long EOR and executed as one. Measured before the fix, it
-    # left d0 = d0 xor d1 - it wrote a register CMPA must not touch and
-    # computed no comparison. `tests/t_logic.nim` asserts the encoding comes
-    # back as an unrecognised word.
+    # is CMPA.L. A `>= 4` predicate claims it, and the claim is silent:
+    # `opmodeSize(7)` answers 4, so `cmpa.l %d0,%a1` (`b3c0`) decodes as a
+    # well-formed long EOR and executes as one, leaving d0 = d0 xor d1 - it
+    # writes a register CMPA must not touch and computes no comparison.
     #
-    # `1011 rrr 1 ss 001 rrr` is CMPM on a 68000, a byte or word opmode whose
+    # `1011 rrr 1 ss 001 rrr` is CMPM on a 68000: a byte or word opmode whose
     # effective address is an address register. It traps on the size and on
     # the operand both.
     return Decoded(op: opEor, ea: decodeEa(word),

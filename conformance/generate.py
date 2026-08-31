@@ -181,26 +181,26 @@ DIRTY_A = 0x0BADC0DE   # the address-register destination seed
 
 # ---------------------------------------------------------------------------
 # The memory seeds, and the address the memory cases point an address register
-# at. CPU-9 added these: the bit operations are the first group whose memory
-# operand is a BYTE while the register operand is a LONGWORD, so a core that
-# read or wrote four bytes where the part reads one is a defect this corpus
-# has to be able to see.
+# at. The bit operations are the first group whose memory operand is a byte
+# while the register operand is a longword, so a core that read or wrote four
+# bytes where the part reads one is a defect this corpus has to be able to
+# see.
 #
 # `MEM_BASE` is clear of the encoding (the runner places that at 0x10000) and
 # inside the runner's 1 MiB board.
 #
-# THE FOUR SEED BYTES ALL DIFFER, AND NEITHER PAIR IS SYMMETRIC. A byte case
-# names `MEM_BASE` and asserts the OTHER THREE BYTES ARE UNCHANGED, so a write
+# The four seed bytes all differ, and neither pair is symmetric. A byte case
+# names `MEM_BASE` and asserts the other three bytes are unchanged, so a write
 # that was one byte too wide, or that landed on the wrong end of the longword,
 # changes a byte the case names. A repeating seed would survive both.
 #
-# 0x02 is the addressed byte and it is chosen so that BIT 1 OF IT IS SET while
+# 0x02 is the addressed byte and it is chosen so that bit 1 of it is set while
 # bit 1 of the longword 0x025A3CC1 - which is bit 1 of its low byte 0xC1 - is
-# CLEAR: `btst #1,(%a0)` therefore answers differently under the byte rule and
+# clear: `btst #1,(%a0)` therefore answers differently under the byte rule and
 # under a longword rule, and the case separates them. 0xC1 at the far end has
 # bit 1 clear too, so a core that read the wrong end of the longword also
-# answers differently. THE BIT NUMBER IS INSIDE A BYTE, so the separation is
-# of the ACCESS WIDTH alone and does not depend on how an out-of-range bit
+# answers differently. The bit number is inside a byte, so the separation is
+# of the access width alone and does not depend on how an out-of-range bit
 # number is reduced - see uncertainty 5 in `logic.nim`'s header.
 MEM_BASE = 0x2000
 MEM_SEED_BYTES = (0x02, 0x5A, 0x3C, 0xC1)
@@ -619,13 +619,10 @@ CASES = {
         },
     ],
 
-    # THE CONDITION-CODE RULES OF THIS GROUP, AND WHERE EACH ONE COMES FROM.
-    # CPU-9 owns these cases; the gap the previous revision described - "no
-    # `sr` expectation anywhere, because no executor exists to measure one
-    # against" - is closed here.
+    # The condition-code rules of this group, and where each one comes from.
     #
     #   AND, ANDI, OR, ORI, EOR, EORI, NOT
-    #       N and Z from the 32-bit result, V and C CLEARED, X UNTOUCHED. The
+    #       N and Z from the 32-bit result, V and C cleared, X untouched. The
     #       MCF5307 User's Manual section 3.2.1.5 defines V as set "if an
     #       arithmetic overflow occurs", C as set on "a carryout of the operand
     #       MSB ... for an addition, or ... a borrow ... in a subtraction", and
@@ -636,39 +633,39 @@ CASES = {
     #       already carries for MOVE.
     #
     #   BTST, BSET, BCLR, BCHG
-    #       Z ALONE. The manual's Table 3-7 gives the operation as
+    #       Z alone. The manual's Table 3-7 gives the operation as
     #       `~(<Bit Number> of Destination) -> Z` and names no other bit, so N,
     #       V, C and X are untouched. Every bit case below therefore starts
-    #       from a status word in which Z has the WRONG value and asserts the
-    #       whole word back: a case whose bit is SET starts with Z set, and a
-    #       case whose bit is CLEAR starts with Z clear. A case that started
+    #       from a status word in which Z has the wrong value and asserts the
+    #       whole word back: a case whose bit is set starts with Z set, and a
+    #       case whose bit is clear starts with Z clear. A case that started
     #       from the value it expects would pass against a core that never
     #       writes Z at all.
     #
     #   LSL, LSR, ASL, ASR
-    #       X AND C BOTH TAKE THE LAST BIT SHIFTED OUT, which Table 3-7 states
+    #       X and C both take the last bit shifted out, which Table 3-7 states
     #       directly for all four: `X/C <- (Dy << Dx) <- 0` for the two left
     #       shifts and `MSB -> (Dy >> Dx) -> X/C`, `0 -> (Dy >> Dx) -> X/C` for
     #       the two right ones. N and Z come from the result. V is cleared by
     #       LSL, LSR and ASR - none of them can produce a value the operand
     #       size cannot represent - and ASL sets it when the sign changes.
     #
-    # THE ASL OVERFLOW CASES ALL USE A SHIFT COUNT OF ONE, DELIBERATELY. The
+    # The ASL overflow cases all use a shift count of one, deliberately. The
     # two readings of the rule - "the MSB changed at any time during the shift"
     # and "the MSB of the result differs from the MSB of the operand" - are the
-    # SAME STATEMENT at a count of one and can differ at a larger count. The
+    # same statement at a count of one and can differ at a larger count. The
     # ColdFire Family Programmer's Reference Manual is the authority that
-    # separates them (AGENTS.md section 11) and it is not on this machine, so
-    # no case here pins a count at which the two disagree.
+    # separates them and it is not on this machine, so no case here pins a
+    # count at which the two disagree.
     # `asl_l_count_register_d1` carries no V hazard for the same reason: it
     # shifts by two, and its operand's top three bits are all zero - the sign
     # after k shifts is bit 31-k of the operand, so bits 31, 30 and 29 are
     # every sign the shift passes through - so the sign is unchanged under
     # either reading and both give V clear.
     #
-    # THE REGISTER SHIFT COUNT OF ZERO CARRIES NO `sr`, for the same reason:
+    # The register shift count of zero carries no `sr`, for the same reason:
     # what a zero count does to C is a rule this project cannot cite today. The
-    # case still earns its place - it asserts the destination is UNCHANGED,
+    # case still earns its place - it asserts the destination is unchanged,
     # which a core that read the count out of the instruction word instead of
     # out of the register would fail, because that core shifts by one.
     "logic": [
@@ -679,7 +676,7 @@ CASES = {
             "instruction": "and.l %d0,%d1",
             "initial": {"regs": {"d0": 0x0F0F0F0F, "d1": DIRTY_D,
                                  "sr": SR_DIRTY}},
-            # The source register is asserted UNCHANGED, so a core that wrote
+            # The source register is asserted unchanged, so a core that wrote
             # the result into the wrong operand fails here and not only on the
             # destination.
             "expected": {"regs": {"d0": 0x0F0F0F0F, "d1": 0x02040608,
@@ -864,31 +861,29 @@ CASES = {
 
         # ----------------------------------------------------------- BTST
         #
-        # A BIT OPERATION ON A DATA REGISTER IS 32 BITS WIDE AND ONE ON MEMORY
-        # IS 8. That is the OPERAND SIZE column of MCF5307 User's Manual
+        # A bit operation on a data register is 32 bits wide and one on memory
+        # is 8. That is the OPERAND SIZE column of MCF5307 User's Manual
         # Table 3-7, which reads "8,32" for BTST, BSET, BCLR and BCHG and for
         # no other instruction in this group. The two cases that pin it are
         # `btst_l_bit_number_above_a_byte` and
         # `btst_b_memory_operand_is_one_byte`. Each one picks a bit number
-        # whose answer under the OTHER width is the opposite, so neither can
+        # whose answer under the other width is the opposite, so neither can
         # pass against a core that applies the wrong one.
         #
-        # NEITHER CASE USES A BIT NUMBER ITS OPERAND CANNOT HOLD, AND THAT IS
-        # DELIBERATE. `logic.nim` reduces an out-of-range bit number modulo
-        # the operand width, and NO PASSAGE OF THE USER'S MANUAL STATES ANY
-        # MODULUS - see uncertainty 5 in that module's header, which also says
+        # Neither case uses a bit number its operand cannot hold, and that is
+        # deliberate. `logic.nim` reduces an out-of-range bit number modulo
+        # the operand width, and no passage of the User's Manual states any
+        # modulus - see uncertainty 5 in that module's header, which also says
         # why Figure 3-8's `MODULO (OFFSET)` annotation does not settle it.
-        # An earlier revision of this corpus held `btst #41,%d0` and
-        # `btst #9,(%a0)` and asserted the modulo-32 and modulo-8 answers as
-        # facts about the part. They are this core's choice, the corpus must
-        # not pin a choice no document supports, and the two cases below get
-        # the same discrimination out of in-range numbers:
+        # That reduction is this core's choice, and the corpus must not pin a
+        # choice no document supports. The two cases below get the same
+        # discrimination out of in-range numbers:
         #
-        #   - bit 9 of the seed is SET, and a core that treated a data
-        #     register operand as a BYTE could not reach bit 9 at all;
-        #   - bit 1 of the addressed BYTE 0x02 is SET while bit 1 of the
+        #   - bit 9 of the seed is set, and a core that treated a data
+        #     register operand as a byte could not reach bit 9 at all;
+        #   - bit 1 of the addressed byte 0x02 is set while bit 1 of the
         #     longword at the same address (0x025A3CC1, low byte 0xC1) is
-        #     CLEAR, so a longword access answers the opposite.
+        #     clear, so a longword access answers the opposite.
         {
             "name": "btst_l_set_bit_clears_z",
             "mnemonic": "btst",
@@ -905,12 +900,12 @@ CASES = {
             "expected": {"regs": {"d0": DIRTY_D, "sr": SR_DIRTY}},
         },
         {
-            # A DATA REGISTER OPERAND IS 32 BITS, SO BIT 9 EXISTS. Bit 9 of
-            # the seed 0x12345678 is SET, so Z is CLEARED. A core that gave a
+            # A data register operand is 32 bits, so bit 9 exists. Bit 9 of
+            # the seed 0x12345678 is set, so Z is cleared. A core that gave a
             # register operand the memory width of 8 could not name bit 9 at
             # all: under any byte reading it reaches bit 1 of 0x78, which is
-            # CLEAR, and sets Z. The bit number is inside the operand either
-            # way, so this case asserts the WIDTH and pins no modulus.
+            # clear, and sets Z. The bit number is inside the operand either
+            # way, so this case asserts the width and pins no modulus.
             "name": "btst_l_bit_number_above_a_byte",
             "mnemonic": "btst",
             "instruction": "btst #9,%d0",
@@ -919,16 +914,16 @@ CASES = {
                                   "sr": SR_DIRTY & ~CCR_Z}},
         },
         {
-            # A MEMORY OPERAND IS ONE BYTE, AND IT IS THE ADDRESSED ONE. Bit 1
-            # of the byte at MEM_BASE (0x02) is SET, so Z is CLEARED. Bit 1 of
-            # the LONGWORD at the same address (0x025A3CC1) is bit 1 of its low
-            # byte 0xC1, which is CLEAR, and bit 1 of the far-end byte is the
+            # A memory operand is one byte, and it is the addressed one. Bit 1
+            # of the byte at MEM_BASE (0x02) is set, so Z is cleared. Bit 1 of
+            # the longword at the same address (0x025A3CC1) is bit 1 of its low
+            # byte 0xC1, which is clear, and bit 1 of the far-end byte is the
             # same bit, so a longword access and a wrong-ended byte access both
-            # set Z where this case asserts it CLEARED. The bit number is 1,
+            # set Z where this case asserts it cleared. The bit number is 1,
             # which every candidate width holds, so this case asserts the
-            # WIDTH and pins no modulus.
+            # width and pins no modulus.
             #
-            # THE MEMORY IS ASSERTED UNCHANGED. BTST reads and must not write.
+            # The memory is asserted unchanged: BTST reads and must not write.
             "name": "btst_b_memory_operand_is_one_byte",
             "mnemonic": "btst",
             "instruction": "btst #1,(%a0)",
@@ -942,7 +937,7 @@ CASES = {
             },
         },
         {
-            # THE DYNAMIC FORM TAKES THE BIT NUMBER FROM A DATA REGISTER, and
+            # The dynamic form takes the bit number from a data register, and
             # that register is asserted unchanged.
             "name": "btst_l_dynamic_bit_number_in_d1",
             "mnemonic": "btst",
@@ -961,8 +956,8 @@ CASES = {
             "expected": {"regs": {"d0": 0x123456F8, "sr": SR_DIRTY}},
         },
         {
-            # THE THREE BYTES AROUND THE OPERAND ARE ASSERTED UNCHANGED. A
-            # core that read, modified and wrote a LONGWORD here would leave
+            # The three bytes around the operand are asserted unchanged. A
+            # core that read, modified and wrote a longword here would leave
             # them equal by accident; one that wrote a longword built from the
             # byte would not. Both are caught, because the seed's four bytes
             # all differ.
@@ -1012,7 +1007,7 @@ CASES = {
         },
         {
             # The dynamic form against a byte in memory: 9 mod 8 is bit 1 of
-            # 0x02, which is SET, so Z clears and the bit flips to 0.
+            # 0x02, which is set, so Z clears and the bit flips to 0.
             "name": "bchg_b_memory_dynamic_bit_number",
             "mnemonic": "bchg",
             "instruction": "bchg %d1,(%a0)",
@@ -1029,8 +1024,8 @@ CASES = {
 
         # ------------------------------------------------------------ LSL
         {
-            # NOTHING LEAVES THE WORD, so C and X are both CLEARED. X starts
-            # SET, so this case asserts that a shift WRITES X rather than
+            # Nothing leaves the word, so C and X are both cleared. X starts
+            # set, so this case asserts that a shift writes X rather than
             # leaving it, which is the one thing a `setNzClearVc`-shaped
             # implementation would get wrong.
             "name": "lsl_l_1_d0",
@@ -1048,7 +1043,7 @@ CASES = {
                                   "sr": SR_BASE | CCR_C | CCR_X}},
         },
         {
-            # THE ENCODED COUNT FIELD 000 MEANS EIGHT. A core that read it as
+            # The encoded count field 000 means eight. A core that read it as
             # zero leaves the register alone and fails on the value.
             "name": "lsl_l_8_d0",
             "mnemonic": "lsl.l",
@@ -1065,7 +1060,7 @@ CASES = {
                                   "sr": SR_BASE | CCR_C | CCR_X}},
         },
         {
-            # NO `sr`: see the note at the head of this group.
+            # No `sr`: see the note at the head of this group.
             "name": "lsl_l_count_register_zero_is_a_no_operation",
             "mnemonic": "lsl.l",
             "instruction": "lsl.l %d1,%d0",
@@ -1082,9 +1077,9 @@ CASES = {
             "expected": {"regs": {"d0": 0x091A2B3C, "sr": SR_BASE}},
         },
         {
-            # THE SAME DESTINATION VALUE AS THE CASE ABOVE AND DIFFERENT
-            # FLAGS. The pair is what proves C and X come from the bit shifted
-            # OUT and not from anything in the result.
+            # The same destination value as the case above and different
+            # flags. The pair is what proves C and X come from the bit shifted
+            # out and not from anything in the result.
             "name": "lsr_l_1_carry_out_sets_c_and_x",
             "mnemonic": "lsr.l",
             "instruction": "lsr.l #1,%d0",
@@ -1093,8 +1088,8 @@ CASES = {
                                   "sr": SR_BASE | CCR_C | CCR_X}},
         },
         {
-            # A LOGICAL RIGHT SHIFT FEEDS ZEROS IN. An arithmetic one would
-            # give 0xF8765432 and set N; this case asserts N is CLEAR.
+            # A logical right shift feeds zeros in. An arithmetic one would
+            # give 0xF8765432 and set N; this case asserts N is clear.
             "name": "lsr_l_4_is_logical_not_arithmetic",
             "mnemonic": "lsr.l",
             "instruction": "lsr.l #4,%d0",
@@ -1104,7 +1099,7 @@ CASES = {
 
         # ------------------------------------------------------------ ASR
         {
-            # AN ARITHMETIC RIGHT SHIFT REPLICATES THE SIGN. A logical one
+            # An arithmetic right shift replicates the sign. A logical one
             # would give 0x43B2A190 and clear N.
             "name": "asr_l_1_replicates_the_sign",
             "mnemonic": "asr.l",
@@ -1131,7 +1126,7 @@ CASES = {
 
         # ------------------------------------------------------------ ASL
         #
-        # THE THREE COUNT-OF-ONE CASES SEPARATE V FROM C IN BOTH DIRECTIONS.
+        # The three count-of-one cases separate V from C in both directions.
         # `asl_l_1_sign_change_sets_v` has V set with C clear, and
         # `asl_l_1_sign_kept_clears_v` has C set with V clear, so a core that
         # copied one bit into the other fails one of them whichever way round

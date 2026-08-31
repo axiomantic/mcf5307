@@ -759,33 +759,27 @@ add_test(NAME t_move
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_move_driver.cmake")
 
-# --------------------------------------------------------------------- CPU-9
+# ---------------------------------------------------------------------------
 # `t_logic` - the logic, bit-operation and shift instruction group.
 #
-# ONE REGISTERED NAME, AND EVERY CASE CAN FAIL. The CPU-9 Check: line is
-# `mcf5307_conformance_logic`, and this test is registered BESIDE it rather
-# than instead of it, because that corpus STRUCTURALLY CANNOT SEE the two
-# defects this file was written to catch.
+# This test is registered beside `mcf5307_conformance_logic` rather than
+# instead of it, because that corpus structurally cannot see the two defects
+# `tests/t_logic.nim` was written to catch.
 #
-# A POSITIVE CORPUS CANNOT SEE A WRONGLY-CLAIMED ENCODING. The 41 committed
-# logic cases are all encodings this part HAS. `decode.nim` claimed line 1011
-# opmode 111 - CMPA.L, which CPU-10 owns - as an EOR, and the wrong claim
-# presented as a well-formed long EOR: measured, `cmpa.l %d0,%a1` (`b3c0`) left
-# d0 = d0 xor d1 and the corpus stayed 41 of 41. Adding green cases never
-# catches that. Only a case that asserts what must NOT decode can.
+# A positive corpus cannot see a wrongly-claimed encoding. Its logic cases are
+# all encodings this part has, so a decoder that claims line 1011 opmode 111 -
+# CMPA.L - as an EOR presents as a well-formed long EOR and the corpus stays
+# green. Only a case that asserts what must not decode can catch that.
 #
-# NOR CAN IT SEE AN OPERAND IT NEVER OFFERS. The corpus holds no dynamic BTST
-# against a PC-relative or an immediate operand, so the disagreement between
-# the declared mask - which admits both - and the executor - which refused both
-# - was invisible. Measured, `btst %d1,(4,%pc)` and `btst %d1,#5` each halted
-# with `fault`, though `m68k-elf-as -mcpu=5307` assembles both.
+# Nor can it see an operand it never offers. The corpus holds no dynamic BTST
+# against a PC-relative or an immediate operand, so a disagreement between the
+# declared mask - which admits the PC-relative pair - and the executor is
+# invisible there.
 #
-# AND NO REGISTERED TEST ENTERED `logic.nim` AT ALL BEFORE THIS ONE.
-# `t_ea_masks` covers MOVE, ADDQ, SUBQ and LEA; `t_move` and `t_alu` cover
-# their own groups. `tests/t_logic.nim` gives the case list and the
-# measurement behind every encoding it names.
+# `tests/t_logic.nim` gives the case list and the measurement behind every
+# encoding it names.
 #
-# THE FLAG SET, THE COMPILE INSIDE THE TEST and the two-part failure check are
+# The flag set, the compile inside the test and the two-part failure check are
 # taken from `t_ea_masks`, `t_sign_extend`, `t_alu` and `t_move` above, for the
 # reasons those blocks give.
 

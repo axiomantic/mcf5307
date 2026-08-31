@@ -1,144 +1,69 @@
-## `t_logic` - the logic, bit-operation and shift instruction group. Task CPU-9
-## owns this file. Design section 6.1.
+## `t_logic` - the logic, bit-operation and shift instruction group.
 ##
-## THE THREE DOCUMENTS THIS FILE CITES ARE OUTSIDE THIS REPOSITORY, so each is
-## named in full here. A bare "section 6.1" is unreadable to a reader who holds
-## only the repository, and none of the three may be copied into it.
+## Why this file exists beside `mcf5307_conformance_logic`. Every case in that
+## corpus is a positive case: an encoding this part has, run against an
+## expected register state. A positive corpus cannot see either of the two
+## defects this file was written to catch, and the reason is structural rather
+## than a gap that more cases would close.
 ##
-##   DESIGN SECTION 6.1 is section 6 "The MCF5307 Core and the Board Model",
-##   subsection 6.1 "The core", of the NMG2 emulator DESIGN DOCUMENT
-##   (`2026-08-04-nmg2-emulator-design.md`, in the nord-modular-emulator plan
-##   set). Opened and checked: it is the section that makes the legality mask a
-##   MANDATORY property of this core - "Each opcode carries its own legality
-##   mask. An illegal mode traps." - and it is the section that sizes the core
-##   and forbids a Musashi fork.
-##
-##   AGENTS.MD SECTION 11 is section 11 "External resources" of the
-##   nord-modular-emulator project's `AGENTS.md`. Opened and checked: it is the
-##   section that names the two Motorola documents this file takes instruction
-##   semantics from - the ColdFire Family Programmer's Reference Manual Rev 3
-##   and the MCF5307 User's Manual - and gives a download location for each.
-##
-##   ONE OF THE TWO IS ON THIS MACHINE AND ONE IS NOT, AND AN EARLIER REVISION
-##   OF THIS PARAGRAPH SAID NEITHER WAS. That was false, it was never
-##   searched for, and it is the sentence that told the next reader not to
-##   look for a document sitting in front of them. The MCF5307 USER'S MANUAL
-##   is present twice under the session scratchpad - as `MCF5307UM.pdf` at its
-##   root and again under `nmg2-artifacts-archive/datasheets/` - with an
-##   extracted text form beside the first as `MCF5307UM.txt`. Both copies
-##   predate this branch's first commit. Neither is in this repository and
-##   neither may be copied into it, which is why every citation here names
-##   table, page and row instead of quoting.
-##
-##   THE COLDFIRE FAMILY PROGRAMMER'S REFERENCE MANUAL IS GENUINELY ABSENT -
-##   searched for by name and by content across the scratchpad, and the
-##   network is closed - and it is the document that would settle FIVE OF THE
-##   SIX uncertainties the `logic.nim` header declares: numbers 1, 2, 4, 5 and
-##   6, which is the list that header itself gives. Number 3, the exact cycle
-##   count, is not one of them - it needs the clock work of AGENTS.md open
-##   question 6. AN EARLIER REVISION OF THIS PARAGRAPH SAID "the four
-##   uncertainties", which named neither the right total nor the right subset.
-##   That absence, and not the User's Manual's, is why the shift-overflow note
-##   in `logic.nim` says what it says.
-##
-##   CPU-6'S PLAN ROW is the CPU-6 row of section 11.3 "The instruction set" of
-##   the NMG2 emulator IMPLEMENTATION PLAN
-##   (`2026-08-04-nmg2-emulator-impl.md`). Opened and checked: its Check line
-##   reads "The test asserts a trap for at least one illegal mode for each
-##   implemented opcode", which is the property the shift block below cites it
-##   for.
-##
-## Fifteen other files in this repository carry the same bare-citation style,
-## and one of them cites a path on the author's desktop. They belong to their
-## own tasks and are not repaired here.
-##
-## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_logic`. That corpus is 41
-## cases and every one of them is a POSITIVE case: an encoding this part has,
-## run against an expected register state. A positive corpus CANNOT SEE either
-## of the two defects this file was written to catch, and the reason is
-## structural rather than a gap that more cases would close.
-##
-##   A WRONGLY-CLAIMED ENCODING PRODUCES A PASSING EXECUTION OF A DIFFERENT
-##   INSTRUCTION. `decode.nim` claimed line 1011 opmode 111 - which is CMPA.L -
-##   as an EOR, because its predicate read `>= 4` where the opmodes of EOR are
-##   100, 101 and 110. `opmodeSize(7)` answers 4, so the wrong claim presented
-##   as a well-formed long EOR and nothing downstream noticed. Measured against
-##   the source before the fix: `cmpa.l %d0,%a1` is `b3c0`, and running it with
-##   d0 = 0x0f0f0f0f and d1 = 0x12345678 left d0 = 0x1d3b5977, which is
-##   d0 xor d1. The core ran `EOR.L D1,D0`: it wrote a register CMPA must not
-##   touch and it computed no comparison. NO NUMBER OF GREEN CASES FINDS THAT.
-##   Only a case that asserts what must NOT decode can, which is what
+##   A wrongly-claimed encoding produces a passing execution of a different
+##   instruction. `decode.nim`'s EOR predicate must not read `>= 4`, because
+##   line 1011 opmode 111 is CMPA.L and `opmodeSize(7)` answers 4, so a wrong
+##   claim presents as a well-formed long EOR and nothing downstream notices:
+##   `cmpa.l %d0,%a1` is `b3c0`, and running it with d0 = 0x0f0f0f0f and
+##   d1 = 0x12345678 leaves d0 = 0x1d3b5977, which is d0 xor d1. The core runs
+##   `EOR.L D1,D0`: it writes a register CMPA must not touch and it computes
+##   no comparison. No number of green positive cases finds that. Only a case
+##   that asserts what must not decode can, which is what
 ##   `decodeWord(0xb3c0).op == opIllegal` below is.
 ##
-##   AN OPERAND THE EXECUTOR REFUSES IS NOT AN OPERAND THE CORPUS OFFERS. The
-##   corpus holds no dynamic BTST against a PC-relative operand, so the
+##   An operand the executor refuses is not an operand the corpus offers. The
+##   corpus holds no dynamic BTST against a PC-relative operand, so a
 ##   disagreement between `eaLegalityFor(opBtst)` - which admits it - and
-##   `execBitOp` - which resolved the operand through `eaResolve` and
-##   therefore refused it - was invisible. Measured before the fix:
-##   `btst %d1,(4,%pc)` (`033a 0004`) and `btst %d1,(4,%pc,%d2)`
-##   (`033b 2804`) each halted with `fault` and returned no cycles, though
-##   `m68k-elf-as -mcpu=5307` assembles both.
+##   `execBitOp` - which would refuse it if it resolved the operand through
+##   `eaResolve` - is invisible there. `btst %d1,(4,%pc)` (`033a 0004`) and
+##   `btst %d1,(4,%pc,%d2)` (`033b 2804`) both assemble on
+##   `m68k-elf-as -mcpu=5307`.
 ##
-## AND NO REGISTERED TEST TOUCHED THIS GROUP AT ALL. `t_ea_masks` covers MOVE,
-## ADDQ, SUBQ and LEA; `t_move` and `t_alu` cover their own groups. Before this
-## file the CTest listing held 13 names and none of them entered `logic.nim`.
-##
-## EVERY CASE ASSERTS A COMPLETE TUPLE, never one field, exactly as `t_alu`
+## Every case asserts a complete tuple, never one field, exactly as `t_alu`
 ## does. A case that changes a register asserts (that register, the whole
 ## status register, `fault`), so a right result with a wrong flag fails and a
-## right flag with a wrong result fails. A case that must TRAP asserts (the
+## right flag with a wrong result fails. A case that must trap asserts (the
 ## register it must not have changed, `fault`, `halted`, the cycle return), so
 ## "it trapped" is separable from "it executed and wrote nothing".
 ##
-## EVERY TRAP CASE BUT ONE WAS OFFERED TO `m68k-elf-as -mcpu=5307` AND
-## REJECTED, and every positive case was assembled by it. The encodings the
-## assembler refuses to emit are built from a MEASURED base word by replacing
+## Every trap case but one was offered to `m68k-elf-as -mcpu=5307` and
+## rejected, and every positive case was assembled by it. The encodings the
+## assembler refuses to emit are built from a measured base word by replacing
 ## the low six bits, which is the effective-address field: `bset %d1,%d0` is
 ## `03c0`, so `bset %d1,(4,%pc)` is `03c0 or 3a` = `03fa`. That method is
-## cross-checked by the two words the assembler DOES emit: `btst %d1,%d0` is
+## cross-checked by the two words the assembler does emit: `btst %d1,%d0` is
 ## `0300`, and `0300 or 3a` and `0300 or 3c` are `033a` and `033c`, which are
 ## exactly what the assembler produced for `btst %d1,(4,%pc)` and
 ## `btst %d1,#5`.
 ##
-## THE ONE EXCEPTION IS `btst %d1,#5`, AND IT IS NAMED HERE RATHER THAN LEFT
-## FOR A READER TO NOTICE. The assembler ACCEPTS that form and emits
-## `033c 0005`, and this file asserts that the core TRAPS it. That is the only
-## place in this file where a trap case contradicts the assembler, it is
-## deliberate, and the manual rows that put it there are on `eaBitDynamic` in
-## `decode_types.nim`. It is uncertainty 4 in the `logic.nim` header - the one
-## entry on that list which a future reader may have to REVERSE.
-##
-## TWO ASSERTIONS GO RED WHEN THEY DO, NOT ONE, AND BOTH ARE NAMED HERE. An
-## earlier revision of this paragraph - and the message of the commit that
-## wrote it - said "this case is what would go red", which undercounts by one.
-## The two are this trap case and the
+## The one exception is `btst %d1,#5`. The assembler accepts that form and
+## emits `033c 0005`, and this file asserts that the core traps it. That is
+## the only place in this file where a trap case contradicts the assembler, it
+## is deliberate, and the manual rows that put it there are on `eaBitDynamic`
+## in `decode_types.nim`. It is uncertainty 4 in the `logic.nim` header - the
+## one entry on that list which a future reader may have to reverse. Two
+## assertions go red when they do, not one: this trap case and the
 ## `checkMask(eaIsLegalFor(opBtst, decodeEa(0x3C)), false, ...)` row further
-## down, which that same commit flipped from `true`. MEASURED: `eaBitDynamic`'s
-## `ea7` restored to `eaData7` in a `git archive` extract of this commit,
-## confirmed in the generated C as `{253, 31}` against this commit's
-## `{253, 15}`, rebuilt from a fresh configure - `t_logic: 2 of 74 cases
-## failed`, exactly those two, and `mcf5307_conformance_logic` stayed
-## `41 cases, 0 failed`. The corpus does not pin this question either way.
+## down. The corpus does not pin this question either way.
 ##
-## THE PC-RELATIVE CASES DO NOT PIN THE PC-RELATIVE BASE, and that is
+## The PC-relative cases do not pin the PC-relative base, and that is
 ## deliberate. `machine.nim` computes a `(d16,PC)` address from the program
-## counter AFTER the displacement word is consumed; the assembler's own base is
-## the ADDRESS OF that word. Measured: `btst %d1,(target,%pc)` with the opcode
-## at 0 assembles to `033a 0004` and places `target` at 6, so the base is 2 and
-## not 4. That disagreement is a defect of `machine.nim` and it belongs to
-## whoever owns that module - it is not this task's, and every PC-relative
-## operand of MOVE and of the arithmetic group has it too. The cases below
-## therefore seed the SAME byte across both candidate addresses, so that they
-## assert the property this task owns - that a dynamic BTST reaches a
-## PC-relative operand at all and complements the bit it found into Z - and
-## stay green when the base is corrected. A case that read neither address
-## would read a zero byte and would still fail the Z-clear case.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
-## semantics, the condition-code rules and the encodings are facts about
-## Motorola silicon; they are taken from the ColdFire Family Programmer's
-## Reference Manual and the MCF5307 User's Manual (AGENTS.md section 11) and
-## from this project's own measurements with the pinned cross assembler.
+## counter after the displacement word is consumed; the assembler's own base
+## is the address of that word. Measured: `btst %d1,(target,%pc)` with the
+## opcode at 0 assembles to `033a 0004` and places `target` at 6, so the base
+## is 2 and not 4. That disagreement belongs to `machine.nim`, and every
+## PC-relative operand of MOVE and of the arithmetic group has it too. The
+## cases below therefore seed the same byte across both candidate addresses,
+## so that they assert the property this file owns - that a dynamic BTST
+## reaches a PC-relative operand at all and complements the bit it found into
+## Z - and stay green when the base is corrected. A case that read neither
+## address would read a zero byte and would still fail the Z-clear case.
 
 import mcf5307/cpu
 import mcf5307/decode
@@ -202,7 +127,7 @@ proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
 
 # ---------------------------------------------------------------------------
 # The runner. It is `t_alu`'s, for the reason that file gives: a pass here has
-# to be a pass of the SHIPPED path - `mcf5307_reset`, `mcf5307_set_reg`,
+# to be a pass of the shipped path - `mcf5307_reset`, `mcf5307_set_reg`,
 # `mcf5307_exec`, `mcf5307_get_reg` - and not of an internal helper reached
 # around the back.
 
@@ -214,17 +139,13 @@ const
 
 type Outcome = object
   cycles: uint32
-    ## `mcf5307_exec(ctx, 1)`'s RETURN, WHICH IS NOT A CYCLE COUNT despite the
+    ## `mcf5307_exec(ctx, 1)`'s return, which is not a cycle count despite the
     ## name. `mcf5307_exec` saturates at its budget, and every instruction in
     ## this group costs 2 for the fetch plus at least one more, so the value is
-    ## 1 for an instruction that ran and 0 for one that trapped. THE `cycles: 1`
-    ## HALF OF EVERY TUPLE BELOW ASSERTS "IT RAN" AND ASSERTS NO COUNT.
-    ## MEASURED: ALL NINE cycle returns in `logic.nim` replaced by wrong
-    ## numbers - 44, 66, 45, 65, 66, 46, 41, 61 and 47 in source order - every
-    ## one confirmed in the generated C, on a fresh extract with a fresh
-    ## configure; all 74 cases here and all 74 corpus cases stayed green. That
-    ## is why uncertainty 3 in the `logic.nim` header says nothing asserts the
-    ## cycle counts.
+    ## 1 for an instruction that ran and 0 for one that trapped. The
+    ## `cycles: 1` half of every tuple below asserts "it ran" and asserts no
+    ## count. Nothing in this file asserts a cycle count; uncertainty 3 in the
+    ## `logic.nim` header says why.
   fault: bool
   halted: bool
   d: array[8, uint32]
@@ -257,7 +178,7 @@ proc runIns(words: openArray[uint16];
   # condition code would silently run with a clear one.
   discard mcf5307_set_reg(ctx, 16, sr)
 
-  # ONE INSTRUCTION, AND THE BUDGET IS WHAT STOPS THE LOOP AFTER IT, exactly as
+  # One instruction, and the budget is what stops the loop after it, exactly as
   # in `t_alu`: the memory after the encoding is zero and `0x0000` is not an
   # instruction this part has. The return is 1 for an instruction that ran and
   # 0 for one that trapped.
@@ -273,7 +194,7 @@ proc runIns(words: openArray[uint16];
 proc mem32(address: uint32): uint32 =
   boardReadValue(board, address, 4)
 
-# The assertions. Each compares ONE complete tuple.
+# The assertions. Each compares one complete tuple.
 
 proc expectD(o: Outcome; n: int; want: uint32; wantSr: uint32; label: string) =
   let got = (reg: o.d[n], sr: o.sr, fault: o.fault)
@@ -285,7 +206,7 @@ proc expectTrapD(o: Outcome; n: int; unchanged: uint32; label: string) =
   ## reach. It must halt with `fault`, return no cycles, and leave the
   ## destination register alone.
   ##
-  ## `unchanged` IS SEEDED NON-ZERO BY EVERY CALLER. A trap case whose
+  ## `unchanged` is seeded non-zero by every caller. A trap case whose
   ## register starts at zero asserts 0 == 0 in this half and would pass
   ## against a core that wrote a zero into it.
   let got = (reg: o.d[n], fault: o.fault, halted: o.halted, cycles: o.cycles)
@@ -293,9 +214,9 @@ proc expectTrapD(o: Outcome; n: int; unchanged: uint32; label: string) =
   check(got == wanted, label, $got, $wanted)
 
 proc expectTrapA(o: Outcome; n: int; unchanged: uint32; label: string) =
-  ## The address-register twin of `expectTrapD`, for a case whose operand IS
+  ## The address-register twin of `expectTrapD`, for a case whose operand is
   ## an address register. `eaResolve` answers `erAn` for that operand and
-  ## `eaRefWrite` puts the result INTO the register, so the register a removed
+  ## `eaRefWrite` puts the result into the register, so the register a removed
   ## mask would disturb is an A and not a D.
   let got = (reg: o.a[n], fault: o.fault, halted: o.halted, cycles: o.cycles)
   let wanted = (reg: unchanged, fault: true, halted: true, cycles: 0'u32)
@@ -303,7 +224,7 @@ proc expectTrapA(o: Outcome; n: int; unchanged: uint32; label: string) =
 
 proc freshCtx(): MCF5307Ctx =
   ## A context reset onto a cleared board. It serves the assertions that call
-  ## a `machine.nim` procedure DIRECTLY; every instruction case goes through
+  ## a `machine.nim` procedure directly; every instruction case goes through
   ## `runIns` and the shipped path instead.
   for i in 0 ..< memSize:
     board.bytes[i] = 0'u8
@@ -328,35 +249,22 @@ proc checkMask(got: bool; want: bool; label: string) =
   check(got == want, label, $got, $want)
 
 # The dirty condition codes a bit operation must carry through untouched. A bit
-# operation writes Z ALONE (manual Table 3-7 names no other bit), so N, V, C
+# operation writes Z alone (manual Table 3-7 names no other bit), so N, V, C
 # and X are set on entry and asserted unchanged on exit.
 const bitDirty = srBase or ccrN or ccrV or ccrC or ccrX
 
 # ---------------------------------------------------------------------------
-# BLOCKING 1. `CMPA.L` IS NOT THIS GROUP'S AND MUST STAY UNRECOGNISED HERE.
+# `CMPA.L` is not this group's and must stay unrecognised here.
 #
-# Line 1011 carries EOR in opmodes 100, 101 and 110. THE OTHER FIVE OPMODES
-# ARE CPU-10'S: CMP in 000, 001 and 010, CMPA.W in 011 and CMPA.L in 111.
-# FIVE AND NOT FOUR - an earlier revision of this comment omitted 011, where
-# `decode.nim`'s comment beside the same predicate counts five. THE ENCODING
-# MUST COME BACK AS AN UNRECOGNISED WORD - `opIllegal`, which is what
-# `decodeWord`'s final arm answers - and NOT as an operation of this group
-# that `logic.nim` then traps, because a claimed-and-trapped encoding is taken
-# away from the task that owns it just as surely as a claimed-and-executed
-# one.
+# Line 1011 carries EOR in opmodes 100, 101 and 110. The other five are CMP in
+# 000, 001 and 010, CMPA.W in 011 and CMPA.L in 111. The encoding must come
+# back as an unrecognised word - `opIllegal`, which is what `decodeWord`'s
+# final arm answers - and not as an operation of this group that `logic.nim`
+# then traps.
 #
-# `cmpa.l %d0,%a1` is `b3c0`, assembled by `m68k-elf-as -mcpu=5307`.
-#
-# OPMODE 111 IS CMPA.L BECAUSE THE ASSEMBLER PUT IT THERE, AND NOT BY ANY
-# INFERENCE FROM `cmpa.w`. `b3c0` is what `m68k-elf-as -mcpu=5307` emitted for
-# `cmpa.l %d0,%a1`, and `(0xb3c0 shr 6) and 7` is 111. That is the whole
-# argument and it needs no second measurement.
-#
-# `m68k-elf-as -mcpu=5307` does also reject `cmpa.w %d0,%a1` ("needs 68000 or
-# higher"), and that measurement is true - but it is a fact about OPMODE 011,
-# which is where CMPA.W lives. An earlier revision of this comment concluded
-# "so CMPA.L is the whole of opmode 111" FROM that rejection. The conclusion
-# happens to be right and it does not follow from that premise.
+# Opmode 111 is CMPA.L because the assembler put it there, and not by any
+# inference from `cmpa.w`. `b3c0` is what `m68k-elf-as -mcpu=5307` emitted for
+# `cmpa.l %d0,%a1`, and `(0xb3c0 shr 6) and 7` is 111.
 
 block:
   expectDecode(0xB3C0'u16, opIllegal,
@@ -364,17 +272,16 @@ block:
   expectDecode(0xB280'u16, opIllegal,
     "cmp.l %d0,%d1 (b280) is not claimed by the logic decoder")
 
-  # THE POSITIVE CONTROLS. Without them a predicate that claimed NOTHING on
+  # The positive controls. Without them a predicate that claimed nothing on
   # line 1011 would report the two cases above as passes, and EOR would be
   # gone. All three EOR opmodes are still claimed, byte and word included -
-  # those two are not instructions on this part and they trap on the SIZE,
-  # which is the channel `decodeLogicLine` and CPU-13 both use.
+  # those two are not instructions on this part and they trap on the size.
   expectDecode(0xB380'u16, opEor, "eor.l %d1,%d0 (b380) is still an EOR")
   expectDecode(0xB300'u16, opEor, "the byte EOR opmode (b300) is still an EOR")
   expectDecode(0xB340'u16, opEor, "the word EOR opmode (b340) is still an EOR")
 
-  # AND THE EXECUTION. `CMPA` writes no data register and computes a
-  # comparison; the defect made `b3c0` write d0 = d0 xor d1 = 0x1d3b5977. Both
+  # And the execution. `CMPA` writes no data register and computes a
+  # comparison; a wrongly-claimed `b3c0` writes d0 = d0 xor d1 = 0x1d3b5977. Both
   # source registers and the destination address register are asserted
   # unchanged, and the core reports the word it could not decode.
   let o = runIns([0xB3C0'u16],
@@ -389,30 +296,30 @@ block:
     $got, $want)
 
 # ---------------------------------------------------------------------------
-# BLOCKING 2. A DYNAMIC `BTST` REACHES EVERY OPERAND ITS MASK ADMITS, AND THE
-# MASK STOPS AT THE IMMEDIATE.
+# A dynamic `BTST` reaches every operand its mask admits, and the mask stops
+# at the immediate.
 #
-# `eaLegalityFor(opBtst)` is `eaBitDynamic`: the manual's DATA class WITHOUT
-# the immediate. BTST NEVER WRITES, so it must read the two PC-relative
+# `eaLegalityFor(opBtst)` is `eaBitDynamic`: the manual's DATA class without
+# the immediate. BTST never writes, so it must read the two PC-relative
 # sub-variants through `eaRead`; `eaResolve` serves `AbsW` and `AbsL` alone
-# and faults on the rest, which is correct for the operations that WRITE and
+# and faults on the rest, which is correct for the operations that write and
 # wrong for this one.
 #
 # `btst %d1,(4,%pc)` is `033a 0004` and `btst %d1,(4,%pc,%d2)` is `033b 2804`,
 # both assembled by `m68k-elf-as -mcpu=5307`.
 #
-# WHY THE IMMEDIATE IS OUT, AND WHY THE ASSEMBLER DOES NOT SETTLE IT. See the
+# Why the immediate is out, and why the assembler does not settle it. See the
 # `eaBitDynamic` doc comment in `decode_types.nim` for the manual rows and the
 # toolchain measurements. The short form: MCF5307 User's Manual Table 3-13
 # (page 3-28) dashes the `#xxx` column of the `btst Dy,<ea>` row, and that
 # dash is the same mark the table uses for every form this part does not have.
 # `m68k-elf-as -mcpu=5307` does assemble `btst %d1,#5` as `033c 0005`, and
 # that acceptance is byte-for-byte the plain-68000 one - the assembler
-# narrows the STATIC bit-operation modes for ColdFire and leaves this form
+# narrows the static bit-operation modes for ColdFire and leaves this form
 # untouched - so it measures the 68000 rule and not this part.
 
 block:
-  # THE IMMEDIATE OPERAND TRAPS. `033c 0005` is the word the assembler emits
+  # The immediate operand traps. `033c 0005` is the word the assembler emits
   # for `btst %d1,#5`; d1 is seeded non-zero so the "unchanged" half is an
   # assertion and not `0 == 0`.
   expectTrapD(runIns([0x033C'u16, 0x0005'u16],
@@ -450,27 +357,23 @@ block:
     "btst %d1,(4,%pc) with a bit number of 6 finds a clear bit and sets Z",
     $gotClear, $wantClear)
 
-  # THE INDEXED PC-RELATIVE OPERAND BECAME REACHABLE BY THE SAME REPAIR, and
-  # nothing executed it. `eaLegalityFor(opBtst)` admits `(d8,PC,Xn)` - the
-  # `eaIsLegalFor(opBtst, ...)` row further down asserts exactly that - and
-  # before this commit `execBitOp` refused it through `eaResolve` exactly as
-  # it refused the two operands the commit names. Measured: under the
-  # pre-repair shape, where every bit operation resolves its operand through
-  # `eaResolve`, this case goes red beside those four. An asserted table entry
-  # that no case executes is a claim about the table and not about the core,
-  # so here is the case.
+  # The indexed PC-relative operand. `eaLegalityFor(opBtst)` admits
+  # `(d8,PC,Xn)` - the `eaIsLegalFor(opBtst, ...)` row further down asserts
+  # exactly that - and a bit operation that resolved every operand through
+  # `eaResolve` would refuse it. An asserted table entry that no case executes
+  # is a claim about the table and not about the core, so here is the case.
   # `btst %d1,(4,%pc,%d2)` is `033b 2804`, assembled by `m68k-elf-as
   # -mcpu=5307`.
   #
-  # THE INDEX IS A SMALL POSITIVE NUMBER ON PURPOSE, for the same kind of
+  # The index is a small positive number on purpose, for the same kind of
   # reason the file header gives about the PC-relative base. `machine.nim`
-  # reads the index word's word/long select at BIT 8, and the assembler emits
-  # it at BIT 11, so the two readings of `2804` disagree about the WIDTH of
+  # reads the index word's word/long select at bit 8, and the assembler emits
+  # it at bit 11, so the two readings of `2804` disagree about the width of
   # the index. They cannot disagree about a d2 of 4, whose low word and whole
-  # longword are the same number. The case therefore asserts the property this
-  # task owns - that a dynamic BTST reaches an indexed PC-relative operand -
-  # and stays green when that disagreement is settled by whoever owns
-  # `machine.nim`. Both candidate bases put the operand inside the window.
+  # longword are the same number. The case therefore asserts that a dynamic
+  # BTST reaches an indexed PC-relative operand, and stays green when that
+  # disagreement is settled by whoever owns `machine.nim`. Both candidate
+  # bases put the operand inside the window.
   let oIndex = runIns([0x033B'u16, 0x2804'u16],
                       d = [0'u32, 7, 4, 0, 0, 0, 0, 0], sr = bitDirty or ccrZ,
                       mem = window)
@@ -484,43 +387,27 @@ block:
     $gotIndex, $wantIndex)
 
 block:
-  # THE WIDENING IS BTST'S ALONE. `BSET`, `BCLR` and `BCHG` WRITE their
+  # The widening is BTST's alone. `BSET`, `BCLR` and `BCHG` write their
   # operand, so a PC-relative or an immediate destination stays refused. Each
   # of the four words below is the measured base word with the low six bits
   # replaced: `bset %d1,%d0` is `03c0`, `bclr %d1,%d0` is `0380` and
   # `bchg %d1,%d0` is `0340`. `m68k-elf-as -mcpu=5307` rejects every one of
   # `bset %d1,(4,%pc)`, `bset %d1,#5`, `bclr %d1,(4,%pc)` and `bchg %d1,#5`.
   #
-  # MORE THAN ONE GUARD REFUSES THESE FOUR AND NO CASE HERE CAN NAME ONE OF
-  # THEM. The per-operation mask in `execBitOp` runs first and `eaResolve`
-  # runs second, and the two IMMEDIATE cases meet a third underneath both:
-  # `eaAddr` has no address for an immediate and faults on its own.
-  #
-  # MEASURED, FOUR WAYS, and the last two are why the two halves of this group
-  # are not the same case twice:
-  #   - widening `eaResolve` to admit `ea7PCDisp` and `ea7PCIndex`: all four
-  #     stay green;
-  #   - widening the BSET/BCLR/BCHG mask to `eaAlterableModes` + `eaData7`:
-  #     all four stay green;
-  #   - widening BOTH: the two PC-RELATIVE cases go red, the two IMMEDIATE
-  #     ones stay green;
-  #   - widening both AND adding `ea7Imm` to `eaResolve`: the two immediate
-  #     cases STILL stay green, because `eaAddr` refuses the immediate
-  #     underneath everything above it.
-  #
-  # AN EARLIER REVISION OF THIS COMMENT CLAIMED THESE WERE "the cases that
-  # fail if `eaResolve` is widened instead of the executor being fixed". That
-  # claim was never run and it is false. The four cases assert that the
-  # encoding DOES NOT EXECUTE, which is worth asserting and is all they
+  # More than one guard refuses these four, and no case here can name one of
+  # them. The per-operation mask in `execBitOp` runs first and `eaResolve`
+  # runs second, and the two immediate cases meet a third underneath both:
+  # `eaAddr` has no address for an immediate and faults on its own. The four
+  # cases assert that the encoding does not execute, and that is all they
   # assert.
   #
-  # EACH GUARD IS MEASURED SOMEWHERE THAT CAN SEE IT, and the places are named
+  # Each guard is measured somewhere that can see it, and the places are named
   # here so that no property rests on a case that cannot fail on it:
-  #   - the DYNAMIC mask is measured by the BSET, BCLR and BCHG rows of the
-  #     `eaIsLegalFor` block further down, which went red under the mask
-  #     widening, and by the three An cases at the end of this block, which
-  #     are the only cases in THIS block that trap on the mask alone;
-  #   - the STATIC mask `eaBitStatic` is measured by its own `checkMask` rows
+  #   - the dynamic mask is measured by the BSET, BCLR and BCHG rows of the
+  #     `eaIsLegalFor` block further down, and by the three An cases at the
+  #     end of this block, which are the only cases in this block that trap on
+  #     the mask alone;
+  #   - the static mask `eaBitStatic` is measured by its own `checkMask` rows
   #     and by the two `btst #3,...` cases beside them, which go red both when
   #     that mask is widened and when the mask check is deleted;
   #   - `eaResolve`'s own refusal is measured by the block that follows this
@@ -536,30 +423,12 @@ block:
   expectTrapD(runIns([0x037C'u16, 0x0005'u16], d = d1only), 1, 3'u32,
     "bchg %d1,#5 still traps")
 
-  # AND THE ONE OPERAND THE MASK REFUSES ON ITS OWN. `eaResolve` RESOLVES AN
-  # ADDRESS REGISTER - it answers `erAn`, and `eaRefWrite` puts the result
-  # INTO that register - so nothing under the executor stops these three. The
+  # And the one operand the mask refuses on its own. `eaResolve` resolves an
+  # address register - it answers `erAn`, and `eaRefWrite` puts the result
+  # into that register - so nothing under the executor stops these three. The
   # per-operation mask is the only guard they meet, which is what makes them
   # cases that go red when it is removed, and what the four cases above
-  # cannot be.
-  #
-  # THEY ARE THREE OF SIX AND NOT THE WHOLE OF IT. Deleting the mask check
-  # from `execBitOp` reddens SIX cases in this file as it stands: these three,
-  # the two `btst #3,...` cases in the `eaBitStatic` block below, whose static
-  # mask is checked by the same line, and the `btst %d1,#5` trap case at the
-  # top of this file, which sits behind that same line too.
-  #
-  # THE COUNT WAS FIVE AND THE COMMIT THAT WROTE "FIVE" IS THE COMMIT THAT
-  # MADE IT SIX. `btst %d1,#5` became a trap case here, so it joined the five;
-  # a count measured before that change was true when it was written and is
-  # not true of this file. MEASURED BOTH WAYS, each on its own `git archive`
-  # extract with a fresh configure and the guard confirmed absent from the
-  # generated C: at `aa13eb4`, `t_logic: 5 of 75 cases failed`; at this commit,
-  # `t_logic: 6 of 74 cases failed` - `btst %d1,#5`, `bset %d1,%a0`,
-  # `bclr %d1,%a0`, `bchg %d1,%a0`, `btst #3,(4,%pc)` and `btst #3,0x200.w`,
-  # and nothing else.
-  #
-  # MEASURED with the mask check deleted from `execBitOp`:
+  # cannot be. Measured with the mask check deleted from `execBitOp`:
   # `bset %d1,%a0` reported no fault, returned a cycle, and left a0 at
   # 0x0000123c - the seeded 0x00001234 with bit 3 set.
   #
@@ -576,27 +445,27 @@ block:
   expectTrapA(runIns([0x0348'u16], d = d1only, a = a0only), 0, 0x1234'u32,
     "bchg %d1,%a0 traps: An is not data alterable")
 
-  # THE POSITIVE CONTROL FOR THE WRITING BIT OPERATIONS. Without it the seven
-  # trap cases above would pass against a `BSET` that refused every operand.
+  # The positive control for the writing bit operations. Without it the trap
+  # cases above would pass against a `BSET` that refused every operand.
   # `bset %d1,%d0` is `03c0`; d0 starts at 0 and bit 3 is set, so Z takes the
-  # complement of the bit AS IT WAS FOUND and is set.
+  # complement of the bit as it was found and is set.
   expectD(runIns([0x03C0'u16], d = [0'u32, 3, 0, 0, 0, 0, 0, 0],
                  sr = bitDirty),
     0, 0x00000008'u32, bitDirty or ccrZ,
     "bset %d1,%d0 sets the bit and reports the bit it found in Z")
 
 # ---------------------------------------------------------------------------
-# `eaResolve` STAYS NARROW, AND THIS IS THE ONLY PLACE IN THIS FILE THAT CAN
-# SAY SO.
+# `eaResolve` stays narrow, and this is the only place in this file that can
+# say so.
 #
-# `logic.nim` says of the BTST repair "THE FIX IS HERE AND NOT IN
-# `eaResolve`", because widening that procedure would let a WRITE reach a
-# PC-relative or an immediate operand and it has callers outside this module.
-# That is a claim about `machine.nim`, and the three assertions below are what
-# make it a measured one: they call `eaResolve` directly and require it to
-# refuse, with `fault` and `halted` set and no usable reference returned.
+# `logic.nim` puts the BTST fix in the executor and not in `eaResolve`,
+# because widening that procedure would let a write reach a PC-relative or an
+# immediate operand and it has callers outside this module. That is a claim
+# about `machine.nim`, and the three assertions below are what make it a
+# measured one: they call `eaResolve` directly and require it to refuse, with
+# `fault` and `halted` set and no usable reference returned.
 #
-# THEY HAVE TO BE DIRECT. Every writing path in `logic.nim` - the
+# They have to be direct. Every writing path in `logic.nim` - the
 # `Dn op <ea> -> <ea>` direction of AND and OR, EOR, and BSET, BCLR and BCHG -
 # checks a mask that already excludes these three sub-variants BEFORE it calls
 # `eaResolve`, so a widened `eaResolve` changes the behaviour of no
@@ -614,8 +483,8 @@ block:
     "eaResolve refuses an immediate destination and halts with fault")
 
 # ---------------------------------------------------------------------------
-# `eaBitStatic` - THE STATIC BIT OPERATION'S OPERAND IS NARROWER THAN THE
-# DYNAMIC ONE, and this is the mask that says so.
+# `eaBitStatic` - the static bit operation's operand is narrower than the
+# dynamic one, and this is the mask that says so.
 #
 # Measured: `m68k-elf-as -mcpu=5307` accepts `btst #3,(%a0)` (`0810 0003`) and
 # rejects `btst #3,(4,%pc)` and `btst #3,0x1234.w`. The two rejected words are
@@ -623,7 +492,7 @@ block:
 # and `0838`.
 
 block:
-  # The mask, read directly. A negative case AND a positive control for each
+  # The mask, read directly. A negative case and a positive control for each
   # end of it, because a mask that rejected everything would report every
   # negative case as a pass.
   checkMask(isEaLegal(eaBitStatic, decodeEa(0x00'u16)), true,
@@ -643,7 +512,7 @@ block:
   checkMask(isEaLegal(eaBitStatic, decodeEa(0x3C'u16)), false,
     "the static bit-operation mask rejects an immediate")
 
-  # And through the executor. `btst #3,(%a0)` reads ONE BYTE - a memory
+  # And through the executor. `btst #3,(%a0)` reads one byte - a memory
   # operand of a bit operation is 8 bits wide - so the byte at 0x200 is 0x08,
   # whose bit 3 is set, and Z is cleared. The three bytes beside it are given
   # distinct values and asserted unchanged, because a core that read or wrote
@@ -662,17 +531,15 @@ block:
 
   # The two encodings the static form may not reach.
   #
-  # EACH OPERAND IS AN ADDRESS THE BOARD ANSWERS, so the mask is the only
-  # thing that can refuse it. The absolute-short case used to name 0x1234,
-  # which is off this 0x1000 board, and an address off the board traps on
-  # `busUnmapped` whatever the mask says. Measured: with `eaBitStatic` widened
-  # to mode 7 the 0x1234 case stayed GREEN while its `(d16,PC)` sibling went
-  # red. 0x200 is on this board, so the widened core executes it here and the
-  # case goes red - which is what a case about a mask has to do.
+  # Each operand is an address the board answers, so the mask is the only
+  # thing that can refuse it. An address off this 0x1000 board would trap on
+  # `busUnmapped` whatever the mask says: with `eaBitStatic` widened to mode 7
+  # an off-board absolute-short case stays green while its `(d16,PC)` sibling
+  # goes red. 0x200 is on this board, so the widened core executes it here and
+  # the case goes red - which is what a case about a mask has to do.
   #
-  # d0 IS SEEDED NON-ZERO in both. These two used to take the default zero
-  # register file, so their "unchanged register" half asserted 0 == 0 - the
-  # only two trap cases in this file that did.
+  # d0 is seeded non-zero in both, so the "unchanged register" half is an
+  # assertion and not `0 == 0`.
   let dSeed = [0x12345678'u32, 0, 0, 0, 0, 0, 0, 0]
   expectTrapD(runIns([0x083A'u16, 0x0003'u16, 0x0004'u16], d = dSeed),
     0, 0x12345678'u32,
@@ -682,16 +549,15 @@ block:
     "btst #3,0x200.w traps: the static form reaches no absolute operand")
 
 # ---------------------------------------------------------------------------
-# `eaDataAddressing` - THE MANUAL'S `DATA` CLASS, WHICH DOES NOT INCLUDE `An`.
+# `eaDataAddressing` - the manual's DATA class, which does not include `An`.
 # It is the source mask of the `<ea> op Dn -> Dn` direction of AND and OR, and
-# THOSE TWO ONLY. Both READ and neither writes, so the PC-relative pair and
+# those two only. Both read and neither writes, so the PC-relative pair and
 # the immediate are in and the address register is out. MCF5307 User's Manual
 # Table 3-13: the `and.l <ea>,Rx` row on page 3-28 and the `or.l <ea>,Rx` row
-# on the CONTINUATION PAGE 3-29 carry a time in every column including `#xxx`,
-# where both read `1(0/0)`. The table spans two pages and an earlier revision
-# of this comment put both rows on the first.
+# on the continuation page 3-29 carry a time in every column including `#xxx`,
+# where both read `1(0/0)`.
 #
-# A DYNAMIC BTST NO LONGER READS THIS MASK. It reads `eaBitDynamic`, which is
+# A dynamic BTST does not read this mask. It reads `eaBitDynamic`, which is
 # this class minus the immediate; the rows behind that difference are on the
 # constant itself and the block below asserts both ends of it.
 #
@@ -713,7 +579,7 @@ block:
   checkMask(isEaLegal(eaDataAddressing, decodeEa(0x3D'u16)), false,
     "the data-addressing mask rejects the reserved mode-7 encoding")
 
-  # THE DYNAMIC BIT OPERATION'S MASK IS `eaBitDynamic`, and these rows are
+  # The dynamic bit operation's mask is `eaBitDynamic`, and these rows are
   # what say so. They read `eaLegalityFor` through `eaIsLegalFor`, which is
   # the call `execBitOp` makes, so a table entry changed under the executor
   # fails here. The immediate row is the one that separates this mask from
@@ -728,7 +594,7 @@ block:
   checkMask(eaIsLegalFor(opBtst, decodeEa(0x08'u16)), false,
     "the BTST mask rejects An")
 
-  # THE THREE BIT OPERATIONS THAT WRITE CARRY A NARROWER MASK, which is the
+  # The three bit operations that write carry a narrower mask, which is the
   # asymmetry the executor has to honour.
   for (opx, name) in [(opBset, "BSET"), (opBclr, "BCLR"), (opBchg, "BCHG")]:
     checkMask(eaIsLegalFor(opx, decodeEa(0x00'u16)), true,
@@ -740,13 +606,13 @@ block:
 
   # And through the executor, both ends.
   #
-  # THE POSITIVE CONTROL IS THE PC-RELATIVE SOURCE AND NOT AN IMMEDIATE ONE.
+  # The positive control is the PC-relative source and not an immediate one.
   # `m68k-elf-as -mcpu=5307` assembles `and.l #0x0f0f0f0f,%d1` as ANDI
   # (`0281 0f0f 0f0f`) and never emits the `and.l <ea>,Dn` form with an
   # immediate effective address, so that word is not a measured encoding and
-  # is not asserted here. `and.l (4,%pc),%d1` IS one: `c2ba 0004`.
+  # is not asserted here. `and.l (4,%pc),%d1` is one: `c2ba 0004`.
   #
-  # The source is a LONGWORD, so the window covers both candidate PC-relative
+  # The source is a longword, so the window covers both candidate PC-relative
   # bases with the same four bytes - see the file header.
   expectD(runIns([0xC2BA'u16, 0x0004'u16],
                  d = [0'u32, 0x12345678'u32, 0, 0, 0, 0, 0, 0],
@@ -762,13 +628,13 @@ block:
     1, 0x12345678'u32, "and.l %a0,%d1 traps: An is not a data-addressing mode")
 
 # ---------------------------------------------------------------------------
-# THE `{eaDn}` ARM. Every shift on this part is register-only, and the four
+# The `{eaDn}` arm. Every shift on this part is register-only, and the
 # immediate-logic and NOT opcodes reach a data register and nothing else. The
-# entry in `eaLegalityFor` that names all eight of them is one `EaLegality`
-# whose modes are `{eaDn}` and whose mode-7 set is empty.
+# entry in `eaLegalityFor` that names them is one `EaLegality` whose modes are
+# `{eaDn}` and whose mode-7 set is empty.
 #
-# THE SHIFT'S REGISTER FORM CANNOT VIOLATE THAT MASK - `decodeShift` builds its
-# operand as `EA(mode: eaDn, ...)` and never asks `decodeEa`. The MEMORY form
+# The shift's register form cannot violate that mask - `decodeShift` builds its
+# operand as `EA(mode: eaDn, ...)` and never asks `decodeEa`. The memory form
 # is what carries an effective address, and it is the case below. Measured:
 # `m68k-elf-as -mcpu=5307` rejects `asl.w (%a0)`, `asr.w (%a0)`, `lsl.w (%a0)`
 # and `lsr.w (%a0)`; the words are the `1110 0tt d 11 <ea>` encoding with
@@ -784,20 +650,17 @@ block:
   checkMask(eaIsLegalFor(opAsl, decodeEa(0x3C'u16)), false,
     "the shift mask rejects an immediate")
 
-  # ONE ILLEGAL MODE PER SHIFT OPERATION - the property CPU-6's plan row
-  # states for every implemented opcode (the file header says what that
-  # document is). The memory form is the encoding that carries an effective
-  # address at all, and these four cases assert that the core REFUSES it.
+  # One illegal mode per shift operation. The memory form is the encoding that
+  # carries an effective address at all, and these cases assert that the core
+  # refuses it.
   #
-  # THEY DO NOT ATTRIBUTE THE REFUSAL TO THE MASK, and an earlier revision of
-  # this comment said "the memory shift is the encoding that reaches the
-  # mask", which reads as though it did. `decodeShift` gives the memory form
-  # `size: 2`, so `execShift`'s two guards - the `{eaDn}` mask and the
-  # long-size rule - each refuse it ON THEIR OWN. Measured: removing the
+  # They do not attribute the refusal to the mask. `decodeShift` gives the
+  # memory form `size: 2`, so `execShift`'s two guards - the `{eaDn}` mask and
+  # the long-size rule - each refuse it on their own. Measured: removing the
   # `eaIsLegalFor` call from `execShift` leaves every case in this file green,
   # and removing the `d.size != 4` check instead leaves every case green too.
-  # The MASK is measured by the four `checkMask` rows just above, which read
-  # it directly; these four cases measure that the encoding does not execute.
+  # The mask is measured by the `checkMask` rows just above, which read it
+  # directly; these cases measure that the encoding does not execute.
   expectTrapD(runIns([0xE1D0'u16], d = [0x12345678'u32, 0, 0, 0, 0, 0, 0, 0],
                      a = [0x200'u32, 0, 0, 0, 0, 0, 0, 0]), 0, 0x12345678'u32,
     "the memory form of asl traps")
@@ -811,12 +674,12 @@ block:
                      a = [0x200'u32, 0, 0, 0, 0, 0, 0, 0]), 0, 0x12345678'u32,
     "the memory form of lsr traps")
 
-  # THE POSITIVE CONTROLS. Without them the four cases above would pass
-  # against a shift group that refused every operand. Each word is the
-  # assembler's: `asl.l #1,%d0` is `e380`, `asr.l #1,%d0` is `e280`,
-  # `lsl.l #1,%d0` is `e388` and `lsr.l #1,%d0` is `e288`.
+  # The positive controls. Without them the cases above would pass against a
+  # shift group that refused every operand. Each word is the assembler's:
+  # `asl.l #1,%d0` is `e380`, `asr.l #1,%d0` is `e280`, `lsl.l #1,%d0` is
+  # `e388` and `lsr.l #1,%d0` is `e288`.
   #
-  # X AND C BOTH TAKE THE LAST BIT SHIFTED OUT, so each case starts with a
+  # X and C both take the last bit shifted out, so each case starts with a
   # dirty X and asserts the value the shift put there rather than the value it
   # inherited.
   expectD(runIns([0xE380'u16], d = [0x80000000'u32, 0, 0, 0, 0, 0, 0, 0],
@@ -836,9 +699,9 @@ block:
     "lsr.l #1 of 3 is 1 with the low bit in C and X")
 
 # ---------------------------------------------------------------------------
-# ONE ILLEGAL MODE PER REMAINING NEW OPERATION: EOR, ANDI, ORI and EORI.
+# One illegal mode per remaining new operation: EOR, ANDI, ORI and EORI.
 #
-# Every word below was offered to `m68k-elf-as -mcpu=5307` and REJECTED, and
+# Every word below was offered to `m68k-elf-as -mcpu=5307` and rejected, and
 # each is a measured base word with the low six bits replaced:
 # `eor.l %d1,%d0` is `b380`, `andi.l #5,%d0` is `0280`, `ori.l #5,%d0` is
 # `0080` and `eori.l #5,%d0` is `0a80`.
@@ -846,17 +709,17 @@ block:
 block:
   let two = [0x12345678'u32, 0x0F0F0F0F'u32, 0, 0, 0, 0, 0, 0]
 
-  # EOR writes its effective address, so the class is DATA ALTERABLE: no
+  # EOR writes its effective address, so the class is data alterable: no
   # PC-relative operand and no address register.
   #
-  # THE TWO CASES ARE NOT EQUALLY SHARP AND THE DIFFERENCE IS `eaResolve`.
-  # `eaResolve` refuses a PC-relative destination on its own, so the
-  # PC-relative case is refused twice over and cannot name the guard that
-  # stopped it - measured, it stayed green when the EOR mask was widened to
-  # `eaAlterableModes` + `eaData7`. `eaResolve` RESOLVES an address register,
-  # so the An case meets the mask alone, and it went red under that same
-  # widening. Both are kept and they say different things: the first asserts
-  # the encoding does not execute, the second asserts WHICH guard stops it.
+  # The two cases are not equally sharp and the difference is `eaResolve`. It
+  # refuses a PC-relative destination on its own, so the PC-relative case is
+  # refused twice over and cannot name the guard that stopped it - measured,
+  # it stayed green when the EOR mask was widened to `eaAlterableModes` +
+  # `eaData7`. `eaResolve` resolves an address register, so the An case meets
+  # the mask alone, and it went red under that same widening. Both are kept
+  # and they say different things: the first asserts the encoding does not
+  # execute, the second asserts which guard stops it.
   expectTrapD(runIns([0xB3BA'u16, 0x0004'u16], d = two), 0, 0x12345678'u32,
     "eor.l %d1,(4,%pc) traps: an EOR destination is not PC-relative")
   expectTrapA(runIns([0xB388'u16], d = two,
@@ -864,7 +727,7 @@ block:
     "eor.l %d1,%a0 traps: An is not data alterable")
 
   # ANDI, ORI and EORI reach a data register and nothing else. The trap comes
-  # BEFORE the immediate is fetched, which is why the extension words below
+  # before the immediate is fetched, which is why the extension words below
   # are present and never consumed.
   expectTrapD(runIns([0x0290'u16, 0x0000'u16, 0x0005'u16], d = two,
                      a = [0x200'u32, 0, 0, 0, 0, 0, 0, 0]), 0, 0x12345678'u32,
@@ -876,9 +739,9 @@ block:
                      a = [0x200'u32, 0, 0, 0, 0, 0, 0, 0]), 0, 0x12345678'u32,
     "eori.l #5,(%a0) traps: the destination is a data register only")
 
-  # THE POSITIVE CONTROLS for the same four operations, each the assembler's
-  # own word. Without them the five cases above would pass against executors
-  # that refused every operand.
+  # The positive controls for the same four operations, each the assembler's
+  # own word. Without them the cases above would pass against executors that
+  # refused every operand.
   expectD(runIns([0xB380'u16], d = two, sr = srBase or ccrX or ccrC or ccrV),
     0, 0x1D3B5977'u32, srBase or ccrX,
     "eor.l %d1,%d0 combines the two registers, clears V and C, and keeps X")
@@ -886,7 +749,7 @@ block:
     0, 0x00000000'u32, srBase or ccrZ, "andi.l #5,%d0 = 0 and sets Z")
   expectD(runIns([0x0080'u16, 0x0000'u16, 0x0005'u16], d = two),
     0, 0x1234567D'u32, srBase, "ori.l #5,%d0 sets the two low bits")
-  # THE EORI CONTROL USES A DIFFERENT IMMEDIATE FROM THE ORI ONE ON PURPOSE.
+  # The EORI control uses a different immediate from the ORI one on purpose.
   # `0x12345678 or 5` and `0x12345678 xor 5` are the same word, so a pair that
   # shared an immediate would pass against an executor that confused the two.
   # `eori.l #0xf,%d0` is `0a80 0000 000f`, and 0x78 xor 0x0f is 0x77 where

@@ -139,7 +139,7 @@ proc step(ctx: MCF5307Ctx): uint32 =
      opNot,
      opBtst, opBchg, opBclr, opBset,
      opAsl, opAsr, opLsl, opLsr:
-    # The logic, bit-operation and shift group (CPU-9). `logicFamily` executes
+    # The logic, bit-operation and shift group. `logicFamily` executes
     # the instruction and halts the context with `fault` on an illegal size or
     # an illegal effective address - a memory shift, a byte or word form of
     # anything in the group, and a bit operation whose static form names an
