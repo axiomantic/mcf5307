@@ -175,15 +175,13 @@ type
     stageFifo: int               ## Where a validate would commit `stage`.
     readBuf: seq[uint8]          ## The bytes a buffer-read command offers.
     log: seq[string]
-      ## The lines the model RETAINS. It stops at `logCapacity`, and the count
-      ## of lines the model WROTE is kept apart in `written` so that a reader
+      ## The lines the model retains. It stops at `logCapacity`, and the count
+      ## of lines the model wrote is kept apart in `written` so that a reader
       ## can subtract and learn how many it cannot see.
     written: int
       ## Every line `note` was ever asked to write, whether or not `log` kept
-      ## it. IT IS THE HALF THAT CANNOT BE LOST. A retained log alone answers
-      ## "what did the model say" with no way to ask "and was that all of it",
-      ## and a truncated account that reads as a complete one is the one
-      ## outcome this file refuses everywhere else.
+      ## it. A retained log alone answers "what did the model say" with no way
+      ## to ask "and was that all of it".
 
 const
   benignValue* = 0x00'u8
@@ -286,16 +284,16 @@ proc isCommandPort*(address: uint32): bool =
   (address and commandSelect) != 0
 
 const logCapacity* = 4096
-  ## How many log lines the model RETAINS. The bound exists because `note` is
+  ## How many log lines the model retains. The bound exists because `note` is
   ## reachable from a bus access: a firmware that hits a refusing site inside
   ## its own loop writes a line per iteration, and an unbounded log then grows
   ## with the run rather than with the number of distinct things that went
   ## wrong.
   ##
-  ## THE LINES KEPT ARE THE FIRST ONES AND NOT THE LAST. A ring would hold the
-  ## end of a run and lose the first refusal, and the first refusal is the one
-  ## that says what the firmware was denied before everything downstream of it
-  ## went wrong. `written` is what makes the loss readable rather than silent.
+  ## The lines kept are the first ones and not the last. A ring would hold the
+  ## end of a run and lose the first refusal, which is the one that says what
+  ## the firmware was denied before everything downstream of it went wrong.
+  ## `written` is what makes the loss readable rather than silent.
 
 proc note(m: ISP1181; line: string) =
   inc m.written
@@ -365,10 +363,9 @@ proc logRetained*(m: ISP1181): int =
   if m.isNil: 0 else: m.log.len
 
 proc logLine*(m: ISP1181; index: int): string =
-  ## The retained line at `index`, or the empty string when there is none. NO
-  ## SITE IN THIS FILE WRITES AN EMPTY LINE, so the empty string is unambiguous
-  ## here; `tests/t_isp1181_stub.nim` is what holds that property at the C
-  ## door rather than this sentence.
+  ## The retained line at `index`, or the empty string when there is none. No
+  ## site in this file writes an empty line, so the empty string is
+  ## unambiguous here.
   if m.isNil or index < 0 or index >= m.log.len: "" else: m.log[index]
 
 proc irqAsserted*(m: ISP1181): bool =

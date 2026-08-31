@@ -106,12 +106,9 @@ proc isp1181_rx*(ctx: ISP1181Ctx; endpoint: cint; data: ptr uint8;
   ## reading a caller with no buffer as a caller offering an empty packet would
   ## fill a single-buffered endpoint and NAK the next real packet.
   ##
-  ## THE ANSWER IS THE POINT. `deliver` refuses a packet for four separate
-  ## reasons and says which one in the log, and this entry point used to
-  ## discard that answer - so a caller handing bytes to a device that took none
-  ## of them saw exactly what a caller handing bytes to a device that took all
-  ## of them saw. `include/mcf5307.h` states the contract; 1 means an OUT
-  ## buffer holds the packet.
+  ## `deliver` refuses a packet for four separate reasons and says which one in
+  ## the log. `include/mcf5307.h` states the contract; 1 means an OUT buffer
+  ## holds the packet.
   if ctx.isNil:
     return 0
   case ctx.backend
@@ -170,18 +167,15 @@ proc isp1181_in_token*(ctx: ISP1181Ctx; endpoint: cint): cint
 # The model's own account of what it did, and the door a C caller reads it
 # through.
 #
-# THE ACCOUNT IS NOT GATED ON THE BACKEND, and every other entry point in this
-# file is. The log is what the model SAID, not a register the device answers
+# The account is not gated on the backend, and every other entry point in this
+# file is. The log is what the model said, not a register the device answers
 # from: a handle that spent a run on the full model and was moved back to the
 # stub still holds that account, and casing on the current backend would hide
 # exactly the record this door exists to carry. The stub writes no line of its
 # own, so a handle that never left the stub reads zero here without help.
 #
-# `written` AND `retained` ARE TWO CALLS AND NOT ONE. Their difference is the
-# number of lines the reader cannot see. A single "count" would be whichever of
-# the two the implementation happened to return, and a reader could not tell a
-# complete account from a truncated one - which is the failure this whole door
-# was added to close.
+# `written` and `retained` are two calls and not one. Their difference is the
+# number of lines the reader cannot see, which a single count could not say.
 
 proc isp1181_log_written*(ctx: ISP1181Ctx): csize_t
     {.exportc: "isp1181_log_written", cdecl, dynlib.} =
@@ -198,10 +192,9 @@ proc isp1181_log_retained*(ctx: ISP1181Ctx): csize_t
 proc isp1181_log_line*(ctx: ISP1181Ctx; index: csize_t; dst: ptr cchar;
                        capacity: csize_t): csize_t
     {.exportc: "isp1181_log_line", cdecl, dynlib.} =
-  ## THE RETURN IS THE SIZE THE LINE NEEDS AND NOT THE SIZE THAT WAS COPIED.
-  ## `include/mcf5307.h` states the contract: a return greater than `capacity`
-  ## is a line the caller's buffer could not hold, which is the second way this
-  ## door could have lied by omission, and 0 is no such retained line.
+  ## The return is the size the line needs and not the size that was copied. A
+  ## return greater than `capacity` is a line the caller's buffer could not
+  ## hold, and 0 is no such retained line.
   if ctx.isNil or ctx.model.isNil:
     return 0
   let line = logLine(ctx.model, int(index))

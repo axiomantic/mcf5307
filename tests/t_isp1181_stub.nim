@@ -792,13 +792,11 @@ check(line == wantLine,
       $line, $wantLine)
 
 # ---------------------------------------------------------------------------
-# THE MODEL'S OWN ACCOUNT, READ THROUGH THE C DOOR.
+# The model's own account, read through the C door.
 #
-# `isp1181_rx` used to be `void`, so a caller handing bytes to a device that
-# refused every one of them saw exactly what a caller whose bytes were accepted
-# saw. These cases drive an ACCEPTANCE and a REFUSAL through the same entry
-# point on the same handle and assert that the two are told apart at the ABI -
-# in the return, and in the log the return points at.
+# These cases drive an acceptance and a refusal through the same entry point on
+# the same handle and assert that the two are told apart at the ABI - in the
+# return, and in the log the return points at.
 
 type RxAnswer = tuple[accepted: cint, refused: cint, stub: cint, nilHandle: cint]
 
@@ -829,8 +827,6 @@ check(rxAnswer == wantRxAnswer,
       $rxAnswer, $wantRxAnswer)
 
 proc readLogLine(handle: ISP1181Ctx; index: int): string =
-  ## Sizes the buffer from the call's own answer and then fills it, which is
-  ## the two-call form `include/mcf5307.h` describes.
   let needed = isp1181_log_line(handle, csize_t(index), nil, csize_t(0))
   if needed == 0:
     return ""
@@ -858,8 +854,8 @@ proc driveLog(): LogWalk =
   result.firstLine = readLogLine(handle, 0)
   result.pastEnd = uint(isp1181_log_line(handle, csize_t(result.retainedAfter),
                                          nil, csize_t(0)))
-  # NO RETAINED LINE IS EMPTY, so the smallest answer for a real line is 2 and
-  # the 0 above is unambiguous. This is the property the header states.
+  # No retained line is empty, so the smallest answer for a real line is 2 and
+  # the 0 above is unambiguous.
   var shortest = high(uint)
   for i in 0 ..< int(result.retainedAfter):
     let needed = uint(isp1181_log_line(handle, csize_t(i), nil, csize_t(0)))
@@ -893,7 +889,7 @@ proc driveTruncation(): Truncation =
   var packet = packetBytes
   discard isp1181_rx(handle, cint(4), addr packet[0], csize_t(packet.len))
   result.needed = uint(isp1181_log_line(handle, csize_t(0), nil, csize_t(0)))
-  # A BUFFER THAT CANNOT HOLD THE LINE. The sentinel byte past the capacity is
+  # A buffer that cannot hold the line. The sentinel byte past the capacity is
   # what proves the call wrote nothing beyond what it was given: a copy that
   # overran would replace it.
   const capacity = 8
@@ -917,11 +913,9 @@ check(truncation == wantTruncation and truncation.short > 8'u,
         "past the capacity",
       $truncation, $wantTruncation)
 
-# THE OVERFLOW IS REPORTABLE, WHICH IS THE WHOLE REASON THE TWO COUNTS ARE TWO
-# CALLS. The loop drives one refusal past the retention bound and asserts that
+# The loop drives one refusal past the retention bound and asserts that
 # `written` kept counting while `retained` stopped: their difference is exactly
-# the number of lines the reader cannot see, and a single count could not say
-# it.
+# the number of lines the reader cannot see.
 type Overflow = tuple[written: uint, retained: uint, dropped: uint,
                       lastRetained: uint, firstDropped: uint]
 

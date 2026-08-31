@@ -2961,11 +2961,6 @@ mcf5307_check_case_sites("t_isp1181_stub" "@MCF5307_ISP1181_STUB_SOURCE@"
 # iteration, so this figure counts properties and not addresses. A sweep that
 # stopped iterating is caught by the iteration count inside the case's own
 # expected value, which is why the two guards do not overlap here.
-# MOVED 30 -> 34 WITH THE LOG DOOR. The four added cases are the status
-# `isp1181_rx` now returns, the log a refusal writes and the empty-index answer
-# that cannot be confused with a line, the truncation a caller can see because
-# the call returns the size the line NEEDS, and the overflow that keeps
-# counting after it stops retaining.
 mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 34)
 
 ]==])
