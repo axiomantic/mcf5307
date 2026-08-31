@@ -64,13 +64,11 @@ type Family = object
   ## starts, which byte (if any) the authority parenthesises as illegal, and
   ## what to call it.
   ##
-  ## THE ORDERING IS THE SAME FOR EVERY FAMILY AND IS THE REASON THIS TYPE
-  ## EXISTS. ISP1362 Rev. 06 section 15.1.1 states the endpoint-configuration
-  ## codes as "20 to 2F - write (control OUT, control IN, endpoints 1 to 14)",
-  ## and Table 109 gives the data-flow families the same shape. A family that
-  ## carried its own numbering could disagree with the rest and nothing in a
-  ## table beside it would notice; every family here is numbered by this one
-  ## procedure instead, so the ordering cannot drift for one of them alone.
+  ## The ordering is the same for every family. ISP1362 Rev. 06 section 15.1.1
+  ## states the endpoint-configuration codes as "20 to 2F - write (control OUT,
+  ## control IN, endpoints 1 to 14)", and Table 109 gives the data-flow
+  ## families the same shape. Every family here is numbered by this one
+  ## procedure, so the ordering cannot drift for one of them alone.
   controlOut: int      ## opcode of the control OUT form, or -1 when illegal
   controlIn: int       ## opcode of the control IN form, or -1 when illegal
   endpointBase: int    ## opcode of endpoint 1's form
@@ -82,9 +80,9 @@ type Family = object
     ## THE FAMILY ADDRESSES AN IN BUFFER. This model gives endpoint 0 an OUT
     ## buffer and an IN buffer and gives endpoints 1 to 3 ONE buffer each, whose
     ## direction the EPDIR bit of DcEndpointConfiguration selects at run time.
-    ## An IN-only family is implemented for the control endpoint and NOT for the
+    ## An IN-only family is implemented for the control endpoint and not for the
     ## rest: whether one of those buffers faces IN is a property of the
-    ## configuration the firmware wrote, and a CLASSIFICATION is a property of
+    ## configuration the firmware wrote, and a classification is a property of
     ## the opcode alone, so the class cannot depend on it. They are
     ## `ccNotImplemented` and not `ccImplemented`, and the model's own refusal
     ## names the configured direction when the firmware drives one.
@@ -114,11 +112,10 @@ const families: array[8, Family] = [
   Family(controlOut: 0x80, controlIn: 0x81, endpointBase: 0x82,
          noun: "unstall", illegalOpcode: -1, illegalName: "",
          illegalDetail: ""),
-  # THE ONE ROW THAT IS NOT FROM TABLE 109. The endpoint-configuration codes
+  # The one row that is not from Table 109. The endpoint-configuration codes
   # come from ISP1362 Rev. 06 section 15.1.1 and the register they write from
-  # Table 110. The row's shape is the same because the document gives it the
-  # same shape, and `docs/sources.md` records that both citations are inherited
-  # from a part that only claims to INTEGRATE the ISP1181B.
+  # Table 110. Both citations are inherited from a part that only claims to
+  # integrate the ISP1181B.
   Family(controlOut: 0x20, controlIn: 0x21, endpointBase: 0x22,
          noun: "configuration", illegalOpcode: -1, illegalName: "",
          illegalDetail: "")]

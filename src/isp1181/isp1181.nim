@@ -19,32 +19,30 @@
 ## gives the enable's value `0x1F07` and not its width, and an enable narrower
 ## than the register it masks could not mask it, so it is the register's width.
 ##
-## THE ENDPOINT-COMPLETION BITS ARE ASSIGNED AND NOTHING ELSE IS. Two
+## The endpoint-completion bits are assigned and nothing else is. Two
 ## sources agree on them: the emulated firmware's own service routine, which
 ## dispatches bits 8 and 9 to fixed routines and bits 10 upwards to a table of
 ## per-endpoint function pointers, and the inherited ISP1362 Rev. 06 Table 143
 ## layout, in which bit 8 is EP0OUT, bit 9 is EP0IN and bits 10 upwards are
 ## EP1 and after. The firmware's own interrupt enable, `0x00001F07`, arms
 ## bits 8 to 12, one for each buffer this model carries.
-## `interruptBitOfFifo` is the assignment - its length is `fifoCount`, so a
-## buffer added without a bit does not compile - and `docs/sources.md` records
-## what each half of the agreement is worth.
+## `interruptBitOfFifo` is the assignment; its length is `fifoCount`, so a
+## buffer added without a bit does not compile.
 ##
-## THE BUS BITS 0 TO 2 AND THE TRANSFER BITS 3 TO 7 ARE STILL UNASSIGNED, and
-## the two sources DISAGREE about two of them: the firmware dispatches bit 1 to
+## The bus bits 0 to 2 and the transfer bits 3 to 7 are still unassigned, and
+## the two sources disagree about two of them: the firmware dispatches bit 1 to
 ## suspend and bit 2 to resume, and the inherited table calls bit 1 RESUME and
 ## bit 2 SUSPND. Nothing here would set them either way - this model's API
 ## delivers an endpoint and bytes and carries no bus event at all - so they are
 ## left where the disagreement leaves them.
 ##
-## THE INTERRUPT REGISTER DOES NOT CLEAR WHEN THE FIRMWARE READS IT. `0xC0`
+## The interrupt register does not clear when the firmware reads it. `0xC0`
 ## reports the register and leaves it, and the bit is taken away by a read of
-## the owning endpoint's status register, `0x50+n`. THAT ROUTE IS INHERITED
+## the owning endpoint's status register, `0x50+n`. That route is inherited
 ## from ISP1362 Rev. 06 p.53 and not read from an ISP1181 document, and it is
 ## the piece that keeps the emulated firmware out of its own handler: the
 ## service routine reads four status bytes and never writes them back, so a bit
-## with no route out of the register would spin the machine. `docs/sources.md`
-## carries what is still owed on it.
+## with no route out of the register would spin the machine.
 ##
 ## Two sequencing rules below are this file's and not the authority's, because
 ## no document on this machine states either way. First, a command this model
@@ -64,12 +62,12 @@
 ## Buffer (`0x10`, `0x12` to `0x14`) followed by Clear Buffer (`0x70`, `0x72`
 ## to `0x74`), which is the sequence the authority states.
 ##
-## `transmit` IS CALLED BY THE HOST AND NOT BY THE VALIDATE. A validate is the
+## `transmit` is called by the host and not by the validate. A validate is the
 ## firmware saying the buffer is now the host's; it is not the moment the host
 ## collects it. A model that transmitted there would push a packet at a host
 ## that had not asked, and would spend the packet on the one call it got. The
 ## host asks through `isp1181_in_token`, which is the bus's IN token and the
-## other half of `isp1181_rx`. `src/isp1181/stub.nim` carries the entry point.
+## other half of `isp1181_rx`.
 ##
 ## Those opcodes are inherited and not read from an ISP1181 document. They come
 ## from Table 109 of the ISP1362 data sheet, Rev. 06, which states that it
@@ -77,25 +75,23 @@
 ## not of a byte-identical command map. The ISP1181B data sheet itself was not
 ## retrieved.
 ##
-## THE SET-UP INTERLOCK IS IMPLEMENTED AND `isp1181_setup` IS THE ROUTE THAT
-## SETS IT. The authority states that a set-up packet flushes the IN buffer and
+## The set-up interlock is implemented and `isp1181_setup` is the route that
+## sets it. The authority states that a set-up packet flushes the IN buffer and
 ## disables Validate and Clear on both control endpoints until the firmware
 ## acknowledges with `0xF4`; ISP1362 Rev. 06 §12.3.6 p.53 and §15.2.7 p.117 are
-## the two halves. This model once carried none of it, and the reason was a
-## MISSING ROUTE and not a decision to skip: `isp1181_rx` carries an endpoint
-## and bytes and no set-up flag, so the interlock would have been a latch that
-## nothing ever sets. `deliverSetup` is that route, and `isp1181_setup` is its
-## published entry point.
+## the two halves. `isp1181_rx` carries an endpoint and bytes and no set-up
+## flag, so `deliverSetup` is the route and `isp1181_setup` its published entry
+## point.
 ##
-## SETUPT IS BIT 2 AND THE POSITION IS READ FROM THE DOCUMENT. ISP1362 Rev. 06
+## SETUPT is bit 2 and the position is read from the document. ISP1362 Rev. 06
 ## Table 126 gives the DcEndpointStatus bit allocation and Table 127 gives bit 2
 ## as "Logic 1 indicates that the buffer contains a set-up packet". It is
-## INHERITED exactly as the opcodes are and it is NOT a reading of firmware
-## behaviour. WHEN THE BIT CLEARS is the part the document does not state, and
+## inherited exactly as the opcodes are and it is not a reading of firmware
+## behaviour. When the bit clears is the part the document does not state, and
 ## `statusByte` and the Clear Buffer arm of `writeCommand` name the inference
-## and its ground; `docs/sources.md` carries it as an Unverified row.
+## and its ground.
 ##
-## OVERWRITE, BIT 3, IS THE ONE PART OF §12.3.6 STILL ABSENT. `deliverSetup`
+## OVERWRITE, bit 3, is the one part of §12.3.6 still absent. `deliverSetup`
 ## refuses a set-up packet arriving at a full control OUT buffer rather than
 ## overwriting one the firmware has not acknowledged, because the bit that
 ## would report the overwrite is not tracked.
@@ -109,7 +105,7 @@ import ./commands
 import ./fifo
 
 const fifoCount* = 5
-  ## THE BUFFERS THIS MODEL CARRIES, and the length of every per-buffer array
+  ## The buffers this model carries, and the length of every per-buffer array
   ## below. They are `fifos`' own order - endpoint 0 OUT, endpoint 0 IN, then
   ## endpoints 1 to 3 - which is the order ISP1362 Rev. 06 section 15.1.1 gives
   ## the endpoint-configuration slots.
@@ -157,13 +153,13 @@ type
     interruptEnable: uint32
     interruptRegister: uint32
     endpointConfig: array[fifoCount, uint8]
-      ## One DcEndpointConfiguration byte per buffer, INDEXED AS `fifos` IS.
+      ## One DcEndpointConfiguration byte per buffer, indexed as `fifos` is.
       ## ISP1362 Rev. 06 section 15.1.1 orders the configuration slots control
       ## OUT, control IN, then endpoints 1 to 14, which is the order `fifos`
       ## is in, so a slot and the buffer it configures share one index.
-    selected: int                ## The BUFFER the last 0x20+k selected.
+    selected: int                ## The buffer the last 0x20+k selected.
     setupHeld: bool
-      ## SETUPT for the CONTROL OUT buffer, and for that buffer alone. ISP1362
+      ## SETUPT for the control OUT buffer, and for that buffer alone. ISP1362
       ## Rev. 06 Table 127 gives bit 2 as "Logic 1 indicates that the buffer
       ## contains a set-up packet", and a set-up packet reaches no other buffer
       ## in this model, so a per-buffer array here would be four latches that
@@ -192,11 +188,10 @@ const
     ## table places FIFOEN at bit 7, DBLBUF at bit 5, FFOISO at bit 4 and
     ## `FFOSZ[3:0]` in the low nibble.
     ##
-    ## THE POSITION IS INHERITED AND NOT READ FROM AN ISP1181 DOCUMENT. ISP1362
+    ## The position is inherited and not read from an ISP1181 document. ISP1362
     ## Rev. 06 states that it integrates the ISP1181B peripheral controller,
-    ## which is a claim of INTEGRATION and not of a byte-identical register map,
-    ## and the ISP1181B data sheet itself was not retrieved. `docs/sources.md`
-    ## carries the limit in full.
+    ## which is a claim of integration and not of a byte-identical register map,
+    ## and the ISP1181B data sheet itself was not retrieved.
   softctBit* = 0x01'u8
     ## The mode register bits. The rest - DISGLBL `0x02`, DBGMOD `0x04`,
     ## INTENA `0x08`, GOSUSP `0x20`, SNDRSU `0x40`, DMAWD `0x80` - live in the
@@ -235,14 +230,14 @@ const interruptBitOfFifo: array[fifoCount, int] = [8, 9, 10, 11, 12]
   ## module head names the two sources that agree on this range and the two
   ## bits on which they do not.
   ##
-  ## THE ARRAY STOPS WHERE THE BUFFERS DO AND THAT IS NOT A LIMIT OF THE
-  ## ASSIGNMENT. Both sources carry per-endpoint bits past 12 - the firmware's
+  ## The array stops where the buffers do and that is not a limit of the
+  ## assignment. Both sources carry per-endpoint bits past 12 - the firmware's
   ## pointer table reaches bit 16 - and this model carries no buffer for them,
   ## so there is no event here that could set one.
 
 const outFifoOfEndpoint0 = 0
   ## The buffer a set-up packet lands in, named because the set-up path uses it
-  ## as ITSELF and not as "whatever endpoint 0 decodes to". A SETUP token is
+  ## as itself and not as "whatever endpoint 0 decodes to". A SETUP token is
   ## defined only for a control endpoint, and control OUT is the one control
   ## endpoint this model can receive on.
 
@@ -252,7 +247,7 @@ const inFifoOfEndpoint0 = 1
   ## model that a delivery from the host never touches.
 
 const inBufferOfEndpoint: array[4, int] = [inFifoOfEndpoint0, 2, 3, 4]
-  ## The buffer that carries an endpoint's DEVICE-TO-HOST direction. Endpoint 0
+  ## The buffer that carries an endpoint's device-to-host direction. Endpoint 0
   ## has two buffers and this is its IN one; endpoints 1 to 3 have one buffer
   ## each, and whether that buffer is the IN one is what EPDIR says.
 
@@ -262,13 +257,13 @@ type BufferDirection = enum
   bdIn
 
 proc directionOfBuffer(m: ISP1181; index: int): BufferDirection =
-  ## THE CONTROL ENDPOINT'S TWO BUFFERS DO NOT CONSULT EPDIR. ISP1362 Rev. 06
+  ## The control endpoint's two buffers do not consult EPDIR. ISP1362 Rev. 06
   ## section 15.1.1 states that control endpoints have fixed configurations and
   ## are included in the initialization sequence only to be given their default
   ## values, so their direction is a property of the endpoint and not of a byte
   ## the firmware may write differently.
   ##
-  ## `endpointConfig` IS INDEXED AS THE CONFIGURATION SEQUENCE IS. Section
+  ## `endpointConfig` is indexed as the configuration sequence is. Section
   ## 15.1.1 orders the sixteen slots control OUT, control IN, then endpoints 1
   ## to 14, and `fifos` is in that same order, so slot and buffer share one
   ## index.
@@ -372,12 +367,11 @@ proc deliver*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
            ", which this model does not implement; the packet is dropped")
     return false
   let index = outFifoOfEndpoint[endpoint]
-  # EPDIR REFUSES A DELIVERY FOR THE SAME REASON IT REFUSES A QUEUE. Endpoints
-  # 1 to 3 carry ONE buffer each and the bit says which way it faces, so a
+  # EPDIR refuses a delivery for the same reason it refuses a queue. Endpoints
+  # 1 to 3 carry one buffer each and the bit says which way it faces, so a
   # packet from the host arriving at a buffer the firmware pointed IN has
   # nowhere to land. Taking it would raise that endpoint's own interrupt and
-  # show the firmware an OUT transfer on a buffer it declared for transmission,
-  # which is the plausible wrong outcome this file refuses everywhere else.
+  # show the firmware an OUT transfer on a buffer it declared for transmission.
   if m.directionOfBuffer(index) == bdIn:
     m.note("isp1181: endpoint " & $endpoint & " is configured IN - EPDIR is " &
            "1 in its DcEndpointConfiguration - so it has no OUT buffer; the " &
@@ -395,14 +389,14 @@ proc deliverSetup*(m: ISP1181; data: openArray[uint8]): bool =
   ## A SET-UP packet from the host. `false` is the refusal, and every refusal
   ## writes the line that says which one it is.
   ##
-  ## THIS IS A SEPARATE ENTRY POINT AND NOT A FLAG ON `deliver`, and it carries
-  ## NO ENDPOINT. A SETUP token is defined only for a control endpoint, this
+  ## This is a separate entry point and not a flag on `deliver`, and it carries
+  ## no endpoint. A SETUP token is defined only for a control endpoint, this
   ## model has exactly one it can receive on, and an endpoint argument here
   ## would be a parameter with one legal value - a value a computed endpoint
   ## could miss, with nothing to catch it.
   ##
-  ## WHAT THE ARRIVAL DOES IS ISP1362 Rev. 06 SECTION 12.3.6, p.53, READ AND
-  ## NOT INFERRED: "The arrival of a set-up packet flushes the IN buffer, and
+  ## What the arrival does is ISP1362 Rev. 06 section 12.3.6, p.53, read and
+  ## not inferred: "The arrival of a set-up packet flushes the IN buffer, and
   ## disables the Validate Buffer and Clear Buffer commands for the control IN
   ## and OUT endpoints. The microprocessor must re-enable these commands by
   ## sending an acknowledge set-up command to both the control endpoints."
@@ -410,12 +404,10 @@ proc deliverSetup*(m: ISP1181; data: openArray[uint8]): bool =
   ## "is automatically unstalled on receiving a set-up token", "regardless of
   ## the packet content".
   ##
-  ## OVERWRITE IS THE ONE PART OF SECTION 12.3.6 THIS MODEL DOES NOT CARRY. The
+  ## OVERWRITE is the one part of section 12.3.6 this model does not carry. The
   ## authority gives bit 3 to a set-up packet that landed on an unacknowledged
   ## one, and the model tracks no such bit, so a set-up packet arriving at a
-  ## full buffer is REFUSED BY NAME rather than silently overwriting: an
-  ## overwrite with no bit to report it is the plausible wrong outcome this
-  ## file refuses everywhere else.
+  ## full buffer is refused by name rather than silently overwriting.
   if m.isNil:
     return false
   if data.len == 0:
@@ -455,8 +447,8 @@ proc queueIn*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
   ## The two opcodes are inherited from ISP1362 Rev. 06 Table 109 and were not
   ## read from an ISP1181 document; the module head states the limit.
   ##
-  ## WHICH ENDPOINT MAY BE QUEUED IS READ OUT OF ITS CONFIGURATION BYTE.
-  ## Endpoints 1 to 3 carry ONE buffer each and EPDIR is which way it faces, so
+  ## Which endpoint may be queued is read out of its configuration byte.
+  ## Endpoints 1 to 3 carry one buffer each and EPDIR is which way it faces, so
   ## the question the model asks is not which endpoint this is but what the
   ## firmware configured it as. `directionOfBuffer` states where the bit and the
   ## slot ordering come from.
@@ -496,7 +488,7 @@ proc transmit*(m: ISP1181; endpoint: int): bool =
   ## emptied the buffer and then found no callback would leave the firmware
   ## with a transfer that completed and a host that never saw it.
   ##
-  ## THE INTERRUPT IS RAISED HERE AND NOT AT THE VALIDATE, for the same reason
+  ## The interrupt is raised here and not at the validate, for the same reason
   ## the packet leaves here: the validate is the firmware handing the buffer to
   ## the host, and this is the host taking it. A bit set at the validate would
   ## tell the firmware a transfer completed against a host that had not asked.
@@ -559,11 +551,9 @@ proc outFifoOf(m: ISP1181; opcode, controlBase, endpointBase: uint8): int =
   -1
 
 proc noteInterlock(m: ISP1181; opcode: uint8; name: string) =
-  ## THE INTERLOCK REFUSES OUT LOUD. A Validate or Clear that did nothing and
+  ## The interlock refuses out loud. A Validate or Clear that did nothing and
   ## said nothing would tell the firmware its buffer was cleared when it was
-  ## not, which is the one outcome this model refuses everywhere. The refusal
-  ## leaves the transfer in flight exactly as the two class refusals in
-  ## `writeCommand` do, and for the same reason the head block gives.
+  ## not.
   m.note("isp1181: command 0x" & toHex(opcode) & " (" & name &
          ") is disabled until the set-up packet is acknowledged with 0xF4; " &
          "nothing is done")
@@ -572,19 +562,18 @@ proc statusByte(m: ISP1181; index: int): uint8 =
   ## The DcEndpointStatus register as far as this model carries it: EPSTAL
   ## (bit 7), EPFULL1 (bit 6), EPFULL0 (bit 5) and SETUPT (bit 2).
   ##
-  ## THE BIT POSITIONS ARE READ AND NOT INFERRED. ISP1362 Rev. 06, Table 126,
+  ## The bit positions are read and not inferred. ISP1362 Rev. 06, Table 126,
   ## "DcEndpointStatus register: bit allocation", places EPSTAL, EPFULL1,
   ## EPFULL0, DATA_PID, OVERWRITE, SETUPT and CPUBUF at bits 7 down to 1, with
   ## bit 0 reserved. Table 127 gives bit 2 as "SETUPT   Logic 1 indicates that
-  ## the buffer contains a set-up packet". The position is INHERITED in exactly
+  ## the buffer contains a set-up packet". The position is inherited in exactly
   ## the sense the module head gives that word - ISP1362 states that it
   ## integrates the ISP1181B and the ISP1181B document was not retrieved - and
   ## it is not a reading of firmware behaviour.
   ##
-  ## DATA_PID, OVERWRITE AND CPUBUF STILL READ ZERO AND THE MODEL DOES NOT
-  ## TRACK THEM. That is a gap, and it is stated in the module head and in
-  ## `docs/sources.md` rather than on every read, because a note per read would
-  ## bury the notes that mark a refusal.
+  ## DATA_PID, OVERWRITE and CPUBUF still read zero and the model does not
+  ## track them. That gap is stated in the module head rather than on every
+  ## read, because a note per read would bury the notes that mark a refusal.
   let pending = m.fifos[index].pending
   result = 0'u8
   if m.stalled[index]:
@@ -707,15 +696,14 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
         m.noteInterlock(opcode, command.name)
         return
       discard m.fifos[clearIndex].take()
-      # SETUPT GOES AWAY WITH THE PACKET AND NOT WITH THE ACKNOWLEDGE, AND
-      # THAT LAST STEP IS THIS FILE'S INFERENCE. Table 127 gives bit 2 as
-      # "the buffer CONTAINS a set-up packet" - a statement about content -
+      # SETUPT goes away with the packet and not with the acknowledge, and
+      # that last step is this file's inference. Table 127 gives bit 2 as
+      # "the buffer contains a set-up packet" - a statement about content -
       # and gives no clearing rule for it, where bit 3 OVERWRITE in the same
       # table is spelled out as cleared by "a read back of this register".
       # The authority knows how to write a read-to-clear bit and did not write
       # one here, so the read leaves it and the clear that empties the buffer
-      # takes it. `docs/sources.md` records this as an inference from the
-      # wording rather than as a sentence in the document.
+      # takes it.
       if clearIndex == outFifoOfEndpoint0:
         m.setupHeld = false
       m.beginTransfer(opcode, tfNone, 0, 0)
@@ -749,18 +737,18 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
     if opcode >= statusControlOut and int(opcode) < int(statusControlOut) + 0x10:
       let offset = int(opcode) - int(statusControlOut)
       let index = (if offset <= 1: offset else: outFifoOfEndpoint[offset - 1])
-      # THE STATUS READ IS THE ROUTE THE BIT LEAVES THE INTERRUPT REGISTER BY,
-      # and it is taken at the COMMAND and not at the data-port read: ISP1362
+      # The status read is the route the bit leaves the interrupt register by,
+      # and it is taken at the command and not at the data-port read: ISP1362
       # Rev. 06 p.53 separates the clearing form from a non-clearing one by the
-      # OPCODE, so it is the opcode that decides and not whether the byte was
-      # collected. The module head states what the route is inherited from.
+      # opcode, so it is the opcode that decides and not whether the byte was
+      # collected.
       m.clearInterrupt(1'u32 shl interruptBitOfFifo[index])
       m.beginTransfer(opcode, tfRead, 1, uint32(m.statusByte(index)))
       return
 
   if opcode >= epConfigBase and
       int(opcode) - int(epConfigBase) < m.endpointConfig.len:
-    # THE SLOT INDEX IS THE BUFFER INDEX. `endpointConfig` states where that
+    # The slot index is the buffer index. `endpointConfig` states where that
     # comes from; accepting exactly the slots this model carries a byte for is
     # what keeps the two in step, and `classify` refuses the rest by name.
     m.selected = int(opcode) - int(epConfigBase)
@@ -783,10 +771,9 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
   of peekCommand:
     # `m.selected` is set only by an endpoint-configuration command, so this
     # couples the peek target to configuration. That coupling is this file's
-    # choice where the authority is silent, and the head block names it. The
-    # value is a BUFFER index and is used as one: it is the slot the
-    # configuration command carried, and section 15.1.1's slot ordering is
-    # `fifos`' own.
+    # choice where the authority is silent. The value is a buffer index and is
+    # used as one: it is the slot the configuration command carried, and
+    # section 15.1.1's slot ordering is `fifos`' own.
     let index = m.selected
     let head = m.fifos[index].peek()
     if head.ok:
@@ -797,9 +784,9 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
       m.beginTransfer(opcode, tfAbsent, 1, 0)
   else:
     # `0xF4` acknowledge set up. ISP1362 Rev. 06 section 15.2.7 and section
-    # 12.3.6 give the effect: it RE-ENABLES the Validate Buffer and Clear
+    # 12.3.6 give the effect: it re-enables the Validate Buffer and Clear
     # Buffer commands that the arrival of a set-up packet disabled on both
-    # control endpoints. It does NOT take SETUPT away - section 12.3.6 says
+    # control endpoints. It does not take SETUPT away - section 12.3.6 says
     # the set-up packet "stays in the buffer" until acknowledged, and what
     # removes it from the buffer is the clear that the acknowledge just
     # re-enabled.

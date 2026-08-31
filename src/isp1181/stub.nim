@@ -114,12 +114,12 @@ proc isp1181_setup*(ctx: ISP1181Ctx; data: ptr uint8;
   ## A SET-UP packet from the host. `include/mcf5307.h` states the contract;
   ## 1 means the control OUT buffer took it.
   ##
-  ## A NIL POINTER OR A ZERO LENGTH DELIVERS NOTHING AT ALL, for the reason
+  ## A nil pointer or a zero length delivers nothing at all, for the reason
   ## `isp1181_rx` gives: a caller with no buffer is not a caller offering an
-  ## empty packet, and a zero-byte packet OCCUPIES A SLOT.
+  ## empty packet, and a zero-byte packet occupies a slot.
   ##
-  ## THE STUB ANSWERS ZERO AND CHANGES NOTHING, which is the whole of what the
-  ## stub is: a device present in the CS3 window with nothing to say.
+  ## The stub answers zero and changes nothing: it is a device present in the
+  ## CS3 window with nothing to say.
   if ctx.isNil:
     return 0
   case ctx.backend
@@ -139,10 +139,9 @@ proc isp1181_in_token*(ctx: ISP1181Ctx; endpoint: cint): cint
   ## The host asking the device for a packet. `include/mcf5307.h` states the
   ## contract; 1 means the transmit callback was called before this returned.
   ##
-  ## THE STUB ANSWERS ZERO AND CALLS NOTHING, which is the whole of what the
-  ## stub is: a device present in the CS3 window with nothing to say. A stub
-  ## that reached the model here would call a host callback on a handle the
-  ## caller never moved.
+  ## The stub answers zero and calls nothing: it is a device present in the CS3
+  ## window with nothing to say. A stub that reached the model here would call a
+  ## host callback on a handle the caller never moved.
   if ctx.isNil:
     return 0
   case ctx.backend

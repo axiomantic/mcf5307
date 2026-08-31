@@ -350,12 +350,6 @@ for value in 0 .. 255:
               " is not in the specified command set; the read answers 0x00"))
 
 let unspecified = driveRefused(unspecifiedRows)
-# THE PIN MOVED, AND WHY IT MOVED IS RECORDED HERE RATHER THAN IN A COMMIT
-# MESSAGE. `0x2F` used to sit in this class because the endpoint-configuration
-# family was numbered `0x20+k` as endpoint k, which ran out of names at `0x2E`.
-# ISP1362 Rev. 06 section 15.1.1 numbers the family control OUT, control IN,
-# then endpoints 1 to 14, so `0x2F` is endpoint 14's slot and the authority
-# numbers it. It left this class by being NUMBERED, not by being reclassified.
 const wantUnspecified: Refused = (firstBad: "", driven: 110)
 check(unspecified == wantUnspecified,
       "unspecified: every unnumbered opcode answers benignly and logs one line",
@@ -399,12 +393,6 @@ let partition: Partition = (implemented: accepted.driven +
                             total: accepted.driven + speaking.driven +
                                    refused.driven + illegalDriven.driven +
                                    unspecified.driven)
-# THE TWO FIGURES THAT MOVED, AND THE ONE REASON BOTH MOVED FOR. Renumbering
-# the endpoint-configuration family onto section 15.1.1's slot ordering makes
-# `0x24` endpoint 3's configuration, which this model carries a buffer for, so
-# it joins the implemented class; and it makes `0x2F` endpoint 14's, which the
-# authority numbers, so it leaves the unspecified class. `refused` is unchanged
-# because the family gave up one member and took one back.
 const wantPartition: Partition = (implemented: 42, refused: 100, illegal: 4,
                                   unspecified: 110, total: 256)
 check(partition == wantPartition,
@@ -689,7 +677,7 @@ check(big == wantBig,
 # PEEK READS AND DOES NOT CONSUME, which is the whole difference between it and
 # a buffer read. The buffer it reads is the one the last accepted
 # `0x20+k` selected, because that is the only selector the authority gives this
-# model - and `k` is a SLOT and not an endpoint number, so `0x22` selects
+# model - and `k` is a slot and not an endpoint number, so `0x22` selects
 # endpoint 1 and not endpoint 2.
 type Peek = tuple[first: uint8, second: uint8, pending: int, logged: int]
 
@@ -711,7 +699,7 @@ check(peeked == wantPeeked,
       "peek: 0xD2 reads the selected endpoint's head byte and consumes none",
       $peeked, $wantPeeked)
 
-# THE CONTROL IN SLOT IS THE ONE THAT SEPARATES THE TWO READINGS. Under the
+# The control IN slot is the one that separates the two readings. Under the
 # slot ordering `0x21` selects endpoint 0's IN buffer; under a reading that
 # takes `k` for an endpoint number it selects endpoint 1's. The buffer is empty
 # either way, so the name in the line is the whole observation.
@@ -775,7 +763,7 @@ check(fifoReset == wantFifoReset,
 # ---------------------------------------------------------------------------
 # Block 7. The IRQ3 line.
 #
-# A DELIVERY DRIVES THE WHOLE PATH: the packet reaches the buffer, the bit its
+# A delivery drives the whole path: the packet reaches the buffer, the bit its
 # endpoint owns is set, the enable the firmware writes admits it, and the line
 # follows. Endpoint 1's bit is `10`, so the register reads `0x0000_0400`.
 
@@ -828,8 +816,8 @@ check(irqRun == wantIrqRun,
       $irqRun, $wantIrqRun)
 
 # ---------------------------------------------------------------------------
-# BLOCK 3a. THE ENDPOINT-CONFIGURATION FAMILY IS NUMBERED AS THE AUTHORITY
-# NUMBERS IT, and the sixteen names are written out here by hand.
+# BLOCK 3a. The endpoint-configuration family is numbered as the authority
+# numbers it, and the sixteen names are written out here by hand.
 #
 # ISP1362 Rev. 06 section 15.1.1 states the write codes as "20 to 2F - write
 # (control OUT, control IN, endpoints 1 to 14)" and states that the sixteen
@@ -837,7 +825,7 @@ check(irqRun == wantIrqRun,
 # So the slot ordering is the same one the stall, status, buffer-read and
 # buffer-clear families already use, whose endpoint 1 form is base + 2.
 #
-# THE NAMES ARE ASSERTED AND NOT ONLY THE CLASSES. A model that classified
+# The names are asserted and not only the classes. A model that classified
 # every slot correctly and named `0x24` "endpoint 4 configuration" would refuse
 # a firmware's endpoint 3 write in a line that sent its reader to the wrong
 # endpoint, which is a wrong answer wearing a loud message.
@@ -872,8 +860,8 @@ check(naming == wantNaming,
       "configuration: the sixteen slots carry the authority's own names",
       $naming, $wantNaming)
 
-# THE ENDPOINT-CONFIGURATION FAMILY SHARES ITS ORDERING WITH THE OTHER
-# FAMILIES, and the assertion is made against the OTHER families rather than
+# The endpoint-configuration family shares its ordering with the other
+# families, and the assertion is made against those other families rather than
 # against a second copy of the same list. A family that drifted alone would
 # satisfy a list written beside it and would fail here.
 
@@ -902,7 +890,7 @@ check(ordering == wantOrdering,
         "numbers endpoints",
       $ordering, $wantOrdering)
 
-# NO CONFIGURATION WRITE IS SILENTLY DROPPED. Every one of the sixteen slots
+# No configuration write is silently dropped. Every one of the sixteen slots
 # either becomes the pending command or writes exactly one log line naming
 # itself, and the two outcomes are separated so that neither can stand in for
 # the other. A slot that did neither would be a write the firmware issued and
@@ -910,7 +898,7 @@ check(ordering == wantOrdering,
 
 type Loudness = tuple[accepted: seq[int], loud: seq[int],
                       unaccounted: seq[int]]
-  ## `unaccounted` IS BROADER THAN SILENCE ON PURPOSE. It holds a slot the
+  ## `unaccounted` is broader than silence on purpose. It holds a slot the
   ## model dropped without a word AND a slot whose one line names a different
   ## slot, because a reader sent to the wrong endpoint is no better served than
   ## a reader sent nowhere.
@@ -936,10 +924,9 @@ check(loudness == wantLoudness,
         "and none goes unaccounted for",
       $loudness, $wantLoudness)
 
-# ENDPOINT 3 CAN BE CONFIGURED, WHICH IS WHAT MOVED `0x24` INTO THE
-# IMPLEMENTED CLASS. Its slot is `0x24` under section 15.1.1's ordering, this
-# model carries a buffer for it, and with EPDIR set the endpoint queues and
-# transmits like endpoint 1 does.
+# Endpoint 3 can be configured. Its slot is `0x24` under section 15.1.1's
+# ordering, this model carries a buffer for it, and with EPDIR set the endpoint
+# queues and transmits like endpoint 1 does.
 
 type Endpoint3 = tuple[queued: bool, sent: bool, log: seq[string]]
 

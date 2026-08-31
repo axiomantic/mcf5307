@@ -2961,9 +2961,6 @@ mcf5307_check_case_sites("t_isp1181_stub" "@MCF5307_ISP1181_STUB_SOURCE@"
 # iteration, so this figure counts properties and not addresses. A sweep that
 # stopped iterating is caught by the iteration count inside the case's own
 # expected value, which is why the two guards do not overlap here.
-# MOVED 29 -> 30 WITH `isp1181_setup`. The added case is the set-up entry
-# point on the stub backend: it answers 0 for a packet, for nil data and for a
-# nil handle, and reaches no register.
 mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 30)
 
 ]==])

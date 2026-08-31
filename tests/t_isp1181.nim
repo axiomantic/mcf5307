@@ -10,12 +10,12 @@
 ## log line by calling the code that writes it, would pass against any table
 ## and any wording at all.
 ##
-## THE INTERRUPT REGISTER IS DRIVEN AS FAR AS IT IS ASSIGNED AND NO FURTHER.
+## The interrupt register is driven as far as it is assigned and no further.
 ## The endpoint-completion bits are assigned and are asserted here by the event
 ## that sets each one; the bus bits, the transfer bits and the endpoints this
 ## model does not carry are not assigned, and there is no event whose bit this
-## suite could assert. What IS assertable of the register itself is its
-## width, its byte order, that a clear is per bit, and that no COMMAND byte
+## suite could assert. What is assertable of the register itself is its
+## width, its byte order, that a clear is per bit, and that no command byte
 ## lights a bit. The last of those is written as a sweep with a positive
 ## control beside it: a model whose register were stuck at zero would satisfy
 ## the sweep and fails the control.
@@ -213,7 +213,7 @@ type Mapping = tuple[accepted: seq[bool], peeked: seq[uint8],
                      pending: seq[int]]
 
 const outSlotOfEndpoint: array[4, int] = [0, 2, 3, 4]
-  ## THE CONFIGURATION SLOT THAT SELECTS EACH ENDPOINT'S OUT BUFFER, written
+  ## The configuration slot that selects each endpoint's OUT buffer, written
   ## out by hand from ISP1362 Rev. 06 section 15.1.1: the sixteen slots are
   ## control OUT, control IN, then endpoints 1 to 14, so endpoint 0's OUT
   ## buffer is slot 0 and endpoint n's is slot n + 1. Slot 1 is endpoint 0's IN
@@ -430,10 +430,10 @@ check(quiet == wantQuiet,
       "interrupt register: no command byte lights a bit, and a bit can be lit",
       $quiet, $wantQuiet)
 
-# A DELIVERY LIGHTS THE BIT ITS OWN ENDPOINT OWNS, AND IT LIGHTS THE LINE. The
+# A delivery lights the bit its own endpoint owns, and it lights the line. The
 # interrupt enable is driven to `0x1F07` first, so every bit the firmware arms
-# is armed while the packets arrive. EVERY ENDPOINT IS DRIVEN IN ONE CASE
-# BECAUSE A SINGLE SHARED BIT WOULD PASS ANY CASE THAT DROVE ONE ENDPOINT. The
+# is armed while the packets arrive. Every endpoint is driven in one case
+# because a single shared bit would pass any case that drove one endpoint. The
 # expected register is written as one hand-typed literal per byte: bit 8 for
 # endpoint 0 OUT and bits 10, 11 and 12 for endpoints 1 to 3, which is
 # `0x0000_1D00` and reads back least significant byte first.
@@ -457,8 +457,8 @@ check(deliveries == wantDeliveries,
       "interrupt register: a delivery lights its own endpoint's bit and the line",
       $deliveries, $wantDeliveries)
 
-# A DELIVERY THE MODEL REFUSES LIGHTS NOTHING, AND THE PROOF IS ON THE HANDLE
-# WHOSE ENDPOINT 3 JUST ANSWERED. A zero register after a refusal proves
+# A delivery the model refuses lights nothing, and the proof is on the handle
+# whose endpoint 3 just answered. A zero register after a refusal proves
 # nothing on its own - a model that had never assigned a bit would answer zero
 # too - so the known positive and the two known negatives run through the same
 # handle, the same enable and the same entry point. Endpoint 3 is
@@ -496,15 +496,15 @@ check(refused == wantRefused,
       "interrupt register: a refused delivery lights nothing, beside one that does",
       $refused, $wantRefused)
 
-# READING AN ENDPOINT'S STATUS TAKES THAT ENDPOINT'S BIT AND LEAVES THE REST.
-# THIS IS THE ROUTE THAT KEEPS THE FIRMWARE OUT OF ITS OWN HANDLER. The
+# Reading an endpoint's status takes that endpoint's bit and leaves the rest.
+# This is the route that keeps the firmware out of its own handler. The
 # interrupt register does not clear on a `0xC0` read - the case above this
 # block pins that - and the firmware's service routine never writes it back,
 # so a bit that only a Nim-side caller could clear would leave the emulated
-# firmware spinning. `0x50+n` is the route, and it is INHERITED from ISP1362
+# firmware spinning. `0x50+n` is the route, and it is inherited from ISP1362
 # Rev. 06 p.53 rather than read from an ISP1181 document.
 #
-# TWO BITS ARE LIT AND TAKEN AWAY ONE AT A TIME, so a status read that emptied
+# Two bits are lit and taken away one at a time, so a status read that emptied
 # the register is separated from one that takes its own endpoint's bit.
 type StatusClear = tuple[before: seq[uint8], status: seq[uint8],
                          afterOne: seq[uint8], afterBoth: seq[uint8],
@@ -535,8 +535,8 @@ check(statusClear == wantStatusClear,
       "interrupt register: a status read takes its own endpoint's bit and drops the line",
       $statusClear, $wantStatusClear)
 
-# THE HOST COLLECTING THE PACKET IS WHAT LIGHTS ENDPOINT 0 IN, AND THE
-# VALIDATE IS NOT. A validate is the firmware saying the buffer is now the
+# The host collecting the packet is what lights endpoint 0 IN, and the
+# validate is not. A validate is the firmware saying the buffer is now the
 # host's; the transfer has not happened yet, and a model that raised the
 # interrupt there would tell the firmware a packet was delivered to a host
 # that had not asked for it. The register is read between the two so that the
@@ -664,7 +664,7 @@ check(negative == wantNegative,
 #
 # EVERY BYTE AND EVERY LOG LINE BELOW IS A HAND-WRITTEN LITERAL.
 #
-# THE QUEUE IS DRIVEN DIRECTLY HERE ON PURPOSE. `queueIn` and `transmit` are
+# The queue is driven directly here on purpose. `queueIn` and `transmit` are
 # the mechanism, and this block takes them as the subject; the block below
 # drives the same mechanism from the firmware's own command bytes, and
 # `t_isp1181_stub` drives it from the published C entry points. A case that
@@ -722,7 +722,7 @@ check(txWalk == wantTxWalk,
         "leaves the buffer empty",
       $txWalk, $wantTxWalk)
 
-# THE REFUSALS EACH NAME THEIR OWN REASON. An endpoint this model does not
+# The refusals each name their own reason. An endpoint this model does not
 # implement, an endpoint whose single buffer the firmware has left facing OUT,
 # and an empty packet are three different findings, and a model that answered
 # all three the same way would hide which one a reader met. Endpoint 1 is
@@ -757,12 +757,12 @@ check(txRefusal == wantTxRefusal,
         "reason and calls no host",
       $txRefusal, $wantTxRefusal)
 
-# EPDIR DECIDES WHICH ENDPOINT MAY TRANSMIT, AND THE TWO OUTCOMES ARE DRIVEN ON
-# ONE HANDLE. ISP1362 Rev. 06 Table 110 puts EPDIR at bit 6 of
+# EPDIR decides which endpoint may transmit, and the two outcomes are driven on
+# one handle. ISP1362 Rev. 06 Table 110 puts EPDIR at bit 6 of
 # DcEndpointConfiguration and Table 111 gives it as 0 = OUT, 1 = IN; section
 # 15.1.1 orders the sixteen configuration slots control OUT, control IN, then
 # endpoints 1 to 14, so `0x22` carries endpoint 1's byte and `0x23` carries
-# endpoint 2's. The positive and the negative differ in that ONE bit and in
+# endpoint 2's. The positive and the negative differ in that one bit and in
 # nothing else: a model that ignored the bit would answer both the same way,
 # and a model that read a neighbouring bit would answer both wrongly.
 type Epdir = tuple[queuedIn: bool, sentIn: bool, seen: TxRecord,
@@ -795,7 +795,7 @@ check(epdir == wantEpdir,
         "and one configured OUT is refused by name",
       $epdir, $wantEpdir)
 
-# EPDIR REFUSES IN BOTH DIRECTIONS, and the negative half is driven here. A
+# EPDIR refuses in both directions, and the negative half is driven here. A
 # single endpoint buffer faces ONE way, so a host packet arriving at an
 # endpoint the firmware configured IN has nowhere to land, and a model that
 # accepted it would raise that endpoint's interrupt and show the firmware an
@@ -989,18 +989,18 @@ check(illegal == wantIllegal,
       $illegal, $wantIllegal)
 
 # ---------------------------------------------------------------------------
-# BLOCK 7. THE SET-UP PACKET AND THE INTERLOCK IT ARMS.
+# BLOCK 7. The set-up packet and the interlock it arms.
 #
-# SETUPT IS BIT 2 OF DcEndpointStatus AND THAT POSITION IS READ, NOT INFERRED.
+# SETUPT is bit 2 of DcEndpointStatus and that position is read, not inferred.
 # ISP1362 Rev. 06, Table 126 ("DcEndpointStatus register: bit allocation",
 # p.114) places the symbols EPSTAL, EPFULL1, EPFULL0, DATA_PID, OVERWRITE,
 # SETUPT, CPUBUF at bits 7 down to 1, and Table 127 (p.115) gives bit 2 as
 # "SETUPT   Logic 1 indicates that the buffer contains a set-up packet."
 #
-# THE ONE-BIT PAIR IS THE POINT OF THE FIRST CASE. The same four bytes reach
-# the same buffer by the two routes this model now has, and the two status
-# bytes differ in EXACTLY bit 2. A model that set the bit for every OUT packet
-# would pass a positive-only check and fails this one.
+# The one-bit pair is the point of the first case. The same four bytes reach
+# the same buffer by the two routes this model has, and the two status bytes
+# differ in exactly bit 2. A model that set the bit for every OUT packet would
+# pass a positive-only check and fails this one.
 
 const setupPacket = [0x80'u8, 0x06'u8, 0x00'u8, 0x01'u8]
 
@@ -1032,15 +1032,14 @@ check(setupBit == wantSetupBit,
         "SETUPT, bit 2",
       $setupBit, $wantSetupBit)
 
-# SETUPT IS NOT CLEARED BY READING THE STATUS REGISTER, AND THE CONTRAST IS
-# THE AUTHORITY'S OWN. Table 127 says of bit 3 OVERWRITE "a read back of this
-# register clears this bit" and says NO SUCH THING of bit 2. The datasheet
+# SETUPT is not cleared by reading the status register, and the contrast is
+# the authority's own. Table 127 says of bit 3 OVERWRITE "a read back of this
+# register clears this bit" and says no such thing of bit 2. The datasheet
 # knows how to spell a read-to-clear bit and does not spell one here, so a
 # read leaves SETUPT standing. What takes it away is the buffer ceasing to
-# hold the set-up packet - bit 2's own wording is about buffer CONTENT - which
-# is the Clear Buffer command. THAT LAST STEP IS AN INFERENCE FROM THE
-# WORDING AND NOT A SENTENCE IN THE DOCUMENT, and `docs/sources.md` records it
-# as one.
+# hold the set-up packet - bit 2's own wording is about buffer content - which
+# is the Clear Buffer command. That last step is an inference from the wording
+# and not a sentence in the document.
 
 type SetupClear = tuple[afterSetup: uint8, afterSecondRead: uint8,
                         afterAcknowledge: uint8, afterClear: uint8]
@@ -1065,15 +1064,15 @@ check(setupClear == wantSetupClear,
         "away by the clear that empties the buffer",
       $setupClear, $wantSetupClear)
 
-# THE INTERLOCK. ISP1362 Rev. 06 section 12.3.6 (p.53): "The arrival of a
+# The interlock. ISP1362 Rev. 06 section 12.3.6 (p.53): "The arrival of a
 # set-up packet flushes the IN buffer, and disables the Validate Buffer and
 # Clear Buffer commands for the control IN and OUT endpoints. The
 # microprocessor must re-enable these commands by sending an acknowledge
 # set-up command to both the control endpoints."
 #
-# THE REFUSAL IS A LOG LINE AND NOT A SILENT NO-OP, which is the rule the rest
-# of this model obeys: a command that did nothing and said nothing would tell
-# the firmware the buffer was cleared when it was not.
+# The refusal is a log line and not a silent no-op: a command that did nothing
+# and said nothing would tell the firmware the buffer was cleared when it was
+# not.
 
 type Interlock = tuple[clearRefusedLog: seq[string], pendingAfterRefused: int,
                        validateRefusedPending: int, pendingAfterAllowed: int,
@@ -1113,7 +1112,7 @@ check(interlock == wantInterlock,
         "endpoints by name until 0xF4, and both work after it",
       $interlock, $wantInterlock)
 
-# THE ARRIVAL FLUSHES THE IN BUFFER AND UNSTALLS BOTH CONTROL ENDPOINTS.
+# The arrival flushes the IN buffer and unstalls both control endpoints.
 # Section 12.3.6 states the flush. Table 127's bit 7 and section 15.2.3 state
 # the unstall: "The endpoint is automatically unstalled on receiving a set-up
 # token", "regardless of the packet content".

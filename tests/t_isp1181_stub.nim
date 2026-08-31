@@ -195,7 +195,7 @@ check(rxOutcome == wantRx,
       "rx: traffic on every endpoint is accepted and reaches no register",
       $rxOutcome, $wantRx)
 
-# THE SET-UP ENTRY POINT IS INERT ON THE STUB TOO, and it ANSWERS rather than
+# The set-up entry point is inert on the stub too, and it answers rather than
 # staying silent: `isp1181_setup` returns an int, so the stub's "nothing to
 # say" has a value and the suite can assert it. A stub that reached the model
 # here would arm the set-up interlock inside a handle the caller never moved.
@@ -613,17 +613,17 @@ check(cRefuse == wantCRefuse,
       $cRefuse, $wantCRefuse)
 
 # ---------------------------------------------------------------------------
-# BLOCK 12. THE DEVICE-TO-HOST ROUTE A C CALLER CAN DRIVE.
+# BLOCK 12. The device-to-host route a C caller can drive.
 #
-# `isp1181_rx` IS THE HOST HANDING A PACKET TO THE DEVICE, AND THIS IS ITS
-# OTHER HALF: the host asking the device for one, which is what an IN token
+# `isp1181_rx` is the host handing a packet to the device, and this is its
+# other half: the host asking the device for one, which is what an IN token
 # is on the bus. A transmit callback the constructor stores and nothing ever
 # calls looks, from the host's side, exactly like a device that never had
 # anything to send - so the case below drives the firmware's own command bytes
-# through `isp1181_write` and asserts the CALL, its endpoint, its length and
+# through `isp1181_write` and asserts the call, its endpoint, its length and
 # every byte of it.
 #
-# EVERY BYTE BELOW IS A HAND-WRITTEN LITERAL. `0x01` is write control IN
+# Every byte below is a hand-written literal. `0x01` is write control IN
 # buffer and `0x61` is validate control IN buffer, and the two bytes between
 # them are the in-band length prefix, lower byte first.
 
@@ -632,8 +632,8 @@ var inTxLog: seq[string]
 
 proc recordInTx(user: pointer; endpoint: cint; data: ptr uint8;
                 length: csize_t) {.cdecl.} =
-  ## THE TRANSCRIPT CARRIES `user`, WHICH IS THE ARGUMENT A CONSUMER CASTS
-  ## BACK TO ITS OWN OBJECT. An entry point that reached the callback with a
+  ## The transcript carries `user`, which is the argument a consumer casts
+  ## back to its own object. An entry point that reached the callback with a
   ## null or a foreign `user` would satisfy every byte-level assertion here
   ## and would fault inside the host on the first packet.
   inc inTxCalls
@@ -672,8 +672,8 @@ proc driveInToken(select: ISP1181Backend): InToken =
   isp1181_destroy(handle)
   (first: first, second: second, calls: inTxCalls, log: inTxLog)
 
-# THE SECOND TOKEN IS WHAT SEPARATES A BUFFER THAT WAS CONSUMED FROM ONE THAT
-# WAS COPIED. A model that left the packet in place would answer every token
+# The second token is what separates a buffer that was consumed from one that
+# was copied. A model that left the packet in place would answer every token
 # with the same bytes and the firmware would never learn the transfer ended.
 let inTokenModel = driveInToken(FullModel)
 const wantInTokenModel: InToken = (
@@ -684,7 +684,7 @@ check(inTokenModel == wantInTokenModel,
         "reaches the host callback once, whole, and the buffer is then empty",
       $inTokenModel, $wantInTokenModel)
 
-# THE CONTROL COMES FROM THE SAME POPULATION AND THE SAME HANDLE. A zero from
+# The control comes from the same population and the same handle. A zero from
 # `isp1181_in_token` proves nothing on its own: an entry point that refused
 # every endpoint would answer zero too. Endpoint 1 is an endpoint this model
 # refuses to transmit for, and it is driven on the handle whose endpoint 0
@@ -714,8 +714,8 @@ check(inTokenControl == wantInTokenControl,
         "and calls no host, on the handle whose endpoint 0 just answered",
       $inTokenControl, $wantInTokenControl)
 
-# THE STUB IS INERT HERE TOO, AND A NIL HANDLE IS ANSWERED RATHER THAN
-# ABORTED. The stub is a device that is present and has nothing to say; a nil
+# The stub is inert here too, and a nil handle is answered rather than
+# aborted. The stub is a device that is present and has nothing to say; a nil
 # handle reaching an abort would destroy a plugin session that has nothing to
 # do with this model.
 type InTokenInert = tuple[stub: InToken, nilHandle: cint]
@@ -733,16 +733,16 @@ check(inTokenInert == wantInTokenInert,
       $inTokenInert, $wantInTokenInert)
 
 # ---------------------------------------------------------------------------
-# BLOCK 13. THE IRQ LINE A C CALLER CAN SEE.
+# BLOCK 13. The IRQ line a C caller can see.
 #
-# EVERY STEP BELOW GOES THROUGH A PUBLISHED ENTRY POINT. The enable is written
+# Every step below goes through a published entry point. The enable is written
 # with `isp1181_write` as the firmware writes it, the packet arrives through
 # `isp1181_rx` as the bus delivers it, and what the case asserts is the
 # argument the C caller's own `isp1181_irq_fn` received. A model that set the
 # bit and never reached the callback would satisfy every Nim-side case in
 # `t_isp1181` and would leave IRQ3 dead in the consumer.
 #
-# EVERY BYTE IS A HAND-WRITTEN LITERAL. `0xC2` is write interrupt enable and
+# Every byte is a hand-written literal. `0xC2` is write interrupt enable and
 # `0x07 0x1F 0x00 0x00` is `0x00001F07` lower byte first, which is the value
 # the emulated firmware writes. `0x50` is read control OUT endpoint status.
 
@@ -775,7 +775,7 @@ proc driveLine(): Line =
   result.clearedTrace = lineTrace
   isp1181_destroy(handle)
 
-# THE KNOWN NEGATIVE IS ON THE SAME HANDLE, THROUGH THE SAME ENTRY POINT.
+# The known negative is on the same handle, through the same entry point.
 # Endpoint 4 is an endpoint this model does not carry, and it is delivered to
 # after endpoint 0 has already lit the line: a callback that fired on any
 # delivery at all would add a second entry here, and one that never fired

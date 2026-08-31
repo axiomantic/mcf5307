@@ -269,15 +269,13 @@ void isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
                 size_t len);
 
 /* A SET-UP packet from the host, which on the bus is a SETUP token followed
- * by its data stage. It is a SEPARATE ENTRY POINT from `isp1181_rx` and not a
+ * by its data stage. It is a separate entry point from `isp1181_rx` and not a
  * flag on it, because a SETUP token is not an ordinary OUT packet: its arrival
  * flushes the control IN buffer, unstalls both control endpoints, and disables
  * the Validate Buffer and Clear Buffer commands on both of them until the
- * firmware issues acknowledge set up. A device that took a set-up packet
- * through `isp1181_rx` would raise the same interrupt and leave the firmware's
- * control handler with no way to tell a SETUP from an OUT.
+ * firmware issues acknowledge set up.
  *
- * IT CARRIES NO ENDPOINT ARGUMENT. A SETUP token is defined only for a control
+ * It carries no endpoint argument. A SETUP token is defined only for a control
  * endpoint and this model has exactly one it can receive on, so an endpoint
  * parameter here would have a single legal value - one a computed endpoint
  * could miss with nothing to catch it.
@@ -296,15 +294,15 @@ int isp1181_setup(isp1181_ctx* ctx, const uint8_t* data, size_t len);
  * the moment the host chooses, with no schedule inside this model.
  *
  * Returns 1 when a packet was handed to `isp1181_tx_fn` before this call
- * returned, and 0 otherwise. THE CALLBACK IS SYNCHRONOUS: a return of 1 means
+ * returned, and 0 otherwise. The callback is synchronous: a return of 1 means
  * the host has already seen the bytes, and the pointer it was given does not
  * outlive the call.
  *
- * A RETURN OF 0 IS THE NAK AND IT IS NOT AN ERROR CODE. It is what the device
+ * A return of 0 is the NAK and it is not an error code. It is what the device
  * answers when the endpoint has nothing validated, when this model carries no
  * IN buffer for that endpoint, when the handle carries no transmit callback,
- * and for a nil handle. A packet the device could not hand over STAYS IN THE
- * BUFFER, so a later token still collects it: a 0 costs the packet nothing. */
+ * and for a nil handle. A packet the device could not hand over stays in the
+ * buffer, so a later token still collects it: a 0 costs the packet nothing. */
 int isp1181_in_token(isp1181_ctx* ctx, int endpoint);
 
 /* The implementation standing behind `isp1181_read`, `isp1181_write` and
