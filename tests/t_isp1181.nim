@@ -126,19 +126,19 @@ check(reissued == wantReissued,
       "state machine: a re-issued command builds its operand from zero",
       $reissued, $wantReissued)
 
-# A REFUSED COMMAND ABANDONS THE TRANSFER IN PROGRESS. Both refusing classes
+# A refused command abandons the transfer in progress. Both refusing classes
 # are driven into the middle of a live two-byte register write: the command the
 # documents name and do not implement, and the byte no document numbers at all.
-# The transfer must NOT complete across them. ISP1362 Rev. 06 p.14 calls the
+# The transfer must not complete across them. ISP1362 Rev. 06 p.14 calls the
 # command "the index of a register" that informs the part which register the
 # data phase reaches, and section 15 p.104 makes the command phase an
 # unconditional read of the bus as a command code, so the operand byte written
-# after the refusals belongs to the LAST command written and that command is
+# after the refusals belongs to the last command written and that command is
 # `0x9C`. A model that charged it to `0xBA` would complete a register write the
 # firmware never finished, and would report every following byte against the
 # wrong command.
 #
-# THE TWO REFUSALS STILL SAY DIFFERENT THINGS - a reader who meets the second
+# The two refusals still say different things - a reader who meets the second
 # has found a gap in the specification rather than a decision somebody took,
 # and a single shared line would hide which one it is.
 type Inert = tuple[hw: seq[uint8], log: seq[string]]
@@ -251,7 +251,7 @@ check(mapping == wantMapping,
       "fifos: each endpoint's packet lands in its own buffer and none in EP0 IN",
       $mapping, $wantMapping)
 
-# A CONFIGURATION SLOT WITH NO BUFFER BEHIND IT IS SELECTED AND SAYS SO. Every
+# A configuration slot with no buffer behind it is selected and says so. Every
 # one of section 15.1.1's sixteen slots is accepted, and eleven of them
 # configure buffer memory this model does not carry, so the selection a peek
 # reads can now name a slot with no FIFO. `0x25` selects slot 5 after `0x22`
@@ -626,10 +626,10 @@ check(softctCase == wantSoftct,
 # read that answered zero in silence is the one outcome that would let the
 # firmware take the benign value for an answer.
 #
-# THE COMMAND LEFT PENDING IS THE REFUSED ONE, and that is the two-sided form
-# of the repair: the refusal takes the command port's latch, and the data-port
-# read that follows is reported against the byte the firmware actually wrote
-# rather than against a command it had finished with.
+# The command left pending is the refused one: the refusal takes the command
+# port's latch, and the data-port read that follows is reported against the
+# byte the firmware actually wrote rather than against a command it had
+# finished with.
 type Negative = tuple[refusal: seq[string], value: uint8, port: uint8,
                       last: int, afterRead: seq[string], hw: seq[uint8],
                       mode: seq[uint8], interrupt: seq[uint8],
@@ -928,7 +928,7 @@ proc driveReadOutControl(): ReadOutControl =
   (readBack: readBack, log: m.logLines[before .. ^1])
 
 let readOutControl = driveReadOutControl()
-# EVERY TRAILING LINE NAMES THE REFUSED COMMAND AND NOT THE ONE BEFORE IT. The
+# Every trailing line names the refused command and not the one before it. The
 # refused `0x16` takes the command port's latch, so the six reads that follow
 # are reported against `0x16`. A model that left `0x10` pending would answer the
 # same six benign bytes and tell a reader that an exhausted control-OUT read was
@@ -1165,18 +1165,18 @@ check(setupArrival == wantSetupArrival,
         "control endpoints",
       $setupArrival, $wantSetupArrival)
 
-# THE WHOLE INITIALIZATION SEQUENCE IS DRIVEN, IN THE ORDER THE AUTHORITY PUTS
-# IT IN. ISP1362 Rev. 06 section 15.1.1 p.107 states that buffer memory is
+# The whole initialization sequence is driven, in the order the authority puts
+# it in. ISP1362 Rev. 06 section 15.1.1 p.107 states that buffer memory is
 # allocated "only after all 16 endpoints have been configured in sequence (from
 # endpoint 0 OUT to endpoint 14)", so the firmware writes `0x20` to `0x2F` with
 # one operand byte each and the model must take all sixteen. What it cannot take
-# is the BUFFER behind a slot it carries no FIFO for, and the pair below
+# is the buffer behind a slot it carries no FIFO for, and the pair below
 # separates the two halves: the same sixteen writes are driven twice, differing
 # only in FIFOEN - bit 7, ISP1362 Rev. 06 Table 110 and Table 111 p.107 - on the
 # eleven slots with no buffer.
 #
-# THE DISABLED PASS IS THE NEGATIVE CONTROL AND IT COMES FROM THE SAME
-# POPULATION. A model that wrote a line for every unbuffered slot regardless of
+# The disabled pass is the negative control and it comes from the same
+# population. A model that wrote a line for every unbuffered slot regardless of
 # the byte would satisfy the enabled pass on its own.
 type ConfigSequence = tuple[quiet: seq[string], loud: seq[string]]
 

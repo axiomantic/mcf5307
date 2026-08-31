@@ -77,16 +77,14 @@ type Family = object
   illegalName: string
   illegalDetail: string
   allEndpoints: bool
-    ## THE FAMILY IS IMPLEMENTED FOR EVERY ENDPOINT THE AUTHORITY NUMBERS AND
-    ## NOT ONLY FOR THE ONES THIS MODEL BUFFERS. It is true for the family
-    ## whose target is a REGISTER the part carries for all sixteen slots and
-    ## false for one whose target is BUFFER MEMORY. ISP1362 Rev. 06 section
+    ## The family is implemented for every endpoint the authority numbers and
+    ## not only for the ones this model buffers. It is true for the family
+    ## whose target is a register the part carries for all sixteen slots and
+    ## false for one whose target is buffer memory. ISP1362 Rev. 06 section
     ## 15.1.1 p.107 states that the buffer memory "takes place only after all
     ## 16 endpoints have been configured in sequence (from endpoint 0 OUT to
     ## endpoint 14)", so a device that refused one of those slots could not
-    ## complete the sequence the same section requires of the firmware. A
-    ## refusal there is therefore a statement about the part that the authority
-    ## contradicts, and not a gap this model may report.
+    ## complete the sequence the same section requires of the firmware.
   inOnly: bool
     ## THE FAMILY ADDRESSES AN IN BUFFER. This model gives endpoint 0 an OUT
     ## buffer and an IN buffer and gives endpoints 1 to 3 ONE buffer each, whose

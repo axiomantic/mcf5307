@@ -3228,11 +3228,6 @@ mcf5307_check_case_sites("t_isp1181"
 # on the same bytes, SETUPT's survival of a status read and its removal by the
 # clear, the Validate/Clear interlock in both states, and the flush-and-unstall
 # the arrival performs.
-# MOVED 32 -> 33 WITH THE SIXTEEN-SLOT CONFIGURATION SEQUENCE. The one added
-# case drives ISP1362 Rev. 06 section 15.1.1's whole initialization sequence,
-# `0x20` to `0x2F` with an operand each, twice: once with FIFOEN clear on the
-# eleven slots this model carries no buffer for, which must write no line, and
-# once with FIFOEN set on those slots, which must write one line per slot.
 mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 33)
 
 ]==])

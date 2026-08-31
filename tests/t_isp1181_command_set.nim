@@ -68,7 +68,7 @@ const implementedOpcodes: array[53, uint8] = [
   0xB6'u8, 0xB7'u8,                           # device address
   0x20'u8, 0x21'u8,                           # control configuration, OUT then IN
   0x22'u8, 0x23'u8, 0x24'u8,                  # endpoint 1 to 3 configuration
-  # ENDPOINTS 4 TO 14 CONFIGURE A REGISTER AND NOT A BUFFER. ISP1362
+  # Endpoints 4 to 14 configure a register and not a buffer. ISP1362
   # Rev. 06 section 15.1.1 p.107 requires all sixteen slots to be written
   # in sequence before the part allocates buffer memory, so the register
   # exists for every slot and the model records every slot. The buffers
@@ -303,10 +303,10 @@ proc driveRefused(rows: openArray[tuple[opcode: uint8, want: string]]): Refused 
       result.firstBad = "0x" & toHex(row.opcode) & " command port answered 0x" &
         toHex(m.portRead(commandPort))
     elif m.lastCommand != int(row.opcode):
-      # THE COMMAND PHASE LATCHES WHETHER OR NOT THE DECODE ACCEPTS. ISP1362
+      # The command phase latches whether or not the decode accepts. ISP1362
       # Rev. 06 p.14 calls the command "the index of a register" and section 15
       # p.104 gives the command phase as an unconditional interpretation of the
-      # bus, so a byte that reached the command port IS the pending command and
+      # bus, so a byte that reached the command port is the pending command and
       # a model that left the previous one there would charge the next operand
       # byte to it.
       result.firstBad = "0x" & toHex(row.opcode) &
@@ -397,13 +397,12 @@ let partition: Partition = (implemented: accepted.driven +
                             total: accepted.driven + speaking.driven +
                                    refused.driven + illegalDriven.driven +
                                    unspecified.driven)
-# THE TWO FIGURES THAT MOVED, AND THE ONE REASON BOTH MOVED FOR. The eleven
-# codes `0x25` to `0x2F` write the DcEndpointConfiguration register of a slot
-# this model carries no buffer for, and ISP1362 Rev. 06 section 15.1.1 p.107
-# states that the part allocates buffer memory only "after all 16 endpoints
-# have been configured in sequence". A slot the model refused would make a step
-# the authority requires look like a step the part cannot take, so the eleven
-# moved from the refused class to the implemented one and nothing else moved.
+# The codes `0x25` to `0x2F` write the DcEndpointConfiguration register of a
+# slot this model carries no buffer for, and are implemented rather than
+# refused: ISP1362 Rev. 06 section 15.1.1 p.107 states that the part allocates
+# buffer memory only "after all 16 endpoints have been configured in sequence",
+# so a slot the model refused would make a step the authority requires look
+# like a step the part cannot take.
 const wantPartition: Partition = (implemented: 53, refused: 89, illegal: 4,
                                   unspecified: 110, total: 256)
 check(partition == wantPartition,
@@ -927,8 +926,8 @@ proc configurationLoudness(): Loudness =
       result.unaccounted.add(slot)
 
 let loudness = configurationLoudness()
-# EVERY SLOT IS ACCEPTED AND `loud` IS EMPTY, WHICH IS THE AUTHORITY'S OWN
-# SHAPE. ISP1362 Rev. 06 section 15.1.1 p.107 states that buffer-memory
+# Every slot is accepted and `loud` is empty. ISP1362 Rev. 06 section 15.1.1
+# p.107 states that buffer-memory
 # allocation "takes place only after all 16 endpoints have been configured in
 # sequence", so a slot the part refused would break a sequence the same section
 # requires. The `loud` branch is kept rather than deleted: it is what the check

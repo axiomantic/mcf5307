@@ -44,23 +44,23 @@
 ## service routine reads four status bytes and never writes them back, so a bit
 ## with no route out of the register would spin the machine.
 ##
-## A REFUSED COMMAND ABANDONS THE TRANSFER IN PROGRESS, AND THE DOCUMENT SAYS
-## SO. ISP1362 Rev. 06 p.14 calls the command "the index of a register" whose
-## job is to "inform the ISP1362 about the register that will be accessed at the
-## data phase", and section 15 p.104 gives the command phase as an
-## unconditional interpretation of the bus as a command code. A command-port
-## write therefore replaces the index whether or not this model implements what
-## it names, and `beginRefused` is where that happens.
+## A refused command abandons the transfer in progress. ISP1362 Rev. 06 p.14
+## calls the command "the index of a register" whose job is to "inform the
+## ISP1362 about the register that will be accessed at the data phase", and
+## section 15 p.104 gives the command phase as an unconditional interpretation
+## of the bus as a command code. A command-port write therefore replaces the
+## index whether or not this model implements what it names, and `beginRefused`
+## is where that happens.
 ##
-## THE SEQUENCING RULE BELOW IS THIS FILE'S AND NOT THE AUTHORITY'S, and it is
+## The sequencing rule below is this file's and not the authority's, and it is
 ## named here because no document on this machine states it either way. `peek`
-## reads the FIFO of the endpoint an endpoint-CONFIGURATION command last
+## reads the FIFO of the endpoint an endpoint-configuration command last
 ## selected, which couples selection to configuration where nothing here couples
 ## them. It is recorded as a choice rather than as a finding, and settling it is
 ## an operator decision and not a repair.
 ##
-## THE SIXTEEN CONFIGURATION SLOTS ARE ACCEPTED AND THE FIVE BUFFERS ARE NOT
-## SIXTEEN. Section 15.1.1 p.107 requires the firmware to configure all sixteen
+## The sixteen configuration slots are accepted and the five buffers are not
+## sixteen. Section 15.1.1 p.107 requires the firmware to configure all sixteen
 ## slots in sequence before the part allocates buffer memory at all, so a model
 ## that refused a slot would report a required step as a gap. `configSlotCount`
 ## is the register the part carries; `fifoCount` is the buffer memory this model
@@ -119,13 +119,13 @@ import ./commands
 import ./fifo
 
 const configSlotCount* = 16
-  ## THE DcEndpointConfiguration SLOTS THE PART CARRIES, which is not the same
+  ## The DcEndpointConfiguration slots the part carries, which is not the same
   ## number as the buffers this model carries. ISP1362 Rev. 06 section 15.1.1
   ## p.107 gives the write codes as "20 to 2F - write (control OUT, control IN,
   ## endpoints 1 to 14)" and states that buffer-memory allocation "takes place
   ## only after all 16 endpoints have been configured in sequence (from
   ## endpoint 0 OUT to endpoint 14)". The register exists for every slot, so
-  ## every slot is accepted and recorded; the BUFFER behind a slot is a
+  ## every slot is accepted and recorded; the buffer behind a slot is a
   ## separate question and `fifoCount` is its answer.
 
 const fifoCount* = 5
@@ -159,7 +159,7 @@ type
     ## latch. A register operand is at most four bytes and fits the latch; an
     ## endpoint buffer carries its own length in band, so its width is a
     ## property of the packet and not of the opcode.
-    ## `tfRefused` IS THE STATE A REFUSED COMMAND LEAVES, and it exists so that
+    ## `tfRefused` is the state a refused command leaves, and it exists so that
     ## the refusal has somewhere to put the command byte that is not the
     ## previous command's. It carries no width, because a command this model
     ## refuses is one whose operand count it has no ground to claim.
@@ -181,12 +181,12 @@ type
     interruptEnable: uint32
     interruptRegister: uint32
     endpointConfig: array[configSlotCount, uint8]
-      ## One DcEndpointConfiguration byte per SLOT, and the slots outnumber the
+      ## One DcEndpointConfiguration byte per slot, and the slots outnumber the
       ## buffers. ISP1362 Rev. 06 section 15.1.1 orders the configuration slots
       ## control OUT, control IN, then endpoints 1 to 14, which is the order
       ## `fifos` is in, so a slot below `fifoCount` and the buffer it configures
       ## share one index and a slot at or above it configures no buffer here.
-    selected: int                ## The SLOT the last 0x20+k selected.
+    selected: int                ## The slot the last 0x20+k selected.
     setupHeld: bool
       ## SETUPT for the control OUT buffer, and for that buffer alone. ISP1362
       ## Rev. 06 Table 127 gives bit 2 as "Logic 1 indicates that the buffer
@@ -232,7 +232,7 @@ const
   fifoEnableBit = 0x80'u8
     ## FIFOEN in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 p.107 places
     ## it at bit 7 and Table 111 gives its meaning: "Logic 1 enables the FIFO
-    ## buffer. Logic 0 disables the FIFO buffer." It is INHERITED on the same
+    ## buffer. Logic 0 disables the FIFO buffer." It is inherited on the same
     ## terms as `epdirBit`.
   softctBit* = 0x01'u8
     ## The mode register bits. The rest - DISGLBL `0x02`, DBGMOD `0x04`,
@@ -629,17 +629,17 @@ proc refusedName(pending: int): string =
   if command.name.len == 0: "not in the specified command set" else: command.name
 
 proc beginRefused(m: ISP1181; opcode: uint8) =
-  ## A REFUSED COMMAND STILL LATCHES, AND THAT IS READ FROM THE DOCUMENT. ISP1362
-  ## Rev. 06 p.14 describes the command as "the index of a register" that
-  ## "inform[s] the ISP1362 about the register that will be accessed at the data
-  ## phase", and section 15 p.104 gives the command phase as an unconditional
-  ## interpretation of the bus as a command code. Nothing in either statement
-  ## admits a path by which an earlier command survives a later command-port
-  ## write, so a refusal abandons the transfer in progress instead of leaving it
-  ## live to collect the next command's operand bytes.
+  ## A refused command still latches. ISP1362 Rev. 06 p.14 describes the
+  ## command as "the index of a register" that "inform[s] the ISP1362 about the
+  ## register that will be accessed at the data phase", and section 15 p.104
+  ## gives the command phase as an unconditional interpretation of the bus as a
+  ## command code. Nothing in either statement admits a path by which an earlier
+  ## command survives a later command-port write, so a refusal abandons the
+  ## transfer in progress instead of leaving it live to collect the next
+  ## command's operand bytes.
   ##
-  ## THE WIDTH IS ZERO AND IS NOT A GUESS AT THE REFUSED COMMAND'S OPERAND
-  ## COUNT. `tfRefused` reports each data-port access against the command that
+  ## The width is zero and is not a guess at the refused command's operand
+  ## count. `tfRefused` reports each data-port access against the command that
   ## was refused and takes nothing, which is the one thing this model can say
   ## truthfully about a command it does not implement.
   m.pending = int(opcode)
@@ -758,7 +758,7 @@ proc beginTransfer(m: ISP1181; opcode: uint8; kind: Transfer; width: int;
 
 proc writeCommand(m: ISP1181; opcode: uint8) =
   let command = classify(opcode)
-  # EVERY REFUSAL BELOW ABANDONS THE TRANSFER IN PROGRESS. `beginRefused` gives
+  # Every refusal below abandons the transfer in progress. `beginRefused` gives
   # the two sentences of the document that put the command phase's latch before
   # the decode.
   case command.class
@@ -849,7 +849,7 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
 
   if opcode >= epConfigBase and
       int(opcode) - int(epConfigBase) < m.endpointConfig.len:
-    # THE SLOT INDEX IS THE BUFFER INDEX WHERE A BUFFER EXISTS. `endpointConfig`
+    # The slot index is the buffer index where a buffer exists. `endpointConfig`
     # and `configSlotCount` state where the ordering comes from; a slot at or
     # above `fifoCount` still has a register byte and no buffer, and `peek` is
     # the one reader that has to tell the two apart.
@@ -878,7 +878,7 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
     # section 15.1.1's slot ordering is `fifos`' own.
     let index = m.selected
     if index >= fifoCount:
-      # THE SELECTED SLOT HAS NO BUFFER. The peek promises a byte from a buffer
+      # The selected slot has no buffer. The peek promises a byte from a buffer
       # and there is none to promise it from, which is the `tfAbsent` case and
       # not a different one: the command is legal and its answer does not exist.
       m.absentNote = "isp1181: peek follows the configuration of slot " &
@@ -917,9 +917,8 @@ proc commitOperand(m: ISP1181) =
         m.pending - int(epConfigBase) < m.endpointConfig.len:
       let slot = m.pending - int(epConfigBase)
       m.endpointConfig[slot] = uint8(m.latch)
-      # THE REGISTER IS RECORDED AND THE BUFFER IS STILL MISSING, AND THE LINE
-      # SAYS SO. A slot the firmware ENABLES and this model has no buffer memory
-      # for is the part of the configuration the model cannot honour; a slot the
+      # A slot the firmware enables and this model has no buffer memory for is
+      # the part of the configuration the model cannot honour; a slot the
       # firmware disables is honoured exactly by having no buffer, and writes
       # nothing.
       if slot >= fifoCount and (uint8(m.latch) and fifoEnableBit) != 0:
