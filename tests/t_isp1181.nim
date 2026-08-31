@@ -765,12 +765,11 @@ check(txRefusal == wantTxRefusal,
 # endpoint 2's. `0xC1 xor 0x81` is `0x40`, so the positive and the negative
 # differ in that ONE bit and in nothing else.
 #
-# FFOSZ IS HELD EQUAL ACROSS THE PAIR AND IS NOT A SIZE CLAIM HERE. Giving each
+# FFOSZ is held equal across the pair and is not a size claim here. Giving each
 # endpoint the FFOSZ its own buffer would encode varies a second field of the
-# byte, and a pair that varies two fields isolates neither. What this model
-# reads a buffer's shape out of is `fifoShape` in `src/isp1181/isp1181.nim`; it
-# reads no size out of DcEndpointConfiguration at all, so holding the low
-# nibble equal costs the run nothing and buys the pair its one-bit property.
+# byte, and a pair that varies two fields isolates neither. This model reads a
+# buffer's shape out of `fifoShape` in `src/isp1181/isp1181.nim`; it reads no
+# size out of DcEndpointConfiguration at all.
 type Epdir = tuple[queuedIn: bool, sentIn: bool, seen: TxRecord,
                    queuedOut: bool, interruptRegister: seq[uint8],
                    log: seq[string]]
@@ -807,8 +806,7 @@ check(epdir == wantEpdir,
 # accepted it would raise that endpoint's interrupt and show the firmware an
 # OUT packet on a buffer it had declared for transmission. The endpoint
 # configured OUT in the same run is the control: `0xC1 xor 0x81` is `0x40`, so
-# the two differ in EPDIR and in nothing else. FFOSZ is held equal across the
-# pair for the reason the transmit half above states.
+# the two differ in EPDIR and in nothing else.
 type DeliverEpdir = tuple[intoIn: bool, intoOut: bool, pending: seq[int],
                           log: seq[string]]
 
