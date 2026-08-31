@@ -488,7 +488,7 @@ MCF5307_MUST_USE int isp1181_config_slot(const isp1181_ctx* ctx, size_t slot,
  * more pieces than they had to. Splitting too large is refused whole by
  * `isp1181/fifo`, which is the size refusal the split was introduced to end.
  *
- * THE SIZE IS DECODED FROM THE CONFIGURATION BYTE THE FIRMWARE WROTE. ISP1362
+ * The size is decoded from the configuration byte the firmware wrote. ISP1362
  * Rev. 06 Table 110 p.107 puts it in `FFOSZ[3:0]`, bits 3 to 0 of the byte
  * written by command `0x20 + slot`, and Table 111 p.107 says those bits
  * "select the buffer memory size according to Table 16". Table 16 p.52 gives
@@ -501,23 +501,19 @@ MCF5307_MUST_USE int isp1181_config_slot(const isp1181_ctx* ctx, size_t slot,
  * buffer is error code `1011`, "overflow; the received packet was larger than
  * the available buffer space", Table 132 p.118.
  *
- * ENDPOINT 0 IS FIXED BY THE PART AND ITS BYTE IS NOT READ. Table 15 p.51 gives
+ * Endpoint 0 is fixed by the part and its byte is not read. Table 15 p.51 gives
  * both control rows as "64 (fixed)" with double buffering "no", against
  * "programmable" for endpoints 1 to 14, and section 15.1.1 p.107 says the
  * control endpoints "have fixed configurations" and are written only to
  * complete the initialization sequence. So slots 0 and 1 answer 64 bytes and
- * one buffer whether or not the firmware ever configured them, and that answer
- * comes from Table 15 rather than from a register the part does not take it
- * from.
+ * one buffer whether or not the firmware ever configured them.
  *
- * A SLOT THE FIRMWARE NEVER WROTE IS NOT DECODED, AND THAT IS THE POINT. Table
- * 110 p.107 resets every bit of the byte to 0, and `FFOSZ` = `0000` is 8 bytes
- * in Table 16 - legal, and the smallest, so a producer handed it would split
- * every frame to eight bytes and never see an error. This call answers 0 for
- * such a slot: an unconfigured endpoint has no geometry, and 8 is exactly the
- * plausible wrong answer that a decode of the reset value would invent.
+ * A slot the firmware never wrote is not decoded. Table 110 p.107 resets every
+ * bit of the byte to 0, and `FFOSZ` = `0000` is 8 bytes in Table 16 - legal,
+ * and the smallest, so a producer handed it would split every frame to eight
+ * bytes and never see an error. This call answers 0 for such a slot.
  *
- * A DISABLED ENDPOINT ANSWERS 0 FOR THE SAME REASON A SLOT WITH NO BUFFER DOES.
+ * A disabled endpoint answers 0 for the same reason a slot with no buffer does.
  * Section 12.3.3 p.51: "Only enabled endpoints are allocated space in the
  * shared buffer memory storage, disabled endpoints have zero bytes." With
  * FIFOEN clear there is no buffer memory to describe.
@@ -536,25 +532,21 @@ MCF5307_MUST_USE int isp1181_config_slot(const isp1181_ctx* ctx, size_t slot,
  * exists and has NO buffer to describe. RETURNS -1 when there is no answer to
  * give.
  *
- * 0 IS NOT A SIZE OF ZERO AND IT IS NOT AN ERROR. It is the answer for a slot
+ * 0 is not a size of zero and it is not an error. It is the answer for a slot
  * this model carries no buffer memory behind - the part has 16 configuration
  * slots and this model implements buffers for the first five - for a slot the
- * firmware never configured, and for one it configured with FIFOEN clear. In
- * all three there is no buffer, and reporting 0 bytes or a plausible 64 would
- * be an invention a producer would then size its packets to.
+ * firmware never configured, and for one it configured with FIFOEN clear.
+ * Reporting 0 bytes or a plausible 64 would be an invention a producer would
+ * then size its packets to.
  *
- * -1 CARRIES TWO CAUSES AND THE CALLER SEPARATES THEM WITHOUT A FOURTH RETURN
- * VALUE. The first is a malformed question: no handle, or `slot` at or past
+ * -1 carries two causes and the caller separates them without a fourth return
+ * value. The first is a malformed question: no handle, or `slot` at or past
  * `isp1181_config_slots`. The second is a configuration that names no size this
  * model can report - a reserved `FFOSZ` code from Table 16's `0100` to `1111`,
  * or an isochronous endpoint, whose sizes come out of that table's other column
- * and reach 1023 bytes where no buffer in this model does. Both are "there is
- * no answer", which is what -1 already meant; a live handle and a `slot` below
- * `isp1181_config_slots` leave only the second, so the pair of facts the caller
- * already holds tells them apart. NEITHER IS A SIZE, and the alternatives are
- * worse in the direction that matters: 1 promises two figures that do not
- * exist, and 0 would say the endpoint has no buffer memory at the moment the
- * firmware allocated some.
+ * and reach 1023 bytes where no buffer in this model does. A live handle and a
+ * `slot` below `isp1181_config_slots` leave only the second, so the pair of
+ * facts the caller already holds tells them apart.
  *
  * Both pointers may be NULL, and neither is written unless this returns 1 -
  * `isp1181_config_slot`'s rule, for its reason.
@@ -562,8 +554,8 @@ MCF5307_MUST_USE int isp1181_config_slot(const isp1181_ctx* ctx, size_t slot,
  * THIS CALL DOES NOT SAY WHETHER THE FIRMWARE CONFIGURED THE SLOT, and it is
  * not an omission. `isp1181_config_slot` says that, and duplicating the answer
  * into a second symbol would be the same defect as the duplicated `64`: one
- * fact in two places with nothing holding them together. THE STATES THE REPORT
- * DISTINGUISHES ARE REACHED BY ASKING BOTH CALLS:
+ * fact in two places with nothing holding them together. The states the report
+ * distinguishes are reached by asking both calls:
  *
  *   config_slot == 1 and slot_buffer ==  1  configured, and its size is here
  *   config_slot == 1 and slot_buffer ==  0  configured, and no buffer behind it
@@ -578,13 +570,12 @@ MCF5307_MUST_USE int isp1181_config_slot(const isp1181_ctx* ctx, size_t slot,
  * `isp1181_config_slot` first; a caller that only needs a packet size may read
  * this call alone, because every answer other than 1 withholds one.
  *
- * WHAT THIS CALL REPORTS IS THE CONFIGURATION, AND THE BUFFER A PACKET MEETS IS
- * ALLOCATED AT RESET FROM A SEPARATE TABLE. For the firmware image this model
- * was measured against the two agree, and `tests/t_isp1181_stub.nim` drives that
- * agreement rather than asserting it here. An image that configured a size the
+ * What this call reports is the configuration; the buffer a packet meets is
+ * allocated at reset from a separate table. For the firmware image this model
+ * was measured against the two agree. An image that configured a size the
  * model's reset allocation does not carry would be reported as it configured
  * itself while the buffer went on enforcing the older figure, and nothing in
- * this tree would say so. `docs/sources.md` carries that gap. */
+ * this tree would say so. */
 MCF5307_MUST_USE int isp1181_slot_buffer(const isp1181_ctx* ctx, size_t slot,
                                          size_t* max_packet_bytes,
                                          size_t* buffer_count);

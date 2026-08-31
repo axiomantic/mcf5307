@@ -1076,11 +1076,10 @@ proc slotBufferAt(handle: ISP1181Ctx;
 # endpoint 0 OUT, whose 64 bytes ISP1362 Rev. 06 Table 15 p.51 fixes, and slot 2
 # is endpoint 1, configured here with the byte the G2 firmware writes - `0xE1`,
 # whose `FFOSZ` is `0001` for 16 bytes and whose `DBLBUF` is set. They differ in
-# both figures. A door that answered a single global maximum would pass every
-# other case here and fail this one, and a consumer built on it would have moved
-# the assumption up one level rather than removed it. Both expectations are
-# hand-written literals decoded from Table 15 and Table 16 p.52, never a second
-# call of the procedure under test.
+# both figures, so a door that answered a single global maximum would pass every
+# other case here and fail this one. Both expectations are hand-written literals
+# decoded from Table 15 and Table 16 p.52, never a second call of the procedure
+# under test.
 type BufferShapes = tuple[ep0Out: tuple[rc: int, bytes: uint, buffers: uint],
                           ep1: tuple[rc: int, bytes: uint, buffers: uint]]
 
@@ -1104,15 +1103,14 @@ check(bufferShapes == wantBufferShapes and
         "maximum can satisfy this",
       $bufferShapes, $wantBufferShapes)
 
-# THE SIZE IS READ OUT OF THE CONFIGURATION BYTE AND IS NOT A CONSTANT, AND
-# THIS IS THE CASE THAT SAYS SO. Slot 3 is endpoint 2, the slot whose reset
-# buffer allocation in this model is 64 bytes and two deep and whose measured
-# firmware byte selects exactly that. Configure it INSTEAD with `0x81` -
-# FIFOEN set, `DBLBUF` clear, `FFOSZ` = `0001` - and ISP1362 Rev. 06 Table 16
-# p.52 makes the answer 16 bytes one deep. A call that still published the
-# allocation table would answer 64 and 2 here and pass every other case in this
-# file, so this pair of figures is the whole evidence that the read-back
-# happened.
+# The size is read out of the configuration byte and is not a constant. Slot 3
+# is endpoint 2, the slot whose reset buffer allocation in this model is 64
+# bytes and two deep and whose measured firmware byte selects exactly that.
+# Configure it instead with `0x81` - FIFOEN set, `DBLBUF` clear, `FFOSZ` =
+# `0001` - and ISP1362 Rev. 06 Table 16 p.52 makes the answer 16 bytes one deep.
+# A call that still published the allocation table would answer 64 and 2 here
+# and pass every other case in this file, so this pair of figures is the whole
+# evidence that the read-back happened.
 type ConfiguredSize = tuple[asWritten: tuple[rc: int, bytes: uint,
                                              buffers: uint],
                             afterRewrite: tuple[rc: int, bytes: uint,
@@ -1137,11 +1135,11 @@ check(configuredSize == wantConfiguredSize,
         "the configuration byte and not published from a table",
       $configuredSize, $wantConfiguredSize)
 
-# THE FOUR NON-ISOCHRONOUS CODES, EACH DRIVEN. Table 16 p.52 gives `0000` to
-# `0011` as 8, 16, 32 and 64 bytes, and a decode that got one row wrong would
-# still satisfy the case above. The sweep aggregates into one case; the length
-# of the answer is part of the expected value, so a table that stopped iterating
-# is red here rather than silently shorter.
+# Each non-isochronous code, driven. Table 16 p.52 gives `0000` to `0011` as 8,
+# 16, 32 and 64 bytes, and a decode that got one row wrong would still satisfy
+# the case above. The sweep aggregates into one case; the length of the answer
+# is part of the expected value, so a table that stopped iterating is red here
+# rather than silently shorter.
 proc driveSizeCodes(): seq[uint] =
   let handle = isp1181_create(addr hostToken, recordIrq, recordTx)
   setBackend(handle, FullModel)
@@ -1185,8 +1183,8 @@ check(noBuffer == wantNoBuffer,
         "figures alone, so no invented size reaches a producer",
       $noBuffer, $wantNoBuffer)
 
-# A SLOT THE FIRMWARE NEVER WROTE MUST NOT ANSWER 8 BYTES, AND 8 IS WHAT ITS
-# BITS SAY. Table 110 p.107 resets the whole byte to 0 and Table 16 p.52 reads
+# A slot the firmware never wrote must not answer 8 bytes, and 8 is what its
+# bits say. Table 110 p.107 resets the whole byte to 0 and Table 16 p.52 reads
 # `FFOSZ` = `0000` as 8 bytes, so a decode that skipped the "was it written"
 # question would answer a legal, plausible, smallest size for an endpoint the
 # firmware never configured - and a producer would split every frame to it and
@@ -1216,12 +1214,10 @@ check(neverWritten == wantNeverWritten and neverWritten.before.bytes != 8'u,
         "answers 64 bytes one deep once 0x83 is written to it",
       $neverWritten, $wantNeverWritten)
 
-# A CONFIGURATION THAT NAMES NO SIZE IS REFUSED, AND THE REFUSAL IS -1. Table 16
+# A configuration that names no size is refused, and the refusal is -1. Table 16
 # p.52 marks `0100` to `1111` reserved in the non-isochronous column, and gives
 # the isochronous column sizes reaching 1023 bytes that no buffer in this model
-# carries. Neither is a size to report. -1 is the answer because 1 promises two
-# figures that do not exist and 0 would say the endpoint has no buffer memory at
-# the moment the firmware allocated some; the caller separates this -1 from the
+# carries. Neither is a size to report. The caller separates this -1 from the
 # out-of-range one by the slot being in range and configured, which is what the
 # third figure in each row records.
 type Unnameable = tuple[reserved: tuple[rc: int, bytes: uint, cfg: int],
@@ -1250,7 +1246,7 @@ check(unnameable == wantUnnameable,
         "neither leaves a size behind, so no reserved code becomes a default",
       $unnameable, $wantUnnameable)
 
-# A DISABLED ENDPOINT HAS NO BUFFER, AND THE AUTHORITY SAYS SO IN WORDS.
+# A disabled endpoint has no buffer.
 # Section 12.3.3 p.51: "Only enabled endpoints are allocated space in the shared
 # buffer memory storage, disabled endpoints have zero bytes." So `0x03` - FIFOEN
 # clear, `FFOSZ` = `0011` - is a slot the firmware configured with a size field
@@ -1281,17 +1277,15 @@ check(disabled == wantDisabled,
         "same byte holds the 64 bytes Table 15 fixes for it",
       $disabled, $wantDisabled)
 
-# THE REPORTED SIZE IS THE SIZE THE BUFFER ENFORCES, FOR THE IMAGE THIS MODEL
-# WAS MEASURED AGAINST. The figure this call reports is decoded from the
+# The reported size is the size the buffer enforces, for the image this model
+# was measured against. The figure this call reports is decoded from the
 # configuration byte; the buffer a packet actually meets is allocated at reset
 # from a separate table, and the two are different mechanisms that happen to
-# agree for the measured firmware. `docs/sources.md` records that agreement as
-# an observation made by hand, and this case is what makes it fail loudly
-# instead: slot 4 gets `0x83`, the byte the G2 firmware writes for endpoint 3,
-# the call is asked for the size, and the answer is then handed to the device as
-# a packet of exactly that many bytes and as one byte more. Accepted then
-# refused is the only pair of outcomes that means the reported figure IS the
-# boundary.
+# agree for the measured firmware. Slot 4 gets `0x83`, the byte the G2 firmware
+# writes for endpoint 3, the call is asked for the size, and the answer is then
+# handed to the device as a packet of exactly that many bytes and as one byte
+# more. Accepted then refused is the only pair of outcomes that means the
+# reported figure is the boundary.
 type SizeIsEnforced = tuple[reported: uint, atSize: int, overSize: int]
 
 proc driveSizeIsEnforced(): SizeIsEnforced =

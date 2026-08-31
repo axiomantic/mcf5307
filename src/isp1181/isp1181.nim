@@ -135,17 +135,16 @@ const fifoCount* = 5
   ## the endpoint-configuration slots.
 
 const controlSlotCount* = 2
-  ## THE SLOTS WHOSE GEOMETRY THE PART FIXES, and they are the first two in
+  ## The slots whose geometry the part fixes, and they are the first two in
   ## section 15.1.1's ordering: control OUT and control IN. ISP1362 Rev. 06
   ## Table 15 p.51 gives both as "64 (fixed)" against "programmable" for
-  ## endpoints 1 to 14, so a configuration byte cannot move them and no reader
-  ## of one should try.
+  ## endpoints 1 to 14, so a configuration byte cannot move them.
 
 const controlFifoBytes* = 64
   ## The control endpoint's buffer memory size. ISP1362 Rev. 06 Table 15 p.51,
-  ## "64 (fixed)" for endpoint 0 OUT and for endpoint 0 IN alike. THIS IS A
-  ## PROPERTY OF THE PART and not of the image, which is what makes it
-  ## different in kind from every figure in `fifoShape`.
+  ## "64 (fixed)" for endpoint 0 OUT and for endpoint 0 IN alike. It is a
+  ## property of the part and not of the image, unlike every figure in
+  ## `fifoShape`.
 
 const controlFifoBuffers* = 1
   ## The control endpoint's buffer depth. ISP1362 Rev. 06 Table 15 p.51 gives
@@ -283,8 +282,8 @@ const
     ## FFOISO in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 p.107 places
     ## it at bit 4 and Table 111 p.107 gives its meaning: "Logic 1 indicates an
     ## isochronous endpoint. Logic 0 indicates a bulk or interrupt endpoint."
-    ## IT SELECTS WHICH COLUMN OF Table 16 p.52 `FFOSZ` IS READ IN, which is why
-    ## a size decode that ignored it would read the wrong table half the time.
+    ## It selects which column of Table 16 p.52 `FFOSZ` is read in, so a size
+    ## decode that ignored it would read the wrong table half the time.
     ## It is INHERITED on the same terms as `epdirBit`.
   ffoszMask* = 0x0F'u8
     ## `FFOSZ[3:0]` in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 p.107
@@ -323,13 +322,12 @@ const fifoShape: array[fifoCount, tuple[capacity: int, buffers: int]] = [
   ## simply not statements about silicon. `docs/sources.md` records the same
   ## correction.
   ##
-  ## IT IS THE BUFFER MEMORY THIS MODEL ALLOCATES AT RESET AND IT IS NO LONGER
-  ## WHAT ANY QUESTION ABOUT AN ENDPOINT'S GEOMETRY IS ANSWERED FROM.
-  ## `slotBufferGeometry` decodes `endpointConfig` instead, so a differently
-  ## configured image is reported as itself rather than as this table. What the
-  ## table still decides is the `Fifo` a packet actually meets, and those two
-  ## are pinned against each other for the measured image by a registered case
-  ## rather than by a sentence here.
+  ## This table is the buffer memory the model allocates at reset, and it
+  ## decides the `Fifo` a packet actually meets. It is not what an endpoint's
+  ## reported geometry comes from: `slotBufferGeometry` decodes
+  ## `endpointConfig` instead, so a differently configured image is reported as
+  ## itself. The two are pinned against each other for the measured image by a
+  ## registered case rather than by a sentence here.
 
 const outFifoOfEndpoint: array[4, int] = [0, 2, 3, 4]
   ## The buffer a packet from the host lands in. Endpoint 0 is the only
@@ -517,12 +515,10 @@ proc nonIsoBufferBytes*(ffosz: uint8): int =
   ## bytes, `0001` is 16, `0010` is 32 and `0011` is 64. Every remaining code is
   ## marked **reserved** in that column.
   ##
-  ## A RESERVED CODE ANSWERS -1 AND NOT A SIZE, and -1 is not a length. The
-  ## right-hand column of the same table gives those codes isochronous sizes
-  ## reaching 1023 bytes, so a decode that fell through to a default would be
-  ## reading the wrong column and would hand a producer a figure the part never
-  ## selected for it. There is no size to report and the caller is made to say
-  ## so.
+  ## A reserved code answers -1 and not a size. The right-hand column of the
+  ## same table gives those codes isochronous sizes reaching 1023 bytes, so a
+  ## decode that fell through to a default would be reading the wrong column
+  ## and would hand a producer a figure the part never selected for it.
   case ffosz and ffoszMask
   of 0b0000'u8: 8
   of 0b0001'u8: 16
@@ -531,8 +527,7 @@ proc nonIsoBufferBytes*(ffosz: uint8): int =
   else: -1
 
 type SlotGeometryKind* = enum
-  ## What `slotBufferGeometry` found, and the four answers are four different
-  ## findings rather than a size and some ways of failing to have one.
+  ## What `slotBufferGeometry` found.
   sgNoSlot        ## No such slot, or no model.
   sgNoBuffer      ## The slot is real and no buffer memory stands behind it.
   sgUnnameable    ## A buffer whose configuration names no size this can report.
@@ -540,52 +535,45 @@ type SlotGeometryKind* = enum
 
 proc slotBufferGeometry*(m: ISP1181; slot: int):
     tuple[kind: SlotGeometryKind; maxPacketBytes: int; buffers: int] =
-  ## The buffer behind the slot, as bytes and as depth, DECODED OUT OF THE
-  ## CONFIGURATION BYTE THE FIRMWARE WROTE. `maxPacketBytes` and `buffers` are
-  ## meaningful on `sgBuffer` alone; on every other answer they are zero because
-  ## zero is the value a caller that ignored `kind` would be least able to use,
-  ## and there is no size to report.
+  ## The buffer behind the slot, as bytes and as depth, decoded out of the
+  ## configuration byte the firmware wrote. `maxPacketBytes` and `buffers` are
+  ## meaningful on `sgBuffer` alone; on every other answer they are zero, which
+  ## is the value a caller that ignored `kind` would be least able to use.
   ##
   ## The bytes are a maximum packet size. ISP1362 Rev. 06 section 12.3.3 p.51
   ## states it directly - "The size of the buffer memory determines the maximum
   ## packet size that the hardware can support for a given endpoint" - and
   ## `Fifo.accept` in `isp1181/fifo` refuses a longer packet whole.
   ##
-  ## ENDPOINT 0 IS FIXED BY THE PART AND ITS BYTE IS NOT CONSULTED. Table 15
+  ## Endpoint 0 is fixed by the part and its byte is not consulted. Table 15
   ## p.51 gives both control rows as "64 (fixed)" with double buffering "no",
   ## and section 15.1.1 p.107 adds that the control endpoints "have fixed
   ## configurations" and are written with their default values only to complete
   ## the initialization sequence. So the two control slots have a geometry
-  ## whether or not this firmware ever configured them, and that geometry is
-  ## read out of Table 15 rather than out of a register the part does not take
-  ## it from.
+  ## whether or not this firmware ever configured them.
   ##
-  ## A SLOT THE FIRMWARE NEVER WROTE HAS NO GEOMETRY, AND ITS BITS DECODE TO A
-  ## PLAUSIBLE ONE. Table 110 p.107 resets every bit to 0, and `FFOSZ` = `0000`
+  ## A slot the firmware never wrote has no geometry, and its bits decode to a
+  ## plausible one. Table 110 p.107 resets every bit to 0, and `FFOSZ` = `0000`
   ## is 8 bytes in Table 16 - a legal size, and the smallest, so a producer
   ## handed it would split every frame to eight bytes and never see an error.
-  ## That is the answer this proc exists to refuse. `configWritten` is what
-  ## separates the reset value from a byte the firmware chose, and it is asked
-  ## before the byte is decoded.
+  ## `configWritten` separates the reset value from a byte the firmware chose,
+  ## and it is asked before the byte is decoded.
   ##
-  ## NO TEST CAN SEPARATE THAT CLAUSE FROM THE FIFOEN ONE BELOW IT, AND THE
-  ## ACCEPTANCE IS RECORDED HERE RATHER THAN LEFT TO BE REDISCOVERED. Table 110
+  ## No test can separate that clause from the FIFOEN one below it. Table 110
   ## p.107 resets FIFOEN to 0 along with every other bit, `clearState` clears
   ## `endpointConfig` and `configWritten` together, and the only writer sets
   ## both - so an unwritten slot always carries FIFOEN clear and reaches
   ## `sgNoBuffer` by either route. Removing the clause would leave the model
-  ## answering a question about the WRITE RECORD out of a bit whose reset value
+  ## answering a question about the write record out of a bit whose reset value
   ## happens to agree, which is a different claim that is true by coincidence.
-  ## It is kept for that reason and not because a red test demands it.
   ##
-  ## A DISABLED ENDPOINT HAS NO BUFFER, WHICH IS NOT A MODELLING LIMIT. Section
+  ## A disabled endpoint has no buffer, which is not a modelling limit. Section
   ## 12.3.3 p.51: "Only enabled endpoints are allocated space in the shared
   ## buffer memory storage, disabled endpoints have zero bytes." FIFOEN clear
-  ## therefore answers `sgNoBuffer` for the same reason a slot past this model's
-  ## buffers does - there is nothing behind it to describe.
+  ## therefore answers `sgNoBuffer`.
   ##
-  ## AN ISOCHRONOUS ENDPOINT IS `sgUnnameable` AND NOT A SIZE OUT OF THE OTHER
-  ## COLUMN. Table 16's isochronous sizes run to 1023 bytes and this model
+  ## An isochronous endpoint is `sgUnnameable` and not a size out of the other
+  ## column. Table 16's isochronous sizes run to 1023 bytes and this model
   ## carries no isochronous buffer, so every figure that column offers is one no
   ## buffer here would accept.
   if m.isNil or slot < 0 or slot >= configSlotCount:

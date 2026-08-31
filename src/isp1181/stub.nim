@@ -294,15 +294,12 @@ proc isp1181_slot_buffer*(ctx: ISP1181Ctx; slot: csize_t;
   ## 1 is a slot with a buffer whose size this model can name, 0 is a slot with
   ## no buffer behind it, and -1 is a question with no answer.
   ##
-  ## -1 CARRIES A SECOND CAUSE AND NOT A FOURTH RETURN VALUE. A configuration
+  ## -1 carries a second cause and not a fourth return value. A configuration
   ## that names no size this model can report - a reserved `FFOSZ` code, or an
-  ## isochronous endpoint - is a buffer whose geometry cannot be stated, and
-  ## every OTHER answer would state one. It cannot be 1, which promises two
-  ## figures; it cannot be 0, which says the endpoint has no buffer memory when
-  ## the firmware has just allocated it. So it joins -1, whose meaning was
-  ## already "there is no answer to give", and the caller separates the two
-  ## causes by the pair - a slot inside `isp1181_config_slots` on a live handle
-  ## can only be the configuration one. `include/mcf5307.h` prints the table.
+  ## isochronous endpoint - is a buffer whose geometry cannot be stated. The
+  ## caller separates the two causes by the pair: a slot inside
+  ## `isp1181_config_slots` on a live handle can only be the configuration one.
+  ## `include/mcf5307.h` prints the table.
   ##
   ## It does not answer "was the slot written" - `isp1181_config_slot` answers
   ## that, and the third state is reached by asking both calls.
