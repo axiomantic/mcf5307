@@ -438,10 +438,19 @@ check(protectedStore == wantProtected,
 #
 # NOTHING IS STACKED AND THE STACK POINTER DOES NOT MOVE, because `takeException`
 # commits A7 only after both longwords are written.
+#
+# THE STATUS REGISTER IS 0x2704 HERE FOR THE REASON BLOCK 5 GIVES, AND THE TWO
+# BLOCKS NOW AGREE RATHER THAN DIFFER. Section 3.5.1, folio 3-15: "All
+# programming model updates associated with the write instruction are
+# completed." The access error of a faulted store is taken at the instruction
+# boundary, so `MOVE` has already set Z from its zero source by the time the
+# stacking is attempted - and the stacking failing does not un-complete an
+# update the manual required. A `0x2700` here would mean the double fault had
+# reached back into the faulting instruction and cancelled half of it.
 
 const wantDoubleFault: FaultOutcome =
-  (sp: doubleSp, pc: execBase + 4'u32, sr: srReset, halted: true, fault: true,
-   frame: 0'u32, framePc: 0'u32, offBoard: 1)
+  (sp: doubleSp, pc: execBase + 4'u32, sr: 0x2704'u32, halted: true,
+   fault: true, frame: 0'u32, framePc: 0'u32, offBoard: 1)
 
 let doubleFault = runProtectedStore(doubleSp, doubleFrameBase)
 check(doubleFault == wantDoubleFault,
@@ -513,6 +522,158 @@ let faultingRead = runFaultingRead()
 check(faultingRead == wantFaultingRead,
       "an operand read fault halts and takes no vector: the unwired half",
       $faultingRead, $wantFaultingRead)
+
+# ---------------------------------------------------------------------------
+# BLOCK 8. AN INSTRUCTION WHOSE OWN STACK PUSH FAULTS LANDS IN THE HANDLER, AND
+# ITS PROGRAMMING-MODEL UPDATES ARE COMPLETED FIRST.
+#
+# THE TWO HALVES ARE ONE SENTENCE OF THE MANUAL AND NOT A COMPROMISE BETWEEN
+# TWO. User's Manual section 3.5.1, "Access Error Exception", printed page
+# 3-15, verbatim: "The ColdFire processor uses an imprecise reporting mechanism
+# for access errors on operand writes. Because the actual write cycle may be
+# decoupled from the processor's issuing of the operation, the signaling of an
+# access error appears to be decoupled from the instruction that generated the
+# write. ... All programming model updates associated with the write
+# instruction are completed."
+#
+# So the faulting instruction FINISHES - which is what BLOCK 5 asserts of
+# `MOVE`'s condition codes - and only then does section 3.3's exception
+# processing run. An exception taken AT the store instead performs section
+# 3.3's third and fourth steps, which assign A7 and the program counter, in the
+# middle of an instruction that then completes against what those steps left.
+#
+# MEASURED ON THIS TREE BEFORE THE DEFERRAL EXISTED, with A7 at 0x0C04 so that
+# each push lands on `protectedWord`: `jsr` ended at 0x0700, its own target,
+# with the handler address discarded; `bsr.w` ended at 0x0442, its own branch
+# target; and `link` ended at 0x0602 - two bytes INTO the handler, because
+# `fetchExt` read the handler's first opword as the displacement - with that
+# opword, `rte` as 0x4E73, sign-extended and added to A7 to give 0x5A6B, and
+# with the exception frame base written into A0.
+#
+# WHAT THE MANUAL DOES NOT SETTLE, STATED SO THAT NO LITERAL BELOW IS READ AS
+# ITS AUTHORITY. The same passage calls the reporting imprecise and says the
+# stacked program counter "merely represents the location in the program when
+# the access error was signaled", so it fixes NO particular value for that
+# longword. This core reports the program counter and the status register AS
+# THE STORE FOUND THEM, which is what it reported before the deferral; the
+# `framePc` literals below pin that choice and cite nothing for it.
+#
+# `PEA` IS HERE AND IS NOT A REPAIR. It pushes and then writes nothing, so it
+# reached the handler correctly before the deferral and reaches it after. The
+# case separates "the fix moved the instructions that clobber control state"
+# from "the fix moved every instruction that pushes".
+#
+# TAKING THE VECTOR AT THE STORE AGAIN LEAVES EXACTLY FOUR RED. Four and not
+# six: the three pushes above and BLOCK 6's status register go red, while
+# BLOCK 5 and the PEA case stay green - BLOCK 5 because the deferral was built
+# to leave the frame's contents alone, and PEA because it was never wrong.
+# `tests/t_claims.cmake` registers that mutation as
+# `write_fault_deferral_suite_t_bus_fault` and refutes this sentence when the
+# count moves.
+
+const
+  linkSp = 0x0C04'u32          ## the push lands on `protectedWord`
+  opJsrAbsW = 0x4EB8'u16       ## `jsr 0x700`, m68k-elf-as -mcpu=5307
+  extJsrTarget = 0x0700'u16
+  opBsrW = 0x6100'u16          ## `bsr.w .+0x42`, the same assembler
+  extBsrDisp = 0x0040'u16
+  opLinkA0 = 0x4E50'u16        ## `link %a0,#-8`, the same assembler
+  extLinkDisp = 0xFFF8'u16
+  opPeaAbsW = 0x4878'u16       ## `pea 0x700`, the same assembler
+  extPeaTarget = 0x0700'u16
+  a0Sentinel = 0xA5A5A5A5'u32
+
+type PushOutcome = tuple[pc: uint32, sp: uint32, a0: uint32, halted: bool,
+                         fault: bool, frame: uint32, framePc: uint32]
+
+proc runFaultingPush(words: openArray[uint16]; frameAt: uint32): PushOutcome =
+  freshBoard()
+  offBoardWrites = 0
+  for i, w in words:
+    boardWrite(board, execBase + uint32(2 * i), 2, uint32(w))
+  boardWrite(board, accessHandler, 2, uint32(opRteWord))
+  boardWrite(board, 4'u32 * uint32(vecAccess), 4, accessHandler)
+
+  let ctx = mcf5307_create(addr board, protectedRead, protectedWrite, bIack)
+  mcf5307_reset(ctx, linkSp, execBase)
+  discard mcf5307_set_reg(ctx, 8, a0Sentinel)
+  discard mcf5307_exec(ctx, 1'u32)
+  result = (pc: mcf5307_get_reg(ctx, 17),
+            sp: mcf5307_get_reg(ctx, 15),
+            a0: mcf5307_get_reg(ctx, 8),
+            halted: ctx.halted,
+            fault: ctx.fault,
+            frame: boardReadValue(board, frameAt, 4),
+            framePc: boardReadValue(board, frameAt + 4'u32, 4))
+  mcf5307_destroy(ctx)
+
+# JSR. Table 3-7, page 3-24, gives it "SP - 4 -> SP; PC -> (SP); Address of
+# <ea> -> PC". A7 goes 0x0C04 to 0x0C00, the push is refused, and "Address of
+# <ea> -> PC" is a programming-model update that section 3.5.1 completes. THEN
+# the exception: Table 3-2, folio 3-14, puts the frame of an A7 of 0x0C00 at
+# 0x0BF8 with FORMAT 4, and the handler address replaces the JSR target.
+# The frame is 0100 | 10 | 00000010 | 01 | 0010011100000000, and the stacked
+# program counter is the one the store found - past the opword and the one
+# `(xxx).W` extension word.
+const wantJsr: PushOutcome =
+  (pc: accessHandler, sp: 0x0BF8'u32, a0: a0Sentinel, halted: false,
+   fault: false, frame: 0x48092700'u32, framePc: execBase + 4'u32)
+
+let faultingJsr = runFaultingPush([opJsrAbsW, extJsrTarget], 0x0BF8'u32)
+check(faultingJsr == wantJsr,
+      "a JSR whose push faults enters the handler, not its own target",
+      $faultingJsr, $wantJsr)
+
+# BSR. Table 3-7, page 3-23, gives it "SP - 4 -> SP; PC -> (SP); PC + dn -> PC"
+# - the same shape as JSR and the same two updates, so the same outcome. The
+# displacement is consumed before the push, so the stacked program counter is
+# again past both words of the instruction.
+const wantBsr: PushOutcome =
+  (pc: accessHandler, sp: 0x0BF8'u32, a0: a0Sentinel, halted: false,
+   fault: false, frame: 0x48092700'u32, framePc: execBase + 4'u32)
+
+let faultingBsr = runFaultingPush([opBsrW, extBsrDisp], 0x0BF8'u32)
+check(faultingBsr == wantBsr,
+      "a BSR whose push faults enters the handler, not its own target",
+      $faultingBsr, $wantBsr)
+
+# LINK. "SP - 4 -> SP; An -> (SP); SP -> An; SP + d -> SP" - Table 3-7, page
+# 3-24. THREE programming-model updates follow the push and section 3.5.1
+# completes all three: A7 is 0x0C00 when the push is refused, so A0 takes
+# 0x0C00 - THE STACK SLOT AND NOT THE FRAME BASE - and A7 then takes
+# 0x0C00 - 8, which is 0x0BF8. Table 3-2 puts the frame of that A7 at 0x0BF0.
+#
+# THE DISPLACEMENT IS FETCHED AFTER THE PUSH, WHICH IS WHY THE STACKED PROGRAM
+# COUNTER IS execBase + 2 AND NOT execBase + 4. `execLink` writes before it
+# calls `fetchExt`, so the store found the program counter one word in. The
+# fetch itself now reads the instruction stream, which is the whole of what
+# 0x0602 was: with the exception taken at the store, that fetch read the
+# handler.
+#
+# -8 AND NOT +4, AND THE REASON IS THE BOARD RATHER THAN THE INSTRUCTION. A
+# non-negative displacement leaves A7 at or above 0x0C00, and Table 3-2 then
+# puts the frame across `protectedWord` itself - a double fault, which BLOCK 6
+# already owns and which would hide this case's subject.
+const wantLink: PushOutcome =
+  (pc: accessHandler, sp: 0x0BF0'u32, a0: 0x0C00'u32, halted: false,
+   fault: false, frame: 0x48092700'u32, framePc: execBase + 2'u32)
+
+let faultingLink = runFaultingPush([opLinkA0, extLinkDisp], 0x0BF0'u32)
+check(faultingLink == wantLink,
+      "a LINK whose push faults completes An and A7 against the stack slot",
+      $faultingLink, $wantLink)
+
+# PEA. "SP - 4 -> SP; Address of <ea> -> (SP)" - Table 3-7, page 3-24. The push
+# is the last thing it does, so there is no update after it to complete and
+# nothing for the deferral to move.
+const wantPea: PushOutcome =
+  (pc: accessHandler, sp: 0x0BF8'u32, a0: a0Sentinel, halted: false,
+   fault: false, frame: 0x48092700'u32, framePc: execBase + 4'u32)
+
+let faultingPea = runFaultingPush([opPeaAbsW, extPeaTarget], 0x0BF8'u32)
+check(faultingPea == wantPea,
+      "a PEA whose push faults was already correct and still is",
+      $faultingPea, $wantPea)
 
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
 # program reports what its text declares and what its run adjudicated,

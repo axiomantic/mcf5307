@@ -35,6 +35,11 @@
 
 import mcf5307/decode_types
 import mcf5307/decode
+# `machine` IS AN EDGE THIS MODULE TAKES FOR ONE PROCEDURE, AND IT ADDS NO
+# CYCLE: `machine` is below every executor and imports none of them. The
+# procedure is `takePendingWriteFault`, and `machine.nim`'s `writeMem` states
+# why the take belongs at the instruction boundary, which is here.
+import mcf5307/machine
 import mcf5307/move
 import mcf5307/alu
 import mcf5307/logic
@@ -120,6 +125,14 @@ proc mcf5307_reset*(ctx: MCF5307Ctx; initialSp: uint32; initialPc: uint32)
   ctx.sr = 0x2700'u32
   ctx.halted = false
   ctx.fault = false
+  # A RESET DISCARDS A STORE'S RECORDED ACCESS ERROR RATHER THAN CARRYING IT
+  # INTO THE RESET HANDLER. The capture names a program counter and a status
+  # register of the program this call has just ended; taking it after the reset
+  # would stack a frame describing a machine that no longer exists.
+  ctx.pendingWriteFault = false
+  ctx.pendingFaultStatus = 0'u32
+  ctx.pendingStackedSr = 0'u32
+  ctx.pendingStackedPc = 0'u32
   # THE RESET EXCEPTION IS AN EXCEPTION, SO ITS FIRST INSTRUCTION IS INHIBITED
   # LIKE EVERY OTHER HANDLER'S. THIS IS A CITATION AND NOT AN INFERENCE. Table
   # 3-1's closing paragraph, folio 3-13 (PDF page 70): "ColdFire processors
@@ -243,6 +256,12 @@ proc step(ctx: MCF5307Ctx): uint32 =
     ctx.fault = true
     ctx.halted = true
     result = 0
+  # THE INSTRUCTION BOUNDARY. A store that faulted recorded the access error
+  # and let the instruction finish; this is where the vector is taken. It sits
+  # after EVERY arm and not inside the arms that write memory, so the rule is a
+  # property of the boundary rather than a list of executors that remembered
+  # it. `machine.nim`'s `writeMem` carries the manual reading.
+  takePendingWriteFault(ctx)
 
 proc mcf5307_exec*(ctx: MCF5307Ctx; maxCycles: uint32): uint32
     {.exportc: "mcf5307_exec", cdecl, dynlib.} =

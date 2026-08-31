@@ -158,18 +158,6 @@ proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
 # this module and the executor modules, and each of those runs only from
 # `step`, whose first statement faults on a nil `readFn`.
 
-# THE `FS` ARGUMENT IS DEFAULTED, AND THE DEFAULT IS THE MANUAL'S ANSWER RATHER
-# THAN THIS MODULE'S CONVENIENCE. User's Manual section 3.4, folio 3-14, of the
-# fault status field: "This field is defined for access and address errors only
-# and written as zeros for all other types of exceptions." The two callers
-# outside this module - `control.nim`'s `TRAP` and `irq.nim`'s interrupt - are
-# both "other types", so `0000` is what the manual writes for each of them, and
-# a required parameter would make each of them state a value the manual already
-# fixes. `frameFirstLongword` keeps its own `fs` parameter undefaulted, so the
-# layout is still closed by the compiler one layer down.
-proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
-                    fs: uint32 = fsNotAnAccessError)
-
 proc boardRead(ctx: MCF5307Ctx; address: uint32; size: uint8;
                st: var Mcf5307BusStatus): uint32 =
   ## One board read, reporting what the board reported and deciding nothing.
@@ -237,6 +225,16 @@ proc stackingWrite(ctx: MCF5307Ctx; address: uint32; size: uint8;
 # write instruction are completed." An executor that carries on after a write
 # fault is doing what the manual requires. That the only access error this part
 # raises is a store to write-protected space puts the real case on this side too.
+#
+# IT DOES NEED THE VECTOR TO BE TAKEN AFTER THE INSTRUCTION RATHER THAN INSIDE
+# IT, AND THAT IS THE SAME SENTENCE READ TO ITS END. An instruction whose
+# remaining updates are required to complete cannot have section 3.3's four
+# exception-processing steps run in the middle of it: those steps assign A7 and
+# the program counter, and the updates that must still complete would then be
+# computed from, or would overwrite, the handler's state. `writeMem` therefore
+# RECORDS the fault on the context and `cpu.nim`'s `step` takes it at the
+# instruction boundary. `decode_types.nim` carries the manual's own words for
+# the deferral and the measurement of what the immediate take did.
 
 proc readMem*(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
   stackingRead(ctx, address, size)
@@ -244,8 +242,19 @@ proc readMem*(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
 proc writeMem*(ctx: MCF5307Ctx; address: uint32; size: uint8; value: uint32) =
   var st = Mcf5307BusStatus.busOk
   boardWrite(ctx, address, size, value, st)
-  if st != Mcf5307BusStatus.busOk:
-    takeException(ctx, vecAccessError, ctx.pc, faultStatusFor(st, operandWrite))
+  if st != Mcf5307BusStatus.busOk and not ctx.pendingWriteFault:
+    # THE FIRST FAULTED STORE OF AN INSTRUCTION IS THE ONE REPORTED, AND THE
+    # MANUAL SETTLES NEITHER THIS NOR ITS ALTERNATIVE. Section 3.5.1 says the
+    # reporting is imprecise and names the NOP instruction as the way to
+    # collect a write error; it says nothing about a second faulted store
+    # before that collection. `movem.l` writing a register list into refused
+    # space is the one instruction in this core that can raise the question.
+    # The first is kept because it is the one whose captured program counter
+    # and status register are nearest the fault.
+    ctx.pendingWriteFault = true
+    ctx.pendingFaultStatus = faultStatusFor(st, operandWrite)
+    ctx.pendingStackedSr = ctx.sr and 0xFFFF'u32
+    ctx.pendingStackedPc = ctx.pc
 
 proc fetchExt*(ctx: MCF5307Ctx): uint16 =
   ## Read one extension word from the instruction stream and advance the pc
@@ -546,10 +555,21 @@ proc exceptionFormat*(sp: uint32): uint32 =
   ## frame base removed, so that `RTE` can put it back.
   4'u32 + (sp and 3'u32)
 
-proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
-                    fs: uint32) =
+proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
+                            fs: uint32; stackedSr: uint32) =
   ## Stack a two-longword exception frame, then load the program counter from
   ## the vector table.
+  ##
+  ## THE COPY OF THE STATUS REGISTER IS A PARAMETER RATHER THAN A READ OF
+  ## `ctx.sr`, AND ONE CALLER IN THIS TREE NEEDS THAT. Section 3.3's copy is
+  ## taken as exception processing begins, and for every exception whose
+  ## processing begins where it is detected the two are the same word -
+  ## `takeException` below passes exactly that and is what TRAP and the
+  ## interrupt reach. The deferred access error of a faulted store is the one
+  ## exception this core detects at one point and processes at another, and
+  ## section 3.5.1 requires the faulting instruction's remaining
+  ## programming-model updates to run in between; the word it passes is the one
+  ## the store saw.
   ##
   ## The status register is copied before it is changed. Section 3.3, page
   ## 3-11: "the processor makes an internal copy of the SR and then enters
@@ -583,7 +603,6 @@ proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## and the procedure returns early, leaving the context halted with `fault`;
   ## it does not recurse. The status register has already been modified at that
   ## point, which is a state a double-fault handler will have to define.
-  let stackedSr = ctx.sr and 0xFFFF'u32
   ctx.sr = (ctx.sr or srSupervisor) and not srTrace
   let format = exceptionFormat(ctx.sp)
   let base = exceptionFrameBase(ctx.sp)
@@ -627,6 +646,49 @@ proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   # ahead of this line and a machine that never reached a handler is not at
   # one.
   ctx.atHandlerEntry = true
+
+# THE `FS` ARGUMENT IS DEFAULTED, AND THE DEFAULT IS THE MANUAL'S ANSWER RATHER
+# THAN THIS MODULE'S CONVENIENCE. User's Manual section 3.4, folio 3-14, of the
+# fault status field: "This field is defined for access and address errors only
+# and written as zeros for all other types of exceptions." The two callers
+# outside this module - `control.nim`'s `TRAP` and `irq.nim`'s interrupt - are
+# both "other types", so `0000` is what the manual writes for each of them, and
+# a required parameter would make each of them state a value the manual already
+# fixes. `frameFirstLongword` keeps its own `fs` parameter undefaulted, so the
+# layout is still closed by the compiler one layer down.
+
+proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
+                    fs: uint32 = fsNotAnAccessError) =
+  ## An exception whose processing begins where the fault was detected, so
+  ## section 3.3's copy of the status register is the live word.
+  takeExceptionCopiedSr(ctx, vector, stackedPc, fs, ctx.sr and 0xFFFF'u32)
+
+proc takePendingWriteFault*(ctx: MCF5307Ctx) =
+  ## Take the access error a faulted store recorded, at the instruction
+  ## boundary. `cpu.nim`'s `step` is the one caller, and `writeMem` above
+  ## carries the manual reading that puts the take here.
+  ##
+  ## THE FOUR FIELDS ARE CLEARED WHETHER OR NOT THE VECTOR IS TAKEN, AND A
+  ## SNAPSHOT IS WHY. `state.nim` encodes every context field, so a machine
+  ## that left a spent capture behind would save a block that differs from the
+  ## block of a machine in the same architectural state reached another way.
+  ##
+  ## A HALTED CORE TAKES NOTHING. The executor stopped for a reason of its own -
+  ## an illegal encoding, an illegal effective address, a nil callback - and a
+  ## machine that is not going to run its next instruction is not going to run
+  ## a handler's first one either.
+  if not ctx.pendingWriteFault:
+    return
+  let stackedPc = ctx.pendingStackedPc
+  let stackedSr = ctx.pendingStackedSr
+  let fs = ctx.pendingFaultStatus
+  ctx.pendingWriteFault = false
+  ctx.pendingStackedPc = 0'u32
+  ctx.pendingStackedSr = 0'u32
+  ctx.pendingFaultStatus = 0'u32
+  if ctx.halted:
+    return
+  takeExceptionCopiedSr(ctx, vecAccessError, stackedPc, fs, stackedSr)
 
 # ---------------------------------------------------------------------------
 # The register access the conformance harness needs. The C ABI in

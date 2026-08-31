@@ -142,6 +142,38 @@ type
     # the rule by arriving there, and must not set this field itself.
     atHandlerEntry*: bool       ## the next instruction is a handler's first
 
+    # AN ACCESS ERROR ON AN OPERAND WRITE IS RECORDED HERE AND TAKEN AT THE
+    # INSTRUCTION BOUNDARY, AND THE MANUAL IS WHY IT CANNOT BE TAKEN WHERE IT
+    # IS DETECTED. MCF5307 User's Manual section 3.5.1, "Access Error
+    # Exception", printed page 3-15, of an access error on an operand write:
+    # "The ColdFire processor uses an imprecise reporting mechanism for access
+    # errors on operand writes. Because the actual write cycle may be decoupled
+    # from the processor's issuing of the operation, the signaling of an access
+    # error appears to be decoupled from the instruction that generated the
+    # write. ... All programming model updates associated with the write
+    # instruction are completed."
+    #
+    # SO THE FAULTING INSTRUCTION FINISHES FIRST AND THE EXCEPTION FOLLOWS IT.
+    # An exception taken at the store instead runs section 3.3's four steps -
+    # which move A7 to the frame base and the program counter to the handler -
+    # in the MIDDLE of an instruction that then completes against the state
+    # those steps left. That is neither ordering the silicon has: MEASURED on
+    # this tree before these fields existed, `jsr` finished at its own target
+    # with the handler address discarded, `bsr` at its own branch target, and
+    # `link` two bytes into the handler with the handler's `rte` opword added
+    # to A7 and the frame base written into An.
+    #
+    # THE THREE COMPANION FIELDS CARRY WHAT THE FRAME MUST SAY, TAKEN AT THE
+    # STORE AND NOT AT THE BOUNDARY, so that deferring WHEN the frame is
+    # written does not change WHAT it contains. Section 3.5.1's own sentence is
+    # what makes the two differ: the instruction's remaining programming-model
+    # updates run between the store and the boundary, so an SR read at the
+    # boundary would carry condition codes the store did not see.
+    pendingWriteFault*: bool    ## a store faulted; the vector is not yet taken
+    pendingFaultStatus*: uint32 ## `FS` for that store, Table 3-3
+    pendingStackedSr*: uint32   ## the status register as the store found it
+    pendingStackedPc*: uint32   ## the program counter as the store found it
+
 # ---------------------------------------------------------------------------
 # The width of one word of the instruction stream.
 #

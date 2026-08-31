@@ -39,9 +39,17 @@ import mcf5307/decode_types
 const
   stateMagic* = 0x4D435335'u32
     ## `MCS5` - the first longword of the block.
-  stateVersion* = 1'u32
+  stateVersion* = 2'u32
     ## The version word. It moves when the payload's layout moves, and
     ## `stateLoad` refuses a block that does not carry this exact value.
+    ##
+    ## VERSION 2 IS THE DEFERRED WRITE FAULT. `MCF5307Ctx` grew the four
+    ## `pending*` fields that let an access error on a store be taken at the
+    ## instruction boundary, so the payload is wider and every field beyond the
+    ## new ones would be read at the wrong offset from a version-1 block.
+    ## `stateLoad` checks this word BEFORE the payload width, so such a block is
+    ## refused as `stateBadVersion` and never as a width or a checksum - the
+    ## refusal names the actual reason.
   stateHeaderBytes = 12
     ## magic, version, payload width
   stateChecksumBytes = 4

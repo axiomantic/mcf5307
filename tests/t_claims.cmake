@@ -57,7 +57,8 @@ set(MCF5307_CLAIM_IDS
     "reset_inhibit_suite_t_irq"
     "reset_edge_call_suite_t_irq"
     "reset_edge_resample_suite_t_irq"
-    "reset_edge_clear_suite_t_irq")
+    "reset_edge_clear_suite_t_irq"
+    "write_fault_deferral_suite_t_bus_fault")
 
 # EVERY `CLAIM_TEXT` BELOW IS QUOTED FROM ITS `CLAIM_FILE` AND IS NOT A SUMMARY
 # OF IT. The driver looks the text up in the file before it measures anything,
@@ -325,6 +326,34 @@ set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_REPLACE "  ctx.irqAutovector = au
 # EVERY COUNT BELOW WAS MEASURED AGAINST THIS TREE ON 2026-08-13 by applying
 # the mutation to a copy of `src/` and running the suite, with a no-op control
 # on the same harness reporting 36 passed and 0 red.
+# ---------------------------------------------------------------------------
+# THE DEFERRED WRITE FAULT. `src/mcf5307/writeMem` RECORDS an access error on a
+# store and `cpu.nim`'s `step` takes the vector at the instruction boundary,
+# because User's Manual section 3.5.1, printed page 3-15, requires the faulting
+# instruction's programming-model updates to complete first. THE MUTATION PUTS
+# THE TAKE BACK AT THE STORE, which is where it was before that reading, and it
+# is two edits because the procedure it calls is defined further down the file
+# and needs its forward declaration back.
+#
+# FOUR RED IS THE WHOLE OF THE CLAIM AND THE TWO GREENS ARE HALF OF IT. A
+# mutation that reddened BLOCK 5 as well would mean the deferral had changed
+# what the frame CONTAINS and not only when it is written, and a mutation that
+# reddened PEA would mean the repair had reached an instruction that was
+# already correct.
+
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_KIND "suite-red")
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_SUITE "t_bus_fault")
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_EXPECT_RED 4)
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_CLAIM_FILE "tests/t_bus_fault.nim")
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_CLAIM_TEXT "EXACTLY FOUR RED. Four and not")
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDITS 2)
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_1_FILE "mcf5307/machine.nim")
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_1_FIND "proc boardRead(ctx: MCF5307Ctx; address: uint32; size: uint8;\n")
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_1_REPLACE "proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;\n                            fs: uint32; stackedSr: uint32)\n\nproc boardRead(ctx: MCF5307Ctx; address: uint32; size: uint8;\n")
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_2_FILE "mcf5307/machine.nim")
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_2_FIND "    ctx.pendingWriteFault = true\n    ctx.pendingFaultStatus = faultStatusFor(st, operandWrite)\n    ctx.pendingStackedSr = ctx.sr and 0xFFFF'u32\n    ctx.pendingStackedPc = ctx.pc\n")
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_2_REPLACE "    takeExceptionCopiedSr(ctx, vecAccessError, ctx.pc,\n                          faultStatusFor(st, operandWrite), ctx.sr and 0xFFFF'u32)\n")
+
 set(CLAIM_reset_inhibit_suite_t_irq_KIND "suite-red")
 set(CLAIM_reset_inhibit_suite_t_irq_SUITE "t_irq")
 set(CLAIM_reset_inhibit_suite_t_irq_EXPECT_RED 6)

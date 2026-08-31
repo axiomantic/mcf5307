@@ -62,7 +62,9 @@ const expectedLayout = @[
   ("halted", 1), ("fault", 1),
   ("irqLevel", 4), ("irqVector", 1), ("irqAutovector", 1),
   ("irq7Armed", 1), ("irq7Vector", 1), ("irq7Autovector", 1),
-  ("atHandlerEntry", 1)]
+  ("atHandlerEntry", 1),
+  ("pendingWriteFault", 1), ("pendingFaultStatus", 4),
+  ("pendingStackedSr", 4), ("pendingStackedPc", 4)]
 
 # EVERY MEASURED VALUE IS TAKEN ONCE INTO A `let` AND THE CASE READS THE `let`.
 # `check` is a TEMPLATE, so an expression written into it is evaluated once for
@@ -76,9 +78,9 @@ check(measuredLayout == expectedLayout,
       $measuredLayout, $expectedLayout)
 
 let measuredSize = int(mcf5307_state_size())
-check(measuredSize == 100,
+check(measuredSize == 113,
       "size: header, payload and checksum",
-      $measuredSize, "100")
+      $measuredSize, "113")
 
 # ---------------------------------------------------------------------------
 # BLOCK 2. The header words, and the buffer every save in this file writes into.
@@ -89,7 +91,7 @@ check(measuredSize == 100,
 # one case there rather than a result returned to each caller.
 
 const
-  blockBytes = 100
+  blockBytes = 113
   guardBytes = 8
   filler = 0xEE'u8
 
@@ -134,8 +136,8 @@ let headerProbe = savedBlock(freshContext())
 let headerWords = (magic: be32(headerProbe, 0),
                    version: be32(headerProbe, 4),
                    payload: be32(headerProbe, 8))
-let wantHeaderWords = (magic: 0x4D435335'u32, version: 1'u32,
-                       payload: 84'u32)
+let wantHeaderWords = (magic: 0x4D435335'u32, version: 2'u32,
+                       payload: 97'u32)
 
 check(headerWords == wantHeaderWords,
       "header: the magic, the version word and the payload width",
@@ -256,8 +258,8 @@ for name, wantValue, gotValue in fieldPairs(stamped[], restored[]):
 # a checksum it did not also compute with the same constants.
 
 const goldenStampedBlock = @[
-  0x4D'u8, 0x43'u8, 0x53'u8, 0x35'u8, 0x00'u8, 0x00'u8, 0x00'u8, 0x01'u8,
-  0x00'u8, 0x00'u8, 0x00'u8, 0x54'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x01'u8,
+  0x4D'u8, 0x43'u8, 0x53'u8, 0x35'u8, 0x00'u8, 0x00'u8, 0x00'u8, 0x02'u8,
+  0x00'u8, 0x00'u8, 0x00'u8, 0x61'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x01'u8,
   0xA5'u8, 0xA5'u8, 0x00'u8, 0x02'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x03'u8,
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x04'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x05'u8,
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x06'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x07'u8,
@@ -268,7 +270,9 @@ const goldenStampedBlock = @[
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x10'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x11'u8,
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x12'u8, 0x01'u8, 0x00'u8, 0x00'u8, 0x00'u8,
   0x01'u8, 0x15'u8, 0x56'u8, 0x01'u8, 0x00'u8, 0x59'u8, 0x00'u8, 0x01'u8,
-  0x18'u8, 0x07'u8, 0xEA'u8, 0x85'u8]
+  0x00'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x1D'u8, 0xA5'u8, 0xA5'u8, 0x00'u8,
+  0x1E'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x1F'u8, 0xC1'u8, 0xED'u8, 0x85'u8,
+  0x97'u8]
 
 check(stampedBytes == goldenStampedBlock,
       "wire format: the salt-0 context saves these exact bytes",
@@ -319,7 +323,7 @@ let namedStatuses = (magic: statusAfterDamage(1),
                      version: statusAfterDamage(5),
                      width: statusAfterDamage(9),
                      payload: statusAfterDamage(20),
-                     checksum: statusAfterDamage(97))
+                     checksum: statusAfterDamage(110))
 let wantNamedStatuses = (magic: stateBadMagic,
                          version: stateBadVersion,
                          width: stateBadWidth,
@@ -352,6 +356,64 @@ let wantNilStatuses = (noContext: stateNilArgument, noSource: stateNilArgument)
 check(nilStatuses == wantNilStatuses,
       "damage: a nil context and a nil source are refused by name",
       $nilStatuses, $wantNilStatuses)
+
+# ---------------------------------------------------------------------------
+# BLOCK 4A. A VERSION-1 BLOCK IS REFUSED BY NAME AND IS NEVER READ.
+#
+# THIS IS THE CASE THE VERSION WORD EXISTS FOR, AND EVERY OTHER CASE IN THIS
+# FILE IS BLIND TO IT. Version 1's payload is the same 84 bytes version 2 opens
+# with: the four `pending*` fields were APPENDED, so every version-1 field sits
+# at the offset version 2 reads it from. A reader that skipped the version word
+# would therefore load all fourteen of the older fields CORRECTLY and take the
+# four new ones from the checksum and from whatever followed the shorter block.
+# There is no corruption for a checksum to notice, because the checksum of a
+# version-1 block is honest - of a version-1 block.
+#
+# SO THE BLOCK BELOW IS A WHOLE, VALID VERSION-1 BLOCK and not a damaged version
+# -2 one: 100 bytes, its own 84-byte payload width, and its own correct FNV-1a.
+# It is the golden vector of the version that shipped before this one, and its
+# first twelve rows are byte-for-byte the rows `goldenStampedBlock` still
+# carries - which is the point. Only the version word and the payload width
+# separate the two, and only the version word is checked before the payload is
+# decoded.
+#
+# THE REFUSAL MUST BE `stateBadVersion` AND NOT `stateBadWidth`. Both are true
+# of this block and `stateLoad` tests the version first, deliberately: a caller
+# that is told the width is wrong learns that its block is malformed, and a
+# caller that is told the version is wrong learns that its block is from an
+# older build. The second is the actionable one and it is the one the reader is
+# ordered to report.
+
+const goldenVersion1Block = @[
+  0x4D'u8, 0x43'u8, 0x53'u8, 0x35'u8, 0x00'u8, 0x00'u8, 0x00'u8, 0x01'u8,
+  0x00'u8, 0x00'u8, 0x00'u8, 0x54'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x01'u8,
+  0xA5'u8, 0xA5'u8, 0x00'u8, 0x02'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x03'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x04'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x05'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x06'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x07'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x08'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x09'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x0A'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x0B'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x0C'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x0D'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x0E'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x0F'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x10'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x11'u8,
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x12'u8, 0x01'u8, 0x00'u8, 0x00'u8, 0x00'u8,
+  0x01'u8, 0x15'u8, 0x56'u8, 0x01'u8, 0x00'u8, 0x59'u8, 0x00'u8, 0x01'u8,
+  0x18'u8, 0x07'u8, 0xEA'u8, 0x85'u8]
+
+# THE CONTEXT IS STAMPED WITH THE OTHER SALT FIRST, so that "no field moved" is
+# a claim about a refusal and not about two defaults agreeing. Every field of
+# this context differs from the value the version-1 block carries for it - the
+# case above the round trip establishes exactly that of these two salts.
+let versionVictim = freshContext()
+stampContext(versionVictim, 1'u32)
+let beforeVersionRefusal = renderContext(versionVictim)
+let versionStatus = stateLoad(versionVictim, unsafeAddr goldenVersion1Block[0])
+let afterVersionRefusal = renderContext(versionVictim)
+
+check((status: versionStatus, state: afterVersionRefusal) ==
+        (status: stateBadVersion, state: beforeVersionRefusal),
+      "version: a whole version-1 block is refused by name and decoded nowhere",
+      $(status: versionStatus, state: afterVersionRefusal),
+      $(status: stateBadVersion, state: beforeVersionRefusal))
 
 # THE SAVE HAS THE SAME TWO NIL ARGUMENTS AND NO STATUS TO REPORT THEM WITH, so
 # what each case reads is the memory the call was pointed at.
