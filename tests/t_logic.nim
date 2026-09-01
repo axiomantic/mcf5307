@@ -69,9 +69,8 @@
 ## pair, so each Z assertion separates the two bases. The exact addresses are
 ## on `pcWindow` itself.
 ##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Instruction
-## semantics, the condition-code rules and the encodings are facts about
-## Motorola silicon; they are taken from the ColdFire Family Programmer's
+## Instruction semantics, the condition-code rules and the encodings are facts
+## about Motorola silicon; they are taken from the ColdFire Family Programmer's
 ## Reference Manual and the MCF5307 User's Manual (AGENTS.md section 11) and
 ## from this project's own measurements with the pinned cross assembler.
 

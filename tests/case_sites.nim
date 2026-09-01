@@ -49,7 +49,7 @@
 ## assertion to go red is the only check that reads through to an assertion's
 ## content, and that lives in `tests/t_claims.cmake` rather than here.
 ##
-## MIT licensed. Nothing here is a fact about Motorola silicon.
+## Nothing here is a fact about Motorola silicon.
 
 import std/algorithm
 

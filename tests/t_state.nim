@@ -7,7 +7,7 @@
 ##
 ##   2. THE COMPARISON IS PER FIELD AND THE DESTINATION IS PRE-LOADED.
 ##
-## MIT licensed. Nothing here is a fact about Motorola silicon.
+## Nothing here is a fact about Motorola silicon.
 
 import mcf5307/cpu
 import mcf5307/decode_types

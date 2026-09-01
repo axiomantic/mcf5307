@@ -11,9 +11,8 @@
 ## string or the manual row it came from, and NOT a second call of the
 ## procedure under test.
 ##
-## MIT licensed and clean-room with respect to GPL and LGPL code. The fault
-## status encodings are facts about Motorola silicon, from the User's Manual
-## named above.
+## The fault status encodings are facts about Motorola silicon, from the User's
+## Manual named above.
 
 import std/strutils
 
