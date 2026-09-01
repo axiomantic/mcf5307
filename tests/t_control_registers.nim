@@ -4,8 +4,7 @@
 ##
 ## WHAT THIS FILE COVERS AND WHAT IT DOES NOT, STATED AT THE TOP BECAUSE A
 ## GREEN RUN OF A PARTIAL SUITE READS EXACTLY LIKE A GREEN RUN OF A COMPLETE
-## ONE. The plan block that names this file states four clauses. THIS FILE
-## CARRIES TWO OF THEM:
+## ONE. FOUR CLAUSES ARE IN QUESTION AND THIS FILE CARRIES TWO OF THEM:
 ##
 ##   CLAUSE 1, the vector base. Covered below, end to end: the base arrives by
 ##   `MOVEC`, the exception is raised by running an instruction through
@@ -22,8 +21,7 @@
 ##
 ##   CLAUSE 3, the write-protect refusal, IS NOT COVERED HERE either. This core
 ##   has no consumer of RAMBAR0, and the operand-write path that would have to
-##   raise the access error is in a module the plan block's own `Files:` line
-##   does not declare.
+##   raise the access error is in a module this file does not reach.
 ##
 ## THE READ-BACK IS NEVER THE VERDICT IN BLOCK 1. A core that stores a value in
 ## a field no dispatch consults fails IDENTICALLY to one that discards it, and
