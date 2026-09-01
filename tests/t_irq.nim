@@ -749,7 +749,7 @@ block:
 # BLOCK 11. THE LEVEL 7 THAT IS RE-PRESENTED AFTER ITS TAKE IS NOT A SECOND
 # EDGE.
 #
-# THIS IS THE BOARD'S DOCUMENTED NORMAL BEHAVIOUR AND NOT AN EXOTIC ONE.
+# This is the board's documented normal behaviour and not an exotic one.
 # Two calls with the same arguments have the same effect as one, so the board
 # may call it unconditionally after every recomputation. A board that does
 # exactly that, with IRQ7 still asserted, calls `mcf5307_set_irq(7, ...)` again
@@ -758,20 +758,20 @@ block:
 # because only one transition from a lower level request to a level 7 request
 # occurred.
 #
-# BLOCK 8 DOES NOT REACH THIS AND CANNOT. Its two calls both happen BEFORE the
+# Block 8 does not reach this and cannot. Its two calls both happen before the
 # take, so the two arms land on a latch that is still armed from the first, and
 # `irq7Armed` being a `bool` makes arming twice indistinguishable from arming
-# once. What decides block 8 is therefore THE TYPE OF THE FIELD and not the
+# once. What decides block 8 is therefore the type of the field and not the
 # `and ctx.irqLevel != 7` guard in `mcf5307_set_irq`: deleting that guard
 # reddens nothing.
-# THE TAKE MUST HAPPEN BETWEEN THE TWO CALLS, because only then is the latch
+# The take must happen between the two calls, because only then is the latch
 # consumed and only then can a second arm produce a second interrupt.
 
 block:
   let ctx = newCtx(0)
   mcf5307_set_irq(ctx, 7, otherVector, 1)
   discard mcf5307_exec(ctx, 1'u32)
-  # THE RE-PRESENTATION, WITH THE SAME ARGUMENTS AND AFTER THE TAKE. The level
+  # The re-presentation, with the same arguments and after the take. The level
   # was 7 before this call and is 7 after it, so no transition occurred.
   mcf5307_set_irq(ctx, 7, otherVector, 1)
   discard mcf5307_exec(ctx, 1'u32)

@@ -44,14 +44,28 @@
 ## service routine reads four status bytes and never writes them back, so a bit
 ## with no route out of the register would spin the machine.
 ##
-## Two sequencing rules below are this file's and not the authority's, because
-## no document on this machine states either way. First, a command this model
-## refuses leaves a transfer already in progress live, so a data byte written
-## after a refusal lands in the earlier command's operand; hardware would more
-## plausibly read any command-port write as a new command and abandon the
-## previous one. Second, `peek` reads the FIFO of the endpoint an
-## endpoint-configuration command last selected, which couples selection to
-## configuration where nothing here couples them.
+## A refused command abandons the transfer in progress. ISP1362 Rev. 06 p.14
+## calls the command "the index of a register" whose job is to "inform the
+## ISP1362 about the register that will be accessed at the data phase", and
+## section 15 p.104 gives the command phase as an unconditional interpretation
+## of the bus as a command code. A command-port write therefore replaces the
+## index whether or not this model implements what it names, and `beginRefused`
+## is where that happens.
+##
+## The sequencing rule below is this file's and not the authority's, and it is
+## named here because no document on this machine states it either way. `peek`
+## reads the FIFO of the endpoint an endpoint-configuration command last
+## selected, which couples selection to configuration where nothing here couples
+## them. It is recorded as a choice rather than as a finding, and settling it is
+## an operator decision and not a repair.
+##
+## The sixteen configuration slots are accepted and the buffers are fewer than
+## sixteen. Section 15.1.1 p.107 requires the firmware to configure all sixteen
+## slots in sequence before the part allocates buffer memory at all, so a model
+## that refused a slot would report a required step as a gap. `configSlotCount`
+## is the register the part carries; `fifoCount` is the buffer memory this model
+## carries; a slot configured with FIFOEN set and no buffer behind it is the
+## gap that remains, and `commitOperand` writes one line naming it.
 ##
 ## The C entry points live in `src/isp1181/stub.nim` and select between the two
 ## implementations. A fresh handle selects the stub and `isp1181_set_backend`
@@ -95,20 +109,44 @@
 ## refuses a set-up packet arriving at a full control OUT buffer rather than
 ## overwriting one the firmware has not acknowledged, because the bit that
 ## would report the overwrite is not tracked.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Nothing here
-## is copied from a Philips or NXP document.
 
 import std/strutils
 
 import ./commands
 import ./fifo
 
+const configSlotCount* = 16
+  ## The DcEndpointConfiguration slots the part carries, which is not the same
+  ## number as the buffers this model carries. ISP1362 Rev. 06 section 15.1.1
+  ## p.107 gives the write codes as "20 to 2F - write (control OUT, control IN,
+  ## endpoints 1 to 14)" and states that buffer-memory allocation "takes place
+  ## only after all 16 endpoints have been configured in sequence (from
+  ## endpoint 0 OUT to endpoint 14)". The register exists for every slot, so
+  ## every slot is accepted and recorded; the buffer behind a slot is a
+  ## separate question and `fifoCount` is its answer.
+
 const fifoCount* = 5
   ## The buffers this model carries, and the length of every per-buffer array
   ## below. They are `fifos`' own order - endpoint 0 OUT, endpoint 0 IN, then
   ## endpoints 1 to 3 - which is the order ISP1362 Rev. 06 section 15.1.1 gives
   ## the endpoint-configuration slots.
+
+const controlSlotCount* = 2
+  ## The slots whose geometry the part fixes, and they are the first two in
+  ## section 15.1.1's ordering: control OUT and control IN. ISP1362 Rev. 06
+  ## Table 15 p.51 gives both as "64 (fixed)" against "programmable" for
+  ## endpoints 1 to 14, so a configuration byte cannot move them.
+
+const controlFifoBytes* = 64
+  ## The control endpoint's buffer memory size. ISP1362 Rev. 06 Table 15 p.51,
+  ## "64 (fixed)" for endpoint 0 OUT and for endpoint 0 IN alike. It is a
+  ## property of the part and not of the image, unlike every figure in
+  ## `fifoShape`.
+
+const controlFifoBuffers* = 1
+  ## The control endpoint's buffer depth. ISP1362 Rev. 06 Table 15 p.51 gives
+  ## "Double buffering: no" for both control rows, so one buffer is the part's
+  ## answer and DBLBUF has nothing to say about these two slots.
 
 type
   Isp1181IrqFn* = proc (user: pointer; asserted: cint) {.cdecl.}
@@ -124,8 +162,8 @@ type
     ## state of a command that takes no operand, and a data-port access in that
     ## state is refused rather than guessed at.
     ##
-    ## `tfAbsent` IS A READ WITH NOTHING BEHIND IT, and it is a state rather
-    ## than a refusal at command time because the command WAS accepted: a peek
+    ## `tfAbsent` is a read with nothing behind it, and it is a state rather
+    ## than a refusal at command time because the command was accepted: a peek
     ## of an empty buffer is a legal command whose answer does not exist. The
     ## report belongs to the read that asks for the byte, not to the command
     ## that set the read up.
@@ -135,7 +173,11 @@ type
     ## latch. A register operand is at most four bytes and fits the latch; an
     ## endpoint buffer carries its own length in band, so its width is a
     ## property of the packet and not of the opcode.
-    tfNone, tfWrite, tfRead, tfAbsent, tfBufferRead, tfBufferWrite
+    ## `tfRefused` is the state a refused command leaves, and it exists so that
+    ## the refusal has somewhere to put the command byte that is not the
+    ## previous command's. It carries no width, because a command this model
+    ## refuses is one whose operand count it has no ground to claim.
+    tfNone, tfWrite, tfRead, tfAbsent, tfBufferRead, tfBufferWrite, tfRefused
 
   ISP1181* = ref object
     user: pointer
@@ -152,12 +194,13 @@ type
     deviceAddress: uint8
     interruptEnable: uint32
     interruptRegister: uint32
-    endpointConfig: array[fifoCount, uint8]
-      ## One DcEndpointConfiguration byte per buffer, indexed as `fifos` is.
-      ## ISP1362 Rev. 06 section 15.1.1 orders the configuration slots control
-      ## OUT, control IN, then endpoints 1 to 14, which is the order `fifos`
-      ## is in, so a slot and the buffer it configures share one index.
-    selected: int                ## The buffer the last 0x20+k selected.
+    endpointConfig: array[configSlotCount, uint8]
+      ## One DcEndpointConfiguration byte per slot, and the slots outnumber the
+      ## buffers. ISP1362 Rev. 06 section 15.1.1 orders the configuration slots
+      ## control OUT, control IN, then endpoints 1 to 14, which is the order
+      ## `fifos` is in, so a slot below `fifoCount` and the buffer it configures
+      ## share one index and a slot at or above it configures no buffer here.
+    selected: int                ## The slot the last 0x20+k selected.
     setupHeld: bool
       ## SETUPT for the control OUT buffer, and for that buffer alone. ISP1362
       ## Rev. 06 Table 127 gives bit 2 as "Logic 1 indicates that the buffer
@@ -175,23 +218,72 @@ type
     stageFifo: int               ## Where a validate would commit `stage`.
     readBuf: seq[uint8]          ## The bytes a buffer-read command offers.
     log: seq[string]
+      ## The lines the model retains. It stops at `logCapacity`, and the count
+      ## of lines the model wrote is kept apart in `written` so that a reader
+      ## can subtract and learn how many it cannot see.
+    written: int
+      ## Every line `note` was ever asked to write, whether or not `log` kept
+      ## it. A retained log alone answers "what did the model say" with no way
+      ## to ask "and was that all of it".
+    configWritten: array[configSlotCount, bool]
+      ## Whether the firmware has written the slot beside it since the last
+      ## reset. `endpointConfig` alone cannot say: its reset value is `0x00`
+      ## and `0x00` is also a byte the firmware may write, so a reader of the
+      ## register file cannot tell a slot the firmware configured OUT with
+      ## every feature disabled from a slot the firmware never reached.
+    configOrdinal: array[configSlotCount, int]
+      ## The event number of the write that set the slot, or 0 when the slot
+      ## was never written. See `events`.
+    logOrdinal: seq[int]
+      ## The event number of each RETAINED line, indexed as `log` is.
+    events: int
+      ## A monotonic count of the recorded events - each line `note` wrote and
+      ## each configuration slot the firmware set - in the order they happened.
+      ##
+      ## It exists to order two records against each other. An accepted
+      ## configuration write leaves a register byte and no log line, and a
+      ## refused command leaves a log line and no register byte, so neither
+      ## record alone can say which came first. Both are stamped from this one
+      ## counter.
+      ##
+      ## It survives `clearState` for the reason `written` does: a reset clears
+      ## the device, not the account of what the device was asked to do.
 
 const
   benignValue* = 0x00'u8
     ## The byte the model answers when it has nothing true to say. It is zero
     ## because the register the firmware reads most often is the interrupt
     ## register, whose zero means no interrupt is pending.
-  epdirBit = 0x40'u8
+  epdirBit* = 0x40'u8
     ## EPDIR in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 places it at
     ## bit 6 of the byte `0x20+n` writes, and Table 111 gives its meaning:
     ## "This bit defines the endpoint direction (0 = OUT, 1 = IN)". The same
     ## table places FIFOEN at bit 7, DBLBUF at bit 5, FFOISO at bit 4 and
     ## `FFOSZ[3:0]` in the low nibble.
     ##
-    ## The position is inherited and not read from an ISP1181 document. ISP1362
-    ## Rev. 06 states that it integrates the ISP1181B peripheral controller,
-    ## which is a claim of integration and not of a byte-identical register map,
-    ## and the ISP1181B data sheet itself was not retrieved.
+    ## The position is inherited and not read from an ISP1181 document.
+    ## `docs/sources.md` carries the limit in full.
+  fifoEnableBit* = 0x80'u8
+    ## FIFOEN in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 p.107 places
+    ## it at bit 7 and Table 111 gives its meaning: "Logic 1 enables the FIFO
+    ## buffer. Logic 0 disables the FIFO buffer." It is inherited on the same
+    ## terms as `epdirBit`.
+  dblbufBit* = 0x20'u8
+    ## DBLBUF in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 p.107 places
+    ## it at bit 5 and Table 111 p.107 gives its meaning: "Logic 1 enables the
+    ## double buffering." It is inherited on the same terms as `epdirBit`.
+  ffoisoBit* = 0x10'u8
+    ## FFOISO in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 p.107 places
+    ## it at bit 4 and Table 111 p.107 gives its meaning: "Logic 1 indicates an
+    ## isochronous endpoint. Logic 0 indicates a bulk or interrupt endpoint."
+    ## It selects which column of Table 16 p.52 `FFOSZ` is read in, so a size
+    ## decode that ignored it would read the wrong table half the time.
+    ## It is inherited on the same terms as `epdirBit`.
+  ffoszMask* = 0x0F'u8
+    ## `FFOSZ[3:0]` in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 p.107
+    ## places it at bits 3 to 0 and Table 111 p.107 gives it as "Selects the
+    ## buffer memory size according to Table 16". It is inherited on the same
+    ## terms as `epdirBit`.
   softctBit* = 0x01'u8
     ## The mode register bits. The rest - DISGLBL `0x02`, DBGMOD `0x04`,
     ## INTENA `0x08`, GOSUSP `0x20`, SNDRSU `0x40`, DMAWD `0x80` - live in the
@@ -205,8 +297,8 @@ const fifoNames: array[fifoCount, string] = [
   "endpoint 0 OUT", "endpoint 0 IN", "endpoint 1", "endpoint 2", "endpoint 3"]
 
 const fifoShape: array[fifoCount, tuple[capacity: int, buffers: int]] = [
-  (64, 1),   ## endpoint 0 OUT
-  (64, 1),   ## endpoint 0 IN
+  (controlFifoBytes, controlFifoBuffers),   ## endpoint 0 OUT
+  (controlFifoBytes, controlFifoBuffers),   ## endpoint 0 IN
   (16, 2),   ## endpoint 1
   (64, 2),   ## endpoint 2
   (64, 1)]   ## endpoint 3 - single-buffered.
@@ -218,7 +310,13 @@ const fifoShape: array[fifoCount, tuple[capacity: int, buffers: int]] = [
   ## scheme in `DBLBUF`. So "endpoint 1 is 16 bytes" and "endpoint 3 is
   ## single-buffered" are facts about the image this model was measured
   ## against, and they would be different facts under a different image.
-  ## Nothing here reads `endpointConfig` back into this table.
+  ##
+  ## This table is the buffer memory the model allocates at reset, and it
+  ## decides the `Fifo` a packet actually meets. It is not what an endpoint's
+  ## reported geometry comes from: `slotBufferGeometry` decodes
+  ## `endpointConfig` instead, so a differently configured image is reported as
+  ## itself. The two are pinned against each other for the measured image by a
+  ## registered case rather than by a sentence here.
 
 const outFifoOfEndpoint: array[4, int] = [0, 2, 3, 4]
   ## The buffer a packet from the host lands in. Endpoint 0 is the only
@@ -276,8 +374,24 @@ proc fifoName*(index: int): string = fifoNames[index]
 proc isCommandPort*(address: uint32): bool =
   (address and commandSelect) != 0
 
+const logCapacity* = 4096
+  ## How many log lines the model retains. The bound exists because `note` is
+  ## reachable from a bus access: a firmware that hits a refusing site inside
+  ## its own loop writes a line per iteration, and an unbounded log then grows
+  ## with the run rather than with the number of distinct things that went
+  ## wrong.
+  ##
+  ## The lines kept are the first ones and not the last. A ring would hold the
+  ## end of a run and lose the first refusal, which is the one that says what
+  ## the firmware was denied before everything downstream of it went wrong.
+  ## `written` is what makes the loss readable rather than silent.
+
 proc note(m: ISP1181; line: string) =
-  m.log.add(line)
+  inc m.events
+  inc m.written
+  if m.log.len < logCapacity:
+    m.log.add(line)
+    m.logOrdinal.add(m.events)
 
 proc updateIrq(m: ISP1181) =
   ## The line is level-triggered and active-low at the pin; the board owns the
@@ -303,6 +417,8 @@ proc clearState(m: ISP1181) =
   m.interruptRegister = 0
   for i in 0 ..< m.endpointConfig.len:
     m.endpointConfig[i] = 0
+    m.configWritten[i] = false
+    m.configOrdinal[i] = 0
   m.selected = 0
   m.stage = @[]
   m.stageFifo = -1
@@ -332,6 +448,141 @@ proc lastCommand*(m: ISP1181): int =
 proc logLines*(m: ISP1181): seq[string] =
   if m.isNil: @[] else: m.log
 
+proc logWritten*(m: ISP1181): int =
+  ## Every line the model ever wrote. `logWritten - logRetained` is exactly the
+  ## number a reader cannot see, and it is the only figure that says so.
+  if m.isNil: 0 else: m.written
+
+proc logRetained*(m: ISP1181): int =
+  ## The lines still readable through `logLine`.
+  if m.isNil: 0 else: m.log.len
+
+proc logLine*(m: ISP1181; index: int): string =
+  ## The retained line at `index`, or the empty string when there is none. No
+  ## site in this file writes an empty line, so the empty string is
+  ## unambiguous here.
+  if m.isNil or index < 0 or index >= m.log.len: "" else: m.log[index]
+
+proc logOrdinal*(m: ISP1181; index: int): int =
+  ## The event number of the retained line at `index`, or 0 when there is no
+  ## such line. Event numbers start at 1, so 0 is unambiguous.
+  if m.isNil or index < 0 or index >= m.logOrdinal.len: 0 else: m.logOrdinal[index]
+
+proc configSlotWritten*(m: ISP1181; slot: int): bool =
+  ## Whether the firmware has written this configuration slot since the last
+  ## reset. A slot that was never written and a slot written with `0x00` read
+  ## the same out of `configSlotValue`, and this is the call that tells them
+  ## apart. A slot outside the range answers false, which is the same answer a
+  ## slot inside it and never written gives; `isp1181_config_slot` is where a C
+  ## caller gets the range as a third answer rather than a second.
+  if m.isNil or slot < 0 or slot >= configSlotCount: false
+  else: m.configWritten[slot]
+
+proc configSlotValue*(m: ISP1181; slot: int): uint8 =
+  ## The raw DcEndpointConfiguration byte the slot holds. It is only a
+  ## configuration when `configSlotWritten` says so; otherwise it is the reset
+  ## value and describes nothing the firmware did.
+  if m.isNil or slot < 0 or slot >= configSlotCount: 0'u8
+  else: m.endpointConfig[slot]
+
+proc configSlotOrdinal*(m: ISP1181; slot: int): int =
+  ## The event number of the write that set the slot, or 0 when it was never
+  ## written.
+  if m.isNil or slot < 0 or slot >= configSlotCount: 0
+  else: m.configOrdinal[slot]
+
+proc slotHasBuffer*(slot: int): bool =
+  ## Whether this model carries a buffer behind the configuration slot. The
+  ## part has `configSlotCount` slots and this model has `fifoCount` buffers,
+  ## and the two are different numbers on purpose. A slot at or above
+  ## `fifoCount` has a register byte and no buffer, so it has no geometry.
+  slot >= 0 and slot < fifoCount
+
+proc nonIsoBufferBytes*(ffosz: uint8): int =
+  ## The buffer memory size `FFOSZ[3:0]` selects for a non-isochronous
+  ## endpoint. ISP1362 Rev. 06 Table 16 p.52, the left-hand column: `0000` is 8
+  ## bytes, `0001` is 16, `0010` is 32 and `0011` is 64. Every remaining code is
+  ## marked **reserved** in that column.
+  ##
+  ## A reserved code answers -1 and not a size. The right-hand column of the
+  ## same table gives those codes isochronous sizes reaching 1023 bytes, so a
+  ## decode that fell through to a default would be reading the wrong column
+  ## and would hand a producer a figure the part never selected for it.
+  case ffosz and ffoszMask
+  of 0b0000'u8: 8
+  of 0b0001'u8: 16
+  of 0b0010'u8: 32
+  of 0b0011'u8: 64
+  else: -1
+
+type SlotGeometryKind* = enum
+  ## What `slotBufferGeometry` found.
+  sgNoSlot        ## No such slot, or no model.
+  sgNoBuffer      ## The slot is real and no buffer memory stands behind it.
+  sgUnnameable    ## A buffer whose configuration names no size this can report.
+  sgBuffer        ## A buffer, with its size and its depth.
+
+proc slotBufferGeometry*(m: ISP1181; slot: int):
+    tuple[kind: SlotGeometryKind; maxPacketBytes: int; buffers: int] =
+  ## The buffer behind the slot, as bytes and as depth, decoded out of the
+  ## configuration byte the firmware wrote. `maxPacketBytes` and `buffers` are
+  ## meaningful on `sgBuffer` alone; on every other answer they are zero, which
+  ## is the value a caller that ignored `kind` would be least able to use.
+  ##
+  ## The bytes are a maximum packet size. ISP1362 Rev. 06 section 12.3.3 p.51
+  ## states it directly - "The size of the buffer memory determines the maximum
+  ## packet size that the hardware can support for a given endpoint" - and
+  ## `Fifo.accept` in `isp1181/fifo` refuses a longer packet whole.
+  ##
+  ## Endpoint 0 is fixed by the part and its byte is not consulted. Table 15
+  ## p.51 gives both control rows as "64 (fixed)" with double buffering "no",
+  ## and section 15.1.1 p.107 adds that the control endpoints "have fixed
+  ## configurations" and are written with their default values only to complete
+  ## the initialization sequence. So the two control slots have a geometry
+  ## whether or not this firmware ever configured them.
+  ##
+  ## A slot the firmware never wrote has no geometry, and its bits decode to a
+  ## plausible one. Table 110 p.107 resets every bit to 0, and `FFOSZ` = `0000`
+  ## is 8 bytes in Table 16 - a legal size, and the smallest, so a producer
+  ## handed it would split every frame to eight bytes and never see an error.
+  ## `configWritten` separates the reset value from a byte the firmware chose,
+  ## and it is asked before the byte is decoded.
+  ##
+  ## No test can separate that clause from the FIFOEN one below it. Table 110
+  ## p.107 resets FIFOEN to 0 along with every other bit, `clearState` clears
+  ## `endpointConfig` and `configWritten` together, and the only writer sets
+  ## both - so an unwritten slot always carries FIFOEN clear and reaches
+  ## `sgNoBuffer` by either route. Removing the clause would leave the model
+  ## answering a question about the write record out of a bit whose reset value
+  ## happens to agree, which is a different claim that is true by coincidence.
+  ##
+  ## A disabled endpoint has no buffer, which is not a modelling limit. Section
+  ## 12.3.3 p.51: "Only enabled endpoints are allocated space in the shared
+  ## buffer memory storage, disabled endpoints have zero bytes." FIFOEN clear
+  ## therefore answers `sgNoBuffer`.
+  ##
+  ## An isochronous endpoint is `sgUnnameable` and not a size out of the other
+  ## column. Table 16's isochronous sizes run to 1023 bytes and this model
+  ## carries no isochronous buffer, so every figure that column offers is one no
+  ## buffer here would accept.
+  if m.isNil or slot < 0 or slot >= configSlotCount:
+    return (sgNoSlot, 0, 0)
+  if slot < controlSlotCount:
+    return (sgBuffer, controlFifoBytes, controlFifoBuffers)
+  if not slotHasBuffer(slot):
+    return (sgNoBuffer, 0, 0)
+  if not m.configWritten[slot]:
+    return (sgNoBuffer, 0, 0)
+  let configured = m.endpointConfig[slot]
+  if (configured and fifoEnableBit) == 0:
+    return (sgNoBuffer, 0, 0)
+  if (configured and ffoisoBit) != 0:
+    return (sgUnnameable, 0, 0)
+  let bytes = nonIsoBufferBytes(configured)
+  if bytes < 0:
+    return (sgUnnameable, 0, 0)
+  (sgBuffer, bytes, if (configured and dblbufBit) != 0: 2 else: 1)
+
 proc irqAsserted*(m: ISP1181): bool =
   if m.isNil: false else: m.asserted
 
@@ -358,6 +609,27 @@ proc clearInterrupt*(m: ISP1181; mask: uint32) =
   m.interruptRegister = m.interruptRegister and not mask
   m.updateIrq()
 
+proc refusalCause(m: ISP1181; index: int; length: int): string =
+  ## The two causes a `Fifo` refusal has, each named in words. `Fifo.accept`
+  ## returns one `false` for a buffer that is full and for a packet that is
+  ## larger than the buffer, and those are different findings: a full buffer is
+  ## ordinary flow control that a drain fixes, and an oversized packet is a
+  ## fault in whatever produced it that no amount of draining fixes.
+  ##
+  ## It is called after the refusal and reads the state the refusal left. A
+  ## refused `accept` changes nothing, so the occupancy here is the occupancy
+  ## the packet met.
+  if m.fifos[index].isFull:
+    "isp1181: " & fifoNames[index] & " refused a packet of " & $length &
+      " bytes because its buffer is FULL; it holds " &
+      $m.fifos[index].pending & " of " & $m.fifos[index].buffers &
+      " and nothing has taken the packet already there"
+  else:
+    "isp1181: " & fifoNames[index] & " refused a packet of " & $length &
+      " bytes because the buffer is " & $m.fifos[index].capacity &
+      " bytes LONG; it holds " & $m.fifos[index].pending & " of " &
+      $m.fifos[index].buffers
+
 proc deliver*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
   ## A packet from the host. `false` is the NAK.
   if m.isNil:
@@ -378,9 +650,7 @@ proc deliver*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
            "packet is dropped")
     return false
   if not m.fifos[index].accept(data):
-    m.note("isp1181: " & fifoNames[index] & " refused a packet of " &
-           $data.len & " bytes; the buffer holds " &
-           $m.fifos[index].pending & " of " & $m.fifos[index].buffers)
+    m.note(m.refusalCause(index, data.len))
     return false
   m.raiseInterrupt(1'u32 shl interruptBitOfFifo[index])
   true
@@ -442,10 +712,8 @@ proc queueIn*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
   ## endpoint's IN buffer, waiting for the host to collect them. `false` is the
   ## refusal, and every refusal writes the line that says which one it is.
   ##
-  ## THE FIRMWARE REACHES THIS THROUGH `0x01` THEN `0x61` - Write control IN
-  ## buffer, then Validate control IN buffer. `commitValidate` is the caller.
-  ## The two opcodes are inherited from ISP1362 Rev. 06 Table 109 and were not
-  ## read from an ISP1181 document; the module head states the limit.
+  ## The firmware reaches this through `0x01` then `0x61` - Write control IN
+  ## buffer, then Validate control IN buffer.
   ##
   ## Which endpoint may be queued is read out of its configuration byte.
   ## Endpoints 1 to 3 carry one buffer each and EPDIR is which way it faces, so
@@ -472,10 +740,7 @@ proc queueIn*(m: ISP1181; endpoint: int; data: openArray[uint8]): bool =
            "packet carries; nothing is queued")
     return false
   if not m.fifos[index].accept(data):
-    m.note("isp1181: " & fifoNames[index] &
-           " refused a packet of " & $data.len & " bytes; the buffer holds " &
-           $m.fifos[index].pending & " of " &
-           $m.fifos[index].buffers)
+    m.note(m.refusalCause(index, data.len))
     return false
   true
 
@@ -514,6 +779,24 @@ proc transmit*(m: ISP1181; endpoint: int): bool =
     m.note("isp1181: " & fifoNames[index] & " holds a packet and the host " &
            "installed no transmit callback; the packet is kept")
     return false
+  # A zero-length packet is refused here and not indexed. `addr packet[0]` on
+  # an empty `seq` is out of bounds. Measured, by removing this guard and
+  # running the suite under the library's own flags: `--mm:arc --panics:on
+  # -d:release` does keep the bounds check, and the run aborts with
+  # `IndexDefect`. An abort is what `portWrite` above refuses for a nil handle,
+  # for the same reason: the caller is a plugin's host and an abort destroys a
+  # session that has nothing to do with this model. A build with `-d:danger`
+  # would not check at all and would read the memory. The buffer can hold one:
+  # `Fifo.accept` takes a zero-length packet, `deliver` reaches it on an
+  # endpoint configured OUT, and endpoints 1 to 3 have one buffer, so a later
+  # EPDIR write turns that same buffer IN and `transmit` finds it. No source on
+  # this machine states what a zero-length IN packet carries, so the model
+  # declines to invent a pointer for it.
+  if m.fifos[index].peekPacket().packet.len == 0:
+    m.note("isp1181: " & fifoNames[index] & " holds a packet of zero bytes " &
+           "and no source on this machine states what a zero-length IN " &
+           "packet carries; the host is not called and the packet is kept")
+    return false
   var packet = m.fifos[index].take()
   m.tx(m.user, cint(endpoint), addr packet[0], csize_t(packet.len))
   m.raiseInterrupt(1'u32 shl interruptBitOfFifo[index])
@@ -528,11 +811,13 @@ proc transmit*(m: ISP1181; endpoint: int): bool =
 
 const
   bufferWriteControlIn = 0x01'u8
+  bufferWriteEndpointBase = 0x02'u8
   bufferReadControlOut = 0x10'u8
   bufferReadEndpointBase = 0x12'u8
   stallControlOut = 0x40'u8
   statusControlOut = 0x50'u8
   validateControlIn = 0x61'u8
+  validateEndpointBase = 0x62'u8
   clearControlOut = 0x70'u8
   clearEndpointBase = 0x72'u8
   unstallControlOut = 0x80'u8
@@ -540,23 +825,102 @@ const
     ## The authority puts the packet length in the first two bytes of the
     ## endpoint buffer, lower byte first.
 
-proc outFifoOf(m: ISP1181; opcode, controlBase, endpointBase: uint8): int =
-  ## The OUT buffer a data-flow opcode names, or -1. `controlBase` is the
-  ## control OUT form and `endpointBase` is endpoint 1's.
+proc endpointOfOpcode(opcode, controlBase, endpointBase: uint8): int =
+  ## The endpoint number a data-flow opcode names, or -1 when this model
+  ## carries no buffer for it. `controlBase` is the family's control form and
+  ## `endpointBase` is endpoint 1's.
+  ##
+  ## It answers an endpoint and not a buffer. Endpoint 0 has two buffers, and
+  ## which one a family means is a property of the family: `0x10` and `0x70`
+  ## address its OUT buffer, `0x01` and `0x61` its IN buffer. A decode that
+  ## returned a buffer would have to pick one, and could serve only that half.
   if opcode == controlBase:
-    return outFifoOfEndpoint[0]
+    return 0
   let endpoint = int(opcode) - int(endpointBase) + 1
   if endpoint >= 1 and endpoint < outFifoOfEndpoint.len:
-    return outFifoOfEndpoint[endpoint]
+    return endpoint
   -1
+
+proc bufferOfEndpoint(endpoint: int; facing: BufferDirection): int =
+  ## The buffer an endpoint presents in one direction. Endpoints 1 to 3 carry
+  ## one buffer and both tables name it; endpoint 0 carries two and they differ.
+  case facing
+  of bdOut: outFifoOfEndpoint[endpoint]
+  of bdIn: inBufferOfEndpoint[endpoint]
+
+proc refusedName(pending: int): string =
+  ## The name a refusal report gives the command it refused. `ccUnspecified`
+  ## has no name, and an empty parenthesis would read as a name this file
+  ## failed to print rather than as the absence that class is.
+  let command = classify(uint8(pending))
+  if command.name.len == 0: "not in the specified command set" else: command.name
+
+proc beginRefused(m: ISP1181; opcode: uint8) =
+  ## A refused command still latches. ISP1362 Rev. 06 p.14 describes the
+  ## command as "the index of a register" that "inform[s] the ISP1362 about the
+  ## register that will be accessed at the data phase", and section 15 p.104
+  ## gives the command phase as an unconditional interpretation of the bus as a
+  ## command code. Nothing in either statement admits a path by which an earlier
+  ## command survives a later command-port write, so a refusal abandons the
+  ## transfer in progress instead of leaving it live to collect the next
+  ## command's operand bytes.
+  ##
+  ## The width is zero and is not a guess at the refused command's operand
+  ## count. `tfRefused` reports each data-port access against the command that
+  ## was refused and takes nothing, which is the one thing this model can say
+  ## truthfully about a command it does not implement.
+  m.pending = int(opcode)
+  m.transfer = tfRefused
+  m.width = 0
+  m.index = 0
+
+proc directionRefused(m: ISP1181; opcode: uint8; name: string; endpoint: int;
+                      index: int; needs: BufferDirection): bool =
+  ## The direction is a run-time precondition of the command and it refuses out
+  ## loud. A single-buffered endpoint faces the way EPDIR points it, so a Write
+  ## or Validate aimed at an endpoint the firmware configured OUT - or a Read or
+  ## Clear aimed at one it configured IN - is addressing a buffer that is not
+  ## there in that direction.
+  ##
+  ## The authority says what the part does, and it is not something this model
+  ## may imitate. ISP1362 Rev. 06 section 15.2.1 p.114 remarks that "There is no
+  ## protection against writing or reading past a buffer's boundary, against
+  ## writing into an OUT buffer or reading from an IN buffer. Any of these
+  ## actions can cause an incorrect operation", and Table 109 notes [4] and [5]
+  ## pp.106 give validating an OUT endpoint buffer and clearing an IN endpoint
+  ## buffer as "unpredictable behavior". A model that carried out the access
+  ## anyway would be inventing one of the outcomes the document declines to
+  ## name; a model that did nothing and said nothing would report the firmware's
+  ## mistake as a success. So it refuses, and the line names the endpoint, the
+  ## direction the command needs and the direction the register holds.
+  ##
+  ## The control endpoint cannot reach this. `directionOfBuffer` gives buffers 0
+  ## and 1 fixed directions, which section 15.1.1 p.107 states control endpoints
+  ## have, so `0x01`, `0x10`, `0x61` and `0x70` always match what they need. The
+  ## check is run for them anyway rather than being skipped by a list: an
+  ## exemption that is never exercised is an exemption nothing keeps honest.
+  if m.directionOfBuffer(index) == needs:
+    return false
+  let want = (if needs == bdIn: "IN" else: "OUT")
+  let held = (if needs == bdIn: "OUT" else: "IN")
+  let bit = (if needs == bdIn: "0" else: "1")
+  m.note("isp1181: command 0x" & toHex(opcode) & " (" & name &
+         ") addresses the " & want & " buffer of endpoint " & $endpoint &
+         ", and EPDIR is " & bit & " in its DcEndpointConfiguration - the " &
+         "endpoint is configured " & held & "; the authority documents this " &
+         "access as unprotected and its result as unpredictable, so nothing " &
+         "is done")
+  m.beginRefused(opcode)
+  true
 
 proc noteInterlock(m: ISP1181; opcode: uint8; name: string) =
   ## The interlock refuses out loud. A Validate or Clear that did nothing and
   ## said nothing would tell the firmware its buffer was cleared when it was
-  ## not.
+  ## not, which is the one outcome this model refuses everywhere.
   m.note("isp1181: command 0x" & toHex(opcode) & " (" & name &
          ") is disabled until the set-up packet is acknowledged with 0xF4; " &
          "nothing is done")
+  m.beginRefused(opcode)
 
 proc statusByte(m: ISP1181; index: int): uint8 =
   ## The DcEndpointStatus register as far as this model carries it: EPSTAL
@@ -571,9 +935,19 @@ proc statusByte(m: ISP1181; index: int): uint8 =
   ## integrates the ISP1181B and the ISP1181B document was not retrieved - and
   ## it is not a reading of firmware behaviour.
   ##
-  ## DATA_PID, OVERWRITE and CPUBUF still read zero and the model does not
-  ## track them. That gap is stated in the module head rather than on every
-  ## read, because a note per read would bury the notes that mark a refusal.
+  ## DATA_PID, OVERWRITE and CPUBUF read zero and the model does not track
+  ## them. Neither DATA_PID nor CPUBUF follows the pending count, so a buffer
+  ## holding a packet must leave both clear. Table 127 gives bit 4 as
+  ## "DATA_PID   This bit indicates data PID of the next packet (0 = DATA PID;
+  ## 1 = DATA1 PID)" - the data toggle the next transaction will carry, not a
+  ## report that the buffer has data - and bit 1 as "CPUBUF   This bit
+  ## indicates which buffer is currently selected for the CPU access
+  ## (0 = primary buffer; 1 = secondary buffer)" - which of a double-buffered
+  ## pair the CPU window is aimed at, not whether the CPU may read. Deriving
+  ## either from the pending count would report a toggle the model never
+  ## tracked and a secondary buffer it does not have. The gap is stated in the
+  ## module head rather than on every read, because a note per read would bury
+  ## the notes that mark a refusal.
   let pending = m.fifos[index].pending
   result = 0'u8
   if m.stalled[index]:
@@ -581,9 +955,9 @@ proc statusByte(m: ISP1181; index: int): uint8 =
   if pending >= 2:
     result = result or 0x40'u8
   if pending >= 1:
-    result = result or 0x20'u8
+    result = result or 0x20'u8  # EPFULL0
   if index == outFifoOfEndpoint0 and m.setupHeld:
-    result = result or 0x04'u8
+    result = result or 0x04'u8  # SETUPT
 
 proc beginBufferRead(m: ISP1181; opcode: uint8; index: int) =
   ## The packet is not consumed. The authority's OUT sequence is Read Buffer
@@ -620,8 +994,11 @@ proc beginBufferWrite(m: ISP1181; opcode: uint8; index: int) =
   m.width = lengthPrefixBytes + m.fifos[index].capacity
   m.index = 0
 
-proc commitValidate(m: ISP1181; index: int) =
-  ## Validate: the staged bytes become a packet the host can collect.
+proc commitValidate(m: ISP1181; endpoint: int; index: int) =
+  ## Validate: the staged bytes become a packet the host can collect. The
+  ## endpoint is a parameter and not the literal `0`: every family that reaches
+  ## here has an endpoint form, and a literal would queue all of them on
+  ## endpoint 0.
   if m.stageFifo != index:
     m.note("isp1181: a validate for " & fifoNames[index] &
            " found no buffer write staged for it; nothing is validated")
@@ -648,7 +1025,7 @@ proc commitValidate(m: ISP1181; index: int) =
            $declared & " byte" & (if declared == 1: "" else: "s") & " and " &
            $payload.len & " followed; nothing is validated")
     return
-  discard m.queueIn(0, payload)
+  discard m.queueIn(endpoint, payload)
 
 proc beginTransfer(m: ISP1181; opcode: uint8; kind: Transfer; width: int;
                    value: uint32) =
@@ -660,17 +1037,19 @@ proc beginTransfer(m: ISP1181; opcode: uint8; kind: Transfer; width: int;
 
 proc writeCommand(m: ISP1181; opcode: uint8) =
   let command = classify(opcode)
-  # Both refusals below return without touching `pending`, `transfer`, `width`
-  # or `index`, so a transfer already in progress survives the refusal. That
-  # sequencing is this file's choice where the authority is silent.
+  # Every refusal below abandons the transfer in progress. `beginRefused` gives
+  # the two sentences of the document that put the command phase's latch before
+  # the decode.
   case command.class
   of ccNotImplemented:
     m.note("isp1181: command 0x" & toHex(opcode) & " (" & command.name &
            ") is not implemented; the read answers 0x00")
+    m.beginRefused(opcode)
     return
   of ccUnspecified:
     m.note("isp1181: command 0x" & toHex(opcode) &
            " is not in the specified command set; the read answers 0x00")
+    m.beginRefused(opcode)
     return
   of ccIllegal:
     # The authority parenthesises these four and forbids them. Two of the four
@@ -679,19 +1058,32 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
     # would tell the firmware the command exists.
     m.note("isp1181: command 0x" & toHex(opcode) & " (" & command.name &
            ") is illegal - " & command.detail & "; nothing is done")
+    m.beginRefused(opcode)
     return
   of ccImplemented:
     discard
 
   block dataFlow:
-    let readIndex = m.outFifoOf(opcode, bufferReadControlOut,
-                                bufferReadEndpointBase)
-    if readIndex >= 0:
+    # Each endpoint-addressing family decodes an endpoint, checks the direction
+    # that endpoint's buffer faces, and then acts. `directionRefused` states
+    # what the check is for.
+    let readEndpoint = endpointOfOpcode(opcode, bufferReadControlOut,
+                                        bufferReadEndpointBase)
+    if readEndpoint >= 0:
+      let readIndex = bufferOfEndpoint(readEndpoint, bdOut)
+      if m.directionRefused(opcode, command.name, readEndpoint, readIndex,
+                            bdOut):
+        return
       m.beginBufferRead(opcode, readIndex)
       return
 
-    let clearIndex = m.outFifoOf(opcode, clearControlOut, clearEndpointBase)
-    if clearIndex >= 0:
+    let clearEndpoint = endpointOfOpcode(opcode, clearControlOut,
+                                         clearEndpointBase)
+    if clearEndpoint >= 0:
+      let clearIndex = bufferOfEndpoint(clearEndpoint, bdOut)
+      if m.directionRefused(opcode, command.name, clearEndpoint, clearIndex,
+                            bdOut):
+        return
       if clearIndex == outFifoOfEndpoint0 and m.setupUnacknowledged:
         m.noteInterlock(opcode, command.name)
         return
@@ -709,20 +1101,34 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
       m.beginTransfer(opcode, tfNone, 0, 0)
       return
 
-    if opcode == bufferWriteControlIn:
-      m.beginBufferWrite(opcode, inFifoOfEndpoint0)
-      return
-    if opcode == validateControlIn:
-      if m.setupUnacknowledged:
-        m.noteInterlock(opcode, command.name)
+    let writeEndpoint = endpointOfOpcode(opcode, bufferWriteControlIn,
+                                         bufferWriteEndpointBase)
+    if writeEndpoint >= 0:
+      let writeIndex = bufferOfEndpoint(writeEndpoint, bdIn)
+      if m.directionRefused(opcode, command.name, writeEndpoint, writeIndex,
+                            bdIn):
         return
-      m.commitValidate(inFifoOfEndpoint0)
-      m.beginTransfer(opcode, tfNone, 0, 0)
+      m.beginBufferWrite(opcode, writeIndex)
       return
 
-    # The IN half for endpoints 1 to 3 never reaches here. `commands.nim`
-    # classifies it `ccNotImplemented`, because this model carries no IN buffer
-    # on those endpoints, and the class arm above has already refused it.
+    let validateEndpoint = endpointOfOpcode(opcode, validateControlIn,
+                                            validateEndpointBase)
+    if validateEndpoint >= 0:
+      let validateIndex = bufferOfEndpoint(validateEndpoint, bdIn)
+      if m.directionRefused(opcode, command.name, validateEndpoint,
+                            validateIndex, bdIn):
+        return
+      # The interlock is the control endpoint's alone and is scoped to it.
+      # ISP1362 Rev. 06 section 12.3.6 p.53 disables Validate Buffer and Clear
+      # Buffer "for the control IN and OUT endpoints" on the arrival of a set-up
+      # packet, and names no other endpoint. An unscoped test of the flag would
+      # stop endpoints 1 to 3 for a reason that belongs to endpoint 0.
+      if validateIndex == inFifoOfEndpoint0 and m.setupUnacknowledged:
+        m.noteInterlock(opcode, command.name)
+        return
+      m.commitValidate(validateEndpoint, validateIndex)
+      m.beginTransfer(opcode, tfNone, 0, 0)
+      return
 
   block stallFamily:
     for (base, want) in [(stallControlOut, true), (unstallControlOut, false)]:
@@ -748,9 +1154,10 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
 
   if opcode >= epConfigBase and
       int(opcode) - int(epConfigBase) < m.endpointConfig.len:
-    # The slot index is the buffer index. `endpointConfig` states where that
-    # comes from; accepting exactly the slots this model carries a byte for is
-    # what keeps the two in step, and `classify` refuses the rest by name.
+    # The slot index is the buffer index where a buffer exists. `endpointConfig`
+    # and `configSlotCount` state where the ordering comes from; a slot at or
+    # above `fifoCount` still has a register byte and no buffer, and `peek` is
+    # the one reader that has to tell the two apart.
     m.selected = int(opcode) - int(epConfigBase)
     m.beginTransfer(opcode, tfWrite, 1, 0)
     return
@@ -775,6 +1182,15 @@ proc writeCommand(m: ISP1181; opcode: uint8) =
     # used as one: it is the slot the configuration command carried, and
     # section 15.1.1's slot ordering is `fifos`' own.
     let index = m.selected
+    if index >= fifoCount:
+      # The selected slot has no buffer. The peek promises a byte from a buffer
+      # and there is none to promise it from, which is the `tfAbsent` case and
+      # not a different one: the command is legal and its answer does not exist.
+      m.absentNote = "isp1181: peek follows the configuration of slot " &
+        $index & ", which this model carries no buffer for; the read answers " &
+        "0x00"
+      m.beginTransfer(opcode, tfAbsent, 1, 0)
+      return
     let head = m.fifos[index].peek()
     if head.ok:
       m.beginTransfer(opcode, tfRead, 1, uint32(head.value))
@@ -804,7 +1220,23 @@ proc commitOperand(m: ISP1181) =
   else:
     if m.pending >= int(epConfigBase) and
         m.pending - int(epConfigBase) < m.endpointConfig.len:
-      m.endpointConfig[m.pending - int(epConfigBase)] = uint8(m.latch)
+      let slot = m.pending - int(epConfigBase)
+      m.endpointConfig[slot] = uint8(m.latch)
+      # The accepted write leaves no log line, so the register file is the only
+      # record of it and has to carry its own "this happened" and its own place
+      # in the sequence.
+      m.configWritten[slot] = true
+      inc m.events
+      m.configOrdinal[slot] = m.events
+      # A slot the firmware enables and this model has no buffer memory for is
+      # the part of the configuration the model cannot honour; a slot the
+      # firmware disables is honoured exactly by having no buffer, and writes
+      # nothing.
+      if slot >= fifoCount and (uint8(m.latch) and fifoEnableBit) != 0:
+        m.note("isp1181: configuration slot " & $slot & " was enabled with 0x" &
+               toHex(uint8(m.latch)) &
+               " and this model carries no buffer for it; the register is " &
+               "recorded and no buffer memory is allocated")
 
 proc writeData(m: ISP1181; value: uint8) =
   if m.transfer == tfBufferWrite:
@@ -815,6 +1247,11 @@ proc writeData(m: ISP1181; value: uint8) =
              " bytes and a further one was written; the byte is discarded")
       return
     m.stage.add(value)
+    return
+  if m.transfer == tfRefused:
+    m.note("isp1181: command 0x" & toHex(uint8(m.pending)) & " (" &
+           refusedName(m.pending) &
+           ") was refused and takes no operand; the byte is discarded")
     return
   if m.transfer != tfWrite:
     m.note("isp1181: a data port write of 0x" & toHex(value) &
@@ -838,6 +1275,10 @@ proc readData(m: ISP1181): uint8 =
   if m.transfer == tfAbsent and m.index < m.width:
     m.note(m.absentNote)
     inc m.index
+    return benignValue
+  if m.transfer == tfRefused:
+    m.note("isp1181: command 0x" & toHex(uint8(m.pending)) & " (" &
+           refusedName(m.pending) & ") was refused; the read answers 0x00")
     return benignValue
   if m.transfer notin {tfRead, tfAbsent, tfBufferRead}:
     m.note("isp1181: a data port read arrived with no command pending; the " &

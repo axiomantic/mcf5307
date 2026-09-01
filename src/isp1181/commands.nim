@@ -1,16 +1,16 @@
 ## The ISP1181 command set, as a total classification of the command byte.
 ##
-## The classification is total and has three classes, not two. The authority
+## The classification is total: every command byte gets a class. The authority
 ## gives a list of commands the model needs and a list it does not, and between
 ## them those two lists leave most of the command byte's range unnamed. A model
-## with two classes has to put the rest somewhere, and either choice is wrong in
-## a way that is hard to see later: called implemented, they answer plausibly;
-## called not-implemented, a real gap in the specification is reported as a
-## decision somebody took.
+## with only those two classes has to put the rest somewhere, and either choice
+## is wrong in a way that is hard to see later: called implemented, they answer
+## plausibly; called not-implemented, a real gap in the specification is
+## reported as a decision somebody took.
 ##
-## The six data-flow commands - buffer write, buffer read, stall, status,
-## validate and clear - are numbered here from Table 109 of the ISP1362 data
-## sheet, Rev. 06. That document states that it integrates the ISP1181B
+## The data-flow commands - buffer write, buffer read, stall, status, validate
+## and clear - are numbered here from Table 109 of the ISP1362 data sheet,
+## Rev. 06. That document states that it integrates the ISP1181B
 ## peripheral controller, which is a claim of integration and not a statement
 ## that the two command maps are byte-identical, and the ISP1181B data sheet
 ## itself was not read. Every opcode below is therefore inherited rather than
@@ -22,14 +22,11 @@
 ## The general commands - error code, unlock, scratch - are numbered by Table
 ## 109 and not adopted here: adopting a family nothing drives would be
 ## inheritance without a consumer.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Nothing here
-## is copied from a Philips or NXP document.
 
 type
   CommandClass* = enum
     ## `ccUnspecified` is the class of every command byte the authority does not
-    ## number, and it is the default: a byte enters the other two classes only by
+    ## number, and it is the default: a byte enters another class only by
     ## appearing in a table below.
     ccUnspecified
     ccImplemented
@@ -60,9 +57,8 @@ const modelEndpoints = 4
 
 type Family = object
   ## One command family whose sixteen codes address the sixteen endpoint
-  ## buffers in order, as the three pieces every such row has: where the family
-  ## starts, which byte (if any) the authority parenthesises as illegal, and
-  ## what to call it.
+  ## buffers in order: where the family starts, which byte (if any) the
+  ## authority parenthesises as illegal, and what to call it.
   ##
   ## The ordering is the same for every family. ISP1362 Rev. 06 section 15.1.1
   ## states the endpoint-configuration codes as "20 to 2F - write (control OUT,
@@ -76,22 +72,21 @@ type Family = object
   illegalOpcode: int   ## the parenthesised byte, or -1 when the family has none
   illegalName: string
   illegalDetail: string
-  inOnly: bool
-    ## THE FAMILY ADDRESSES AN IN BUFFER. This model gives endpoint 0 an OUT
-    ## buffer and an IN buffer and gives endpoints 1 to 3 ONE buffer each, whose
-    ## direction the EPDIR bit of DcEndpointConfiguration selects at run time.
-    ## An IN-only family is implemented for the control endpoint and not for the
-    ## rest: whether one of those buffers faces IN is a property of the
-    ## configuration the firmware wrote, and a classification is a property of
-    ## the opcode alone, so the class cannot depend on it. They are
-    ## `ccNotImplemented` and not `ccImplemented`, and the model's own refusal
-    ## names the configured direction when the firmware drives one.
+  allEndpoints: bool
+    ## The family is implemented for every endpoint the authority numbers and
+    ## not only for the ones this model buffers. It is true for the family
+    ## whose target is a register the part carries for all sixteen slots and
+    ## false for one whose target is buffer memory. ISP1362 Rev. 06 section
+    ## 15.1.1 p.107 states that the buffer memory "takes place only after all
+    ## 16 endpoints have been configured in sequence (from endpoint 0 OUT to
+    ## endpoint 14)", so a device that refused one of those slots could not
+    ## complete the sequence the same section requires of the firmware.
 
 const families: array[8, Family] = [
   Family(controlOut: -1, controlIn: 0x01, endpointBase: 0x02,
          noun: "buffer write", illegalOpcode: 0x00,
          illegalName: "write control OUT buffer",
-         illegalDetail: "the endpoint is read-only", inOnly: true),
+         illegalDetail: "the endpoint is read-only"),
   Family(controlOut: 0x10, controlIn: -1, endpointBase: 0x12,
          noun: "buffer read", illegalOpcode: 0x11,
          illegalName: "read control IN buffer",
@@ -103,8 +98,7 @@ const families: array[8, Family] = [
   Family(controlOut: -1, controlIn: 0x61, endpointBase: 0x62,
          noun: "buffer validate", illegalOpcode: 0x60,
          illegalName: "validate control OUT buffer",
-         illegalDetail: "validating an OUT buffer is unpredictable",
-         inOnly: true),
+         illegalDetail: "validating an OUT buffer is unpredictable"),
   Family(controlOut: 0x70, controlIn: -1, endpointBase: 0x72,
          noun: "buffer clear", illegalOpcode: 0x71,
          illegalName: "clear control IN buffer",
@@ -118,12 +112,35 @@ const families: array[8, Family] = [
   # integrate the ISP1181B.
   Family(controlOut: 0x20, controlIn: 0x21, endpointBase: 0x22,
          noun: "configuration", illegalOpcode: -1, illegalName: "",
-         illegalDetail: "")]
+         illegalDetail: "", allEndpoints: true)]
 
 proc classifyFamily(opcode: int): (bool, Command) =
   ## The data-flow families of Table 109. `false` means no family claims the
   ## byte, which is not the same as the byte being unspecified: the caller
   ## still has the register families and the general commands to try.
+  ##
+  ## A class answers "is there a buffer behind this opcode", and never "which
+  ## way is it facing". A class is a property of the opcode, and
+  ## `modelEndpoints` - the buffer memory this model carries - is a property of
+  ## the opcode too, so the class may depend on it. EPDIR is not: it is a bit
+  ## the firmware writes and rewrites at run time, and a classification that
+  ## moved with it would answer a different thing at two instants.
+  ##
+  ## The authority puts the direction in the same place. ISP1362 Rev. 06
+  ## Table 109 p.105-106 numbers `02` to `0F` and `62` to `6F` for endpoints 1
+  ## to 14 with no configuration attached to the code, and annotates the
+  ## destination "(IN endpoints only)". What happens when the direction is wrong
+  ## is stated as behaviour and not as a missing code: section 15.2.1 p.114
+  ## remarks that "There is no protection against ... writing into an OUT buffer
+  ## or reading from an IN buffer. Any of these actions can cause an incorrect
+  ## operation", and Table 109 note [4] p.106 gives validating an OUT endpoint
+  ## buffer as "unpredictable behavior". So the direction is a run-time
+  ## precondition of the command, and `src/isp1181/isp1181.nim` refuses it there
+  ## by name.
+  ##
+  ## `ccIllegal` is still reserved for the bytes the authority parenthesises -
+  ## `00`, `11`, `60` and `71`. Those are forbidden by the code, whatever any
+  ## register says, and none of `02` to `0F` or `62` to `6F` is parenthesised.
   for family in families:
     if family.illegalOpcode == opcode:
       return (true, Command(class: ccIllegal, name: family.illegalName,
@@ -137,14 +154,13 @@ proc classifyFamily(opcode: int): (bool, Command) =
     if opcode >= family.endpointBase and opcode < family.endpointBase + 14:
       let endpoint = opcode - family.endpointBase + 1
       let name = "endpoint " & $endpoint & " " & family.noun
-      if endpoint < modelEndpoints and not family.inOnly:
+      if family.allEndpoints or endpoint < modelEndpoints:
         return (true, Command(class: ccImplemented, name: name))
       return (true, Command(class: ccNotImplemented, name: name))
   (false, Command(class: ccUnspecified, name: ""))
 
 proc classify*(opcode: uint8): Command =
-  ## The class and the name of one command byte. THE ONLY PLACE EITHER LIST IS
-  ## WRITTEN DOWN.
+  ## The class and the name of one command byte.
   let (claimed, dataFlow) = classifyFamily(int(opcode))
   if claimed:
     return dataFlow

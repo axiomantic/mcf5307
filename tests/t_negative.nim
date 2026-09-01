@@ -1,4 +1,4 @@
-## `t_negative` - the negative corpus. Encodings the core must REFUSE, and the
+## `t_negative` - the negative corpus. Encodings the core must refuse, and the
 ## legal neighbours it must still execute.
 ##
 ## The expected values are not transcribed. Each
@@ -9,8 +9,6 @@
 ## and every neighbour is accepted for `-mcpu=5307`. The partition is the
 ## assembler's and not this project's, which is what keeps the corpus from
 ## being a transcription of a belief about the part.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import std/json
 import std/strutils

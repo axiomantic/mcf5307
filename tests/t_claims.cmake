@@ -298,14 +298,11 @@ set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_FILE "mcf5307/irq.nim")
 set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_FIND "  ctx.irqAutovector = autovector != 0\n")
 set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_REPLACE "  ctx.irqAutovector = autovector != 0\n  ctx.irq7Vector = vector\n")
 
-# --- THE INTERRUPT MODEL'S OWN TWO FIXES, WHICH WENT UNREGISTERED ----------
-# The pass that made `mcf5307_reset` acquire its own interrupt inhibition and
-# re-observe the level-7 pin registered NEITHER of them. Both carry sentences
-# naming a hypothetical wrong core - the marker this project treats as a claim
-# about COVERAGE - and both rested on a count in prose. `t_irq`'s block 19 had
-# already written the rule those two entries needed: "A date alone would go
-# stale the moment this block was weakened - the entry reds instead." It was
-# applied to the older claims and not to the new ones.
+# --- The interrupt model's fixes -------------------------------------------
+# A sentence naming a hypothetical wrong core is a claim about coverage, and a
+# claim about coverage rests on an entry here rather than on a count in prose:
+# a date alone goes stale the moment the block is weakened, whereas the entry
+# reds.
 #
 # Every count below is measured by applying the mutation to a copy of `src/`
 # and running the suite, against a no-op control on the same harness.
@@ -313,29 +310,21 @@ set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_REPLACE "  ctx.irqAutovector = au
 # The deferred write fault. `src/mcf5307/writeMem` records an access error on a
 # store and `cpu.nim`'s `step` takes the vector at the instruction boundary,
 # because User's Manual section 3.5.1, printed page 3-15, requires the faulting
-# instruction's programming-model updates to complete first. THE MUTATION PUTS
-# THE TAKE BACK AT THE STORE, which is where it was before that reading, and it
-# is two edits because the procedure it calls is defined further down the file
-# and needs its forward declaration back.
+# instruction's programming-model updates to complete first. The mutation puts
+# the take back at the store, and it is two edits because the procedure it
+# calls is defined further down the file and needs its forward declaration
+# back.
 #
-# WHY FOUR ENTRIES AND NOT TWO. The reset does two separable things and the
-# second is itself two halves, and a count is only evidence about the half it
-# moves with. Deleting the whole `resetInterruptEdge` call, keeping the clear
-# without the re-presentation, and keeping the re-presentation without the
-# clear are three different wrong cores with three different signatures - 3, 3
-# and 1 - and the two that agree on 3 fail DIFFERENT cases. A single entry
-# would have been satisfied by any core that moved the total to the registered
-# number, which is the shape of measurement this file exists to refuse.
+# The reset does two separable things and the second is itself two halves, and
+# a red count is only evidence about the half it moves with. Each separable
+# change therefore gets its own entry: a single entry would be satisfied by any
+# core that moved the total to the registered number, which is the shape of
+# measurement this file exists to refuse.
 #
-# EVERY COUNT BELOW WAS MEASURED AGAINST THIS TREE by applying
-# the mutation to a copy of `src/` and running the suite, with a no-op control
-# on the same harness reporting 36 passed and 0 red.
-
-# FOUR RED IS THE WHOLE OF THE CLAIM AND THE TWO GREENS ARE HALF OF IT. A
-# mutation that reddened BLOCK 5 as well would mean the deferral had changed
-# what the frame CONTAINS and not only when it is written, and a mutation that
-# reddened PEA would mean the repair had reached an instruction that was
-# already correct.
+# Which cases stay green is half of the claim. A mutation that also reddened
+# the frame-content block would mean the deferral had changed what the frame
+# contains and not only when it is written, and a mutation that reddened PEA
+# would mean the repair had reached an instruction that was already correct.
 
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_KIND "suite-red")
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_SUITE "t_bus_fault")

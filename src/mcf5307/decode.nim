@@ -169,14 +169,14 @@ proc decodeShift(word: uint16): Decoded =
                 else: countField))
 
 proc decodeBitOp(word: uint16): Decoded =
-  ## The four bit operations, in both of their forms. Bits 7..6 select the
+  ## The bit operations, in both of their forms. Bits 7..6 select the
   ## operation - 00 BTST, 01 BCHG, 10 BCLR, 11 BSET - and bit 8 selects the
   ## form: 1 is dynamic, whose bit number is in the data register named by
   ## bits 11..9, and 0 is static, whose bit number is the extension word after
   ## the opcode. The caller has already established that this is a bit
   ## operation.
   ##
-  ## THE OPERAND SIZE IS DECIDED BY THE OPERAND. A data register is 32 bits
+  ## The operand size is decided by the operand. A data register is 32 bits
   ## wide and every memory operand is 8. The bit number is taken
   ## modulo that width by the executor.
   let operand = decodeEa(word)
@@ -461,16 +461,15 @@ proc decodeWord*(word: uint16): Decoded =
   elif word == 0x4E73'u16:
     return Decoded(op: opRte)
   elif word == 0x4E7B'u16:
-    # MOVEC.L Ry,Rc. The register numbers are in a SECOND word, which
+    # MOVEC.L Ry,Rc. The register numbers are in a second word, which
     # `movec.nim` reads and this module does not fetch.
     #
-    # THE TEST IS AN EQUALITY AND NOT A MASK, WHICH IS WHY IT CAN SIT HERE
-    # BESIDE `RTS` AND `RTE` RATHER THAN AHEAD OF THE JMP AND JSR ARMS ABOVE.
-    # Line 4 is dense: `0x4E7A` is MOVEC-FROM-control-register, which is a
-    # 68000 instruction that this part does not have, and a mask over
-    # `0x4E78`-`0x4E7F` would claim it.
+    # The test is an equality and not a mask, which is why it can sit here
+    # beside RTS and RTE rather than ahead of the JMP and JSR arms above:
+    # `0x4E7A` is MOVEC-from-control-register, a 68000 instruction that this
+    # part does not have, and a mask over `0x4E78`-`0x4E7F` would claim it.
     #
-    # `size: 4` IS THE INSTRUCTION'S OWN AND NOT AN OPERAND'S: the transfer is
+    # `size: 4` is the instruction's own and not an operand's: the transfer is
     # always 32 bits even though a control register may be implemented with
     # fewer.
     return Decoded(op: opMovec, size: 4'u8)

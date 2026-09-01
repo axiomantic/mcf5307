@@ -189,8 +189,8 @@ DIRTY_A = 0x0BADC0DE   # the address-register destination seed
 # `MEM_BASE` is clear of the encoding (the runner places that at 0x10000) and
 # inside the runner's 1 MiB board.
 #
-# The four seed bytes all differ, and neither pair is symmetric. A byte case
-# names `MEM_BASE` and asserts the other three bytes are unchanged, so a write
+# The seed bytes all differ, and neither pair is symmetric. A byte case
+# names `MEM_BASE` and asserts the remaining bytes are unchanged, so a write
 # that was one byte too wide, or that landed on the wrong end of the longword,
 # changes a byte the case names. A repeating seed would survive both.
 #
@@ -199,9 +199,9 @@ DIRTY_A = 0x0BADC0DE   # the address-register destination seed
 # clear: `btst #1,(%a0)` therefore answers differently under the byte rule and
 # under a longword rule, and the case separates them. 0xC1 at the far end has
 # bit 1 clear too, so a core that read the wrong end of the longword also
-# answers differently. THE BIT NUMBER IS INSIDE A BYTE, so the separation is
-# of the ACCESS WIDTH alone and does not depend on how an out-of-range bit
-# number is reduced - see uncertainty 4 in `logic.nim`'s header.
+# answers differently. The bit number is inside a byte, so the separation is of
+# the access width alone and does not depend on how an out-of-range bit number
+# is reduced - see uncertainty 4 in `logic.nim`'s header.
 MEM_BASE = 0x2000
 MEM_SEED_BYTES = (0x02, 0x5A, 0x3C, 0xC1)
 MEM_GUARD = 0x0BADC0DE   # the longword after a longword memory destination
@@ -1549,7 +1549,7 @@ CASES = {
         # ----------------------------------------------------------- BTST
         #
         # A bit operation on a data register is 32 bits wide and one on memory
-        # is 8. That is the OPERAND SIZE column of MCF5307 User's Manual
+        # is 8. That is the operand size column of MCF5307 User's Manual
         # Table 3-7, which reads "8,32" for BTST, BSET, BCLR and BCHG and for
         # no other instruction in this group. The two cases that pin it are
         # `btst_l_bit_number_above_a_byte` and
@@ -1557,11 +1557,11 @@ CASES = {
         # whose answer under the other width is the opposite, so neither can
         # pass against a core that applies the wrong one.
         #
-        # NEITHER CASE USES A BIT NUMBER ITS OPERAND CANNOT HOLD, AND THAT IS
-        # DELIBERATE. `logic.nim` reduces an out-of-range bit number modulo
-        # the operand width, and NO PASSAGE OF THE REFERENCE STATES ANY
-        # MODULUS - see uncertainty 4 in that module's header, which also says
-        # why Figure 3-8's `MODULO (OFFSET)` annotation does not settle it.
+        # Neither case uses a bit number its operand cannot hold, and that is
+        # deliberate. `logic.nim` reduces an out-of-range bit number modulo the
+        # operand width, and no passage of the reference states any modulus -
+        # see uncertainty 4 in that module's header, which also says why
+        # Figure 3-8's `MODULO (OFFSET)` annotation does not settle it.
         # That reduction is this core's choice, and the corpus must not pin a
         # choice no document supports. The two cases below get the same
         # discrimination out of in-range numbers:
@@ -2037,7 +2037,7 @@ CASES = {
     #
     #   RTE
     #       The status register is reloaded from the frame, not computed. Every
-    #       RTE case below therefore starts from a DIFFERENT word than the one
+    #       RTE case below therefore starts from a different word than the one
     #       it expects, so "the core reloaded it" is separable from "the core
     #       left it alone".
     #
@@ -2045,29 +2045,21 @@ CASES = {
     #       The reference: "the
     #       processor makes an internal copy of the SR and then enters
     #       supervisor mode by setting the S-bit and disabling trace mode by
-    #       clearing the T-bit". The COPY is what reaches the stack frame and
-    #       the MODIFIED word is what the handler runs under.
+    #       clearing the T-bit". The copy is what reaches the stack frame and
+    #       the modified word is what the handler runs under.
     "control": [
         {
-            # `nop` NOW NAMES `sr`, AND THE REASON IT DID NOT IS GONE.
-            #
-            # It used to name no register at all - not even `sr` - because the
-            # runner judged a register-less case by its cycle return and applied
-            # that judgement ONLY when `expected.regs` was empty. Naming `sr`
-            # therefore REMOVED the case's only assertion instead of adding one:
-            # an `sr` expectation of "unchanged" is satisfied by a NOP that never
-            # executed, since an instruction that never ran changes nothing.
-            #
-            # `conformance/runner.cpp` no longer works that way. It asserts
+            # An `sr` expectation of "unchanged" is satisfied by a NOP that
+            # never executed, so it carries no assertion of its own.
+            # `conformance/runner.cpp` supplies the missing one: it asserts
             # `mcf5307_faulted`, then `mcf5307_halted`, then a non-zero cycle
-            # return, for EVERY case and before it compares one register.
-            # Measured on the mutation "the encoding word is 0000 instead of
-            # 4e71" - a NOP that is not there - the old runner passed the case
-            # with `sr` named and this one reports the trap.
+            # return, before it compares one register. Measured on the mutation
+            # "the encoding word is 0000 instead of 4e71" - a NOP that is not
+            # there - the runner reports the trap.
             #
-            # IT NOW NAMES `pc` TOO, which is the assertion that separates a NOP
-            # from every other one-word instruction in this group: the program
-            # counter advances by exactly one word and by nothing else.
+            # `pc` separates a NOP from every other one-word instruction in this
+            # group: the program counter advances by exactly one word and by
+            # nothing else.
             "name": "nop",
             "mnemonic": "nop",
             "instruction": "nop",

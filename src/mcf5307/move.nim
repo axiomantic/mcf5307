@@ -126,16 +126,18 @@ proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ##   therefore 68000 semantics" does not follow in general - and it is not
   ##   what pins these flags. Section 3.2.1.5 is.
   ##
-  ## What remains unpinned is the width. Section 3.2.1.5 says
-  ## "the result" and never says how wide that result is, and Table 3-7's
-  ## operand size column for SWAP says 16. A reader who reads "the result" as
-  ## the 16-bit half takes N from bit 15 and Z from the low half. This core
-  ## reads it as the whole 32-bit register, because the register is what the
-  ## instruction writes - the size argument is 4 and not 2 for exactly that
-  ## reason. The ambiguity is why `tests/t_move.nim` carries an N-separator
-  ## case on each side of it, `0x0000FFFF` and `0xFFFF0000`, the two shapes
-  ## whose halves disagree in their top bit. The CFPRM would close the width
-  ## question outright.
+  ## The width is settled, and the User's Manual alone did not settle it:
+  ## section 3.2.1.5 says only "the result" and Table 3-7's operand-size column
+  ## for SWAP says 16, which reads as the low half. CFPRM folio 4-81 gives the
+  ## operation as `Register[31:16] <-> Register[15:0]` and N as "Set if the msb
+  ## of the result is set", Z as "Set if the result is zero". The result of
+  ## that operation is the whole register, so N is bit 31 and Z spans all 32
+  ## bits - which is the size argument of 4 below, not 2.
+  ##
+  ## `tests/t_move.nim` keeps an N-separator case on each side of the reading
+  ## that was ambiguous, `0x0000FFFF` and `0xFFFF0000`, whose halves disagree
+  ## in their top bit, so a core that took N from bit 15 goes red here rather
+  ## than merely disagreeing with this note.
   let v = regD(ctx, d.destReg)
   let swapped = (v shr 16'u32) or (v shl 16'u32)
   setRegD(ctx, d.destReg, swapped)
@@ -266,4 +268,11 @@ proc moveFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   of opUnlk:
     result = execUnlk(ctx, d)
   else:
-    discard
+    # Unreachable from `cpu.nim`, which routes exact opcodes. It refuses rather
+    # than returning 0 because returning 0 costs nothing and halts nothing: the
+    # program counter would advance past an instruction that never executed and
+    # the core would run on into whatever followed. Refusing is the same
+    # observable `aluFamily` gives an opcode it does not carry.
+    ctx.fault = true
+    ctx.halted = true
+    result = 0'u32

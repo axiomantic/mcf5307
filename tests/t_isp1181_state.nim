@@ -1,6 +1,4 @@
 ## `t_isp1181_state` - the SOF tick and the ISP1181 state block.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import std/algorithm
 import std/strutils
@@ -57,10 +55,10 @@ proc fresh(): ISP1181Ctx =
 const frameModulus = 2048
 
 # ---------------------------------------------------------------------------
-# BLOCK 1. The tick advances the USB frame counter.
+# Block 1. The tick advances the USB frame counter.
 #
-# THE COUNTER'S NO-OP VALUE IS ZERO, WHICH IS WHY A FIRST-MISMATCH ASSERTION IS
-# NOT ENOUGH ON ITS OWN. A tick that never advanced reads 0, and so does one
+# The counter's no-op value is zero, which is why a first-mismatch assertion is
+# not enough on its own. A tick that never advanced reads 0, and so does one
 # that completed a full cycle.
 
 type FrameWalk = tuple[start: uint16, firstMismatch: string, ticks: int,
@@ -183,7 +181,7 @@ check(nilTick == wantNilTick,
       $nilTick, $wantNilTick)
 
 # ---------------------------------------------------------------------------
-# BLOCK 2. The block's size and its layout.
+# Block 2. The block's size and its layout.
 
 const headerBytes = 12
 const checksumBytes = 4
@@ -202,7 +200,7 @@ check(layoutSeen == wantLayout,
       $layoutSeen, $wantLayout)
 
 # ---------------------------------------------------------------------------
-# BLOCK 3. The bytes the save writes.
+# Block 3. The bytes the save writes.
 
 proc blockHex(buf: openArray[uint8]): string =
   var parts: seq[string]
@@ -313,7 +311,7 @@ check(tripsOutcome == wantTrips,
       $tripsOutcome, $wantTrips)
 
 # ---------------------------------------------------------------------------
-# BLOCK 5. A perturbed block is refused BY NAME and changes nothing.
+# Block 5. A perturbed block is refused by name and changes nothing.
 
 type Perturbation = tuple[tried: int, accepted: int, touched: int,
                           statuses: string]
@@ -358,7 +356,7 @@ check(perturbation == wantPerturbation,
         "name and leaves the handle exactly as it was",
       $perturbation, $wantPerturbation)
 
-# THE C ENTRY POINT DROPS THE NAME AND MUST STILL REFUSE. A `void` signature
+# The C entry point drops the name and must still refuse. A `void` signature
 # leaves a C caller with the state it already had, which is only true if the
 # refusal precedes the decode.
 type CRefusal = tuple[backend: string, counter: uint16]
@@ -436,7 +434,7 @@ check(badBackend == wantBadBackend,
       $badBackend, $wantBadBackend)
 
 # ---------------------------------------------------------------------------
-# BLOCK 6. Nil arguments are answered and are not aborts.
+# Block 6. Nil arguments are answered and are not aborts.
 
 type NilState = tuple[size: int, nilCtxStatus: string, nilSrcStatus: string,
                       irq: int, tx: int]

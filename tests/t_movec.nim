@@ -1,8 +1,5 @@
 ## `t_movec` - the `MOVEC` encoding and the control-register map of
 ## `mcf5307/movec`.
-##
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import mcf5307/movec
 import mcf5307/machine
@@ -261,9 +258,11 @@ proc ranAndConsumedBothWords(o: Outcome): auto =
 const accepted = (ran: true, fault: false, halted: false,
                   pc: execBase + 4'u32, d0: dirtyD, a0: dirtyA,
                   sr: srSuper, a7: stackBase)
-  ## Nothing architectural changes. The control registers this part carries are
-  ## not modelled by this core, so an accepted `MOVEC` advances the program
-  ## counter and touches no register the ABI can read.
+  ## The fields an accepted `MOVEC` leaves alone, plus the program counter it
+  ## advances by both words. The control register it writes is deliberately not
+  ## here: the `landed` cases below assert that register per destination, and
+  ## against the whole control file so a write that lands in the wrong slot
+  ## fails.
 
 # The numbers the firmware writes, plus ACR1, each driven as a whole instruction
 # rather than as a bare register number. The pair of lists is the point: the
@@ -292,8 +291,8 @@ check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0C0F'u16], srSuper)),
 check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x8C04'u16], srSuper)),
     accepted, "movec %a0,RAMBAR0 (0xC04) executes with A/D set")
 
-# A NUMBER THIS PART DOES NOT CARRY HALTS THE CORE, AND IT HALTS WITHOUT A
-# FAULT. An access to unimplemented control register space produces undefined
+# A control-register number this part does not carry halts the core, and it
+# halts without a fault. An access to unimplemented control register space produces undefined
 # results, so the encoding is a valid `MOVEC` with only the destination absent
 # from this part, which is the `opExg`/`opTas`/`opNbcd` shape `cpu.nim` already
 # states: `halted` set and `fault` clear. A core that accepted these instead
@@ -306,16 +305,16 @@ const refused = (ran: false, fault: false, halted: true,
 check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0006'u16], srSuper)),
     refused, "movec %d0,0x006 halts: ACR2 is not on this part")
 
-# `0x800` IS ASSIGNED TO NOTHING ON THIS PART. A fork that restored the 68k
+# `0x800` is assigned to nothing on this part. A fork that restored the 68k
 # reading would make this number a register and this case is what goes red.
 
 check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0800'u16], srSuper)),
     refused, "movec %d0,0x800 halts: it names no register of this part")
 
-# THE PRIVILEGE, TAKEN AS AN EXCEPTION AND NOT AS A HALT. The privilege
-# violation stacks the PC of the instruction that caused it, so the stacked
-# value is `execBase` and NOT the address after either word: an `RTE` from the
-# handler re-executes the whole instruction.
+# The privilege violation is taken as an exception and not as a halt. It stacks
+# the PC of the instruction that caused it, so the stacked value is `execBase`
+# and not the address after either word: an `RTE` from the handler re-executes
+# the whole instruction.
 
 block:
   let o = runIns([0x4E7B'u16, 0x0C0F'u16], srUser,
