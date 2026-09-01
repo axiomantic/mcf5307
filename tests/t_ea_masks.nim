@@ -459,14 +459,11 @@ func table313PageOf(op: Operation): Table313Page =
   let mnemonic = toLowerAscii(name[2 .. ^1])
   if mnemonic <= table313LastRowOn328: p313Start else: p313Cont
 
-## THE PAGE AXIS AND THE `#xxx` AXIS ARE TWO DIFFERENT MANUAL FACTS, AND ONE
-## SENTENCE USED TO COVER BOTH. The four shift rows - `asl.l`, `asr.l`,
-## `lsl.l`, `lsr.l` - carry `1(0/0)` under `#xxx`; the eight
-## immediate-and-register rows dash it. "A dash under every memory column" was
-## true of both only by declining to say anything about `#xxx`, which is not a
-## memory column - so the citation was accurate and INCOMPLETE, and an entry
-## that later needed the `#xxx` fact would have found the constant silent.
-## Both facts are now SPELLED by every entry, and neither is defaultable.
+## THE PAGE AXIS AND THE `#xxx` AXIS ARE TWO DIFFERENT MANUAL FACTS. The
+## four shift rows - `asl.l`, `asr.l`, `lsl.l`, `lsr.l` - carry `1(0/0)`
+## under `#xxx`; the eight immediate-and-register rows dash it. `#xxx` is not
+## a memory column, so "a dash under every memory column" says nothing about
+## it. Both facts are SPELLED by every entry, and neither is defaultable.
 ##
 ## Spelling it is not checking it, and assertion (8) is the check. It is
 ## two-sided, which one mutation would not have shown: a check that answered
@@ -656,8 +653,7 @@ let coverage: seq[Coverage] = @[
   # WHAT THE FLAG BUYS IS ASSERTION (4) AND NOT ASSERTION (1). Assertion (1)
   # calls `eaIsLegalFor(c.op, c.illegal)`, which never consults `regOperand`,
   # so a widening of their own entry IS seen with the flag or without it -
-  # measured by dropping the flag and widening the arm together, and the plan
-  # section carries the run.
+  # measured by dropping the flag and widening the arm together.
   #
   # WHAT IS LOST WITHOUT THE FLAG IS ASSERTION (4)'s SUBJECT. `logic.nim`'s
   # `execBitOp` picks `eaBitStatic` for the static form, `eaBitStatic` also
@@ -705,9 +701,8 @@ let coverage: seq[Coverage] = @[
   cov(opJsr, famControl, mAnInd, mDn, whyDnNotControl),
   cov(opLea, famMove, mAnInd, mDn, whyDnNotControl),
   cov(opPea, famMove, mAnInd, mDn, whyDnNotControl),
-  # MOVEM's own narrowing is ordered separately and is NOT asserted here;
-  # `-(An)` is outside the mask the file carries today and outside the one
-  # the plan orders, so this entry is stable across that repair.
+  # MOVEM's own narrowing is NOT asserted here; `-(An)` is outside the mask
+  # the file carries today, so this entry is stable across a later narrowing.
   cov(opMovem, famMove, mAnInd, mAnPre, whyPredecNotControl),
 ]
 

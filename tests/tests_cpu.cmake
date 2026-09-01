@@ -1,9 +1,5 @@
 # The registration list for `tests/`.
 #
-# CPU-26 CREATES THIS FILE EMPTY AND REGISTERS NOTHING IN IT. That is the
-# correct state for the skeleton, and CPU-26's own check asserts it by reading
-# `Total Tests: 0` out of the CTest listing.
-#
 # Each cpu task adds its own `add_test(NAME <name> ...)` line here, with
 # whatever target the name needs, and attaches that target to the `mcf5307_tests`
 # aggregate that the root list creates, after the `PROJECT_IS_TOP_LEVEL` guard
@@ -1883,7 +1879,7 @@ add_test(NAME t_state
 #
 # IT RUNS AT CONFIGURE TIME AND IS NOT A REGISTERED TEST, deliberately. A check
 # on whether the tests are wired up must not be a test that a selection filter
-# can leave out - which is the defect REPO-6 recorded when CI selected three of
+# can leave out - which is the defect seen when CI selected three of
 # eleven T0 tests and could not see a suite vanish. A configure that fails here
 # builds nothing at all.
 #
@@ -2258,8 +2254,7 @@ add_test(NAME t_claims
 # is the assertion that a renamed or dropped definition is a link error. It
 # calls `mcf5307_runtime_init()` twice and asserts both calls return.
 #
-# This is the test the CPU-3 task CHECK names. It tests the ABI surface the
-# task's closure produces, and it asserts NO CORE BEHAVIOUR. The test takes
+# It asserts NO CORE BEHAVIOUR. The test takes
 # the address of every published function the library defines and exports,
 # which is the assertion that a renamed or dropped definition is a link error.
 # It calls `mcf5307_runtime_init()` twice and asserts both calls return. C++

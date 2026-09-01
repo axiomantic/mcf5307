@@ -7,10 +7,6 @@
 ##   Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998. Every
 ##   citation below names its section, table and folio page.
 ##
-##   DESIGN SECTION 5.2.1 is "Bus faults and the error channel" of the NMG2
-##   emulator DESIGN DOCUMENT (`2026-08-04-nmg2-emulator-design.md`), and its
-##   mapping table is the specification `mcf5307/bus` implements.
-##
 ## EVERY EXPECTED VALUE BELOW IS A HAND-DERIVED LITERAL, written beside the bit
 ## string or the manual row it came from, and NOT a second call of the
 ## procedure under test.
@@ -75,10 +71,6 @@ template checkEq(got: uint32; want: uint32; label: string) =
 # instruction fetch, `1000` error on operand write, `1001` attempted write to
 # write-protected space, `1100` error on operand read. Every other value of the
 # four bits is Reserved.
-#
-# DESIGN SECTION 5.2.1's MAPPING TABLE assigns three of those five codes to the
-# three non-OK bus statuses, and each expected value below is the code that
-# table's own row prints.
 
 checkEq(faultStatusFor(Mcf5307BusStatus.busFault, operandWrite),
         0b1001'u32,
