@@ -76,8 +76,8 @@
 ##       A subtraction with the result discarded. Table 3-7, page 3-23, reads
 ##       "Destination - Source" for CMP and for CMPA, and "Destination -
 ##       Immediate Data" for CMPI. N and Z from the difference, V the signed
-##       overflow, C the borrow, and X not written. The X rule is uncertainty
-##       2 below.
+##       overflow, C the borrow, and X not written. CFPRM folio 4-28 gives
+##       CMP's X as "Not affected".
 ##
 ##   RTE
 ##       The status register is reloaded from the frame and computed from
@@ -135,36 +135,41 @@
 ##   A table's rows and its notes can end on different pages, and a second
 ##   table on the same subject can follow the notes.
 ##
-## What this module does not know. The implementation picks a behaviour and
-## this list says so.
+## Two questions this module once could not settle are settled, against the
+## ColdFire Family Programmer's Reference Manual, Rev. 3, whose per-instruction
+## folios give the flag rules and the condition tests directly.
 ##
-##   1. The boolean test of each condition. The four-bit ENCODING is measured
-##      and is not in doubt: `m68k-elf-as -mcpu=5307` put `bhi` at 0x62, `bls`
-##      at 0x63, `bcc` at 0x64, `bcs` at 0x65, `bne` at 0x66, `beq` at 0x67,
-##      `bvc` at 0x68, `bvs` at 0x69, `bpl` at 0x6a, `bmi` at 0x6b, `bge` at
-##      0x6c, `blt` at 0x6d, `bgt` at 0x6e and `ble` at 0x6f, and `st` at
-##      0x50c0 and `sf` at 0x51c0. The tests themselves are the M68000 family
-##      definition and no document on this machine states them. The available
-##      sources give the condition-code BITS and name the wildcard `cc` as
-##      "Logical Condition (example: NE for not equal)", and print no table of
-##      the tests anywhere.
+##   The sixteen condition tests. CFPRM folio 4-13, under `Bcc`, prints the
+##   whole table: code, four-bit encoding and boolean test, over CCR[C],
+##   CCR[N], CCR[V] and CCR[Z]. It agrees with the M68000 family definition
+##   this module implements and with the encodings measured from
+##   `m68k-elf-as -mcpu=5307` (`bhi` 0x62, `bls` 0x63, `bcc` 0x64, `bcs` 0x65,
+##   `bne` 0x66, `beq` 0x67, `bvc` 0x68, `bvs` 0x69, `bpl` 0x6a, `bmi` 0x6b,
+##   `bge` 0x6c, `blt` 0x6d, `bgt` 0x6e, `ble` 0x6f, `st` 0x50c0, `sf` 0x51c0).
 ##
-##   2. WHETHER A COMPARISON WRITES X. This module leaves X alone, which is
-##      the M68000 Family rule for CMP, CMPA and CMPI. CUTTING THE OTHER WAY,
-##      section 3.2.1.5 ENDS, on page 3-9, with the unattached sentence "Set
-##      to the value of the C-bit for arithmetic operations; otherwise not
-##      affected". That sentence is printed after the C-bit paragraph and the
-##      section's `X` bullet carries no text of its own, so it reads as the X
-##      rule; and a comparison is a subtraction. Read literally it would
-##      have every CMP write X and would break a multi-precision sequence that
-##      compared between its steps. The manual states it as a property of the
-##      X bit and not as a per-instruction rule, Table 3-7 gives CMP no flag
-##      column at all, and this module follows the family rule.
+##   `tests/t_control.nim` runs all sixteen conditions over all sixteen
+##   condition-code words, for `Bcc` and again for `Scc`, against a literal
+##   16-bit vector, so a reversed condition goes red rather than merely
+##   disagreeing with this note.
 ##
-##   3. The exact cycle count of every instruction in this group. `cpu.nim`
+##   Whether a comparison writes X. It does not. CFPRM folio 4-28 gives CMP's
+##   X as "Not affected". The doubt came from the User's Manual: section
+##   3.2.1.5 ends on page 3-9 with an unattached "Set to the value of the
+##   C-bit for arithmetic operations; otherwise not affected", printed where it
+##   reads as the X rule, and a comparison is a subtraction. Read that way
+##   every CMP would write X and would break a multi-precision sequence that
+##   compared between its steps.
+##
+##   Every CMP, CMPA and CMPI case in `conformance/corpus/control_00.json`
+##   enters with X set and expects it set.
+##
+## What this module still does not know. The implementation picks a behaviour
+## and this list says so.
+##
+##   1. The exact cycle count of every instruction in this group. `cpu.nim`
 ##      states the mechanism once, above its cycle constants.
 ##
-##   4. What an `RTE` with a bad format field should do. The reference is
+##   2. What an `RTE` with a bad format field should do. The reference is
 ##      unambiguous that it "generates a format error", placed at vector 14
 ##      with a stacked program counter of "Fault" - the address of the RTE
 ##      itself. This module traps instead, because a trap is this core's one
@@ -434,7 +439,7 @@ proc execRte(ctx: MCF5307Ctx; insnPc: uint32): uint32 =
   ## processor "first examines the 4-bit format field to validate the frame
   ## type", and "any attempted execution of an RTE where the format is not
   ## equal to {4,5,6,7} generates a format error". This core traps instead of
-  ## taking vector 14; that is uncertainty 4 in this module's header.
+  ## taking vector 14; that is unknown 2 in this module's header.
   ##
   ## The stack pointer is `SP + 4 + format` and not `SP + 8`. The same section
   ## says the processor "adjusts the stack pointer by adding the format value

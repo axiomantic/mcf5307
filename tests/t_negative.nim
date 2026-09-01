@@ -1,4 +1,4 @@
-## `t_negative` - the negative corpus. Encodings the core must REFUSE, and the
+## `t_negative` - the negative corpus. Encodings the core must refuse, and the
 ## legal neighbours it must still execute.
 ##
 ## The expected values are not transcribed. Each

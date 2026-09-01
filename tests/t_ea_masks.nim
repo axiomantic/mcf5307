@@ -160,16 +160,6 @@
 ## There is no supervisor and user stack split on ISA_A; the context holds the
 ## single `sp`.
 
-## THE IMPORTS NAME THE LAYER EACH SYMBOL COMES FROM. `decode` no longer
-## re-exports `decode_types`, so each module below supplies exactly the names
-## the test takes from it: `cpu` the lifecycle ABI, `decode` the decoder
-## (`decodeWord`), `decode_types` the shared types and the legality table,
-## `ea` the effective-address decoding, and the four instruction-group modules
-## their family entry points, which is the layer assertions (3) and (4) drive.
-##
-## `machine` supplies the register bridge (`mcf5307_set_reg`,
-## `mcf5307_get_reg`) that the absolute-long extension-word case drives.
-
 import std/[options, strutils]
 import mcf5307/cpu
 import mcf5307/decode
