@@ -1,7 +1,5 @@
 ## `isp1181/state` - the SOF tick and the snapshot of the USB device handle, as
 ## a flat block of bytes.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import ./isp1181
 import ./stub

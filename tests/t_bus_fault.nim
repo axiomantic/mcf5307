@@ -3,9 +3,8 @@
 ## EVERY EXPECTED VALUE BELOW IS A HAND-DERIVED LITERAL and NOT a second call
 ## of the procedure under test.
 ##
-## MIT licensed and clean-room with respect to GPL and LGPL code. The fault
-## status encodings are facts about Motorola silicon, from the MCF5307 User's
-## Manual.
+## The fault status encodings are facts about Motorola silicon, from the
+## MCF5307 User's Manual.
 
 import std/strutils
 
