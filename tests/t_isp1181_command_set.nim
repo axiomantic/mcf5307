@@ -57,10 +57,9 @@ const
   commandPort = 0x13000010'u32
   benign = 0x00'u8
 
-# THE IMPLEMENTED LIST, HAND-WRITTEN. Every entry is an opcode the plan or the
-# design document spells out. The six commands those documents name WITHOUT an
-# opcode are not here and cannot be: an opcode chosen by this suite would be
-# asserting its own guess.
+# THE IMPLEMENTED LIST, HAND-WRITTEN. Every entry is an opcode the authority
+# spells out. Commands the authority names WITHOUT an opcode are not here and
+# cannot be: an opcode chosen by this suite would be asserting its own guess.
 const implementedOpcodes: array[42, uint8] = [
   0xF6'u8,                                    # reset
   0xBA'u8, 0xBB'u8,                           # hardware configuration
