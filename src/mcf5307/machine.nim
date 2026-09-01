@@ -598,11 +598,12 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## `SP-4;PC`, `SP-2;SR`, `SP-2;Format`, which agrees whenever A7 was already
   ## longword aligned and does not show the self-alignment at all.
   ##
-  ## The vector table is based at zero, and that is a limitation. Section 3.3,
-  ## page 3-12: the handler address is "obtained by fetching a value from the
-  ## table located at the address defined in the vector base register", indexed
-  ## by `4 x vector_number`. This core has no VBR: the context holds no such
-  ## field, and `MOVEC` - the only way to write one - is not implemented.
+  ## The vector table is based at VBR. Section 3.3, page 3-12: the handler
+  ## address is "obtained by fetching a value from the table located at the
+  ## address defined in the vector base register", indexed by
+  ## `4 x vector_number`. `ctx.vbr` holds that base, `movec.nim` is what writes
+  ## it, and `exception.nim`'s `vectorAddress` masks the low twenty bits the
+  ## part does not implement.
   ##
   ## The read below is the only reader of `ctx.vbr`. A core that stored the
   ## value and dispatched from zero would answer every read-back correctly and
