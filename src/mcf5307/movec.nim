@@ -5,10 +5,12 @@
 ## of the status register; `movecFamily` is the one procedure that needs a
 ## context.
 ##
-## Nothing here writes a control register: the value the instruction carries is
-## discarded. The one consequence a reader must not miss is that
-## `machine.nim`'s `takeException` still bases the vector table at zero, so a
-## `MOVEC` to VBR is accepted and does not move it.
+## `movecFamily` writes the control register the extension word names, for
+## every register `controlRegisterFor` decodes. The one consequence a reader
+## must not miss is that a `MOVEC` to VBR moves the vector table:
+## `machine.nim`'s `takeException` dispatches through `vectorAddress(ctx.vbr,
+## vector)`, and `exception.nim` masks VBR[19-0] off there because the part
+## does not implement them.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. The encoding,
 ## the register numbers and the privilege rule are facts about Motorola
