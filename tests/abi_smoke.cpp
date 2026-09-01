@@ -1,6 +1,6 @@
 /* tests/abi_smoke.cpp - the application binary interface smoke test.
  *
- * Two assertions, and each one can fail.
+ * Three assertions, and each one can fail.
  *
  * (1) The link itself. The test takes the address of every function that
  *     `include/mcf5307.h` declares AND the library actually defines. A
@@ -12,6 +12,26 @@
  *     asserts both calls return. The function is documented as idempotent;
  *     a re-entrant call that crashes is a regression in the runtime. C++
  *     never names `NimMain`; the C names are the whole contract.
+ *
+ * (3) The concurrent first call. The twice-call above runs on one thread and
+ *     reaches the latch only after it holds `latchDone`, so it exercises the
+ *     early return and nothing else. This case starts several threads on a
+ *     COLD latch behind a start gate and asserts every one of them returns.
+ *     It is placed before the twice-call for that reason: run it second and
+ *     the latch is already closed and the case is vacuous.
+ *
+ *     What it covers: the compare-and-exchange admits one thread, and the
+ *     losers reach a return rather than a crash, a hang or a second entry
+ *     into `NimMain`. A latch built on a plain boolean lets two threads run
+ *     the initializer, which is the failure this shape catches.
+ *
+ *     What it does NOT cover, stated rather than implied: which branch each
+ *     loser took. `NimMain` returns in microseconds, so a loser may find
+ *     `latchDone` already stored and take the early return without ever
+ *     entering the wait loop. The deadline and the abandoned state below it
+ *     end in `c_abort` BY DESIGN, and a process that aborts cannot report a
+ *     pass, so neither is reachable from a test that must survive to exit 0.
+ *     Reaching them needs fault injection the published C ABI does not offer.
  *
  * This test links the real library and no stub. `t0_abi_header` cases 3 and 4
  * link the whole eighteen-name surface against `tests/abi_stub.c` and are the
@@ -31,8 +51,11 @@
  * change to the implementation.
  */
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <thread>
+#include <vector>
 
 #include "mcf5307.h"
 
@@ -72,9 +95,42 @@ static_assert(sizeof(abi_addr_all) / sizeof(abi_addr_all[0]) > 0,
               "abi_smoke: the generated address set is empty, so the link "
               "assertion asserts nothing.");
 
+/* More threads than a developer machine has cores, so the losers are real
+ * losers and not threads that started after the winner had already finished. */
+constexpr int kRacers = 8;
+
+/* True when every racer returned from `mcf5307_runtime_init`. A thread that
+ * hangs never joins and the test times out instead of answering. */
+bool all_racers_returned() {
+    std::atomic<bool> gate{false};
+    std::atomic<int> returned{0};
+
+    std::vector<std::thread> racers;
+    racers.reserve(kRacers);
+    for (int i = 0; i < kRacers; ++i) {
+        racers.emplace_back([&gate, &returned]() {
+            /* The spin is the point: a thread that called straight away would
+             * be serialised by its own creation cost, and the latch would be
+             * closed before the next thread reached it. */
+            while (!gate.load(std::memory_order_acquire)) {
+            }
+            mcf5307_runtime_init();
+            returned.fetch_add(1, std::memory_order_relaxed);
+        });
+    }
+
+    gate.store(true, std::memory_order_release);
+    for (std::thread& t : racers) t.join();
+
+    return returned.load(std::memory_order_relaxed) == kRacers;
+}
+
 } /* namespace */
 
 int main() {
+    /* The concurrent first call, BEFORE any other call closes the latch. */
+    if (!all_racers_returned()) return 2;
+
     /* The twice-call. `mcf5307_runtime_init()` is documented as idempotent.
      * A second call that reaches unmapped memory, that re-enters a partial
      * initialiser, or that panics is a regression in the runtime itself.

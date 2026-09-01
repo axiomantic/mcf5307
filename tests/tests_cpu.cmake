@@ -354,7 +354,12 @@ target_include_directories(abi_smoke PRIVATE
     "${PROJECT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_BINARY_DIR}"
 )
-target_link_libraries(abi_smoke PRIVATE mcf5307)
+# `Threads::Threads` is for the concurrent case in `abi_smoke.cpp`. Apple's
+# clang needs no flag for `std::thread`; a GNU/libstdc++ host does, and it
+# fails at LINK time rather than at compile time, so an omission here would
+# pass every check run on this machine.
+find_package(Threads REQUIRED)
+target_link_libraries(abi_smoke PRIVATE mcf5307 Threads::Threads)
 target_compile_features(abi_smoke PRIVATE cxx_std_17)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     target_compile_options(abi_smoke PRIVATE -Wall -Wextra -pedantic -Werror)

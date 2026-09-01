@@ -271,5 +271,18 @@ proc mcf5307RuntimeInit() {.exportc: "mcf5307_runtime_init", mcf5307Abi.} =
           running, latchAbandoned, moAcquireRelease, moAcquire):
         if running == latchDone:
           return
+      # The SAME race, one line later. A successful exchange says the
+      # initializing thread was still inside at that instant; it does not say
+      # it still is. It can store `latchDone` between the exchange and this
+      # line, and the check above cannot see that store because it already
+      # happened. Without this second load the process aborts with a runtime
+      # that is fully up.
+      #
+      # The initializer's store is what makes this load worth doing: it writes
+      # `latchDone` unconditionally, so it overwrites the `latchAbandoned` just
+      # written here rather than leaving an initialized runtime marked
+      # abandoned for every later caller.
+      if latch.load(moAcquire) == latchDone:
+        return
       mcf5307LatchStalled()
     mcf5307Yield()
