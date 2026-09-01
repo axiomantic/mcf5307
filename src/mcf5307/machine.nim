@@ -6,11 +6,10 @@
 ## all "how the machine is touched". What each opcode means is the job of the
 ## instruction-group modules, and none of that is here.
 ##
-## The helpers live here rather than in one executor because a second executor
-## needs the same register file, the same board accesses and the same
-## effective-address evaluation. `alu.nim` importing `move.nim` for them would
-## put an executor under another executor. The helpers are pure functions over
-## the shared types, so they belong beside those types, not beside one caller.
+## `alu.nim` importing `move.nim` for the shared helpers would put an executor
+## under another executor, which is the same shape as the decoder-under-executor
+## cycle. The helpers are pure functions over the shared types, so they live
+## beside those types and not beside one caller.
 ##
 ## This module sits at the `decode_types` level. It reads the shared types and
 ## it names no executor and no decoder:
@@ -44,7 +43,18 @@ import mcf5307/exception
 #
 # d0..d7 live in `ctx.dRegs`, a0..a6 in `ctx.aRegs`, and a7 is `ctx.sp`.
 # `regFileGet`/`regFileSet` are the single-index view the ABI accessors and
-# the MOVEM mask use: 0..7 = d0..d7, 8..15 = a0..a7, 16 = sr, 17 = pc.
+# the MOVEM mask use: 0..7 = d0..d7, 8..15 = a0..a7, 16 = sr, 17 = pc, and
+# 18 upwards the control registers - 18 = vbr, 19 = cacr, 20 = acr0,
+# 21 = acr1, 22 = rambar0, 23 = rambar1, 24 = mbar.
+#
+# The control registers are not part of the register file. They are here
+# because this index space is the only channel a host has: `MOVEC` reaches
+# nothing outside a running program. The MOVEM mask never names an index above
+# 15, so widening this view does not widen that instruction.
+#
+# 17 stays read-only through `regFileSet` and the control registers do not. The
+# program counter is written by `mcf5307_reset`, which is the entry point that
+# owns it.
 
 proc regD*(ctx: MCF5307Ctx; n: uint8): uint32 =
   ctx.dRegs[n and 7]
@@ -71,6 +81,20 @@ proc regFileGet*(ctx: MCF5307Ctx; index: int): uint32 =
     ctx.sr
   elif index == 17:
     ctx.pc
+  elif index == 18:
+    ctx.vbr
+  elif index == 19:
+    ctx.cacr
+  elif index == 20:
+    ctx.acr0
+  elif index == 21:
+    ctx.acr1
+  elif index == 22:
+    ctx.rambar0
+  elif index == 23:
+    ctx.rambar1
+  elif index == 24:
+    ctx.mbar
   else:
     0
 
@@ -86,6 +110,27 @@ proc regFileSet*(ctx: MCF5307Ctx; index: int; v: uint32): bool =
     true
   elif index == 16:
     ctx.sr = v and 0xFFFF'u32
+    true
+  elif index == 18:
+    ctx.vbr = v
+    true
+  elif index == 19:
+    ctx.cacr = v
+    true
+  elif index == 20:
+    ctx.acr0 = v
+    true
+  elif index == 21:
+    ctx.acr1 = v
+    true
+  elif index == 22:
+    ctx.rambar0 = v
+    true
+  elif index == 23:
+    ctx.rambar1 = v
+    true
+  elif index == 24:
+    ctx.mbar = v
     true
   else:
     false
@@ -216,22 +261,12 @@ proc stackingWrite(ctx: MCF5307Ctx; address: uint32; size: uint8;
 # `decode_types.nim` holds, or a check after the executor returns, which
 # `cpu.nim`'s `step` holds.
 #
-# The write path needs no unwind, which is why it is wired and the read is not.
-# The one exception to that unwind rule is the operand write, and User's Manual
-# section 3.5.1, folio 3-14, is why: "All programming model updates associated
-# with the write instruction are completed." An executor that carries on after
-# a write fault is doing what the manual requires. That the only access error
-# this part raises is a store to write-protected space puts the real case on
-# this side too.
-#
-# It does need the vector to be taken after the instruction rather than inside
-# it, which is the same sentence read to its end. An instruction whose
-# remaining updates are required to complete cannot have section 3.3's four
-# exception-processing steps run in the middle of it: those steps assign A7 and
-# the program counter, and the updates that must still complete would then be
-# computed from, or would overwrite, the handler's state. `writeMem` therefore
-# records the fault on the context and `cpu.nim`'s `step` takes it at the
-# instruction boundary.
+# THE WRITE PATH NEEDS NO UNWIND, WHICH IS WHY IT IS WIRED AND THE READ IS NOT.
+# The rule's one named exception is the operand write, and the reason is that
+# "all programming model updates associated with the write instruction are
+# completed". An executor that carries on after a write fault is doing what the
+# reference requires. That the only access error this part
+# raises is a store to write-protected space puts the real case on this side too.
 
 proc readMem*(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
   stackingRead(ctx, address, size)
@@ -361,11 +396,10 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
     of ea7AbsW:
       result = uint32(s16(fetchExt(ctx)))
     of ea7AbsL:
-      # The first extension word is the high half of the address. MCF5307
-      # User's Manual section 3.7.2, "Organization of Integer Data Formats in
-      # Memory", page 3-19: "The address N of a longword data item corresponds
-      # to the address of the high order word. The lower order word is located
-      # at address N + 2." The extension pair is a longword in the instruction
+      # THE FIRST EXTENSION WORD IS THE HIGH HALF OF THE ADDRESS. "The address
+      # N of a longword data item corresponds to the address of the high order
+      # word. The lower order word is located at address N + 2." The extension
+      # pair is a longword in the instruction
       # stream, so the word at the lower address is the high half.
       # `m68k-elf-as -mcpu=5307` agrees: `btst %d1,0x00030004` assembles to
       # `0339 0003 0004`.
@@ -513,21 +547,15 @@ proc eaRefWrite*(ctx: MCF5307Ctx; r: EaRef; size: uint8; value: uint32) =
   of erNone: discard
 
 # ---------------------------------------------------------------------------
-# The exception stack frame.
+# The exception stack frame. It is here and not in `control.nim` because the
+# exception model, the bus-fault channel, interrupts and `control.nim`'s own
+# format-error path all need the same frame, and `exception.nim` is a sibling
+# of `control.nim`.
 #
-# It is here and not in `control.nim` because more than one executor needs it:
-# the exception model, the bus-fault channel, interrupts and `control.nim`'s
-# own format-error path. An executor that reached into another executor for it
-# would be the decoder-under-executor inversion one layer down.
-#
-# It is the minimum `TRAP` needs and not the exception model. There is no
-# vector table object, no fault-status computation and no double-fault
-# handling.
+# There is no vector table object, no fault-status computation and no
+# double-fault handling; this procedure is what those extend.
 
-# User's Manual section 3.2.2.1, folio 3-10, prints the whole 16-bit status
-# register over its bit numbers: T at 15, S at 13, M at 12 and I[2:0] at bits
-# 10 to 8. The three named here are the ones this module's own `takeException`
-# writes or preserves, and `srMaster` sits with them because a status-register
+# `srMaster` sits with the bits `takeException` writes because a status-register
 # bit position is a fact about the register and not about the exception that
 # happens to clear it.
 const
@@ -538,12 +566,11 @@ const
 proc exceptionFrameBase*(sp: uint32): uint32 =
   ## Where the two-longword frame goes, and it is not simply `sp - 8`.
   ##
-  ## MCF5307 User's Manual section 3.3, page 3-11: "the exception stack frame
-  ## is created at a 0-modulo-4 address on the top of the current system
-  ## stack". Table 3-2, "Format Field Encoding", page 3-14, gives the four
-  ## cases: an A7 whose low two bits are 00, 01, 10 or 11 leaves the handler
-  ## with A7-8, A7-9, A7-10 or A7-11, and each of those four results is
-  ## 0-modulo-4. That is this expression.
+  ## "The exception stack frame is created at a 0-modulo-4 address on the top
+  ## of the current system stack". The format field encoding gives the cases: an
+  ## A7 whose low two bits are 00, 01, 10 or 11 leaves the handler with A7-8,
+  ## A7-9, A7-10 or A7-11, and each of those results is 0-modulo-4. That is
+  ## this expression.
   (sp - 8'u32) and not 3'u32
 
 proc exceptionFormat*(sp: uint32): uint32 =
@@ -557,27 +584,17 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## Stack a two-longword exception frame, then load the program counter from
   ## the vector table.
   ##
-  ## The copy of the status register is a parameter rather than a read of
-  ## `ctx.sr`. Section 3.3's copy is taken as exception processing begins, and
-  ## for every exception whose processing begins where it is detected the two
-  ## are the same word. The deferred access error of a faulted store is the one
-  ## exception this core detects at one point and processes at another, and
-  ## section 3.5.1 requires the faulting instruction's remaining
-  ## programming-model updates to run in between; the word it passes is the one
-  ## the store saw.
+  ## The status register is copied before it is changed: "the processor makes
+  ## an internal copy of the SR and then enters supervisor mode by setting the
+  ## S-bit and disabling trace mode by clearing the T-bit". The COPY is what
+  ## reaches the frame; the modified word is what the handler runs under. The
+  ## M-bit and the interrupt priority mask are changed only by an INTERRUPT
+  ## exception, so nothing here touches them.
   ##
-  ## The status register is copied before it is changed. Section 3.3, page
-  ## 3-11: "the processor makes an internal copy of the SR and then enters
-  ## supervisor mode by setting the S-bit and disabling trace mode by clearing
-  ## the T-bit". The copy is what reaches the frame; the modified word is what
-  ## the handler runs under. The M-bit and the interrupt priority mask are
-  ## changed only by an interrupt exception, so nothing here touches them.
-  ##
-  ## The frame is two longword writes and not six bytewise pushes. Figure 3-7,
-  ## page 3-13, draws it as two longwords - the format/vector word above the
-  ## status register, then the program counter - and Table 3-14, page 3-29,
-  ## gives `trap #imm` a cost of `18(1/2)`: one read, the vector, and two
-  ## writes. Table 3-7's `TRAP` row on page 3-25 spells the same thing as
+  ## The frame is two longword writes and not six bytewise pushes. It is drawn
+  ## as two longwords - the format/vector word above the status register, then
+  ## the program counter - and `trap #imm` costs `18(1/2)`: ONE read, the
+  ## vector, and TWO writes. The instruction summary spells the same thing as
   ## `SP-4;PC`, `SP-2;SR`, `SP-2;Format`, which agrees whenever A7 was already
   ## longword aligned and does not show the self-alignment at all.
   ##
@@ -587,12 +604,10 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## by `4 x vector_number`. This core has no VBR: the context holds no such
   ## field, and `MOVEC` - the only way to write one - is not implemented.
   ##
-  ## The reset value is zero and the manual prints it. Table B-2, "Summary
-  ## Chart of MCF5307 Internal CPU Memory Map", Appendix page B-5, gives
-  ## `CPU @ $801` the name VBR, a width of 32, a reset value of `$00000000`
-  ## and an access of `W`. So this expression is correct for a machine that
-  ## has not written VBR and wrong for one that has, and the one line that
-  ## changes when VBR arrives is the `readMem` below.
+  ## The read below is the only reader of `ctx.vbr`. A core that stored the
+  ## value and dispatched from zero would answer every read-back correctly and
+  ## take every exception to the wrong handler, so the suite adjudicates on the
+  ## handler address it lands on and never on the value it reads back.
   ##
   ## A fault inside this procedure is a double fault. Each access is checked
   ## and the procedure returns early, leaving the context halted with `fault`;
@@ -609,7 +624,7 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   if ctx.halted:
     return
   ctx.sp = base
-  let handler = stackingRead(ctx, vectorAddress(0'u32, vector), 4)
+  let handler = stackingRead(ctx, vectorAddress(ctx.vbr, vector), 4)
   if ctx.halted:
     return
   ctx.pc = handler
@@ -619,12 +634,10 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   # during the first instruction of all exception handlers." `mcf5307_exec`
   # reads this field at its sample and clears it.
   #
-  # It is written here, after the program counter, and that position is the
-  # whole of the rule's reach. Every exception this core takes ends on this
-  # line, so no exception path can acquire the rule and none can be forgotten
-  # by it. A flag set by `execTrap` instead would be a rule about TRAP. The
-  # reset is not a counterexample: it does not run through this procedure at
-  # all, it writes the field itself, and `cpu.nim` says why.
+  # It is written here, after the program counter: every exception this core
+  # takes ends on this line, so no exception path can acquire the rule and none
+  # can be forgotten by it. A flag set by `execTrap` instead would be a rule
+  # about TRAP.
   #
   # A take that faulted does not set it, because each early return above is
   # ahead of this line and a machine that never reached a handler is not at
@@ -674,6 +687,40 @@ proc takePendingWriteFault*(ctx: MCF5307Ctx) =
     return
   takeExceptionCopiedSr(ctx, vecAccessError, stackedPc, fs, stackedSr)
 
+proc transferControl*(ctx: MCF5307Ctx; target: uint32; faultPc: uint32) =
+  ## Write `target` into the program counter, or take the address error when
+  ## it is odd. `faultPc` is the address of the instruction doing the
+  ## transferring.
+  ##
+  ## "Any attempted execution transferring control to an odd instruction
+  ## address (i.e., if bit 0 of the target address is set) results in an
+  ## address error exception" - MCF5307 User's Manual, section 3.5.2. The
+  ## Programmer's Reference Manual, Rev. 3 assigns the vector and stops there:
+  ## its section 11.1.3 names a table of processor exceptions that the revision
+  ## does not carry, so nothing in it says what raises this one.
+  ##
+  ## It is a funnel and not a check per executor: a test beside each
+  ## `ctx.pc = target` is silent for whichever executor is added next.
+  ##
+  ## The stacked program counter is the transferring instruction's, not the odd
+  ## address and not the instruction after it: vector 3 is marked `Fault` in
+  ## the vector assignments, and "fault refers to the PC of the instruction
+  ## that caused the exception".
+  ##
+  ## `fsInstructionFetch` is the fault status. The field is defined for access
+  ## and address errors, and `0100` - "error on instruction fetch" - is the one
+  ## defined code naming the access this exception exists to refuse.
+  ##
+  ## The program counter loaded by `takeException` itself is not checked here,
+  ## and a vector table entry with bit 0 set therefore still enters a handler
+  ## at an odd address. The manual puts that case in the fault-on-fault halted
+  ## state, which this core has no representation for yet; routing the handler
+  ## address through this procedure would recurse instead.
+  if (target and 1'u32) != 0'u32:
+    takeException(ctx, vecAddressError, faultPc, fsInstructionFetch)
+  else:
+    ctx.pc = target
+
 # ---------------------------------------------------------------------------
 # The register access the conformance harness needs. The C ABI in
 # `include/mcf5307.h` declares these. `index` 0..7 is d0..d7, 8..14 is a0..a6,
@@ -682,7 +729,7 @@ proc takePendingWriteFault*(ctx: MCF5307Ctx) =
 
 proc mcf5307_set_reg*(ctx: MCF5307Ctx; index: cint; value: uint32): cint
     {.exportc: "mcf5307_set_reg", cdecl, dynlib.} =
-  if ctx.isNil or index < 0 or index > 16:
+  if ctx.isNil or index < 0 or index > 24:
     return cast[cint](0)
   if regFileSet(ctx, int(index), value):
     return cast[cint](1)
@@ -690,7 +737,7 @@ proc mcf5307_set_reg*(ctx: MCF5307Ctx; index: cint; value: uint32): cint
 
 proc mcf5307_get_reg*(ctx: MCF5307Ctx; index: cint): uint32
     {.exportc: "mcf5307_get_reg", cdecl, dynlib.} =
-  if ctx.isNil or index < 0 or index > 17:
+  if ctx.isNil or index < 0 or index > 24:
     return 0'u32
   regFileGet(ctx, int(index))
 

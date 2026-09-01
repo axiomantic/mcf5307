@@ -15,13 +15,12 @@
 ##
 ## The sizes.
 ##
-##   CMP, CMPA, CMPI are 32-bit and there is no other size. MCF5307 User's
-##   Manual Table 3-7, "Instruction Set Summary", page 3-23, gives all three an
-##   operand size column of `32` alone. `m68k-elf-as -mcpu=5307` rejects
-##   `cmp.b`, `cmp.w`, `cmpa.w`, `cmpi.b` and `cmpi.w`, and
-##   `m68k-elf-objdump -m m68k:5307` decodes `b2c0` - which is `cmpaw %d0,%a1`
-##   under `-m m68k:68020` - as `.short 0xb2c0`. Every byte and word form
-##   traps here.
+##   CMP, CMPA, CMPI are 32-BIT AND THERE IS NO OTHER SIZE. The instruction set
+##   summary gives all three an OPERAND SIZE of `32` alone.
+##   `m68k-elf-as -mcpu=5307` rejects `cmp.b`, `cmp.w`, `cmpa.w`, `cmpi.b` and
+##   `cmpi.w`, and `m68k-elf-objdump -m m68k:5307` decodes `b2c0` - which is
+##   `cmpaw %d0,%a1` under `-m m68k:68020` - as `.short 0xb2c0`. Every byte and
+##   word form TRAPS here.
 ##
 ##   Scc is a byte. Table 3-7, page 3-25, gives `Scc Dx` an operand size of 8
 ##   and the operation "If Condition True, Then 1's -> Destination; Else 0's ->
@@ -85,18 +84,16 @@
 ##       nothing.
 ##
 ##   TRAP
-##       Section 3.3, page 3-11: the processor copies SR, then sets the S-bit
-##       and clears the T-bit. `machine.nim`'s `takeException` carries it.
+##       The processor copies SR, then sets the S-bit and clears the T-bit.
+##       `machine.nim`'s `takeException` carries it.
 ##
 ## Cycles. Nothing checks any of them, and the numbers are not a transcription
 ## of the tables.
 ##
-##   Four are exact, each of them a row carrying a single cell that the one
-##   return equals. `execScc` returns 1 and Table 3-12, folio 3-27, gives
-##   `scc Dx` 1(0/0); `execRts` returns 8 and Table 3-15, folio 3-30, gives
-##   `rts` 8(1/0); `execRte` returns 14 and the same table gives `rte` 14(2/0);
-##   `execTrap` returns 18 and Table 3-14, folio 3-29, gives `trap #imm`
-##   18(1/2).
+##   Exact - a row carrying a SINGLE cell that the one return equals, so no
+##   effective address can pull them apart. `execScc` returns 1 and `scc Dx` is
+##   1(0/0); `execRts` returns 8 and `rts` is 8(1/0); `execRte` returns 14 and
+##   `rte` is 14(2/0); `execTrap` returns 18 and `trap #imm` is 18(1/2).
 ##
 ##   Three are flattened across the effective address. `execJump` returns 5 for
 ##   every operand; Table 3-15 gives `jmp`/`jsr` 5 for `(An)` and `(d16,An)`
@@ -135,26 +132,22 @@
 ##   vary between 1 to 3 cycles depending on the amount of decoupling" between
 ##   the two pipelines.
 ##
-##   A table's rows and its notes can end on different folios, and a second
-##   table on the same subject can follow the notes. A citation to a table read
-##   on one page is not complete until the next page has been read.
+##   A table's rows and its notes can end on different pages, and a second
+##   table on the same subject can follow the notes.
 ##
 ## What this module does not know. The implementation picks a behaviour and
-## this list says so. The document that would settle numbers 1, 2 and 4 is the
-## ColdFire Family Programmer's Reference Manual, whose per-instruction pages
-## give the flag rules and the condition tests directly.
+## this list says so.
 ##
-##   1. The boolean test of each of the sixteen conditions. The four-bit
-##      encoding is measured and is not in doubt: `m68k-elf-as -mcpu=5307` put
-##      `bhi` at 0x62, `bls` at 0x63, `bcc` at 0x64, `bcs` at 0x65, `bne` at
-##      0x66, `beq` at 0x67, `bvc` at 0x68, `bvs` at 0x69, `bpl` at 0x6a,
-##      `bmi` at 0x6b, `bge` at 0x6c, `blt` at 0x6d, `bgt` at 0x6e and `ble`
-##      at 0x6f, and `st` at 0x50c0 and `sf` at 0x51c0. The tests themselves
-##      are the M68000 family definition and no document on this machine
-##      states them. The User's Manual gives the condition-code bits in
-##      section 3.2.1.5 (pages 3-8 and 3-9) and names the wildcard `cc` as
-##      "Logical Condition (example: NE for not equal)" in Table 3-6 (page
-##      3-21), and it prints no table of the sixteen tests anywhere.
+##   1. The boolean test of each condition. The four-bit ENCODING is measured
+##      and is not in doubt: `m68k-elf-as -mcpu=5307` put `bhi` at 0x62, `bls`
+##      at 0x63, `bcc` at 0x64, `bcs` at 0x65, `bne` at 0x66, `beq` at 0x67,
+##      `bvc` at 0x68, `bvs` at 0x69, `bpl` at 0x6a, `bmi` at 0x6b, `bge` at
+##      0x6c, `blt` at 0x6d, `bgt` at 0x6e and `ble` at 0x6f, and `st` at
+##      0x50c0 and `sf` at 0x51c0. The tests themselves are the M68000 family
+##      definition and no document on this machine states them. The available
+##      sources give the condition-code BITS and name the wildcard `cc` as
+##      "Logical Condition (example: NE for not equal)", and print no table of
+##      the tests anywhere.
 ##
 ##   2. WHETHER A COMPARISON WRITES X. This module leaves X alone, which is
 ##      the M68000 Family rule for CMP, CMPA and CMPI. CUTTING THE OTHER WAY,
@@ -171,11 +164,10 @@
 ##   3. The exact cycle count of every instruction in this group. `cpu.nim`
 ##      states the mechanism once, above its cycle constants.
 ##
-##   4. What an `RTE` with a bad format field should do. Section 3.5.7, "RTE
-##      and Format Error Exceptions", page 3-16, is unambiguous that it
-##      "generates a format error", which Table 3-1 on page 3-13 places at
-##      vector 14 with a stacked program counter of "Fault" - the address of
-##      the RTE itself. This module traps instead. A trap is this core's one
+##   4. What an `RTE` with a bad format field should do. The reference is
+##      unambiguous that it "generates a format error", placed at vector 14
+##      with a stacked program counter of "Fault" - the address of the RTE
+##      itself. This module traps instead, because a trap is this core's one
 ##      observable for "the core refused", the same channel every illegal size
 ##      and illegal operand in every group uses; `alu.nim`'s header makes the
 ##      identical statement about a divide by zero. What `tests/t_control.nim`
@@ -251,8 +243,9 @@ proc setCompareCc(ctx: MCF5307Ctx; src, dst, res: uint32; borrow: bool) =
 # ---------------------------------------------------------------------------
 # BRA, BSR and Bcc.
 
-proc execBranch(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
-  ## One branch. `d.size` carries the form the decoder read out of the
+proc execBranch(ctx: MCF5307Ctx; word: uint16; d: Decoded;
+                insnPc: uint32): uint32 =
+  ## One branch. `d.size` carries the FORM the decoder read out of the
   ## displacement byte: 1 is the byte displacement in the opcode word, 2 the
   ## 16-bit displacement in the word after it, and 4 the 32-bit form that this
   ## part does not have.
@@ -288,12 +281,14 @@ proc execBranch(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
     if ctx.halted:
       return 0'u32
   if d.op != opBcc or conditionHolds(ctx.sr, d.destReg):
-    ctx.pc = target
-  # No cell of Table 3-15 or Table 3-16 carries 2 or 3, but their notes do, and
-  # the notes run past folio 3-30. Note 1 puts BRA's 2 inside a documented
-  # 1-to-3 range and note 2 puts BSR's 3 inside one; note 3 continues onto
-  # folio 3-31, where Table 3-17 and the sentence beneath it put Bcc's 2 inside
-  # one as well.
+    transferControl(ctx, target, insnPc)
+    if ctx.halted:
+      return 0'u32
+  # No timing CELL carries 2 or 3, but the NOTES beneath those tables do, and
+  # the notes run past the end of the table. They put BRA's 2 and BSR's 3
+  # inside a documented 1-to-3 range; Bcc's note continues onto the following
+  # page, where a second table and the sentence beneath it put Bcc's 2 inside
+  # one as well. This module's header carries the readings.
   if d.op == opBsr: 3'u32 else: 2'u32
 
 # ---------------------------------------------------------------------------
@@ -389,10 +384,10 @@ proc execCompare(ctx: MCF5307Ctx; d: Decoded): uint32 =
 # ---------------------------------------------------------------------------
 # JMP and JSR.
 
-proc execJump(ctx: MCF5307Ctx; d: Decoded): uint32 =
-  ## `JMP <ea>` and `JSR <ea>`. The operand is a control address and the
-  ## instruction jumps to the address itself and never to what is at it -
-  ## Table 3-7, page 3-23, gives JMP as "Address of <ea> -> PC".
+proc execJump(ctx: MCF5307Ctx; d: Decoded; insnPc: uint32): uint32 =
+  ## `JMP <ea>` and `JSR <ea>`. The operand is a CONTROL address and the
+  ## instruction jumps to the ADDRESS ITSELF and never to what is at it: JMP is
+  ## "Address of <ea> -> PC".
   ##
   ## The effective address is evaluated before the return address is pushed,
   ## and that ordering is the whole of what makes `jsr 0x00054320` different
@@ -411,24 +406,28 @@ proc execJump(ctx: MCF5307Ctx; d: Decoded): uint32 =
     writeMem(ctx, ctx.sp, 4, ctx.pc)
     if ctx.halted:
       return 0'u32
-  ctx.pc = target
+  transferControl(ctx, target, insnPc)
+  if ctx.halted:
+    return 0'u32
   5'u32
 
 # ---------------------------------------------------------------------------
 # RTS and RTE.
 
-proc execRts(ctx: MCF5307Ctx): uint32 =
-  ## "(SP) -> PC; SP + 4 -> SP" - Table 3-7, page 3-25. The pop is read before
+proc execRts(ctx: MCF5307Ctx; insnPc: uint32): uint32 =
+  ## "(SP) -> PC; SP + 4 -> SP". The pop is read BEFORE
   ## the stack pointer moves, and the pointer moves only when the read
   ## succeeded.
   let target = readMem(ctx, ctx.sp, 4)
   if ctx.halted:
     return 0'u32
   ctx.sp = ctx.sp + 4'u32
-  ctx.pc = target
+  transferControl(ctx, target, insnPc)
+  if ctx.halted:
+    return 0'u32
   8'u32
 
-proc execRte(ctx: MCF5307Ctx): uint32 =
+proc execRte(ctx: MCF5307Ctx; insnPc: uint32): uint32 =
   ## The inverse of `takeException`.
   ##
   ## The format field is validated first. Section 3.5.7, page 3-16: the
@@ -460,7 +459,9 @@ proc execRte(ctx: MCF5307Ctx): uint32 =
     return 0'u32
   ctx.sr = first and 0xFFFF'u32
   ctx.sp = ctx.sp + 4'u32 + format
-  ctx.pc = target
+  transferControl(ctx, target, insnPc)
+  if ctx.halted:
+    return 0'u32
   14'u32
 
 # ---------------------------------------------------------------------------
@@ -469,18 +470,16 @@ proc execRte(ctx: MCF5307Ctx): uint32 =
 proc execTrap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## `TRAP #<vector>`, the four-bit field in the low bits of the opcode.
   ##
-  ## The vector number is 32 plus the field. MCF5307 User's Manual Table 3-1,
-  ## "Exception Vector Assignments", page 3-13: vector numbers 32 to 47, at
-  ## vector offsets $080 to $0BC, are the "Trap # 0-15 instructions".
+  ## THE VECTOR NUMBER IS 32 PLUS THE FIELD. Vector numbers 32 to 47, at vector
+  ## offsets $080 to $0BC, are the "Trap # 0-15 instructions".
   ##
-  ## The stacked program counter is the *next* instruction and not this one.
-  ## The same table's stacked-program-counter column reads "Next" for those
-  ## sixteen vectors, and its footnote defines Next as "the PC of the next
-  ## instruction that follows the instruction that caused the fault". `ctx.pc`
-  ## is already that address: `step` advanced it past the opcode word and TRAP
-  ## has no extension words. The rows that read "Fault" instead - the access
-  ## error, the address error, the illegal instruction - are not this
-  ## module's.
+  ## THE STACKED PROGRAM COUNTER IS THE *NEXT* INSTRUCTION AND NOT THIS ONE.
+  ## Those vectors stack "the PC of the next instruction that follows the
+  ## instruction that caused the fault". `ctx.pc` is already that address:
+  ## `step` advanced it past the opcode word and TRAP has no extension words.
+  ## The address error stacks the FAULT address instead, which is why the
+  ## branch and jump executors carry `insnPc` and this one does not: `ctx.pc`
+  ## is the wrong value for that vector and the right one for these.
   takeException(ctx, 32'u8 + (d.destReg and 0xF'u8), ctx.pc)
   if ctx.halted:
     return 0'u32
@@ -496,13 +495,19 @@ proc controlFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   ## `cpu.nim` - and halts the context with `fault` set on an illegal size, an
   ## illegal effective address, a 32-bit branch displacement or an exception
   ## frame whose format field is not one of the four the part writes.
+  # THE ADDRESS OF THE OPCODE WORD, WHICH THE EXECUTORS CANNOT RECOVER FOR
+  # THEMSELVES. `step` has advanced `ctx.pc` past the opcode and nothing else
+  # yet, so it is one instruction word back from here - but an executor that
+  # has consumed an extension word can no longer say that, and each of the four
+  # below needs it for the address error's stacked program counter.
+  let insnPc = ctx.pc - insWordBytes
   case d.op
-  of opBra, opBsr, opBcc: execBranch(ctx, word, d)
+  of opBra, opBsr, opBcc: execBranch(ctx, word, d, insnPc)
   of opScc: execScc(ctx, d)
   of opTst: execTst(ctx, d)
   of opCmp, opCmpa, opCmpi: execCompare(ctx, d)
-  of opJmp, opJsr: execJump(ctx, d)
-  of opRts: execRts(ctx)
-  of opRte: execRte(ctx)
+  of opJmp, opJsr: execJump(ctx, d, insnPc)
+  of opRts: execRts(ctx, insnPc)
+  of opRte: execRte(ctx, insnPc)
   of opTrap: execTrap(ctx, d)
   else: trap(ctx)
