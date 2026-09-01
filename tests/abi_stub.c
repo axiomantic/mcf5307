@@ -1,17 +1,14 @@
 /* abi_stub.c - one definition, with an empty body and external linkage, of
  * every function `include/mcf5307.h` declares.
  *
- * WHY IT EXISTS. Cases 3 and 4 of `t0_abi_header` COMPILE AND LINK, and
- * linking is what makes a RENAMED declaration a link error rather than
- * nothing at all. `-fsyntax-only` never links, so the two header compiles
+ * Cases 3 and 4 of `t0_abi_header` compile and link, and linking is what
+ * makes a renamed declaration a link error rather than nothing at all. `-fsyntax-only` never links, so the two header compiles
  * alone cannot catch a rename. This stub supplies the definitions the real
  * implementation does not yet carry.
  *
  * `cmake/Nim.cmake` step 4a, part three compiles this file, reads the symbols
  * the object defines with `nm`, and compares that set against the published
- * set it parses out of the contract with a C compiler. No count is written
- * here or there. A count is a third number beside the header and the code,
- * and it falls behind them both.
+ * set it parses out of the contract with a C compiler.
  *
  * The freeze is on behaviour: every body stays empty, every return stays a
  * fixed benign value, and nothing here emulates anything. A test that needs
@@ -24,11 +21,6 @@
  * link of `t0_abi_header` resolves against. A published name defined `static`
  * here would resolve nothing there, so the gate refuses that and says nothing
  * about a `static` name the contract never declared.
- *
- * `tests/abi_smoke.cpp` does take the address of EVERY published name, through
- * `tests/abi_smoke_symbols.inc`, and step 4a holds that list against the
- * contract in both directions. That gate is what keeps the word `every` true,
- * and it is why no number is written beside it.
  */
 
 #include <stddef.h>
@@ -162,13 +154,14 @@ void isp1181_write(isp1181_ctx* ctx, uint32_t addr, uint8_t value)
     (void)value;
 }
 
-void isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
-                size_t len)
+int isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
+               size_t len)
 {
     (void)ctx;
     (void)endpoint;
     (void)data;
     (void)len;
+    return 0;
 }
 
 int isp1181_setup(isp1181_ctx* ctx, const uint8_t* data, size_t len)
@@ -197,6 +190,66 @@ void isp1181_tick(isp1181_ctx* ctx, uint32_t sof_frames)
 {
     (void)ctx;
     (void)sof_frames;
+}
+
+size_t isp1181_log_written(const isp1181_ctx* ctx)
+{
+    (void)ctx;
+    return (size_t)0;
+}
+
+size_t isp1181_log_retained(const isp1181_ctx* ctx)
+{
+    (void)ctx;
+    return (size_t)0;
+}
+
+size_t isp1181_log_line(const isp1181_ctx* ctx, size_t index, char* dst,
+                        size_t capacity)
+{
+    (void)ctx;
+    (void)index;
+    (void)dst;
+    (void)capacity;
+    return (size_t)0;
+}
+
+size_t isp1181_config_slots(void)
+{
+    return (size_t)0;
+}
+
+/* -1 is the fixed benign value here: of the three answers the contract names
+ * it is the one that claims least, and the one that leaves `value` untouched.
+ */
+int isp1181_config_slot(const isp1181_ctx* ctx, size_t slot, uint8_t* value)
+{
+    (void)ctx;
+    (void)slot;
+    (void)value;
+    return -1;
+}
+
+/* -1 for `isp1181_config_slot`'s reason: of the three answers the contract
+ * names it is the one that claims least, and the one that leaves both
+ * out-parameters untouched. A benign 1 here would hand a linked caller a
+ * packet size out of a file that models nothing. */
+int isp1181_slot_buffer(const isp1181_ctx* ctx, size_t slot,
+                        size_t* max_packet_bytes, size_t* buffer_count)
+{
+    (void)ctx;
+    (void)slot;
+    (void)max_packet_bytes;
+    (void)buffer_count;
+    return -1;
+}
+
+size_t isp1181_report(const isp1181_ctx* ctx, char* dst, size_t capacity)
+{
+    (void)ctx;
+    (void)dst;
+    (void)capacity;
+    return (size_t)0;
 }
 
 size_t isp1181_state_size(void)
