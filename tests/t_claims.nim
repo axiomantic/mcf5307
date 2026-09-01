@@ -42,8 +42,6 @@
 ## refute is a claim no scenario in this bounded space separates, which is a
 ## weaker statement than "changes no reachable state" and must not be recorded
 ## as that one.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import std/strutils
 
