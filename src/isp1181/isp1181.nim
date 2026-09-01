@@ -95,9 +95,6 @@
 ## refuses a set-up packet arriving at a full control OUT buffer rather than
 ## overwriting one the firmware has not acknowledged, because the bit that
 ## would report the overwrite is not tracked.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Nothing here
-## is copied from a Philips or NXP document.
 
 import std/strutils
 

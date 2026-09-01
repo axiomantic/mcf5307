@@ -12,10 +12,9 @@
 ## vector)`, and `exception.nim` masks VBR[19-0] off there because the part
 ## does not implement them.
 ##
-## MIT licensed and clean-room with respect to GPL and LGPL code. The encoding,
-## the register numbers and the privilege rule are facts about Motorola
-## silicon, from the MCF5307 User's Manual (1998) and the ColdFire Family
-## Programmer's Reference Manual, Rev. 3.
+## The encoding, the register numbers and the privilege rule are facts about
+## Motorola silicon, from the MCF5307 User's Manual (1998) and the ColdFire
+## Family Programmer's Reference Manual, Rev. 3.
 
 import mcf5307/decode_types
 import mcf5307/machine

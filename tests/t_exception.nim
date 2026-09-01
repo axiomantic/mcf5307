@@ -5,10 +5,9 @@
 ## the bit string it came from, and NOT a second call of the procedure under
 ## test.
 ##
-## MIT licensed and clean-room with respect to GPL and LGPL code. The frame
-## layout, the vector assignments and the format encoding are facts about
-## Motorola silicon, taken from the MCF5307 User's Manual and the ColdFire
-## Family Programmer's Reference Manual.
+## The frame layout, the vector assignments and the format encoding are facts
+## about Motorola silicon, taken from the MCF5307 User's Manual and the
+## ColdFire Family Programmer's Reference Manual.
 
 import std/strutils
 
