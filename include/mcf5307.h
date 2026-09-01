@@ -26,6 +26,26 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Several calls here answer "the device refused" with a value and nothing
+ * else: no out-parameter, no errno, no state a later call reveals. A caller
+ * that drops that value proceeds exactly as a caller whose call succeeded.
+ * There is no portable way to force a C caller to read a return, so the
+ * enforcement is a compiler diagnostic at the call site.
+ *
+ * The C++17 and C23 spelling is `[[nodiscard]]`; gcc and clang carry
+ * `warn_unused_result` under every older standard, and this header is parsed
+ * as C11 by `cmake/Nim.cmake`. A toolchain with neither gets an empty macro. */
+#if defined(__cplusplus) && __cplusplus >= 201703L
+#  define MCF5307_MUST_USE [[nodiscard]]
+#elif !defined(__cplusplus) && defined(__STDC_VERSION__) && \
+      __STDC_VERSION__ >= 202311L
+#  define MCF5307_MUST_USE [[nodiscard]]
+#elif defined(__GNUC__) || defined(__clang__)
+#  define MCF5307_MUST_USE __attribute__((warn_unused_result))
+#else
+#  define MCF5307_MUST_USE
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -128,14 +148,14 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * is therefore the only interrupt the inhibition above can defer, because it
  * is the only one a mask of 7 leaves takeable at all.
  *
- * `mcf5307_reset` ALSO CLEARS THE LATCHED LEVEL-7 EDGE AND THEN RE-OBSERVES
- * THE BOARD'S LAST PRESENTATION. A level 7 request must be held until the
+ * `mcf5307_reset` also clears the latched level-7 edge and then re-observes
+ * the board's last presentation. A level 7 request must be held until the
  * second interrupt-acknowledge bus cycle has begun, so an edge whose pin has
- * since been released has nothing left to acknowledge. The
- * presentation itself survives the call: it is the board's state and reset has
- * no newer answer for it. A level 7 STILL PRESENTED across `mcf5307_reset` is
- * armed again, carrying the vector and the autovector flag of that
- * presentation; one the board had already lowered is not. */
+ * since been released has nothing left to acknowledge. The presentation itself
+ * survives the call: it is the board's state and reset has no newer answer for
+ * it. A level 7 still presented across `mcf5307_reset` is armed again,
+ * carrying the vector and the autovector flag of that presentation; one the
+ * board had already lowered is not. */
 
 /* `MCF5307_MUST_CHECK` marks a return value a caller should not drop. It is a
  * compiler diagnostic and not a mechanism: a toolchain that does not know the
@@ -311,8 +331,22 @@ isp1181_ctx* isp1181_create(void* user, isp1181_irq_fn irq, isp1181_tx_fn tx);
 void isp1181_destroy(isp1181_ctx* ctx);
 uint8_t isp1181_read(isp1181_ctx* ctx, uint32_t addr);
 void isp1181_write(isp1181_ctx* ctx, uint32_t addr, uint8_t value);
-void isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
-                size_t len);
+/* A packet from the host, which on the bus is an OUT token and its data.
+ *
+ * Returns 1 when an OUT buffer holds the packet and 0 otherwise. A 0 is the
+ * NAK and it is not an error code, and the device answers it for a nil handle,
+ * for a nil pointer, for a zero length, when the stub backend is selected,
+ * for an endpoint this model does not implement, for an endpoint whose single
+ * buffer EPDIR points IN so that it has no OUT buffer at all, and when the
+ * buffer is already full. The packet is gone in every one of those cases: a
+ * refusal here is a dropped packet and not a deferred one, which is what tells
+ * this return from `isp1181_in_token`'s.
+ *
+ * Which of them it was is in the log, one line per refusal, read through
+ * `isp1181_log_written`, `isp1181_log_retained` and `isp1181_log_line`. */
+MCF5307_MUST_USE
+int isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
+               size_t len);
 
 /* A SET-UP packet from the host, which on the bus is a SETUP token followed
  * by its data stage. It is a separate entry point from `isp1181_rx` and not a
@@ -375,6 +409,189 @@ int isp1181_set_backend(isp1181_ctx* ctx, int backend);
  * 96 quanta, and the board calls this with `sof_frames` = 1 once for each
  * virtual millisecond. */
 void isp1181_tick(isp1181_ctx* ctx, uint32_t sof_frames);
+
+/* ------------------------------------------- what the device model recorded
+ *
+ * The model writes a line every time it cannot answer truthfully: a command
+ * it does not implement, a packet it dropped, an endpoint it has no buffer
+ * for, a register it would have had to wrap. Those lines are the difference
+ * between "the device took the bytes" and "the device threw them away".
+ *
+ * The account is bounded. The model retains a fixed number of lines and keeps
+ * counting past it. `isp1181_log_written` is every line it ever wrote and
+ * `isp1181_log_retained` is how many are still readable; their difference is
+ * the number that were dropped, and it is the only figure that reports them.
+ * A reader that consults only one of the two cannot tell a complete account
+ * from a truncated one. The lines retained are the first ones: a refusal early
+ * in a run is what explains everything downstream of it, and a ring buffer
+ * would be holding the downstream and have lost the cause.
+ *
+ * Neither count ever decreases for a live handle, and no call here changes
+ * any device state. Both answer 0 for a nil handle. */
+MCF5307_MUST_USE size_t isp1181_log_written(const isp1181_ctx* ctx);
+MCF5307_MUST_USE size_t isp1181_log_retained(const isp1181_ctx* ctx);
+
+/* Copies retained line `index` into `dst` and NUL-terminates it.
+ *
+ * Returns the size the line needs, in bytes, including the terminator - not
+ * the size that was copied. A return greater than `capacity` is a line the
+ * caller's buffer could not hold, and a caller that reads the buffer without
+ * comparing has a line that ends early and looks whole.
+ *
+ * Returns 0 when there is no such retained line - a nil handle, or an `index`
+ * at or past `isp1181_log_retained`. A return of 0 is never a line, because
+ * the model writes no empty one and the smallest answer for a real line is
+ * therefore 2.
+ *
+ * `dst` may be NULL, or `capacity` may be 0, and then nothing is copied and
+ * the size is still returned. That is how a caller sizes a buffer before it
+ * allocates one. Nothing is written to `dst` past `capacity` bytes. */
+MCF5307_MUST_USE size_t isp1181_log_line(const isp1181_ctx* ctx, size_t index,
+                                         char* dst, size_t capacity);
+
+/* ------------------------------- how the firmware configured the endpoints
+ *
+ * The register file alone cannot say whether a slot was configured. Every
+ * DcEndpointConfiguration byte resets to `0x00`, and `0x00` is also a byte the
+ * firmware may write - a slot configured OUT with the FIFO disabled. So the
+ * answer is the RETURN and the byte is secondary.
+ *
+ * The slot order is ISP1362 Rev. 06 section 15.1.1 p.107: slot 0 is control
+ * OUT, slot 1 is control IN, and slot k for k >= 2 is endpoint k - 1, up to
+ * endpoint 14. The command code that writes slot k is `0x20 + k`. */
+MCF5307_MUST_USE size_t isp1181_config_slots(void);
+
+/* Returns 1 when the firmware has written configuration slot `slot` since the
+ * last reset, 0 when it has not, and -1 when there is no such slot or no
+ * handle.
+ *
+ * `*value` is written if and only if this returns 1. On 0 and on -1 `value` is
+ * left exactly as the caller left it. `value` may be NULL, and then the return
+ * is still the answer.
+ *
+ * EPDIR is bit 6 of the byte, mask `0x40`: 0 is OUT and 1 is IN. ISP1362
+ * Rev. 06 Table 110 p.107 places it and Table 111 p.107 gives its meaning. The
+ * same table places FIFOEN at bit 7, DBLBUF at bit 5, FFOISO at bit 4 and
+ * FFOSZ[3:0] in the low nibble. Every bit resets to 0. */
+MCF5307_MUST_USE int isp1181_config_slot(const isp1181_ctx* ctx, size_t slot,
+                                         uint8_t* value);
+
+/* --------------------------------- what an endpoint's buffer will hold
+ *
+ * A producer that hands the device a packet has to know the size the endpoint
+ * will accept. Splitting too small still delivers - the frames merely arrive
+ * in more pieces than they had to. Splitting too large is refused whole by
+ * `isp1181/fifo`.
+ *
+ * The size is decoded from the configuration byte the firmware wrote, and is
+ * not a constant. ISP1362 Rev. 06 Table 110 p.107 puts it in `FFOSZ[3:0]`,
+ * bits 3 to 0 of the byte written by command `0x20 + slot`, and Table 111
+ * p.107 says those bits "select the buffer memory size according to Table 16".
+ * Table 16 p.52 gives the legal non-isochronous sizes as 8, 16, 32 and 64
+ * bytes for `0000` to `0011`, and marks `0100` to `1111` reserved. The depth
+ * comes from `DBLBUF`, bit 5 of the same byte, which Table 111 gives as
+ * "Logic 1 enables the double buffering". Section 12.3.3 p.51 is what makes a
+ * buffer size a packet size: "The size of the buffer memory determines the
+ * maximum packet size that the hardware can support for a given endpoint." An
+ * OUT packet larger than the buffer is error code `1011`, "overflow; the
+ * received packet was larger than the available buffer space", Table 132
+ * p.118.
+ *
+ * Endpoint 0 is fixed by the part and its byte is not read. Table 15 p.51
+ * gives both control rows as "64 (fixed)" with double buffering "no", against
+ * "programmable" for endpoints 1 to 14, and section 15.1.1 p.107 says the
+ * control endpoints "have fixed configurations". So slots 0 and 1 answer 64
+ * bytes and one buffer whether or not the firmware ever configured them.
+ *
+ * A slot the firmware never wrote is not decoded, and the reason is a hazard
+ * rather than a preference: Table 110 p.107 resets every bit of the byte to 0,
+ * and `FFOSZ` = `0000` is 8 bytes in Table 16 - legal, and the smallest, so a
+ * producer handed it would split every frame to eight bytes and never see an
+ * error. This call answers 0 for such a slot, and for one configured with
+ * FIFOEN clear: section 12.3.3 p.51, "Only enabled endpoints are allocated
+ * space in the shared buffer memory storage, disabled endpoints have zero
+ * bytes."
+ *
+ * The datasheet contradicts itself on the bulk and interrupt bound and it is
+ * not resolved here. Table 109 p.105 gives "interrupt/bulk: N <= 64 bytes" for
+ * the buffer read and write commands, and Table 110 with Table 111 p.107 reach
+ * 64 through `FFOSZ` = `0011`. Section 15.2.1 p.113 writes the same bound as
+ * "bulk/interrupt endpoint: N <= 32". Two places say 64 and one says 32. This
+ * call states no bound of its own for that reason: it reports the size the
+ * configuration selects, and a caller that needs a bound reads it from the
+ * answer.
+ *
+ * Returns 1 when the slot has a buffer whose size this model can name, and
+ * then writes `*max_packet_bytes` and `*buffer_count`. Returns 0 when the slot
+ * exists and has no buffer to describe. Returns -1 when there is no answer to
+ * give.
+ *
+ * 0 is not a size of zero and it is not an error. It is the answer for a slot
+ * this model carries no buffer memory behind, for a slot the firmware never
+ * configured, and for one it configured with FIFOEN clear. Reporting 0 bytes
+ * or a plausible 64 would be an invention a producer would then size its
+ * packets to.
+ *
+ * -1 carries two causes and the caller separates them without a fourth return
+ * value. The first is a malformed question: no handle, or `slot` at or past
+ * `isp1181_config_slots`. The second is a configuration that names no size
+ * this model can report - a reserved `FFOSZ` code from Table 16's `0100` to
+ * `1111`, or an isochronous endpoint, whose sizes come out of that table's
+ * other column and reach 1023 bytes where no buffer in this model does. A live
+ * handle and a `slot` below `isp1181_config_slots` leave only the second.
+ *
+ * Both pointers may be NULL, and neither is written unless this returns 1 -
+ * `isp1181_config_slot`'s rule, for its reason.
+ *
+ * This call does not say whether the firmware configured the slot;
+ * `isp1181_config_slot` says that, and answering it here too would put one
+ * fact in two symbols with nothing holding them together. The states the
+ * report distinguishes are reached by asking both calls:
+ *
+ *   config_slot == 1 and slot_buffer ==  1  configured, and its size is here
+ *   config_slot == 1 and slot_buffer ==  0  configured, and no buffer behind it
+ *   config_slot == 1 and slot_buffer == -1  configured, and its size is not
+ *                                           one this model can name
+ *   config_slot == 0 and slot_buffer ==  0  never written since the last reset,
+ *                                           so it has no geometry at all
+ *   config_slot == 0 and slot_buffer ==  1  slot 0 or slot 1, whose 64 bytes
+ *                                           Table 15 fixes without a write
+ *
+ * A caller that wants to act only on a configured endpoint asks
+ * `isp1181_config_slot` first; a caller that only needs a packet size may read
+ * this call alone, because every answer other than 1 withholds one. */
+MCF5307_MUST_USE int isp1181_slot_buffer(const isp1181_ctx* ctx, size_t slot,
+                                         size_t* max_packet_bytes,
+                                         size_t* buffer_count);
+
+/* ------------------------------------------- the whole account in one call
+ *
+ * Copies a NUL-terminated report into `dst`: the three log counters, a
+ * sentence saying in words whether the account is complete or truncated, every
+ * configuration slot with its byte and its decoded EPDIR - or the words NEVER
+ * WRITTEN - and every retained log line with its place in the recorded
+ * sequence.
+ *
+ * The sequence numbers are what orders the two records against each other. An
+ * accepted configuration write leaves a register byte and no log line, and a
+ * refused command leaves a log line and no register byte, so neither record on
+ * its own says which happened first. Both carry an event number from one
+ * counter, and the report prints it beside each.
+ *
+ * Returns the size the report NEEDS, in bytes, including the terminator - not
+ * the size that was copied, and for `isp1181_log_line`'s reason: a return
+ * greater than `capacity` is a report the buffer could not hold.
+ *
+ * `dst` may be NULL, or `capacity` may be 0, and then nothing is copied and
+ * the size is still returned. Nothing is written past `capacity` bytes.
+ * Returns 0 only for a NULL handle - a live handle always has a report.
+ *
+ * The same report is written at teardown without any call at all when the
+ * environment variable `MCF5307_ISP1181_REPORT` names a file: `isp1181_destroy`
+ * APPENDS the report to it. Unset or empty changes nothing - no file is
+ * created, no default path is used and nothing is written anywhere. */
+MCF5307_MUST_USE size_t isp1181_report(const isp1181_ctx* ctx, char* dst,
+                                       size_t capacity);
 
 size_t isp1181_state_size(void);
 void isp1181_state_save(const isp1181_ctx* ctx, void* dst);

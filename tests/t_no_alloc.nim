@@ -158,10 +158,10 @@ let readBack = mcf5307_get_reg(ctx, 0)
 let afterRegisters = counts()
 
 # ---------------------------------------------------------------------------
-# Ten million instructions, one per call.
+# One instruction per call.
 #
-# A BUDGET OF ONE CYCLE RUNS EXACTLY ONE INSTRUCTION whatever that instruction
-# costs, because `mcf5307_exec` tests the budget only BEFORE a step rather than
+# A budget of one cycle runs exactly one instruction whatever that instruction
+# costs, because `mcf5307_exec` tests the budget only before a step rather than
 # declining to take one it cannot pay for. It is the budget
 # `conformance/runner.cpp` passes.
 

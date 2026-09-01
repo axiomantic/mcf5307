@@ -432,10 +432,10 @@ add_test(NAME t_checks_on
 # summary line the driver below matches, and that line is the live figure. In
 # case order:
 #
-#   FIRST  `exec` runs a NOP fetch and returns a non-zero cycle count. Drives
+#   First, `exec` runs a NOP fetch and returns a non-zero cycle count. Drives
 #      `mcf5307_create`/`mcf5307_reset`/`mcf5307_exec`/`mcf5307_destroy`
 #      through the real ABI against a board that answers `MCF5307_BUS_OK`.
-#   THEN  EA legality, enumerated over `Operation` and not over a roster of
+#   Then EA legality, enumerated over `Operation` and not over a roster of
 #      opcode names. Every operation whose `eaLegalityFor` mask is non-empty
 #      carries four assertions: the mask rejects an illegal mode cited from the
 #      MCF5307 User's Manual and never derived from the mask itself, the mask
@@ -445,9 +445,8 @@ add_test(NAME t_checks_on
 #      Both directions are therefore red-on-drift: an operation that gains a
 #      mask with no coverage entry fails in the wave that adds it, and an entry
 #      whose mask has gone empty fails as a stale entry.
-#   LAST  the decoder recognizes each of a handful of implemented opcodes from
-#      a representative word, so the legality assertions are attached to the
-#      code that runs and not to a table the decoder never reads.
+#   Last, the decoder recognizes each implemented opcode from a
+#      representative word.
 #
 # The trap is not equally attributable for every operation, and the summary
 # line says so rather than letting a bare count imply otherwise. A minority of
@@ -871,10 +870,6 @@ add_test(NAME t_alu
 
 # ---------------------------------------------------------------------------
 # `t_move` - the sized write to a data register in the data-movement group.
-#
-# ONE REGISTERED NAME, AND EVERY CASE CAN FAIL. This test is
-# registered BESIDE `mcf5307_conformance_move` rather than instead of it,
-# because that corpus CANNOT SEE THE RULE THIS TEST ASSERTS.
 #
 # Each case here asserts the register, the whole status register and `fault` as
 # one tuple.
@@ -1797,12 +1792,9 @@ add_test(NAME t_lines
 # MEASURES through the same entry point, on a path where the budget cannot be
 # the thing that stops the loop, so the two contracts give different totals.
 #
-# THE FLAG SET IS THE LIBRARY'S OWN, taken exactly as the blocks above take it,
-# and for the reason those blocks give.
-#
-# THE COMPILE HAPPENS INSIDE THE TEST AND NOT IN THE BUILD, for the reason the
-# blocks above give: a `ctest` run over a tree whose build had failed would
-# otherwise run a STALE binary of an earlier build and pass.
+# The compile happens inside the test and not in the build: a `ctest` run over
+# a tree whose build had failed would otherwise run a stale binary of an
+# earlier build and pass.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
     message(FATAL_ERROR
@@ -2075,13 +2067,10 @@ add_test(NAME t_negative
 # group. This one has none: the corpus runner executes assembled encodings, and
 # neither an access error nor an address error can be assembled.
 #
-# IT COMPILES `src/mcf5307/exception.nim` FOR ITS OWN RUN, with the library's
+# It compiles `src/mcf5307/exception.nim` for its own run, with the library's
 # own flag set, so that the module this test asserts about is built the way the
-# library builds it.
-#
-# THE FLAG SET, THE COMPILE INSIDE THE TEST and the two-part failure check are
-# taken from the `t_control` block above, for the reasons that block gives. The
-# tail anchor is `[1-9][0-9]*`, which rejects a run of zero cases.
+# library builds it. The tail anchor is `[1-9][0-9]*`, which rejects a run of
+# zero cases.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
     message(FATAL_ERROR
@@ -2325,10 +2314,10 @@ add_test(NAME t_control_registers
 # instruction, so there is no encoding to assemble. The whole of the evidence
 # for this task is the registered name below.
 #
-# THE FLAG SET IS THE LIBRARY'S OWN, taken from the compile command this
-# configure built for the library itself, so that the modules this test asserts
-# about are built the way the library builds them. The tail anchor is
-# `[1-9][0-9]*`, which rejects a run of zero cases.
+# The flag set is taken from the compile command this configure built for the
+# library itself, so that the modules this test asserts about are built the way
+# the library builds them. The tail anchor is `[1-9][0-9]*`, which rejects a
+# run of zero cases.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
     message(FATAL_ERROR
@@ -2715,10 +2704,7 @@ add_test(NAME t_irq
 # WAY. It compiles `src/mcf5307/state.nim` FROM SOURCE through `--path:src`,
 # exactly as every suite above it compiles the modules it measures, so it
 # measures the module whether or not the archive holds it. What no suite here
-# can measure is the LINK; `t0_abi_smoke` is the test that does.
-#
-# THE FLAG SET, THE COMPILE INSIDE THE TEST and the two-part failure check are
-# taken from the `t_irq` block above, for the reasons that block gives.
+# can measure is the link; `t0_abi_smoke` is the test that does.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
     message(FATAL_ERROR
@@ -2961,7 +2947,7 @@ mcf5307_check_case_sites("t_isp1181_stub" "@MCF5307_ISP1181_STUB_SOURCE@"
 # iteration, so this figure counts properties and not addresses. A sweep that
 # stopped iterating is caught by the iteration count inside the case's own
 # expected value, which is why the two guards do not overlap here.
-mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 30)
+mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 51)
 
 ]==])
 
@@ -3206,15 +3192,21 @@ include("@MCF5307_CASE_SITES_MODULE@")
 mcf5307_check_case_sites("t_isp1181"
     "@MCF5307_ISP1181_MODEL_SOURCE@" "${isp_model_run_out}" 0)
 
-# THE CASE TOTAL. `tests/case_sites.cmake` states at `mcf5307_check_case_total`
-# why a TYPED figure is accepted here and what it still does not reach. MOVE IT
-# ONLY WITH A DELIBERATE CHANGE IN THE CASE COUNT.
+# The case total. `tests/case_sites.cmake` states at `mcf5307_check_case_total`
+# why a typed figure is accepted here and what it still does not reach. Move it
+# only with a deliberate change in the case count.
 #
-# THE SWEEP OVER THE COMMAND BYTE AGGREGATES INTO ONE CASE and carries its own
+# The sweep over the command byte aggregates into one case and carries its own
 # driven-count inside the expected value, so a sweep that stopped iterating
 # fails on that count rather than on this figure. What this figure catches is
 # a whole case removed.
-mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 32)
+#
+# The EPDIR decode is covered once per direction: a queue and a transmit on an
+# endpoint configured IN against one configured OUT, and a host delivery
+# refused on an endpoint configured IN against one configured OUT. The bit
+# governs both halves of a single buffer, so a figure that covered only the
+# transmit half would let the receive half go untested.
+mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 41)
 
 ]==])
 
@@ -3368,14 +3360,14 @@ add_test(NAME t_isp1181_state
 # `--checks:off` and `-d:danger` - are neither added nor implied by this one,
 # and the strip loop below removes no check-bearing argument.
 #
-# THE SUITE'S OWN `mcf5307_create` CASE IS WHAT ENFORCES THIS BLOCK. Drop the
+# The suite's own `mcf5307_create` case is what enforces this block. Drop the
 # define and that case reads zero where it requires one, so the departure
 # cannot be undone quietly - which is the only reason a departure was
 # acceptable at all.
 #
-# THE COMPILE HAPPENS INSIDE THE TEST AND NOT IN THE BUILD, for the reason the
-# blocks above give: a `ctest` run over a tree whose build had failed would
-# otherwise run a STALE binary of an earlier build and pass.
+# The compile happens inside the test and not in the build: a `ctest` run over
+# a tree whose build had failed would otherwise run a stale binary of an
+# earlier build and pass.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
     message(FATAL_ERROR
@@ -4036,10 +4028,10 @@ endforeach()
 # `tests/t_claims.cmake` holds the registry and the driver, and
 # `tests/t_claims.nim` is the observer the absolute claims are measured with.
 #
-# IT WRITES NOTHING INTO THE SOURCE TREE. Every mutation is applied to a COPY
+# It writes nothing into the source tree. Every mutation is applied to a copy
 # of `src/` under this test's own working directory in the build tree.
 #
-# THE FLAG SET IS THE LIBRARY'S OWN, AS `t_irq`'s IS, AND WITH NO `--path`.
+# The flag set is the library's own, with no `--path`.
 # The driver passes the path of the tree under measurement itself, and a second
 # `--path` naming the pristine tree would leave which module the compiler reads
 # up to a search order this project does not control.
@@ -4160,7 +4152,12 @@ target_include_directories(abi_smoke PRIVATE
     "${PROJECT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_BINARY_DIR}"
 )
-target_link_libraries(abi_smoke PRIVATE mcf5307)
+# `Threads::Threads` is for the concurrent case in `abi_smoke.cpp`. Apple's
+# clang needs no flag for `std::thread`; a GNU/libstdc++ host does, and it
+# fails at LINK time rather than at compile time, so an omission here would
+# pass every check run on this machine.
+find_package(Threads REQUIRED)
+target_link_libraries(abi_smoke PRIVATE mcf5307 Threads::Threads)
 target_compile_features(abi_smoke PRIVATE cxx_std_17)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     # `MCF5307_TEST_WARNING_RELAXATIONS` is the root list's probe result. It is
@@ -4308,6 +4305,33 @@ add_test(NAME t0_no_local_paths
         "-DSCAN_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
         "-DSCAN_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/t0_no_local_paths_work"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t0_no_local_paths_driver.cmake")
+
+# ---------------------------------------------------------------------------
+# `t0_test_set_builds_what_it_runs` - the t0 BUILD preset produces every
+# executable the t0 TEST preset runs.
+#
+# The two presets are joined by one thing only: `--target mcf5307_tests`. A test
+# the T0 pattern selects whose COMMAND names an executable target is therefore
+# reachable only through an `add_dependencies(mcf5307_tests <target>)` line, and
+# `conformance/conformance_cpu.cmake` registered `t0_corpus_parses` without one.
+# `cmake/run_t0_build_set.cmake` carries the rule, the parser, and the account of
+# why three existing mechanisms all passed over the omission.
+#
+# THE PATTERN HERE IS A COPY, NOT THE SOURCE. `.github/workflows/ci.yml` carries
+# it as `T0_PATTERN` together with the written roster of what it excludes, and
+# nothing in a CMake list file can read that. `CMakePresets.json` already keeps a
+# second copy for the same reason. Read the roster in `ci.yml`.
+#
+# THE SOURCE DIRECTORY IS PASSED, NOT A LIST OF FILES. The script sweeps every
+# CMake list file under it for registrations, so a fourth file that registers a
+# test is covered without an edit here. A written list of files would be a roster
+# that stops covering the tree the day somebody adds to it.
+add_test(NAME t0_test_set_builds_what_it_runs
+    COMMAND "${CMAKE_COMMAND}"
+        "-DT0_PATTERN=^t0_|^t_"
+        "-DT0_AGGREGATE=mcf5307_tests"
+        "-DT0_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        -P "${PROJECT_SOURCE_DIR}/cmake/run_t0_build_set.cmake")
 
 # ---------------------------------------------------------------------------
 # Put every test this list registered behind the build gate.
