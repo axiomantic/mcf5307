@@ -937,8 +937,7 @@ proc noteInterlock(m: ISP1181; opcode: uint8; name: string) =
 
 proc statusByte(m: ISP1181; index: int): uint8 =
   ## The DcEndpointStatus register as far as this model carries it: EPSTAL
-  ## (bit 7), EPFULL1 (bit 6), EPFULL0 (bit 5), DATA_PID (bit 4), OVERWRITE
-  ## (bit 3), SETUPT (bit 2), CPUBUF (bit 1).
+  ## (bit 7), EPFULL1 (bit 6), EPFULL0 (bit 5) and SETUPT (bit 2).
   ##
   ## The bit positions are read and not inferred. ISP1362 Rev. 06, Table 126,
   ## "DcEndpointStatus register: bit allocation", places EPSTAL, EPFULL1,
@@ -949,9 +948,19 @@ proc statusByte(m: ISP1181; index: int): uint8 =
   ## integrates the ISP1181B and the ISP1181B document was not retrieved - and
   ## it is not a reading of firmware behaviour.
   ##
-  ## DATA_PID (bit 4) is set when the buffer holds a valid packet, and CPUBUF
-  ## (bit 1) when the buffer is accessible to the CPU. OVERWRITE (bit 3) is not
-  ## tracked by this model.
+  ## DATA_PID, OVERWRITE and CPUBUF read zero and the model does not track
+  ## them. Neither DATA_PID nor CPUBUF follows the pending count, so a buffer
+  ## holding a packet must leave both clear. Table 127 gives bit 4 as
+  ## "DATA_PID   This bit indicates data PID of the next packet (0 = DATA PID;
+  ## 1 = DATA1 PID)" - the data toggle the next transaction will carry, not a
+  ## report that the buffer has data - and bit 1 as "CPUBUF   This bit
+  ## indicates which buffer is currently selected for the CPU access
+  ## (0 = primary buffer; 1 = secondary buffer)" - which of a double-buffered
+  ## pair the CPU window is aimed at, not whether the CPU may read. Deriving
+  ## either from the pending count would report a toggle the model never
+  ## tracked and a secondary buffer it does not have. The gap is stated in the
+  ## module head rather than on every read, because a note per read would bury
+  ## the notes that mark a refusal.
   let pending = m.fifos[index].pending
   result = 0'u8
   if m.stalled[index]:
@@ -960,8 +969,6 @@ proc statusByte(m: ISP1181; index: int): uint8 =
     result = result or 0x40'u8
   if pending >= 1:
     result = result or 0x20'u8  # EPFULL0
-    result = result or 0x10'u8  # DATA_PID
-    result = result or 0x02'u8  # CPUBUF
   if index == outFifoOfEndpoint0 and m.setupHeld:
     result = result or 0x04'u8  # SETUPT
 
