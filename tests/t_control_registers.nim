@@ -28,10 +28,9 @@
 ## passes every read-back assertion. So the read-back is carried in each tuple
 ## as DESCRIPTION and the handler address is what adjudicates.
 ##
-## MIT licensed and clean-room with respect to GPL and LGPL code. The vector
-## numbers, the 1 MByte vector-table alignment and the unimplemented low bits
-## of VBR are facts about Motorola silicon, from the MCF5307 User's Manual
-## (1998) and the ColdFire Family Programmer's Reference Manual, Rev. 3.
+## The vector numbers, the 1 MByte vector-table alignment and the unimplemented
+## low bits of VBR are facts about Motorola silicon, from the MCF5307 User's
+## Manual (1998) and the ColdFire Family Programmer's Reference Manual, Rev. 3.
 
 import mcf5307/cpu
 import mcf5307/decode_types
