@@ -11,8 +11,6 @@
 ## also a byte the firmware may write. `configSlotWritten` is what separates
 ## them, and this text reports never-written and a written `0x00` as two
 ## different sentences.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import std/strutils
 
