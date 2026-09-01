@@ -1,8 +1,6 @@
 ## `t_movec` - the `MOVEC` encoding and the control-register map of
 ## `mcf5307/movec`.
 ##
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import mcf5307/movec
 import mcf5307/machine

@@ -19,9 +19,6 @@
 ## lights a bit. The last of those is written as a sweep with a positive
 ## control beside it: a model whose register were stuck at zero would satisfy
 ## the sweep and fails the control.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Nothing here
-## is copied from a Philips or NXP document.
 
 import std/strutils
 
