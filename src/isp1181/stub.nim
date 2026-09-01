@@ -7,8 +7,6 @@
 ## THE ADDRESS IS NOT DECODED HERE. The board owns the CS3 decode and answers
 ## for the whole window, so this model has no address it may refuse and no bus
 ## status of its own.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import ./isp1181
 export Isp1181IrqFn, Isp1181TxFn

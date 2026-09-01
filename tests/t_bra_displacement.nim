@@ -49,8 +49,7 @@
 ## THE TWO COUNTS AGREE AND THE CASES DO NOT. Each mutation reds the sweep and
 ## one marker row, and the marker row it reds is the one the other leaves green.
 ##
-## MIT licensed and clean-room with respect to GPL and LGPL code. The
-## displacement rule, the two markers and the ISA revision that carries the
+## The displacement rule, the two markers and the ISA revision that carries the
 ## longword form are facts about Motorola silicon, from the ColdFire Family
 ## Programmer's Reference Manual and the MCF5307 User's Manual.
 

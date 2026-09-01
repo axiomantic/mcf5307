@@ -23,7 +23,7 @@
 ## EXECUTION leaves its site in `declaredSites` and out of `executedSites`,
 ## which is the failure. Neither direction needs a number to be maintained.
 ##
-## MIT licensed. Nothing here is a fact about Motorola silicon.
+## Nothing here is a fact about Motorola silicon.
 
 import std/algorithm
 
