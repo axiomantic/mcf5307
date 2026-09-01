@@ -47,6 +47,23 @@ jobs:
     name: repo-lints
     runs-on: ubuntu-latest
     steps:
+    # EVERY GUARD REPORTS INDEPENDENTLY. Actions skips the remaining steps of a
+    # job once one has failed, so with a plain sequential list guard N failing
+    # made guards N+1..end report `skipped` -- a word that is not `success` and
+    # is not `failure`, and that reads to a human as "not applicable here".
+    # These guards close FOUR DIFFERENT holes and none substitutes for another,
+    # so one of them firing is the WORST moment to stop asking the others: the
+    # tree is already known to be wrong, and the run silently stops saying how
+    # wrong. In the artifacts repository that is not hypothetical; a staleness
+    # step failed there and all four content lints reported `skipped`.
+    #
+    # `!cancelled()` rather than `always()`: a cancelled run should stop, and a
+    # failed one should finish reporting. Neither form makes the JOB green -- a
+    # step that runs and fails still fails the job, so the overall verdict is
+    # unchanged and only the amount the run tells you goes up.
+    #
+    # The two checkout steps carry no condition. Every guard below reads a tree
+    # one of them produces, so a failed checkout leaves nothing to lint.
       - name: Check out the repository under test
         uses: actions/checkout@v4
         with:
@@ -61,15 +78,18 @@ jobs:
           path: lint-tools
 
       - name: Set up Python
+        if: ${{ !cancelled() }}
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: no-private-submodule
+        if: ${{ !cancelled() }}
         working-directory: lint-tools
         run: python3 -m nmg2_tools.submodule_lint "${GITHUB_WORKSPACE}/under-test"
 
       - name: no-clavia-payload
+        if: ${{ !cancelled() }}
         working-directory: lint-tools
         run: |
           python3 -m nmg2_tools.payload_lint "${GITHUB_WORKSPACE}/under-test" \
@@ -89,6 +109,7 @@ jobs:
       # one. A pattern written as one literal would match its own definition
       # and the step would fail on itself for ever.
       - name: no-clavia-upload
+        if: ${{ !cancelled() }}
         env:
           VISIBILITY: ${{ inputs.visibility }}
         run: |
@@ -123,6 +144,7 @@ jobs:
           exit "${fail}"
 
       - name: no-artifact-credential
+        if: ${{ !cancelled() }}
         working-directory: lint-tools
         run: |
           python3 -m nmg2_tools.credential_lint "${GITHUB_WORKSPACE}/under-test" \
