@@ -73,8 +73,10 @@ R=$REACH_ROOT
 W=$R/w
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
 
-# The suites the measurement reports on. `abi_smoke` is left out on purpose:
-# it does not link on arm64 and is Not Run there, so it can carry no signal.
+# The suites the measurement reports on. `t0_abi_smoke` is left out on purpose:
+# it takes the address of every published symbol and asserts no core behaviour,
+# so no deletion inside a core module can red it and it can carry no signal
+# here. That is a property of what it asserts, not of whether it builds.
 SUITES='^(t_control|t_logic|t_alu|t_move|t_ea_masks|t_sign_extend|mcf5307_conformance_all)$'
 
 if command -v md5 > /dev/null 2>&1; then
