@@ -1,28 +1,14 @@
 ## `t_exception` - the exception model of `mcf5307/exception`, and the frame
 ## the shipped core actually writes.
 ##
-## THE DOCUMENTS THIS FILE CITES ARE OUTSIDE THIS REPOSITORY and each is named
-## in full, as `tests/t_control.nim` and `tests/t_logic.nim` name theirs.
-##
-##   THE MCF5307 USER'S MANUAL: Motorola, "MCF5307 ColdFire Integrated
-##   Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998. Every
-##   citation below names its section, table and folio page.
-##
-##   THE COLDFIRE FAMILY PROGRAMMER'S REFERENCE MANUAL, Rev. 3 (Freescale).
-##   It is a SECOND oracle for the frame layout and it is the only one of the
-##   two that states why the vector table is 1 MByte aligned.
-##
-##   DESIGN SECTIONS 6.1 AND 5.2.1 are "The core" and "Bus faults and the
-##   error channel" of the NMG2 emulator DESIGN DOCUMENT
-##   (`2026-08-04-nmg2-emulator-design.md`).
-##
 ## EVERY EXPECTED VALUE IN BLOCK 1 IS A HAND-DERIVED LITERAL, written beside
 ## the bit string it came from, and NOT a second call of the procedure under
 ## test.
 ##
 ## MIT licensed and clean-room with respect to GPL and LGPL code. The frame
 ## layout, the vector assignments and the format encoding are facts about
-## Motorola silicon, taken from the two manuals named above.
+## Motorola silicon, taken from the MCF5307 User's Manual and the ColdFire
+## Family Programmer's Reference Manual.
 
 import std/strutils
 
@@ -78,12 +64,9 @@ template checkEq(got: uint32; want: uint32; label: string) =
 # ---------------------------------------------------------------------------
 # BLOCK 1. The first longword of the frame, as a number.
 #
-# CFPRM Rev. 3 section 11.1.2, Figure 11-1, folio 11-4, prints the bit numbers
-# 31, 28, 27, 26, 25, 18, 17, 16, 15 and 0 over the fields
-# `FORMAT | FS[3-2] | VEC | FS[1-0] | Status Register`. MCF5307 User's Manual
-# section 3.4, Figure 3-7, folio 3-13, prints the same figure with the same
-# numbers. The two agree, and each expected value below is the bit string those
-# two figures define, written out and converted by hand.
+# The fields are `FORMAT | FS[3-2] | VEC | FS[1-0] | Status Register`, and both
+# manuals print the same figure. Each expected value below is the bit string
+# that figure defines, written out and converted by hand.
 
 checkEq(frameFirstLongword(4'u32, fsWriteProtected, 2'u8, 0x2700'u32),
         0x48092700'u32,
@@ -139,14 +122,10 @@ checkEq(uint32(frameVector(0x7C0C2000'u32)), 3'u32,
         "decode: VEC of 0x7C0C2000")
 
 # ---------------------------------------------------------------------------
-# BLOCK 3. The vector numbers, and the offsets the manual prints beside them.
+# BLOCK 3. The vector numbers, and the offsets the manuals print beside them.
 #
-# MCF5307 User's Manual section 3.4, Table 3-1, "Exception Vector Assignments",
-# folios 3-12 and 3-13; CFPRM Rev. 3 section 11.1, Table 11-1, folios 11-2 and
-# 11-3. Both tables carry a VECTOR NUMBER column and a VECTOR OFFSET column,
-#
-# THE TWO TABLES ARE NOT IDENTICAL and this file cites only rows where they
-# agree. Their disagreement is recorded in `src/mcf5307/exception.nim`.
+# THE TWO MANUALS' TABLES ARE NOT IDENTICAL and this file takes only rows where
+# they agree. Their disagreement is recorded in `src/mcf5307/exception.nim`.
 
 checkEq(uint32(vecAccessError), 2'u32, "vector number: access error is 2")
 checkEq(uint32(vecAddressError), 3'u32, "vector number: address error is 3")
@@ -171,8 +150,7 @@ checkEq(vectorAddress(0'u32, vecUserFirst), 0x100'u32,
 checkEq(vectorAddress(0'u32, vecUserLast), 0x3FC'u32,
         "vector offset: last user-defined vector at $3FC")
 
-# The table is 1024 bytes (User's Manual section 3.3, folio 3-12; CFPRM section
-# 11.1, folio 11-2) and its last longword is the one at $3FC.
+# The table is 1024 bytes and its last longword is the one at $3FC.
 checkEq(vectorTableBytes, 1024'u32, "vector table: 1024 bytes")
 checkEq(vectorAddress(0'u32, vecUserLast) + 4'u32, vectorTableBytes,
         "vector table: the $3FC longword is its last")
@@ -180,12 +158,9 @@ checkEq(vectorAddress(0'u32, vecUserLast) + 4'u32, vectorTableBytes,
 # ---------------------------------------------------------------------------
 # BLOCK 4. The 1 MByte alignment, and where it comes from.
 #
-# CFPRM Rev. 3 section 11.1, folio 11-2, verbatim: "VBR[19-0] are not
-# implemented and are assumed to be zero, forcing the vector table to be
-# aligned on a 0-modulo-1-Mbyte boundary." The User's Manual states the
-# CONSEQUENCE - section 3.3, folio 3-12, "aligned on any 1 MByte address
-# boundary" - and not the mechanism, so the low bits of VBR are pinned from the
-# CFPRM alone.
+# VBR[19-0] are not implemented and are assumed to be zero, which is what
+# forces the vector table onto a 1 MByte boundary. Only one of the two manuals
+# gives that mechanism, so the low bits of VBR are pinned from it alone.
 
 checkEq(vectorAddress(0x0010_0000'u32, vecAccessError), 0x0010_0008'u32,
         "VBR 0x00100000: access error at 0x00100008")
@@ -198,17 +173,26 @@ checkEq(vectorAddress(0x000F_FFFF'u32, vecAccessError), 0x008'u32,
 # The board. One flat byte array, big-endian, as `t_control`'s and the
 # conformance runner's. A read outside it reports `busUnmapped`.
 #
-# IT RECORDS EVERY READ BELOW `vectorTableBytes`, which is the vector table and
-# nothing else: the code sits at `execBase`, above the whole 1024-byte table,
-# and the stack is higher still.
+# IT RECORDS EVERY READ INSIDE A VECTOR TABLE AND NOTHING ELSE: the code sits
+# at `execBase`, above the whole 1024-byte zero-based table, and the stack is
+# higher still. TWO TABLES CAN BE IN PLAY - the zero-based one and the one
+# `vbrTableBase` names - and a read of EITHER is recorded, so a core that read
+# the wrong table reports WHICH address it read rather than an empty list.
+#
+# THE MEMORY REACHES THE `VBR`-BASED TABLE AND STOPS THERE. `memSize` is
+# COMPOSED from `vbrTableBase` and `vectorTableBytes` rather than written as a
+# literal, so moving the base cannot leave the array one table short.
 
 const
-  memSize = 0x1000
-  execBase = 0x400'u32      ## above the whole 1024-byte vector table
+  vbrTableBase = 0x0010_0000'u32
+    ## 1 MByte, THE SMALLEST NON-ZERO BASE THIS PART CAN HOLD: VBR[19-0] are
+    ## not implemented, which block 4 above asserts value by value.
+  memSize = int(vbrTableBase) + int(vectorTableBytes)
+  execBase = 0x400'u32      ## above the whole 1024-byte zero-based table
   trapHandler = 0x500'u32
   accessHandler = 0x600'u32
   addressHandler = 0x700'u32
-  frameBase = 0x7F8'u32     ## Table 3-2: 0x800-8, 0x801-9, 0x802-10, 0x803-11
+  frameBase = 0x7F8'u32     ## 0x800-8, 0x801-9, 0x802-10, 0x803-11
   srReset = 0x2700'u32
   opTrap0 = 0x4E40'u16      ## `trap #0`, m68k-elf-as -mcpu=5307
   opRteWord = 0x4E73'u16    ## `rte`, the same assembler
@@ -218,6 +202,10 @@ type TestBoard = object
 
 var board: TestBoard
 var vectorReads: seq[uint32]
+
+var tableBase: uint32 = 0'u32
+  ## The base the case under way put its OWN vector table at. It is the second
+  ## table the read log recognizes; the zero-based one is always recognized.
 
 proc boardWrite(b: var TestBoard; address: uint32; size: int; value: uint32) =
   for i in 0 ..< size:
@@ -235,7 +223,8 @@ proc bRead(user: pointer; address: uint32; size: cint;
     status[] = Mcf5307BusStatus.busUnmapped
     return 0'u32
   status[] = Mcf5307BusStatus.busOk
-  if address < vectorTableBytes:
+  if address < vectorTableBytes or
+     (address >= tableBase and address - tableBase < vectorTableBytes):
     vectorReads.add(address)
   boardReadValue(b[], address, int(size))
 
@@ -251,7 +240,8 @@ proc bWrite(user: pointer; address: uint32; size: cint; value: uint32;
 proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
   discard
 
-proc freshBoard() =
+proc freshBoard(base: uint32 = 0'u32) =
+  tableBase = base
   for i in 0 ..< memSize:
     board.bytes[i] = 0'u8
   vectorReads = @[]
@@ -269,15 +259,13 @@ proc mem32(address: uint32): uint32 =
 # The path is the published one - `mcf5307_create`, `mcf5307_reset`,
 # `mcf5307_exec` - and not an internal helper reached around the back.
 #
-# MCF5307 User's Manual section 3.4, Table 3-2, "Format Field Encoding", folio
-# 3-14, gives the four rows: an A7 whose low two bits are 00, 01, 10 or 11
-# leaves the handler with A7-8, A7-9, A7-10 or A7-11 and a FORMAT of 4, 5, 6 or
-# 7. All four of the A7 values below produce the same frame base, 0x7F8, and
-# each of the four subtractions is written out above `frameBase`.
+# The format field encoding is what makes an A7 whose low two bits are 00, 01,
+# 10 or 11 leave the handler with A7-8, A7-9, A7-10 or A7-11 and a FORMAT of 4,
+# 5, 6 or 7. All of the A7 values below produce the same frame base, 0x7F8, and
+# each subtraction is written out above `frameBase`.
 #
-# THE STACKED PROGRAM COUNTER IS `execBase + 2`. Table 3-1 gives vectors 32 to
-# 47 a STACKED PROGRAM COUNTER of "Next", and its footnote defines Next as the
-# instruction after the one that caused the fault; `trap #0` is one word.
+# THE STACKED PROGRAM COUNTER IS `execBase + 2`. A trap stacks the instruction
+# after the one that caused the fault, and `trap #0` is one word.
 
 proc runTrapAndRte(startSp: uint32; startSr: uint32;
                    expectFrame: uint32; label: string) =
@@ -313,10 +301,9 @@ proc runTrapAndRte(startSp: uint32; startSr: uint32;
         $returned, $wantReturned)
   mcf5307_destroy(ctx)
 
-# The four expected frames are hand-derived exactly as block 1's are. `FS` is
-# 0000 for a TRAP - Table 3-3, folio 3-14, defines the field for access and
-# address errors only and writes zeros for every other exception - and the
-# vector is 32, which Table 3-1 gives to `trap #0`.
+# The expected frames are hand-derived exactly as block 1's are. `FS` is 0000
+# for a TRAP - the field is defined for access and address errors only and
+# zeros for every other exception - and the vector is 32, which is `trap #0`.
 #   0100 | 00 | 00100000 | 00 | 0010011100000000 -> 0x40802700
 runTrapAndRte(0x800'u32, srReset, 0x40802700'u32, "A7 0x800, FORMAT 4")
 runTrapAndRte(0x801'u32, srReset, 0x50802700'u32, "A7 0x801, FORMAT 5")
@@ -324,10 +311,9 @@ runTrapAndRte(0x802'u32, srReset, 0x60802700'u32, "A7 0x802, FORMAT 6")
 runTrapAndRte(0x803'u32, srReset, 0x70802700'u32, "A7 0x803, FORMAT 7")
 
 # THE STACKED STATUS REGISTER IS THE COPY TAKEN BEFORE THE EXCEPTION CHANGED
-# IT. Section 3.3, folio 3-11: the processor "makes an internal copy of the SR
-# and then enters supervisor mode by setting the S-bit and disabling trace mode
-# by clearing the T-bit". Entered with T set, the FRAME must carry T and the
-# HANDLER must not.
+# IT. The processor copies the SR, then enters supervisor mode by setting the
+# S-bit and disables trace mode by clearing the T-bit. Entered with T set, the
+# FRAME must carry T and the HANDLER must not.
 #   0100 | 00 | 00100000 | 00 | 1010011100000000 -> 0x4080A700
 runTrapAndRte(0x800'u32, 0xA700'u32, 0x4080A700'u32, "A7 0x800, T set")
 
@@ -374,6 +360,75 @@ check(addressErr == (sp: frameBase, pc: addressHandler, halted: false,
       "address error: vector 3, handler from $00C", $addressErr,
       "the $00C handler, VEC 3, one read of $00C")
 #   0100 | 00 | 00000011 | 00 | 0010011100000000 -> 0x400C2700
+
+# ---------------------------------------------------------------------------
+# BLOCK 7. THE DISPATCH READS `VBR`, AND NO READ-BACK CAN SHOW THAT.
+#
+# A core that STORES the value in a context field no dispatch consults fails
+# IDENTICALLY to one that discards it, and passes every read-back assertion.
+# So the read-back below is carried in the tuple as DESCRIPTION and the
+# handler address is what adjudicates: the ZERO-BASED slot for this vector
+# holds `accessHandler` and the `VBR`-BASED slot holds `vbrHandler`, and the
+# two are different addresses. A core basing the table at zero lands on
+# `accessHandler` and says so; the read log names the address it fetched from.
+#
+# THE VECTOR IS THE ACCESS ERROR BECAUSE `freshBoard` ALREADY WRITES ITS
+# ZERO-BASED SLOT. The decoy is therefore the same value block 6 asserts
+# against, and not a second constant that could drift away from it.
+
+const vbrHandler = 0x0010_0800'u32
+
+type TakenVbr = tuple[setOk: bool, readBack: uint32, sp: uint32, pc: uint32,
+                      halted: bool, framePc: uint32, reads: seq[uint32]]
+
+proc runTakeExceptionWithVbr(vbr: uint32; vector: uint8;
+                             stackedPc: uint32): TakenVbr =
+  freshBoard(vbrTableBase)
+  boardWrite(board, vectorAddress(vbrTableBase, vector), 4, vbrHandler)
+  let ctx = mcf5307_create(addr board, bRead, bWrite, bIack)
+  mcf5307_reset(ctx, 0x800'u32, execBase)
+  let setOk = mcf5307_set_reg(ctx, 18, vbr) != 0
+  takeException(ctx, vector, stackedPc)
+  result = (setOk: setOk,
+            readBack: mcf5307_get_reg(ctx, 18),
+            sp: ctx.sp,
+            pc: ctx.pc,
+            halted: ctx.halted,
+            framePc: mem32(frameBase + 4'u32),
+            reads: vectorReads)
+  mcf5307_destroy(ctx)
+
+let vbrBased = runTakeExceptionWithVbr(vbrTableBase, vecAccessError, 0x444'u32)
+check(vbrBased == (setOk: true, readBack: vbrTableBase, sp: frameBase,
+                   pc: vbrHandler, halted: false, framePc: 0x444'u32,
+                   reads: @[vbrTableBase + 0x008'u32]),
+      "VBR 0x00100000: the handler comes from 0x00100008 and not from $008",
+      $vbrBased,
+      "the 0x00100008 handler, one read of 0x00100008, the frame unchanged")
+
+# THE UNIMPLEMENTED LOW BITS ARE MASKED BY THE DISPATCH AND NOT ONLY BY
+# `vectorAddress`. Block 4 asserts the mask on the pure function; this asserts
+# that the procedure which takes the exception is the one applying it.
+let vbrMisaligned =
+  runTakeExceptionWithVbr(vbrTableBase or 0x4'u32, vecAccessError, 0x444'u32)
+check(vbrMisaligned == (setOk: true, readBack: vbrTableBase or 0x4'u32,
+                        sp: frameBase, pc: vbrHandler, halted: false,
+                        framePc: 0x444'u32,
+                        reads: @[vbrTableBase + 0x008'u32]),
+      "VBR 0x00100004: VBR[19-0] are not implemented at the dispatch",
+      $vbrMisaligned,
+      "the 0x00100008 handler, one read of 0x00100008")
+
+# A ZERO `VBR` STILL READS THE ZERO-BASED TABLE. Without this case a core that
+# hardcoded the dispatch at `vbrTableBase` instead of at zero would satisfy
+# both cases above, and block 6's cases run on a board whose second table does
+# not exist.
+let vbrZero = runTakeExceptionWithVbr(0'u32, vecAccessError, 0x444'u32)
+check(vbrZero == (setOk: true, readBack: 0'u32, sp: frameBase,
+                  pc: accessHandler, halted: false, framePc: 0x444'u32,
+                  reads: @[0x008'u32]),
+      "VBR 0x00000000: the handler comes from $008",
+      $vbrZero, "the $008 handler, one read of $008")
 
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
 # program reports what its text declares and what its run adjudicated,

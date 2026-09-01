@@ -1,10 +1,6 @@
 # The registration list for `tests/`.
 #
-# CPU-26 CREATES THIS FILE EMPTY AND REGISTERS NOTHING IN IT. That is the
-# correct state for the skeleton, and CPU-26's own check asserts it by reading
-# `Total Tests: 0` out of the CTest listing.
-#
-# Each cpu task adds its own `add_test(NAME <name> ...)` line here, with
+# Each suite adds its own `add_test(NAME <name> ...)` line here, with
 # whatever target the name needs, and attaches that target to the `mcf5307_tests`
 # aggregate that the root list creates, after the `PROJECT_IS_TOP_LEVEL` guard
 # below unless it has the same reason to outlive it the block above the guard has.
@@ -16,7 +12,7 @@
 # What it protects. What the OFF branch of step 4a does is `message(WARNING)`,
 # and a warning fails neither `cmake`, nor `cmake --build`, nor `ctest`. The
 # switch is a `CACHE BOOL`, so a directory configured OFF once stays OFF with
-# nobody naming it again. The whole OFF state was therefore reportable only as
+# nobody naming it again. The whole OFF state is therefore reportable only as
 # one line of scrollback on a run that ends in exit 0 - the shape of a check
 # that quietly does not run, which is the shape step 4a was written to end.
 # This test is the only thing in the repository that fails when the gate is
@@ -29,20 +25,18 @@
 # normal variable, which the docstring in `cmake/Nim.cmake` records. A
 # cache-only assertion passes on both.
 #
-# So the assertion is on an artifact step 4a produced, and the cache checks are
-# kept beside it. `cmake/Nim.cmake` writes `mcf5307_abi_gate_ran.token` at the
-# end of step 4a's own branch, carrying the counts the three parts measured and
-# the number of sites that ran. This file moves that token - removes any
+# SO THE ASSERTION IS ON AN ARTIFACT STEP 4a PRODUCED, AND THE CACHE CHECKS ARE
+# KEPT BESIDE IT. `cmake/Nim.cmake` writes `mcf5307_abi_gate_ran.token` at the
+# END of step 4a's own branch. This file MOVES that token - removes any
 # previous stamp, then renames - into the binary directory ctest starts the
 # driver in. The token is consumed, so a stamp can be here only if step 4a
 # wrote a token in the same run that moved it.
 #
-# What the move does not close is a configure that aborts before this directory
-# is read: nothing here runs to remove the previous stamp, so the test can pass
-# against a surviving stamp. A stamp therefore proves the branch ran through in
-# the most recent configure that reached `tests/`, which is what the pass line
-# says. It is bounded: `cmake --build` on that tree re-runs cmake and exits 2,
-# so CI never reaches ctest.
+# WHAT THE MOVE DOES NOT CLOSE is a configure that ABORTS before this directory
+# is read: nothing here runs to remove the previous stamp. So a stamp proves
+# the branch ran through IN THE MOST RECENT CONFIGURE THAT REACHED `tests/`,
+# which is what the pass line says. It is bounded: `cmake --build` on that tree
+# re-runs cmake and exits 2, so CI never reaches ctest.
 #
 # The move is why there is no mtime comparison. An existence-only stamp needs
 # one, and `CMakeCache.txt` is the file it would have to name. Both directions
@@ -53,26 +47,23 @@
 # reads newer than the cache. Consumption answers the question the mtime was
 # reaching for without depending on either ordering.
 #
-# The two offsets are anchored differently on purpose. The token lands in this
-# project's binary directory, `PROJECT_BINARY_DIR`; `CMakeCache.txt` is written
-# once per build tree, `CMAKE_BINARY_DIR`. The two are the same directory only
-# when mcf5307 is top-level: with the cache offset taken from
-# `PROJECT_BINARY_DIR`, a configure through `add_subdirectory()` names
-# `<build>/mcf5307_build`, which holds no cache, and the test is red on every
-# run with the gate on.
+# THE TWO OFFSETS ARE ANCHORED DIFFERENTLY ON PURPOSE. The token lands in THIS
+# PROJECT's binary directory, `PROJECT_BINARY_DIR`; `CMakeCache.txt` is written
+# once per BUILD TREE, `CMAKE_BINARY_DIR`. The two are the same directory ONLY
+# when mcf5307 is top-level, so taking the cache offset from
+# `PROJECT_BINARY_DIR` names a directory that holds no cache under
+# `add_subdirectory()` and reds on every run WITH THE GATE ON.
 #
 # The cache checks are kept and not replaced. They read the persisted entry,
 # which is the thing that survives into the next configure, and they name a
-# different fault: a tree whose switch is off, or whose switch is no longer
-# declared, is a different report from a tree whose branch did not run.
+# different fault: a tree whose switch is off, or whose switch is not declared
+# at all, is a different report from a tree whose branch did not run.
 #
 # The two files it reads are resolved at run time and not baked at configure
 # time. What `add_test` records for each is a relative offset, resolved against
 # the directory ctest starts the driver in, in whatever tree ctest was invoked
-# in. An absolute path computed at configure time names that tree forever, and
-# a build tree is a directory anyone can copy: with the absolute form, a tree
-# configured OFF and copied, with the original reconfigured to ON, passes in
-# the copy and prints the original tree's path in its own pass line.
+# in. An absolute path computed at configure time names THAT tree forever, and
+# a build tree is a directory anyone can copy.
 #
 # The assertion is on CMake's own boolean reading of the literal, not on the
 # spelling `ON`. `-DMCF5307_ABI_GATE=TRUE` and `-DMCF5307_ABI_GATE=1` are gates
@@ -111,9 +102,8 @@
 #
 # Deleting this step is not a quiet way to disarm the test. The offset computed
 # below names `MCF5307_GATE_STAMP`, so a tree without this step reaches
-# `file(RELATIVE_PATH)` with an empty argument: `CMake Error ... file
-# RELATIVE_PATH must be passed a full path to the file`, and the configure ends
-# non-zero with no test registered at all.
+# `file(RELATIVE_PATH)` with an empty argument, which is a hard CMake error and
+# ends the configure non-zero with no test registered at all.
 set(MCF5307_GATE_TOKEN "${PROJECT_BINARY_DIR}/mcf5307_abi_gate_ran.token")
 set(MCF5307_GATE_STAMP "${CMAKE_CURRENT_BINARY_DIR}/t0_abi_gate_ran.stamp")
 file(REMOVE "${MCF5307_GATE_STAMP}")
@@ -132,11 +122,9 @@ file(RELATIVE_PATH MCF5307_GATE_CACHE_OFFSET
 file(RELATIVE_PATH MCF5307_GATE_STAMP_OFFSET
     "${CMAKE_CURRENT_BINARY_DIR}" "${MCF5307_GATE_STAMP}")
 
-# The driver is a source file and the offsets still resolve against the build
-# tree. `cmake -P` sets `CMAKE_CURRENT_BINARY_DIR` to the working directory and
-# never to the script's own directory: with a decoy `CMakeCache.txt` reading
-# OFF planted where a script-anchored resolution would have landed, the driver
-# reads the build tree's cache.
+# THE DRIVER IS A SOURCE FILE AND THE OFFSETS STILL RESOLVE AGAINST THE BUILD
+# TREE. `cmake -P` sets `CMAKE_CURRENT_BINARY_DIR` to the WORKING DIRECTORY and
+# never to the script's own directory.
 add_test(NAME t0_abi_gate_on
     COMMAND "${CMAKE_COMMAND}"
         "-DGATE_CACHE_OFFSET=${MCF5307_GATE_CACHE_OFFSET}"
@@ -520,11 +508,9 @@ endforeach()
 
 # THE VANISHED-CASE CHECK EVERY `t_*` DRIVER BELOW INCLUDES.
 #
-# Each driver anchors its pass on `<suite>: <N> cases passed`, and MEASURED
-# 2026-08-13 that anchor accepts a suite that has stopped running its cases:
-# `t_irq` with `if passCount >= 1: return` at the head of its `check` printed
-# `t_irq: 1 cases passed`, exited 0, and `ctest -R ^t_irq$` reported `Passed`
-# with twenty-two of twenty-three cases gone.
+# Each driver anchors its pass on `<suite>: <N> cases passed`, and that anchor
+# on its own accepts a suite that has stopped running its cases: a suite that
+# returns early from `check` still prints a pass line and still exits 0.
 #
 # `case_sites.cmake` states the rules that replace the range with a
 # comparison, and `tests/case_sites.nim` states the run-time half.
@@ -601,7 +587,7 @@ mcf5307_check_case_sites("t_ea_masks" "@MCF5307_EA_SOURCE@" "${ea_run_out}"
 # states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
 # what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
 # CASE COUNT.
-mcf5307_check_case_total("t_ea_masks" "${ea_run_out}" 446)
+mcf5307_check_case_total("t_ea_masks" "${ea_run_out}" 451)
 
 ]==])
 
@@ -766,9 +752,7 @@ add_test(NAME t_sign_extend
 # The corpus carries no negative case, so the encodings this part does not
 # have - byte and word arithmetic, an ADDI to memory, a NEG to memory, a
 # PC-relative ADDQ destination, a 64-bit MULU.L, the memory form of ADDX -
-# are asserted to trap here. Each one was offered to
-# `m68k-elf-as -mcpu=5307` and rejected, which is the ground truth for what
-# the silicon has.
+# are asserted to trap here.
 #
 # The flag set, the compile inside the test and the two-part failure check are
 # taken from `t_ea_masks` and `t_sign_extend` above, for the reasons those
@@ -888,12 +872,9 @@ add_test(NAME t_alu
 # ---------------------------------------------------------------------------
 # `t_move` - the sized write to a data register in the data-movement group.
 #
-# This test is registered beside `mcf5307_conformance_move` rather than instead
-# of it, because a corpus case that starts the destination register at zero
-# cannot see the rule this test asserts: a `MOVE.B` into `Dn` writes the low
-# byte and leaves the upper three alone, and a core that zeroes them produces
-# the same register from a zero destination. Every case in `tests/t_move.nim`
-# starts the destination at 0x12345678, which is what separates the two.
+# ONE REGISTERED NAME, AND EVERY CASE CAN FAIL. This test is
+# registered BESIDE `mcf5307_conformance_move` rather than instead of it,
+# because that corpus CANNOT SEE THE RULE THIS TEST ASSERTS.
 #
 # Each case here asserts the register, the whole status register and `fault` as
 # one tuple.
@@ -1030,22 +1011,11 @@ add_test(NAME t_move
 # declared mask - which admits the PC-relative pair - and the executor is
 # invisible there.
 #
-# `t_ea_masks` enumerates over `Operation`, so it
-# enters `logicFamily` for every logic operation carrying a legality mask -
-# but it enters through the effective-address door alone. It asserts that a
-# legal operand runs and that an illegal one traps whole, and it asserts
-# nothing about the computed result of a legal run and nothing about the
-# encoding of any logic word - it hand-builds its `Decoded` objects, and the
-# six words it does put through `decodeWord` are NOP, MOVE, ADDQ, SUBQ, LEA and
-# MOVEQ, not one logic opcode among them. Its `opBtst` entry offers `Dn` and
-# `An` and no other mode, so the PC-relative and immediate operands named above
-# are never presented to it. That leaves both defects above out of its reach
-# and leaves this file's reason to exist unchanged. (It does assert a cycle
-# count and the status register, but only as part of `traps whole`: a non-zero
-# count for the legal run and zero cycles with an unchanged SR for the trap.)
-# `t_move` and `t_alu` cover their own groups.
-# `tests/t_logic.nim` gives the case list and the measurement behind every
-# encoding it names.
+# `t_ea_masks` enters `logic.nim` through the effective-address door alone: it
+# hand-builds its `Decoded` objects, and the words it does put through
+# `decodeWord` carry no logic opcode. Its `opBtst` entry offers `Dn` and `An`
+# and no other mode, so the PC-relative and immediate operands named above are
+# never presented to it.
 #
 # The flag set, the compile inside the test and the two-part failure check are
 # taken from `t_ea_masks`, `t_sign_extend`, `t_alu` and `t_move` above, for the
@@ -1134,8 +1104,7 @@ endif()
 # CHECK. `[0-9]+` matches `0`, so a `t_logic.nim` reduced to nothing but
 # `echo "t_logic: ", 0, " cases passed"` exits 0, prints the banner, runs no
 # case and PASSES this test - which is the one outcome the paragraph above
-# says this anchor exists to reject. Measured: with `[0-9]+`, that reduced
-# program passes; with the pattern below it fails.
+# says this anchor exists to reject.
 if(NOT logic_run_out MATCHES "t_logic: [1-9][0-9]* cases passed")
     message(FATAL_ERROR
         "t_logic: the run exited 0 but did not report a full pass.\n"
@@ -1177,26 +1146,19 @@ add_test(NAME t_logic
 # wrongly-claimed encoding, because a stolen encoding produces a passing
 # execution of a different instruction.
 #
-# This group arrived with one. `decode.nim`'s ADDQ and SUBQ arms matched on
-# `word and 0xF100` alone and claimed all 1024 `0101 cccc 11 <ea>` words, 512 as
-# `opAddq` and 512 as `opSubq`, none unclaimed. Every one of them then trapped
-# on the illegal size field, which is indistinguishable from "the opcode is not
+# A DECODER THAT MATCHED ADDQ AND SUBQ ON `word and 0xF100` ALONE CLAIMS THE
+# WHOLE `0101 cccc 11 <ea>` SPACE, and every word of it then traps on the
+# illegal size field - which is indistinguishable from "the opcode is not
 # written yet". `tests/t_control.nim` asserts `decodeWord(0x50c0).op == opScc`
-# and the three ADDQ/SUBQ controls beside it.
+# and the ADDQ/SUBQ controls beside it.
 #
 # Those 1024 words are not "the Scc and DBcc space". The split is measured:
 #
-#     128 are `Scc Dn` - EA field `000 rrr`, eight registers times sixteen
-#         conditions. All 128 assemble under `m68k-elf-as -mcpu=5307` (`st %d0`
-#         is `50c0`, `sf %d0` is `51c0`, `shi %d0` is `52c0`) and `st (%a0)` is
-#         refused. Table 3-7, page 3-25, gives Scc an operand syntax of `Dx`,
-#         and Table 3-12, page 3-27, one `scc Dx` row and no memory column.
+#     `Scc Dn`, the EA field `000 rrr`. Scc takes a data register operand and
+#         nothing else on this part, so `st (%a0)` is not an instruction.
 #
-#       0 are DBcc. The instruction is not on this part. Section 3.9, page
-#         3-21, lists "decrement and branch" among the removed instructions,
-#         no table carries a row, and the pinned assembler rejects `dbf`,
-#         `dbra`, `dbt` and `dbne` under `-mcpu=5307`. The 128 words
-#         `0101 cccc 11 001 rrr` are a 68000 DBcc slot and nothing here.
+#     DBcc, WHICH IS NOT ON THIS PART AT ALL. The words `0101 cccc 11 001 rrr`
+#         are a 68000 DBcc slot and nothing here.
 #
 #       3 are TRAPF - `51fa`, `51fb` and `51fc`, measured from `trapf.w #1`,
 #         `trapf.l #1` and `trapf`. `trapt`, `trapeq`, `trapne` and `traphi`
@@ -1205,7 +1167,7 @@ add_test(NAME t_logic
 #         `opIllegal` so they stay unclaimed, and keeps `51c0`, `51f9` and
 #         `51fd` as Scc controls beside them.
 #
-#     893 are none of the three - no instruction on this part.
+#     Everything else in the space is no instruction on this part.
 #
 # It also carries the assertion no corpus case can hold: a `Bcc` whose 8-bit
 # displacement is `0xff` means a 32-bit displacement, which is ISA_B, and must
@@ -1299,8 +1261,7 @@ endif()
 # check. `[0-9]+` matches `0`, so a `t_control.nim` reduced to nothing but
 # `echo "t_control: ", 0, " cases passed"` exits 0, prints the banner, runs no
 # case and PASSES this test - which is the one outcome the paragraph above says
-# this anchor exists to reject. The `t_logic` block above measured exactly that
-# and this block uses its tightened form.
+# this anchor exists to reject.
 if(NOT control_run_out MATCHES "t_control: [1-9][0-9]* cases passed")
     message(FATAL_ERROR
         "t_control: the run exited 0 but did not report a full pass.\n"
@@ -1320,7 +1281,7 @@ mcf5307_check_case_sites("t_control" "@MCF5307_CONTROL_SOURCE@" "${control_run_o
 # states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
 # what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
 # CASE COUNT.
-mcf5307_check_case_total("t_control" "${control_run_out}" 168)
+mcf5307_check_case_total("t_control" "${control_run_out}" 175)
 
 ]==])
 
@@ -1332,6 +1293,779 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_control_driver.cmake"
 add_test(NAME t_control
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_control_driver.cmake")
+
+# ---------------------------------------------------------------------------
+# `t_bra_displacement` - `BRA` over every value of its displacement byte.
+#
+# The displacement field is one signed byte, so the whole of it is small enough
+# to run - and half of the values it can hold transfer control to an ODD
+# address, which no even-target fixture reaches.
+
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_bra_displacement cannot be registered: MCF5307_NIM_COMMAND "
+        "is not set. The test takes its flag set from the library's own "
+        "compile command, and a test registered against an empty command would "
+        "compile with no flags at all and assert nothing.")
+endif()
+
+set(MCF5307_BRADISP_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_BRADISP_COMMAND "${argument}")
+endforeach()
+list(APPEND MCF5307_BRADISP_COMMAND "--path:${PROJECT_SOURCE_DIR}/src")
+
+set(NIM_BRADISP_COMMAND_LITERAL "")
+foreach(argument IN LISTS MCF5307_BRADISP_COMMAND)
+    string(APPEND NIM_BRADISP_COMMAND_LITERAL "    \"${argument}\"\n")
+endforeach()
+
+set(MCF5307_BRADISP_SOURCE
+    "${CMAKE_CURRENT_LIST_DIR}/t_bra_displacement.nim")
+set(MCF5307_BRADISP_BINARY
+    "${CMAKE_CURRENT_BINARY_DIR}/t_bra_displacement_program")
+set(MCF5307_BRADISP_NIMCACHE
+    "${CMAKE_CURRENT_BINARY_DIR}/t_bra_displacement_nimcache")
+
+set(MCF5307_BRADISP_DRIVER_TEMPLATE [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t_bra_displacement`. It compiles the Nim
+# test program with THE LIBRARY'S OWN FLAG SET, runs it, and fails when the run
+# exits non-zero or does not report a full pass.
+
+set(nim_command
+@NIM_BRADISP_COMMAND_LITERAL@)
+set(source "@MCF5307_BRADISP_SOURCE@")
+set(binary "@MCF5307_BRADISP_BINARY@")
+set(nimcache "@MCF5307_BRADISP_NIMCACHE@")
+
+# The binary of an earlier run is REMOVED BEFORE THE COMPILE. Without this a
+# compile that failed would leave the earlier binary in place, and the run
+# would then execute code this run never produced.
+file(REMOVE "${binary}")
+
+execute_process(
+    COMMAND ${nim_command} "--nimcache:${nimcache}" "-o:${binary}" "${source}"
+    RESULT_VARIABLE bradisp_compile_rc
+    OUTPUT_VARIABLE bradisp_compile_out
+    ERROR_VARIABLE bradisp_compile_err)
+
+if(NOT bradisp_compile_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_bra_displacement: the Nim test program did not compile "
+        "(result: ${bradisp_compile_rc})\n"
+        "${bradisp_compile_out}\n${bradisp_compile_err}")
+endif()
+
+execute_process(
+    COMMAND "${binary}"
+    RESULT_VARIABLE bradisp_run_rc
+    OUTPUT_VARIABLE bradisp_run_out
+    ERROR_VARIABLE bradisp_run_err)
+message("${bradisp_run_out}")
+
+if(NOT bradisp_run_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_bra_displacement: the run exited ${bradisp_run_rc}\n"
+        "${bradisp_run_err}")
+endif()
+
+# THE COUNT IS `[1-9][0-9]*` AND NOT `[0-9]+`, AND THE DIFFERENCE IS THE WHOLE
+# CHECK. `[0-9]+` matches `0`, so a source reduced to nothing but the banner
+# exits 0, prints it, runs no case and PASSES - which is the one outcome this
+# anchor exists to reject.
+if(NOT bradisp_run_out MATCHES "t_bra_displacement: [1-9][0-9]* cases passed")
+    message(FATAL_ERROR
+        "t_bra_displacement: the run exited 0 but did not report a full "
+        "pass.\n"
+        "  stdout : ${bradisp_run_out}\n  stderr : ${bradisp_run_err}")
+endif()
+
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_bra_displacement" "@MCF5307_BRADISP_SOURCE@"
+    "${bradisp_run_out}" 0)
+
+# THE CASE TOTAL. The sweep itself is ONE site inside no loop, so the site
+# checks above cannot see the sweep shrink from 256 rows to none - the suite's
+# own second case is what sees that. MOVE THIS ONLY WITH A DELIBERATE CHANGE IN
+# THE CASE COUNT.
+mcf5307_check_case_total("t_bra_displacement" "${bradisp_run_out}" 4)
+
+]==])
+
+string(CONFIGURE "${MCF5307_BRADISP_DRIVER_TEMPLATE}"
+    MCF5307_BRADISP_DRIVER @ONLY)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_bra_displacement_driver.cmake"
+    "${MCF5307_BRADISP_DRIVER}")
+
+add_test(NAME t_bra_displacement
+    COMMAND "${CMAKE_COMMAND}"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t_bra_displacement_driver.cmake")
+
+# ---------------------------------------------------------------------------
+# `t_movec` - the `MOVEC` encoding and the control-register map.
+#
+# There is no corpus beside it: `MOVEC` writes a control register this core
+# does not keep, so a corpus case could assert that the instruction decoded and
+# nothing about which register it named.
+#
+# The map is tested number by number because the 68k collision is silent in
+# both directions: `0x004` and `0x005` are ACR0 and ACR1 here and ITT0 and ITT1
+# on the 68040, and `0x800` is USP on the 68040 and names no register of this
+# part. A decoder carrying the wrong map writes a real register with a real
+# value and reports nothing.
+
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_movec cannot be registered: MCF5307_NIM_COMMAND is not set. "
+        "The test takes its flag set from the library's own compile command, "
+        "and a test registered against an empty command would compile with no "
+        "flags at all and assert nothing.")
+endif()
+
+set(MCF5307_MOVEC_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_MOVEC_COMMAND "${argument}")
+endforeach()
+list(APPEND MCF5307_MOVEC_COMMAND "--path:${PROJECT_SOURCE_DIR}/src")
+
+set(NIM_MOVEC_COMMAND_LITERAL "")
+foreach(argument IN LISTS MCF5307_MOVEC_COMMAND)
+    string(APPEND NIM_MOVEC_COMMAND_LITERAL "    \"${argument}\"\n")
+endforeach()
+
+set(MCF5307_MOVEC_SOURCE "${CMAKE_CURRENT_LIST_DIR}/t_movec.nim")
+set(MCF5307_MOVEC_BINARY "${CMAKE_CURRENT_BINARY_DIR}/t_movec_program")
+set(MCF5307_MOVEC_NIMCACHE "${CMAKE_CURRENT_BINARY_DIR}/t_movec_nimcache")
+
+set(MCF5307_MOVEC_DRIVER_TEMPLATE [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t_movec`. It compiles the Nim test
+# program with THE LIBRARY'S OWN FLAG SET, runs it, and fails when the run
+# exits non-zero or does not report a full pass.
+
+set(nim_command
+@NIM_MOVEC_COMMAND_LITERAL@)
+set(source "@MCF5307_MOVEC_SOURCE@")
+set(binary "@MCF5307_MOVEC_BINARY@")
+set(nimcache "@MCF5307_MOVEC_NIMCACHE@")
+
+# The binary of an earlier run is REMOVED BEFORE THE COMPILE. Without this a
+# compile that failed would leave the earlier binary in place, and the run
+# would then execute code this run never produced.
+file(REMOVE "${binary}")
+
+execute_process(
+    COMMAND ${nim_command} "--nimcache:${nimcache}" "-o:${binary}" "${source}"
+    RESULT_VARIABLE movec_compile_rc
+    OUTPUT_VARIABLE movec_compile_out
+    ERROR_VARIABLE movec_compile_err)
+
+if(NOT movec_compile_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_movec: the Nim test program did not compile "
+        "(result: ${movec_compile_rc})\n"
+        "${movec_compile_out}\n${movec_compile_err}")
+endif()
+
+execute_process(
+    COMMAND "${binary}"
+    RESULT_VARIABLE movec_run_rc
+    OUTPUT_VARIABLE movec_run_out
+    ERROR_VARIABLE movec_run_err)
+message("${movec_run_out}")
+
+if(NOT movec_run_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_movec: the run exited ${movec_run_rc}\n${movec_run_err}")
+endif()
+
+# The program prints `t_movec: <N> cases passed`; failing cases make it exit
+# non-zero, which the check above already rejects. Anchoring the tail here
+# keeps a run that printed the banner but skipped the cases from passing.
+# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES.
+if(NOT movec_run_out MATCHES "t_movec: [1-9][0-9]* cases passed")
+    message(FATAL_ERROR
+        "t_movec: the run exited 0 but did not report a full pass.\n"
+        "  stdout : ${movec_run_out}\n  stderr : ${movec_run_err}")
+endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_movec" "@MCF5307_MOVEC_SOURCE@" "${movec_run_out}"
+    0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
+# states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
+# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
+# CASE COUNT.
+mcf5307_check_case_total("t_movec" "${movec_run_out}" 45)
+
+]==])
+
+string(CONFIGURE "${MCF5307_MOVEC_DRIVER_TEMPLATE}"
+    MCF5307_MOVEC_DRIVER @ONLY)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_movec_driver.cmake"
+    "${MCF5307_MOVEC_DRIVER}")
+
+add_test(NAME t_movec
+    COMMAND "${CMAKE_COMMAND}"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t_movec_driver.cmake")
+
+# ---------------------------------------------------------------------------
+# `t_system_control` - the SR and CCR transfers.
+#
+
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_system_control cannot be registered: MCF5307_NIM_COMMAND is "
+        "not set. The test takes its flag set from the library's own compile "
+        "command, and a test registered against an empty command would compile "
+        "with no flags at all and assert nothing.")
+endif()
+
+set(MCF5307_SYSCTL_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_SYSCTL_COMMAND "${argument}")
+endforeach()
+list(APPEND MCF5307_SYSCTL_COMMAND "--path:${PROJECT_SOURCE_DIR}/src")
+
+set(NIM_SYSCTL_COMMAND_LITERAL "")
+foreach(argument IN LISTS MCF5307_SYSCTL_COMMAND)
+    string(APPEND NIM_SYSCTL_COMMAND_LITERAL "    \"${argument}\"\n")
+endforeach()
+
+set(MCF5307_SYSCTL_SOURCE "${CMAKE_CURRENT_LIST_DIR}/t_system_control.nim")
+set(MCF5307_SYSCTL_BINARY
+    "${CMAKE_CURRENT_BINARY_DIR}/t_system_control_program")
+set(MCF5307_SYSCTL_NIMCACHE
+    "${CMAKE_CURRENT_BINARY_DIR}/t_system_control_nimcache")
+
+set(MCF5307_SYSCTL_DRIVER_TEMPLATE [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t_system_control`. It compiles the Nim
+# test program with THE LIBRARY'S OWN FLAG SET, runs it, and fails when the run
+# exits non-zero or does not report a full pass.
+
+set(nim_command
+@NIM_SYSCTL_COMMAND_LITERAL@)
+set(source "@MCF5307_SYSCTL_SOURCE@")
+set(binary "@MCF5307_SYSCTL_BINARY@")
+set(nimcache "@MCF5307_SYSCTL_NIMCACHE@")
+
+# The binary of an earlier run is REMOVED BEFORE THE COMPILE. Without this a
+# compile that failed would leave the earlier binary in place, and the run
+# would then execute code this run never produced.
+file(REMOVE "${binary}")
+
+execute_process(
+    COMMAND ${nim_command} "--nimcache:${nimcache}" "-o:${binary}" "${source}"
+    RESULT_VARIABLE sysctl_compile_rc
+    OUTPUT_VARIABLE sysctl_compile_out
+    ERROR_VARIABLE sysctl_compile_err)
+
+if(NOT sysctl_compile_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_system_control: the Nim test program did not compile "
+        "(result: ${sysctl_compile_rc})\n"
+        "${sysctl_compile_out}\n${sysctl_compile_err}")
+endif()
+
+execute_process(
+    COMMAND "${binary}"
+    RESULT_VARIABLE sysctl_run_rc
+    OUTPUT_VARIABLE sysctl_run_out
+    ERROR_VARIABLE sysctl_run_err)
+message("${sysctl_run_out}")
+
+if(NOT sysctl_run_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_system_control: the run exited ${sysctl_run_rc}\n${sysctl_run_err}")
+endif()
+
+# The program prints `t_system_control: <N> cases passed`; failing cases make
+# it exit non-zero, which the check above already rejects. Anchoring the tail
+# here keeps a run that printed the banner but skipped the cases from passing.
+# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES.
+if(NOT sysctl_run_out MATCHES "t_system_control: [1-9][0-9]* cases passed")
+    message(FATAL_ERROR
+        "t_system_control: the run exited 0 but did not report a full pass.\n"
+        "  stdout : ${sysctl_run_out}\n  stderr : ${sysctl_run_err}")
+endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_system_control" "@MCF5307_SYSCTL_SOURCE@"
+    "${sysctl_run_out}" 0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
+# states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
+# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
+# CASE COUNT.
+mcf5307_check_case_total("t_system_control" "${sysctl_run_out}" 37)
+
+]==])
+
+string(CONFIGURE "${MCF5307_SYSCTL_DRIVER_TEMPLATE}"
+    MCF5307_SYSCTL_DRIVER @ONLY)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_system_control_driver.cmake"
+    "${MCF5307_SYSCTL_DRIVER}")
+
+add_test(NAME t_system_control
+    COMMAND "${CMAKE_COMMAND}"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t_system_control_driver.cmake")
+
+# ---------------------------------------------------------------------------
+# `t_lines` - the line-A and line-F opcode spaces.
+#
+# No corpus beside it. A positive corpus executes an encoding and compares the
+# machine state after it, and the whole subject here is encodings that must not
+# execute. `t_negative` names the removed 68000 instructions; the two line
+# spaces are not removed instructions but opcode space this core declines to
+# claim, and the refusal has to be asserted over the whole of each space rather
+# than at sampled encodings a corpus could carry.
+#
+# The sweep is exhaustive and not sampled. The two spaces reach no operation
+# because no arm of `decodeWord` matches them, which is a property of an
+# absence. An absence is the one thing a
+# sampled case cannot pin: it holds for every word of the space or it does not
+# hold at all, so the assertion is written over every word of it.
+#
+# The compile happens inside the test and not in the build: a `ctest` run over a
+# tree whose build had failed would otherwise run a stale binary of an earlier
+# build and pass.
+
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_lines cannot be registered: MCF5307_NIM_COMMAND is not set. "
+        "The test takes its flag set from the library's own compile command, "
+        "and a test registered against an empty command would compile with no "
+        "flags at all and assert nothing.")
+endif()
+
+set(MCF5307_LINES_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_LINES_COMMAND "${argument}")
+endforeach()
+list(APPEND MCF5307_LINES_COMMAND "--path:${PROJECT_SOURCE_DIR}/src")
+
+set(NIM_LINES_COMMAND_LITERAL "")
+foreach(argument IN LISTS MCF5307_LINES_COMMAND)
+    string(APPEND NIM_LINES_COMMAND_LITERAL "    \"${argument}\"\n")
+endforeach()
+
+set(MCF5307_LINES_SOURCE "${CMAKE_CURRENT_LIST_DIR}/t_lines.nim")
+set(MCF5307_LINES_BINARY "${CMAKE_CURRENT_BINARY_DIR}/t_lines_program")
+set(MCF5307_LINES_NIMCACHE "${CMAKE_CURRENT_BINARY_DIR}/t_lines_nimcache")
+
+set(MCF5307_LINES_DRIVER_TEMPLATE [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t_lines`. It compiles the Nim test
+# program with THE LIBRARY'S OWN FLAG SET, runs it, and fails when the run
+# exits non-zero or does not report a full pass.
+
+set(nim_command
+@NIM_LINES_COMMAND_LITERAL@)
+set(source "@MCF5307_LINES_SOURCE@")
+set(binary "@MCF5307_LINES_BINARY@")
+set(nimcache "@MCF5307_LINES_NIMCACHE@")
+
+# The binary of an earlier run is REMOVED BEFORE THE COMPILE. Without this a
+# compile that failed would leave the earlier binary in place, and the run
+# would then execute code this run never produced.
+file(REMOVE "${binary}")
+
+execute_process(
+    COMMAND ${nim_command} "--nimcache:${nimcache}" "-o:${binary}" "${source}"
+    RESULT_VARIABLE lines_compile_rc
+    OUTPUT_VARIABLE lines_compile_out
+    ERROR_VARIABLE lines_compile_err)
+
+if(NOT lines_compile_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_lines: the Nim test program did not compile "
+        "(result: ${lines_compile_rc})\n"
+        "${lines_compile_out}\n${lines_compile_err}")
+endif()
+
+execute_process(
+    COMMAND "${binary}"
+    RESULT_VARIABLE lines_run_rc
+    OUTPUT_VARIABLE lines_run_out
+    ERROR_VARIABLE lines_run_err)
+message("${lines_run_out}")
+
+if(NOT lines_run_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_lines: the run exited ${lines_run_rc}\n${lines_run_err}")
+endif()
+
+# The program prints `t_lines: <N> cases passed`; failing cases make it exit
+# non-zero, which the check above already rejects. Anchoring the tail here
+# keeps a run that printed the banner but skipped the cases from passing.
+# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES.
+if(NOT lines_run_out MATCHES "t_lines: [1-9][0-9]* cases passed")
+    message(FATAL_ERROR
+        "t_lines: the run exited 0 but did not report a full pass.\n"
+        "  stdout : ${lines_run_out}\n  stderr : ${lines_run_err}")
+endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_lines" "@MCF5307_LINES_SOURCE@" "${lines_run_out}"
+    0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. THIS SUITE'S SWEEP IS
+# EXACTLY SUCH A SITE. `tests/case_sites.cmake` states at
+# `mcf5307_check_case_total` why a TYPED figure is accepted here and what it
+# still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE CASE
+# COUNT.
+mcf5307_check_case_total("t_lines" "${lines_run_out}" 20)
+
+]==])
+
+string(CONFIGURE "${MCF5307_LINES_DRIVER_TEMPLATE}"
+    MCF5307_LINES_DRIVER @ONLY)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_lines_driver.cmake"
+    "${MCF5307_LINES_DRIVER}")
+
+add_test(NAME t_lines
+    COMMAND "${CMAKE_COMMAND}"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t_lines_driver.cmake")
+
+# ---------------------------------------------------------------------------
+# `t_exec_budget` - what `mcf5307_exec` RETURNS when the budget runs out inside
+# an instruction.
+#
+# WHY IT IS A SUITE OF ITS OWN. Every other suite that calls `mcf5307_exec`
+# passes a budget of one and reads the return as a ran-or-trapped flag. Such a
+# comparison cannot separate a return that reports the whole retired cost from
+# one that stops at the budget, because at a budget of one BOTH are a single
+# small number. This suite holds a sum of many returns against a cost it
+# MEASURES through the same entry point, on a path where the budget cannot be
+# the thing that stops the loop, so the two contracts give different totals.
+#
+# THE FLAG SET IS THE LIBRARY'S OWN, taken exactly as the blocks above take it,
+# and for the reason those blocks give.
+#
+# THE COMPILE HAPPENS INSIDE THE TEST AND NOT IN THE BUILD, for the reason the
+# blocks above give: a `ctest` run over a tree whose build had failed would
+# otherwise run a STALE binary of an earlier build and pass.
+
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_exec_budget cannot be registered: MCF5307_NIM_COMMAND is not "
+        "set. The test takes its flag set from the library's own compile "
+        "command, and a test registered against an empty command would compile "
+        "with no flags at all and assert nothing.")
+endif()
+
+set(MCF5307_EXEC_BUDGET_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_EXEC_BUDGET_COMMAND "${argument}")
+endforeach()
+list(APPEND MCF5307_EXEC_BUDGET_COMMAND "--path:${PROJECT_SOURCE_DIR}/src")
+
+set(NIM_EXEC_BUDGET_COMMAND_LITERAL "")
+foreach(argument IN LISTS MCF5307_EXEC_BUDGET_COMMAND)
+    string(APPEND NIM_EXEC_BUDGET_COMMAND_LITERAL "    \"${argument}\"\n")
+endforeach()
+
+set(MCF5307_EXEC_BUDGET_SOURCE "${CMAKE_CURRENT_LIST_DIR}/t_exec_budget.nim")
+set(MCF5307_EXEC_BUDGET_BINARY
+    "${CMAKE_CURRENT_BINARY_DIR}/t_exec_budget_program")
+set(MCF5307_EXEC_BUDGET_NIMCACHE
+    "${CMAKE_CURRENT_BINARY_DIR}/t_exec_budget_nimcache")
+
+set(MCF5307_EXEC_BUDGET_DRIVER_TEMPLATE [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t_exec_budget`. It compiles the Nim test
+# program with THE LIBRARY'S OWN FLAG SET, runs it, and fails when the run
+# exits non-zero or does not report a full pass.
+
+set(nim_command
+@NIM_EXEC_BUDGET_COMMAND_LITERAL@)
+set(source "@MCF5307_EXEC_BUDGET_SOURCE@")
+set(binary "@MCF5307_EXEC_BUDGET_BINARY@")
+set(nimcache "@MCF5307_EXEC_BUDGET_NIMCACHE@")
+
+# The binary of an earlier run is REMOVED BEFORE THE COMPILE. Without this a
+# compile that failed would leave the earlier binary in place, and the run
+# would then execute code this run never produced.
+file(REMOVE "${binary}")
+
+execute_process(
+    COMMAND ${nim_command} "--nimcache:${nimcache}" "-o:${binary}" "${source}"
+    RESULT_VARIABLE exec_budget_compile_rc
+    OUTPUT_VARIABLE exec_budget_compile_out
+    ERROR_VARIABLE exec_budget_compile_err)
+
+if(NOT exec_budget_compile_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_exec_budget: the Nim test program did not compile "
+        "(result: ${exec_budget_compile_rc})\n"
+        "${exec_budget_compile_out}\n${exec_budget_compile_err}")
+endif()
+
+execute_process(
+    COMMAND "${binary}"
+    RESULT_VARIABLE exec_budget_run_rc
+    OUTPUT_VARIABLE exec_budget_run_out
+    ERROR_VARIABLE exec_budget_run_err)
+message("${exec_budget_run_out}")
+
+if(NOT exec_budget_run_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_exec_budget: the run exited ${exec_budget_run_rc}\n"
+        "${exec_budget_run_err}")
+endif()
+
+# The program prints `t_exec_budget: <N> cases passed`; failing cases make it
+# exit non-zero, which the check above already rejects. Anchoring the tail here
+# keeps a run that printed the banner but skipped the cases from passing.
+# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES.
+if(NOT exec_budget_run_out MATCHES "t_exec_budget: [1-9][0-9]* cases passed")
+    message(FATAL_ERROR
+        "t_exec_budget: the run exited 0 but did not report a full pass.\n"
+        "  stdout : ${exec_budget_run_out}\n"
+        "  stderr : ${exec_budget_run_err}")
+endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_exec_budget" "@MCF5307_EXEC_BUDGET_SOURCE@"
+    "${exec_budget_run_out}" 0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a SWEEP THAT GOT SHORTER, because a site inside a
+# loop is one site however many budgets the loop carries. THIS SUITE'S BUDGET
+# SWEEP IS EXACTLY SUCH A SITE, and its length is a constant in the suite
+# rather than a multiple of a measured cycle count, so a change to a cycle
+# count in the core does not move this figure. `tests/case_sites.cmake` states
+# at `mcf5307_check_case_total` why a TYPED figure is accepted here and what it
+# still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE CASE
+# COUNT.
+mcf5307_check_case_total("t_exec_budget" "${exec_budget_run_out}" 15)
+
+]==])
+
+string(CONFIGURE "${MCF5307_EXEC_BUDGET_DRIVER_TEMPLATE}"
+    MCF5307_EXEC_BUDGET_DRIVER @ONLY)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_exec_budget_driver.cmake"
+    "${MCF5307_EXEC_BUDGET_DRIVER}")
+
+add_test(NAME t_exec_budget
+    COMMAND "${CMAKE_COMMAND}"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t_exec_budget_driver.cmake")
+
+# ---------------------------------------------------------------------------
+# `t_negative` - the negative corpus.
+#
+# The corpus is bound into the program rather than passed to it.
+# `tests/t_negative.nim` reads `conformance/corpus/negative_00.json` with
+# `staticRead`, so the corpus arrives at compile time and this block forwards no
+# corpus path. A path
+# forwarded at run time that pointed nowhere would leave the suite
+# adjudicating an empty table and reporting a pass, and an empty negative
+# corpus passes against any core at all.
+#
+# It is not registered in `conformance/conformance_cpu.cmake` beside the four
+# positive groups, and the reason is the runner rather than the file. That
+# runner takes a `<group>_00.json` and compares a machine state after the
+# encoding executes; these cases are encodings that must not execute, and the
+# comparison it makes has nothing to read. `conformance/parse_check.cpp` names
+# its required groups explicitly, so this file is invisible to it too and
+# `t0_corpus_parses` is unaffected either way.
+#
+# The ground it divides with `t_lines`: the line-A and line-F spaces are opcode
+# space this core declines to claim and are swept exhaustively there, and this
+# suite is the removed 68000 instructions, which live in lines the core does
+# claim and decode. No encoding in the corpus is in either of those two lines.
+#
+# The compile happens inside the test and not in the build: a `ctest` run over a
+# tree whose build had failed would otherwise run a stale binary of an earlier
+# build and pass. It carries a second weight here, because the corpus is a
+# compile-time input: a corpus edited without a recompile would be tested in its
+# previous state.
+
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_negative cannot be registered: MCF5307_NIM_COMMAND is not "
+        "set. The test takes its flag set from the library's own compile "
+        "command, and a test registered against an empty command would "
+        "compile with no flags at all and assert nothing.")
+endif()
+
+set(MCF5307_NEGATIVE_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_NEGATIVE_COMMAND "${argument}")
+endforeach()
+list(APPEND MCF5307_NEGATIVE_COMMAND "--path:${PROJECT_SOURCE_DIR}/src")
+
+set(NIM_NEGATIVE_COMMAND_LITERAL "")
+foreach(argument IN LISTS MCF5307_NEGATIVE_COMMAND)
+    string(APPEND NIM_NEGATIVE_COMMAND_LITERAL "    \"${argument}\"\n")
+endforeach()
+
+set(MCF5307_NEGATIVE_SOURCE "${CMAKE_CURRENT_LIST_DIR}/t_negative.nim")
+set(MCF5307_NEGATIVE_BINARY "${CMAKE_CURRENT_BINARY_DIR}/t_negative_program")
+set(MCF5307_NEGATIVE_NIMCACHE
+    "${CMAKE_CURRENT_BINARY_DIR}/t_negative_nimcache")
+
+set(MCF5307_NEGATIVE_DRIVER_TEMPLATE [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t_negative`. It compiles the Nim test
+# program with THE LIBRARY'S OWN FLAG SET, runs it, and fails when the run
+# exits non-zero or does not report a full pass.
+
+set(nim_command
+@NIM_NEGATIVE_COMMAND_LITERAL@)
+set(source "@MCF5307_NEGATIVE_SOURCE@")
+set(binary "@MCF5307_NEGATIVE_BINARY@")
+set(nimcache "@MCF5307_NEGATIVE_NIMCACHE@")
+
+# The binary of an earlier run is REMOVED BEFORE THE COMPILE. Without this a
+# compile that failed would leave the earlier binary in place, and the run
+# would then execute code this run never produced.
+file(REMOVE "${binary}")
+
+execute_process(
+    COMMAND ${nim_command} "--nimcache:${nimcache}" "-o:${binary}" "${source}"
+    RESULT_VARIABLE negative_compile_rc
+    OUTPUT_VARIABLE negative_compile_out
+    ERROR_VARIABLE negative_compile_err)
+
+if(NOT negative_compile_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_negative: the Nim test program did not compile "
+        "(result: ${negative_compile_rc})\n"
+        "${negative_compile_out}\n${negative_compile_err}")
+endif()
+
+execute_process(
+    COMMAND "${binary}"
+    RESULT_VARIABLE negative_run_rc
+    OUTPUT_VARIABLE negative_run_out
+    ERROR_VARIABLE negative_run_err)
+message("${negative_run_out}")
+
+if(NOT negative_run_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_negative: the run exited ${negative_run_rc}\n${negative_run_err}")
+endif()
+
+# The program prints `t_negative: <N> cases passed`; failing cases make it
+# exit non-zero, which the check above already rejects. Anchoring the tail
+# here keeps a run that printed the banner but skipped the cases from passing.
+# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES.
+if(NOT negative_run_out MATCHES "t_negative: [1-9][0-9]* cases passed")
+    message(FATAL_ERROR
+        "t_negative: the run exited 0 but did not report a full pass.\n"
+        "  stdout : ${negative_run_out}\n  stderr : ${negative_run_err}")
+endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor
+# is the cheaper of the two. `tests/case_sites.cmake` states the rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_negative" "@MCF5307_NEGATIVE_SOURCE@"
+    "${negative_run_out}" 0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. EVERY PER-CASE SITE IN
+# THIS SUITE IS SUCH A SITE - the suite iterates the corpus - so a case
+# deleted from `conformance/corpus/negative_00.json` is invisible to
+# everything except this figure. `tests/case_sites.cmake` states at
+# `mcf5307_check_case_total` why a TYPED figure is accepted here and what it
+# still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE CASE
+# COUNT.
+mcf5307_check_case_total("t_negative" "${negative_run_out}" 33)
+
+]==])
+
+string(CONFIGURE "${MCF5307_NEGATIVE_DRIVER_TEMPLATE}"
+    MCF5307_NEGATIVE_DRIVER @ONLY)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_negative_driver.cmake"
+    "${MCF5307_NEGATIVE_DRIVER}")
+
+add_test(NAME t_negative
+    COMMAND "${CMAKE_COMMAND}"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t_negative_driver.cmake")
 
 # ---------------------------------------------------------------------------
 # `t_exception` - the exception model.
@@ -1448,7 +2182,7 @@ mcf5307_check_case_sites("t_exception" "@MCF5307_EXCEPTION_SOURCE@" "${exception
 # states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
 # what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
 # CASE COUNT.
-mcf5307_check_case_total("t_exception" "${exception_run_out}" 39)
+mcf5307_check_case_total("t_exception" "${exception_run_out}" 42)
 
 ]==])
 
@@ -1460,6 +2194,128 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_exception_driver.cmake"
 add_test(NAME t_exception
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_exception_driver.cmake")
+
+# ---------------------------------------------------------------------------
+# `t_control_registers` - the control registers as channels.
+#
+# There is no corpus beside it: the corpus runner executes assembled encodings
+# and adjudicates a register file, and neither the vector base a dispatch
+# consults nor a snapshot block is a register file it can compare.
+
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_control_registers cannot be registered: MCF5307_NIM_COMMAND "
+        "is not set. The test takes its flag set from the library's own "
+        "compile command, and a test registered against an empty command would "
+        "compile with no flags at all and assert nothing.")
+endif()
+
+set(MCF5307_CTLREGS_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_CTLREGS_COMMAND "${argument}")
+endforeach()
+list(APPEND MCF5307_CTLREGS_COMMAND "--path:${PROJECT_SOURCE_DIR}/src")
+
+set(NIM_CTLREGS_COMMAND_LITERAL "")
+foreach(argument IN LISTS MCF5307_CTLREGS_COMMAND)
+    string(APPEND NIM_CTLREGS_COMMAND_LITERAL "    \"${argument}\"\n")
+endforeach()
+
+set(MCF5307_CTLREGS_SOURCE
+    "${CMAKE_CURRENT_LIST_DIR}/t_control_registers.nim")
+set(MCF5307_CTLREGS_BINARY
+    "${CMAKE_CURRENT_BINARY_DIR}/t_control_registers_program")
+set(MCF5307_CTLREGS_NIMCACHE
+    "${CMAKE_CURRENT_BINARY_DIR}/t_control_registers_nimcache")
+
+set(MCF5307_CTLREGS_DRIVER_TEMPLATE [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t_control_registers`. It compiles the Nim
+# test program with THE LIBRARY'S OWN FLAG SET, runs it, and fails when the run
+# exits non-zero or does not report a full pass.
+
+set(nim_command
+@NIM_CTLREGS_COMMAND_LITERAL@)
+set(source "@MCF5307_CTLREGS_SOURCE@")
+set(binary "@MCF5307_CTLREGS_BINARY@")
+set(nimcache "@MCF5307_CTLREGS_NIMCACHE@")
+
+# The binary of an earlier run is REMOVED BEFORE THE COMPILE. Without this a
+# compile that failed would leave the earlier binary in place, and the run
+# would then execute code this run never produced.
+file(REMOVE "${binary}")
+
+execute_process(
+    COMMAND ${nim_command} "--nimcache:${nimcache}" "-o:${binary}" "${source}"
+    RESULT_VARIABLE ctlregs_compile_rc
+    OUTPUT_VARIABLE ctlregs_compile_out
+    ERROR_VARIABLE ctlregs_compile_err)
+
+if(NOT ctlregs_compile_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_control_registers: the Nim test program did not compile "
+        "(result: ${ctlregs_compile_rc})\n"
+        "${ctlregs_compile_out}\n${ctlregs_compile_err}")
+endif()
+
+execute_process(
+    COMMAND "${binary}"
+    RESULT_VARIABLE ctlregs_run_rc
+    OUTPUT_VARIABLE ctlregs_run_out
+    ERROR_VARIABLE ctlregs_run_err)
+message("${ctlregs_run_out}")
+
+if(NOT ctlregs_run_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_control_registers: the run exited ${ctlregs_run_rc}\n"
+        "${ctlregs_run_err}")
+endif()
+
+# The program prints `t_control_registers: <N> cases passed`; failing cases
+# make it exit non-zero, which the check above already rejects. THE COUNT IS
+# `[1-9][0-9]*` AND NOT `[0-9]+`: `[0-9]+` matches `0`, so a test program
+# reduced to its banner alone would exit 0, run no case and PASS.
+if(NOT ctlregs_run_out MATCHES "t_control_registers: [1-9][0-9]* cases passed")
+    message(FATAL_ERROR
+        "t_control_registers: the run exited 0 but did not report a full "
+        "pass.\n  stdout : ${ctlregs_run_out}\n  stderr : ${ctlregs_run_err}")
+endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_control_registers" "@MCF5307_CTLREGS_SOURCE@"
+    "${ctlregs_run_out}" 0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
+# states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
+# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
+# CASE COUNT.
+mcf5307_check_case_total("t_control_registers" "${ctlregs_run_out}" 10)
+
+]==])
+
+string(CONFIGURE "${MCF5307_CTLREGS_DRIVER_TEMPLATE}"
+    MCF5307_CTLREGS_DRIVER @ONLY)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_control_registers_driver.cmake"
+    "${MCF5307_CTLREGS_DRIVER}")
+
+add_test(NAME t_control_registers
+    COMMAND "${CMAKE_COMMAND}"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t_control_registers_driver.cmake")
 
 # ---------------------------------------------------------------------------
 # `t_bus_fault` - the bus-fault channel.
@@ -1587,10 +2443,139 @@ add_test(NAME t_bus_fault
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_bus_fault_driver.cmake")
 
 # ---------------------------------------------------------------------------
+# `t_bus_fault_write` - the imprecise stacked program counter of an operand
+# write fault.
+#
+# No corpus beside it: the corpus runner executes assembled encodings, and a bus
+# fault is raised by a board rather than by an instruction, so there is no
+# encoding to assemble.
+#
+# The flag set is the library's own, taken from the compile command this
+# configure built for the library itself, so that the modules this test asserts
+# about are built the way the library builds them. The tail anchor is
+# `[1-9][0-9]*`, which rejects a run of zero cases.
+
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_bus_fault_write cannot be registered: MCF5307_NIM_COMMAND is "
+        "not set. The test takes its flag set from the library's own compile "
+        "command, and a test registered against an empty command would compile "
+        "with no flags at all and assert nothing.")
+endif()
+
+set(MCF5307_BUS_FAULT_WRITE_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_BUS_FAULT_WRITE_COMMAND "${argument}")
+endforeach()
+list(APPEND MCF5307_BUS_FAULT_WRITE_COMMAND "--path:${PROJECT_SOURCE_DIR}/src")
+
+set(NIM_BUS_FAULT_WRITE_COMMAND_LITERAL "")
+foreach(argument IN LISTS MCF5307_BUS_FAULT_WRITE_COMMAND)
+    string(APPEND NIM_BUS_FAULT_WRITE_COMMAND_LITERAL "    \"${argument}\"\n")
+endforeach()
+
+set(MCF5307_BUS_FAULT_WRITE_SOURCE
+    "${CMAKE_CURRENT_LIST_DIR}/t_bus_fault_write.nim")
+set(MCF5307_BUS_FAULT_WRITE_BINARY
+    "${CMAKE_CURRENT_BINARY_DIR}/t_bus_fault_write_program")
+set(MCF5307_BUS_FAULT_WRITE_NIMCACHE
+    "${CMAKE_CURRENT_BINARY_DIR}/t_bus_fault_write_nimcache")
+
+set(MCF5307_BUS_FAULT_WRITE_DRIVER_TEMPLATE [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t_bus_fault_write`. It compiles the Nim
+# test program with THE LIBRARY'S OWN FLAG SET, runs it, and fails when the run
+# exits non-zero or does not report a full pass.
+
+set(nim_command
+@NIM_BUS_FAULT_WRITE_COMMAND_LITERAL@)
+set(source "@MCF5307_BUS_FAULT_WRITE_SOURCE@")
+set(binary "@MCF5307_BUS_FAULT_WRITE_BINARY@")
+set(nimcache "@MCF5307_BUS_FAULT_WRITE_NIMCACHE@")
+
+# The binary of an earlier run is REMOVED BEFORE THE COMPILE. Without this a
+# compile that failed would leave the earlier binary in place, and the run
+# would then execute code this run never produced.
+file(REMOVE "${binary}")
+
+execute_process(
+    COMMAND ${nim_command} "--nimcache:${nimcache}" "-o:${binary}" "${source}"
+    RESULT_VARIABLE bus_fault_write_compile_rc
+    OUTPUT_VARIABLE bus_fault_write_compile_out
+    ERROR_VARIABLE bus_fault_write_compile_err)
+
+if(NOT bus_fault_write_compile_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_bus_fault_write: the Nim test program did not compile "
+        "(result: ${bus_fault_write_compile_rc})\n"
+        "${bus_fault_write_compile_out}\n${bus_fault_write_compile_err}")
+endif()
+
+execute_process(
+    COMMAND "${binary}"
+    RESULT_VARIABLE bus_fault_write_run_rc
+    OUTPUT_VARIABLE bus_fault_write_run_out
+    ERROR_VARIABLE bus_fault_write_run_err)
+message("${bus_fault_write_run_out}")
+
+if(NOT bus_fault_write_run_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_bus_fault_write: the run exited ${bus_fault_write_run_rc}\n"
+        "${bus_fault_write_run_err}")
+endif()
+
+# The program prints `t_bus_fault_write: <N> cases passed`; failing cases make
+# it exit non-zero, which the check above already rejects. THE COUNT IS
+# `[1-9][0-9]*` AND NOT `[0-9]+`: `[0-9]+` matches `0`, so a test program
+# reduced to its banner alone would exit 0, run no case and PASS.
+if(NOT bus_fault_write_run_out MATCHES
+        "t_bus_fault_write: [1-9][0-9]* cases passed")
+    message(FATAL_ERROR
+        "t_bus_fault_write: the run exited 0 but did not report a full pass.\n"
+        "  stdout : ${bus_fault_write_run_out}\n"
+        "  stderr : ${bus_fault_write_run_err}")
+endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_bus_fault_write"
+    "@MCF5307_BUS_FAULT_WRITE_SOURCE@" "${bus_fault_write_run_out}" 0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
+# states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
+# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
+# CASE COUNT.
+mcf5307_check_case_total("t_bus_fault_write" "${bus_fault_write_run_out}" 5)
+
+]==])
+
+string(CONFIGURE "${MCF5307_BUS_FAULT_WRITE_DRIVER_TEMPLATE}"
+    MCF5307_BUS_FAULT_WRITE_DRIVER @ONLY)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_bus_fault_write_driver.cmake"
+    "${MCF5307_BUS_FAULT_WRITE_DRIVER}")
+
+add_test(NAME t_bus_fault_write
+    COMMAND "${CMAKE_COMMAND}"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t_bus_fault_write_driver.cmake")
+
+# ---------------------------------------------------------------------------
 # `t_irq` - the interrupt model.
 #
-# One registered name, and no corpus beside it, for the reason the exception
-# block above gives: the corpus runner executes assembled encodings, and an
+# No corpus beside it: the corpus runner executes assembled encodings, and an
 # interrupt has no encoding.
 #
 # It exercises a module the library does carry. `src/mcf5307/cpu.nim` imports
@@ -1599,8 +2584,6 @@ add_test(NAME t_bus_fault
 # source. That import also carries `src/mcf5307/exception.nim` into the library,
 # because `irq.nim` imports it for `autovectorFor`.
 #
-# THE FLAG SET, THE COMPILE INSIDE THE TEST and the two-part failure check are
-# taken from the `t_exception` block above, for the reasons that block gives.
 # The tail anchor is `[1-9][0-9]*`, which rejects a run of zero cases.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
@@ -1842,7 +2825,7 @@ mcf5307_check_case_sites("t_state" "@MCF5307_STATE_SOURCE@" "${state_run_out}"
 # to `MCF5307Ctx` moves this figure. That coupling is the point: a field that
 # enters the snapshot without anyone deciding it should is what this figure
 # refuses to let pass quietly.
-mcf5307_check_case_total("t_state" "${state_run_out}" 38)
+mcf5307_check_case_total("t_state" "${state_run_out}" 45)
 
 ]==])
 
@@ -1855,17 +2838,806 @@ add_test(NAME t_state
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_state_driver.cmake")
 
 
+# ---------------------------------------------------------------------------
+# `t_isp1181_stub` - the CS3 stub of the ISP1181 USB device controller.
+#
+# No corpus beside it: the corpus runner executes assembled encodings, and a
+# device model answers a bus access rather than an instruction, so there is no
+# encoding to assemble.
+#
+# The flag set is the library's own, taken from the compile command this
+# configure built for the library itself, so that the module this test asserts
+# about is built the way the library builds it. The tail anchor is
+# `[1-9][0-9]*`, which rejects a run of zero cases.
+
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_isp1181_stub cannot be registered: MCF5307_NIM_COMMAND is "
+        "not set. The test takes its flag set from the library's own compile "
+        "command, and a test registered against an empty command would compile "
+        "with no flags at all and assert nothing.")
+endif()
+
+set(MCF5307_ISP1181_STUB_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_ISP1181_STUB_COMMAND "${argument}")
+endforeach()
+list(APPEND MCF5307_ISP1181_STUB_COMMAND "--path:${PROJECT_SOURCE_DIR}/src")
+
+set(NIM_ISP1181_STUB_COMMAND_LITERAL "")
+foreach(argument IN LISTS MCF5307_ISP1181_STUB_COMMAND)
+    string(APPEND NIM_ISP1181_STUB_COMMAND_LITERAL "    \"${argument}\"\n")
+endforeach()
+
+set(MCF5307_ISP1181_STUB_SOURCE
+    "${CMAKE_CURRENT_LIST_DIR}/t_isp1181_stub.nim")
+set(MCF5307_ISP1181_STUB_BINARY
+    "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_stub_program")
+set(MCF5307_ISP1181_STUB_NIMCACHE
+    "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_stub_nimcache")
+
+set(MCF5307_ISP1181_STUB_DRIVER_TEMPLATE [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t_isp1181_stub`. It compiles the Nim test
+# program with THE LIBRARY'S OWN FLAG SET, runs it, and fails when the run exits
+# non-zero or does not report a full pass.
+
+set(nim_command
+@NIM_ISP1181_STUB_COMMAND_LITERAL@)
+set(source "@MCF5307_ISP1181_STUB_SOURCE@")
+set(binary "@MCF5307_ISP1181_STUB_BINARY@")
+set(nimcache "@MCF5307_ISP1181_STUB_NIMCACHE@")
+
+# The binary of an earlier run is REMOVED BEFORE THE COMPILE. Without this a
+# compile that failed would leave the earlier binary in place, and the run
+# would then execute code this run never produced.
+file(REMOVE "${binary}")
+
+execute_process(
+    COMMAND ${nim_command} "--nimcache:${nimcache}" "-o:${binary}" "${source}"
+    RESULT_VARIABLE isp_stub_compile_rc
+    OUTPUT_VARIABLE isp_stub_compile_out
+    ERROR_VARIABLE isp_stub_compile_err)
+
+if(NOT isp_stub_compile_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_isp1181_stub: the Nim test program did not compile "
+        "(result: ${isp_stub_compile_rc})\n"
+        "${isp_stub_compile_out}\n${isp_stub_compile_err}")
+endif()
+
+execute_process(
+    COMMAND "${binary}"
+    RESULT_VARIABLE isp_stub_run_rc
+    OUTPUT_VARIABLE isp_stub_run_out
+    ERROR_VARIABLE isp_stub_run_err)
+message("${isp_stub_run_out}")
+
+# A NIL DEREFERENCE INSIDE THE MODEL ARRIVES HERE AND NOT AS A FAILED CASE.
+# The suite drives the entry points with a nil handle, which the model must not
+# abort on: a model that aborts kills the program before it can report anything
+# at all.
+if(NOT isp_stub_run_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_isp1181_stub: the run exited ${isp_stub_run_rc}\n"
+        "${isp_stub_run_err}")
+endif()
+
+# The program prints `t_isp1181_stub: <N> cases passed`; failing cases make it
+# exit non-zero, which the check above already rejects. THE COUNT IS
+# `[1-9][0-9]*` AND NOT `[0-9]+`: `[0-9]+` matches `0`, so a test program
+# reduced to its banner alone would exit 0, run no case and PASS.
+if(NOT isp_stub_run_out MATCHES "t_isp1181_stub: [1-9][0-9]* cases passed")
+    message(FATAL_ERROR
+        "t_isp1181_stub: the run exited 0 but did not report a full pass.\n"
+        "  stdout : ${isp_stub_run_out}\n  stderr : ${isp_stub_run_err}")
+endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_isp1181_stub" "@MCF5307_ISP1181_STUB_SOURCE@"
+    "${isp_stub_run_out}" 0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
+# states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
+# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
+# CASE COUNT.
+#
+# EVERY SWEEP IN THIS SUITE AGGREGATES INTO ONE CASE rather than asserting per
+# iteration, so this figure counts properties and not addresses. A sweep that
+# stopped iterating is caught by the iteration count inside the case's own
+# expected value, which is why the two guards do not overlap here.
+mcf5307_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 30)
+
+]==])
+
+string(CONFIGURE "${MCF5307_ISP1181_STUB_DRIVER_TEMPLATE}"
+    MCF5307_ISP1181_STUB_DRIVER @ONLY)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_stub_driver.cmake"
+    "${MCF5307_ISP1181_STUB_DRIVER}")
+
+add_test(NAME t_isp1181_stub
+    COMMAND "${CMAKE_COMMAND}"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_stub_driver.cmake")
+
+
+# ---------------------------------------------------------------------------
+# `t_isp1181_command_set` - the command set of the full ISP1181 model.
+#
+# No corpus beside it: the corpus runner executes assembled encodings and a
+# device model answers a bus access rather than an instruction.
+#
+# The flag set is the library's own, taken from the compile command this
+# configure built for the library itself, so that the modules this test asserts
+# about are built the way the library builds them.
+
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_isp1181_command_set cannot be registered: "
+        "MCF5307_NIM_COMMAND is not set. The test takes its flag set from the "
+        "library's own compile command, and a test registered against an empty "
+        "command would compile with no flags at all and assert nothing.")
+endif()
+
+set(MCF5307_ISP1181_CMD_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_ISP1181_CMD_COMMAND "${argument}")
+endforeach()
+list(APPEND MCF5307_ISP1181_CMD_COMMAND "--path:${PROJECT_SOURCE_DIR}/src")
+
+set(NIM_ISP1181_CMD_COMMAND_LITERAL "")
+foreach(argument IN LISTS MCF5307_ISP1181_CMD_COMMAND)
+    string(APPEND NIM_ISP1181_CMD_COMMAND_LITERAL "    \"${argument}\"\n")
+endforeach()
+
+set(MCF5307_ISP1181_CMD_SOURCE
+    "${CMAKE_CURRENT_LIST_DIR}/t_isp1181_command_set.nim")
+set(MCF5307_ISP1181_CMD_BINARY
+    "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_command_set_program")
+set(MCF5307_ISP1181_CMD_NIMCACHE
+    "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_command_set_nimcache")
+
+set(MCF5307_ISP1181_CMD_DRIVER_TEMPLATE [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t_isp1181_command_set`. It compiles the
+# Nim test program with THE LIBRARY'S OWN FLAG SET, runs it, and fails when the
+# run exits non-zero or does not report a full pass.
+
+set(nim_command
+@NIM_ISP1181_CMD_COMMAND_LITERAL@)
+set(source "@MCF5307_ISP1181_CMD_SOURCE@")
+set(binary "@MCF5307_ISP1181_CMD_BINARY@")
+set(nimcache "@MCF5307_ISP1181_CMD_NIMCACHE@")
+
+# The binary of an earlier run is REMOVED BEFORE THE COMPILE, so that a failed
+# compile cannot leave the earlier binary in place for the run to execute. A
+# run of a binary this run did not produce reports a pass about code that no
+# longer exists.
+file(REMOVE "${binary}")
+
+execute_process(
+    COMMAND ${nim_command} "--nimcache:${nimcache}" "-o:${binary}" "${source}"
+    RESULT_VARIABLE isp_cmd_compile_rc
+    OUTPUT_VARIABLE isp_cmd_compile_out
+    ERROR_VARIABLE isp_cmd_compile_err)
+
+if(NOT isp_cmd_compile_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_isp1181_command_set: the Nim test program did not compile "
+        "(result: ${isp_cmd_compile_rc})\n"
+        "${isp_cmd_compile_out}\n${isp_cmd_compile_err}")
+endif()
+
+execute_process(
+    COMMAND "${binary}"
+    RESULT_VARIABLE isp_cmd_run_rc
+    OUTPUT_VARIABLE isp_cmd_run_out
+    ERROR_VARIABLE isp_cmd_run_err)
+message("${isp_cmd_run_out}")
+
+if(NOT isp_cmd_run_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_isp1181_command_set: the run exited ${isp_cmd_run_rc}\n"
+        "${isp_cmd_run_err}")
+endif()
+
+# THE COUNT IS `[1-9][0-9]*` AND NOT `[0-9]+`, for the reason the
+# `t_isp1181_stub` driver
+# states: `[0-9]+` matches `0`, so a program reduced to its banner alone would
+# exit 0, run no case and PASS.
+if(NOT isp_cmd_run_out MATCHES "t_isp1181_command_set: [1-9][0-9]* cases passed")
+    message(FATAL_ERROR
+        "t_isp1181_command_set: the run exited 0 but did not report a full "
+        "pass.\n"
+        "  stdout : ${isp_cmd_run_out}\n  stderr : ${isp_cmd_run_err}")
+endif()
+
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_isp1181_command_set"
+    "@MCF5307_ISP1181_CMD_SOURCE@" "${isp_cmd_run_out}" 0)
+
+# THE CASE TOTAL. `tests/case_sites.cmake` states at `mcf5307_check_case_total`
+# why a TYPED figure is accepted here and what it still does not reach. MOVE IT
+# ONLY WITH A DELIBERATE CHANGE IN THE CASE COUNT.
+#
+# THE THREE OPCODE SWEEPS AGGREGATE INTO ONE CASE EACH and carry their own
+# driven-count inside the expected value, so a sweep that stopped iterating
+# fails on that count rather than on this figure. What this figure catches is
+# a whole case removed.
+mcf5307_check_case_total("t_isp1181_command_set" "${isp_cmd_run_out}" 31)
+
+]==])
+
+string(CONFIGURE "${MCF5307_ISP1181_CMD_DRIVER_TEMPLATE}"
+    MCF5307_ISP1181_CMD_DRIVER @ONLY)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_command_set_driver.cmake"
+    "${MCF5307_ISP1181_CMD_DRIVER}")
+
+add_test(NAME t_isp1181_command_set
+    COMMAND "${CMAKE_COMMAND}"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_command_set_driver.cmake")
+
+
+# ---------------------------------------------------------------------------
+# `t_isp1181` - the ISP1181 model driven by synthetic transactions.
+#
+# No corpus beside it: the corpus runner executes assembled encodings and a
+# device model answers a bus access rather than an instruction.
+#
+# The flag set is the library's own, taken from the compile command this
+# configure built for the library itself, so that the modules this test asserts
+# about are built the way the library builds them.
+
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_isp1181 cannot be registered: MCF5307_NIM_COMMAND is not "
+        "set. The test takes its flag set from the library's own compile "
+        "command, and a test registered against an empty command would "
+        "compile with no flags at all and assert nothing.")
+endif()
+
+set(MCF5307_ISP1181_MODEL_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_ISP1181_MODEL_COMMAND "${argument}")
+endforeach()
+list(APPEND MCF5307_ISP1181_MODEL_COMMAND "--path:${PROJECT_SOURCE_DIR}/src")
+
+set(NIM_ISP1181_MODEL_COMMAND_LITERAL "")
+foreach(argument IN LISTS MCF5307_ISP1181_MODEL_COMMAND)
+    string(APPEND NIM_ISP1181_MODEL_COMMAND_LITERAL "    \"${argument}\"\n")
+endforeach()
+
+set(MCF5307_ISP1181_MODEL_SOURCE
+    "${CMAKE_CURRENT_LIST_DIR}/t_isp1181.nim")
+set(MCF5307_ISP1181_MODEL_BINARY
+    "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_program")
+set(MCF5307_ISP1181_MODEL_NIMCACHE
+    "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_nimcache")
+
+set(MCF5307_ISP1181_MODEL_DRIVER_TEMPLATE [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t_isp1181`. It compiles the Nim test
+# program with THE LIBRARY'S OWN FLAG SET, runs it, and fails when the run
+# exits non-zero or does not report a full pass.
+
+set(nim_command
+@NIM_ISP1181_MODEL_COMMAND_LITERAL@)
+set(source "@MCF5307_ISP1181_MODEL_SOURCE@")
+set(binary "@MCF5307_ISP1181_MODEL_BINARY@")
+set(nimcache "@MCF5307_ISP1181_MODEL_NIMCACHE@")
+
+# The binary of an earlier run is REMOVED BEFORE THE COMPILE, so that a failed
+# compile cannot leave the earlier binary in place for the run to execute. A
+# run of a binary this run did not produce reports a pass about code that no
+# longer exists.
+file(REMOVE "${binary}")
+
+execute_process(
+    COMMAND ${nim_command} "--nimcache:${nimcache}" "-o:${binary}" "${source}"
+    RESULT_VARIABLE isp_model_compile_rc
+    OUTPUT_VARIABLE isp_model_compile_out
+    ERROR_VARIABLE isp_model_compile_err)
+
+if(NOT isp_model_compile_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_isp1181: the Nim test program did not compile "
+        "(result: ${isp_model_compile_rc})\n"
+        "${isp_model_compile_out}\n${isp_model_compile_err}")
+endif()
+
+execute_process(
+    COMMAND "${binary}"
+    RESULT_VARIABLE isp_model_run_rc
+    OUTPUT_VARIABLE isp_model_run_out
+    ERROR_VARIABLE isp_model_run_err)
+message("${isp_model_run_out}")
+
+if(NOT isp_model_run_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_isp1181: the run exited ${isp_model_run_rc}\n"
+        "${isp_model_run_err}")
+endif()
+
+# THE COUNT IS `[1-9][0-9]*` AND NOT `[0-9]+`, for the reason the
+# `t_isp1181_stub` driver
+# states: `[0-9]+` matches `0`, so a program reduced to its banner alone would
+# exit 0, run no case and PASS.
+if(NOT isp_model_run_out MATCHES "t_isp1181: [1-9][0-9]* cases passed")
+    message(FATAL_ERROR
+        "t_isp1181: the run exited 0 but did not report a full pass.\n"
+        "  stdout : ${isp_model_run_out}\n  stderr : ${isp_model_run_err}")
+endif()
+
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_isp1181"
+    "@MCF5307_ISP1181_MODEL_SOURCE@" "${isp_model_run_out}" 0)
+
+# THE CASE TOTAL. `tests/case_sites.cmake` states at `mcf5307_check_case_total`
+# why a TYPED figure is accepted here and what it still does not reach. MOVE IT
+# ONLY WITH A DELIBERATE CHANGE IN THE CASE COUNT.
+#
+# THE SWEEP OVER THE COMMAND BYTE AGGREGATES INTO ONE CASE and carries its own
+# driven-count inside the expected value, so a sweep that stopped iterating
+# fails on that count rather than on this figure. What this figure catches is
+# a whole case removed.
+mcf5307_check_case_total("t_isp1181" "${isp_model_run_out}" 32)
+
+]==])
+
+string(CONFIGURE "${MCF5307_ISP1181_MODEL_DRIVER_TEMPLATE}"
+    MCF5307_ISP1181_MODEL_DRIVER @ONLY)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_driver.cmake"
+    "${MCF5307_ISP1181_MODEL_DRIVER}")
+
+add_test(NAME t_isp1181
+    COMMAND "${CMAKE_COMMAND}"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_driver.cmake")
+
+
+# ---------------------------------------------------------------------------
+# `t_isp1181_state` - the SOF tick and the ISP1181 state block.
+#
+
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_isp1181_state cannot be registered: MCF5307_NIM_COMMAND is "
+        "not set. The test takes its flag set from the library's own compile "
+        "command, and a test registered against an empty command would compile "
+        "with no flags at all and assert nothing.")
+endif()
+
+set(MCF5307_ISP1181_STATE_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_ISP1181_STATE_COMMAND "${argument}")
+endforeach()
+list(APPEND MCF5307_ISP1181_STATE_COMMAND "--path:${PROJECT_SOURCE_DIR}/src")
+
+set(NIM_ISP1181_STATE_COMMAND_LITERAL "")
+foreach(argument IN LISTS MCF5307_ISP1181_STATE_COMMAND)
+    string(APPEND NIM_ISP1181_STATE_COMMAND_LITERAL "    \"${argument}\"\n")
+endforeach()
+
+set(MCF5307_ISP1181_STATE_SOURCE
+    "${CMAKE_CURRENT_LIST_DIR}/t_isp1181_state.nim")
+set(MCF5307_ISP1181_STATE_BINARY
+    "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_state_program")
+set(MCF5307_ISP1181_STATE_NIMCACHE
+    "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_state_nimcache")
+
+set(MCF5307_ISP1181_STATE_DRIVER_TEMPLATE [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t_isp1181_state`. It compiles the Nim test
+# program with THE LIBRARY'S OWN FLAG SET, runs it, and fails when the run exits
+# non-zero or does not report a full pass.
+
+set(nim_command
+@NIM_ISP1181_STATE_COMMAND_LITERAL@)
+set(source "@MCF5307_ISP1181_STATE_SOURCE@")
+set(binary "@MCF5307_ISP1181_STATE_BINARY@")
+set(nimcache "@MCF5307_ISP1181_STATE_NIMCACHE@")
+
+# The binary of an earlier run is REMOVED BEFORE THE COMPILE. Without this a
+# compile that failed would leave the earlier binary in place, and the run would
+# then execute code this run never produced.
+file(REMOVE "${binary}")
+
+execute_process(
+    COMMAND ${nim_command} "--nimcache:${nimcache}" "-o:${binary}" "${source}"
+    RESULT_VARIABLE isp_state_compile_rc
+    OUTPUT_VARIABLE isp_state_compile_out
+    ERROR_VARIABLE isp_state_compile_err)
+
+if(NOT isp_state_compile_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_isp1181_state: the Nim test program did not compile "
+        "(result: ${isp_state_compile_rc})\n"
+        "${isp_state_compile_out}\n${isp_state_compile_err}")
+endif()
+
+execute_process(
+    COMMAND "${binary}"
+    RESULT_VARIABLE isp_state_run_rc
+    OUTPUT_VARIABLE isp_state_run_out
+    ERROR_VARIABLE isp_state_run_err)
+message("${isp_state_run_out}")
+
+if(NOT isp_state_run_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_isp1181_state: the run exited ${isp_state_run_rc}\n"
+        "${isp_state_run_err}")
+endif()
+
+# THE COUNT IS `[1-9][0-9]*` AND NOT `[0-9]+`: `[0-9]+` matches `0`, so a test
+# program reduced to its banner alone would exit 0, run no case and PASS.
+if(NOT isp_state_run_out MATCHES "t_isp1181_state: [1-9][0-9]* cases passed")
+    message(FATAL_ERROR
+        "t_isp1181_state: the run exited 0 but did not report a full pass.\n"
+        "  stdout : ${isp_state_run_out}\n  stderr : ${isp_state_run_err}")
+endif()
+
+# THE VANISHED-CASE CHECK. `tests/case_sites.cmake` states the rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_isp1181_state" "@MCF5307_ISP1181_STATE_SOURCE@"
+    "${isp_state_run_out}" 0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries. MOVE IT ONLY WITH A
+# DELIBERATE CHANGE IN THE CASE COUNT.
+#
+# EVERY SWEEP IN THIS SUITE AGGREGATES INTO ONE CASE and carries its own
+# iteration count inside its expected value, so a sweep that stopped iterating
+# fails on that count rather than on this figure.
+mcf5307_check_case_total("t_isp1181_state" "${isp_state_run_out}" 15)
+
+]==])
+
+string(CONFIGURE "${MCF5307_ISP1181_STATE_DRIVER_TEMPLATE}"
+    MCF5307_ISP1181_STATE_DRIVER @ONLY)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_state_driver.cmake"
+    "${MCF5307_ISP1181_STATE_DRIVER}")
+
+add_test(NAME t_isp1181_state
+    COMMAND "${CMAKE_COMMAND}"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t_isp1181_state_driver.cmake")
+
+
+# ---------------------------------------------------------------------------
+# `t_no_alloc` - the core allocates only inside `mcf5307_create`.
+#
+# THIS IS THE ONE SUITE IN THIS FILE WHOSE FLAG SET IS NOT THE LIBRARY'S ALONE,
+# and the addition is stated here rather than left to the reader of the list
+# below. `-d:nimAllocStats` is appended after the library's own arguments.
+# `system/memalloc.nim` compiles the allocator's two counters only under that
+# define; without it `getAllocStats()` compiles, returns an `AllocStats`, and
+# returns a DEFAULT one. A suite asserting zero against that build reports a
+# pass it never measured.
+#
+# THE DEFINE ADDS A COUNTER AND CHANGES NOTHING THAT ALLOCATES. It is an
+# `atomicInc` inside the allocator's own entry points, so a call that reaches
+# the allocator under this define reaches it without one. What the departure
+# does cost is that this suite measures a compile the shipped library does not
+# make, and that is why the property is stated against a counter rather than
+# against a byte figure.
+#
+# NOTHING HERE SUPPRESSES A RUN-TIME CHECK. The two defines AGENTS.md forbids -
+# `--checks:off` and `-d:danger` - are neither added nor implied by this one,
+# and the strip loop below removes no check-bearing argument.
+#
+# THE SUITE'S OWN `mcf5307_create` CASE IS WHAT ENFORCES THIS BLOCK. Drop the
+# define and that case reads zero where it requires one, so the departure
+# cannot be undone quietly - which is the only reason a departure was
+# acceptable at all.
+#
+# THE COMPILE HAPPENS INSIDE THE TEST AND NOT IN THE BUILD, for the reason the
+# blocks above give: a `ctest` run over a tree whose build had failed would
+# otherwise run a STALE binary of an earlier build and pass.
+
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_no_alloc cannot be registered: MCF5307_NIM_COMMAND is not "
+        "set. The test takes its flag set from the library's own compile "
+        "command, and a test registered against an empty command would compile "
+        "with no flags at all and assert nothing.")
+endif()
+
+set(MCF5307_NO_ALLOC_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_NO_ALLOC_COMMAND "${argument}")
+endforeach()
+list(APPEND MCF5307_NO_ALLOC_COMMAND "--path:${PROJECT_SOURCE_DIR}/src")
+list(APPEND MCF5307_NO_ALLOC_COMMAND "-d:nimAllocStats")
+
+set(NIM_NO_ALLOC_COMMAND_LITERAL "")
+foreach(argument IN LISTS MCF5307_NO_ALLOC_COMMAND)
+    string(APPEND NIM_NO_ALLOC_COMMAND_LITERAL "    \"${argument}\"\n")
+endforeach()
+
+set(MCF5307_NO_ALLOC_SOURCE "${CMAKE_CURRENT_LIST_DIR}/t_no_alloc.nim")
+set(MCF5307_NO_ALLOC_BINARY "${CMAKE_CURRENT_BINARY_DIR}/t_no_alloc_program")
+set(MCF5307_NO_ALLOC_NIMCACHE
+    "${CMAKE_CURRENT_BINARY_DIR}/t_no_alloc_nimcache")
+
+set(MCF5307_NO_ALLOC_DRIVER_TEMPLATE [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t_no_alloc`. It compiles the Nim test
+# program with the library's flag set plus `-d:nimAllocStats`, runs it, and
+# fails when the run exits non-zero or does not report a full pass.
+
+set(nim_command
+@NIM_NO_ALLOC_COMMAND_LITERAL@)
+set(source "@MCF5307_NO_ALLOC_SOURCE@")
+set(binary "@MCF5307_NO_ALLOC_BINARY@")
+set(nimcache "@MCF5307_NO_ALLOC_NIMCACHE@")
+
+# The binary of an earlier run is REMOVED BEFORE THE COMPILE. Without this a
+# compile that failed would leave the earlier binary in place, and the run
+# would then execute code this run never produced.
+file(REMOVE "${binary}")
+
+execute_process(
+    COMMAND ${nim_command} "--nimcache:${nimcache}" "-o:${binary}" "${source}"
+    RESULT_VARIABLE no_alloc_compile_rc
+    OUTPUT_VARIABLE no_alloc_compile_out
+    ERROR_VARIABLE no_alloc_compile_err)
+
+if(NOT no_alloc_compile_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_no_alloc: the Nim test program did not compile "
+        "(result: ${no_alloc_compile_rc})\n"
+        "${no_alloc_compile_out}\n${no_alloc_compile_err}")
+endif()
+
+execute_process(
+    COMMAND "${binary}"
+    RESULT_VARIABLE no_alloc_run_rc
+    OUTPUT_VARIABLE no_alloc_run_out
+    ERROR_VARIABLE no_alloc_run_err)
+message("${no_alloc_run_out}")
+
+if(NOT no_alloc_run_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_no_alloc: the run exited ${no_alloc_run_rc}\n${no_alloc_run_err}")
+endif()
+
+# The program prints `t_no_alloc: <N> cases passed`; failing cases make it
+# exit non-zero, which the check above already rejects. Anchoring the tail
+# here keeps a run that printed the banner but skipped the cases from passing.
+# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES.
+if(NOT no_alloc_run_out MATCHES "t_no_alloc: [1-9][0-9]* cases passed")
+    message(FATAL_ERROR
+        "t_no_alloc: the run exited 0 but did not report a full pass.\n"
+        "  stdout : ${no_alloc_run_out}\n  stderr : ${no_alloc_run_err}")
+endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_no_alloc" "@MCF5307_NO_ALLOC_SOURCE@"
+    "${no_alloc_run_out}" 0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a case DELETED from the file, because a deleted call
+# site leaves the compiler's registry as well as the text.
+# `tests/case_sites.cmake` states at `mcf5307_check_case_total` why a TYPED
+# figure is accepted here and what it still does not reach. MOVE IT ONLY WITH A
+# DELIBERATE CHANGE IN THE CASE COUNT.
+mcf5307_check_case_total("t_no_alloc" "${no_alloc_run_out}" 9)
+
+]==])
+
+string(CONFIGURE "${MCF5307_NO_ALLOC_DRIVER_TEMPLATE}"
+    MCF5307_NO_ALLOC_DRIVER @ONLY)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_no_alloc_driver.cmake"
+    "${MCF5307_NO_ALLOC_DRIVER}")
+
+add_test(NAME t_no_alloc
+    COMMAND "${CMAKE_COMMAND}"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t_no_alloc_driver.cmake")
+
+
+# `t_bus_size_unit` - the UNIT of the `size` argument of the two board
+# callbacks, pinned as a behaviour of the core rather than as a sentence in the
+# header.
+#
+# `include/mcf5307.h` states that `size` is a count of bytes.
+#
+# The path is `mcf5307_create`, `mcf5307_reset`, `mcf5307_exec` - the same
+# three calls a board makes - so the values asserted are the values that cross
+# the ABI. A suite that reached `readMem` directly would assert the core's
+# internal spelling, and a core and a board that read the unit differently
+# would each stay internally consistent and each stay green.
+#
+# `sizeField` in `src/mcf5307/decode.nim` reports the `11` size encoding as 0,
+# so a value that is not a legal width exists inside the decoder; the sweep
+# over all 65536 opcode words is what establishes that no such value reaches a
+# board.
+#
+# Each sweep set is asserted EQUAL to the byte widths, so a run that observed
+# nothing at all reports an empty set and is red.
+
+if(NOT DEFINED MCF5307_NIM_COMMAND)
+    message(FATAL_ERROR
+        "tests: t_bus_size_unit cannot be registered: MCF5307_NIM_COMMAND is "
+        "not set. The test takes its flag set from the library's own compile "
+        "command, and a test registered against an empty command would "
+        "compile with no flags at all and assert nothing.")
+endif()
+
+# The command is the LIBRARY's command with the runtime-only and output
+# arguments removed, exactly as `t_sign_extend` does, plus `--path:src` so the
+# imports of `mcf5307/*` resolve against the source tree.
+set(MCF5307_SIZE_UNIT_COMMAND "")
+foreach(argument IN LISTS MCF5307_NIM_COMMAND)
+    if(argument STREQUAL "--compileOnly"
+            OR argument STREQUAL "--noMain"
+            OR argument MATCHES "^--nimcache:"
+            OR argument MATCHES "^--header:"
+            OR argument MATCHES "^--nimMainPrefix:"
+            OR argument MATCHES "^--path:"
+            OR argument MATCHES "\\.nim$")
+        continue()
+    endif()
+    list(APPEND MCF5307_SIZE_UNIT_COMMAND "${argument}")
+endforeach()
+list(APPEND MCF5307_SIZE_UNIT_COMMAND "--path:${PROJECT_SOURCE_DIR}/src")
+
+set(NIM_SIZE_UNIT_COMMAND_LITERAL "")
+foreach(argument IN LISTS MCF5307_SIZE_UNIT_COMMAND)
+    string(APPEND NIM_SIZE_UNIT_COMMAND_LITERAL "    \"${argument}\"\n")
+endforeach()
+
+set(MCF5307_SIZE_UNIT_SOURCE "${CMAKE_CURRENT_LIST_DIR}/t_bus_size_unit.nim")
+set(MCF5307_SIZE_UNIT_BINARY
+    "${CMAKE_CURRENT_BINARY_DIR}/t_bus_size_unit_program")
+set(MCF5307_SIZE_UNIT_NIMCACHE
+    "${CMAKE_CURRENT_BINARY_DIR}/t_bus_size_unit_nimcache")
+
+set(MCF5307_SIZE_UNIT_DRIVER_TEMPLATE [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t_bus_size_unit`. It compiles the Nim test
+# program with THE LIBRARY'S OWN FLAG SET, runs it, and fails when the run
+# exits non-zero or does not report a full pass.
+
+set(nim_command
+@NIM_SIZE_UNIT_COMMAND_LITERAL@)
+set(source "@MCF5307_SIZE_UNIT_SOURCE@")
+set(binary "@MCF5307_SIZE_UNIT_BINARY@")
+set(nimcache "@MCF5307_SIZE_UNIT_NIMCACHE@")
+
+# The binary of an earlier run is REMOVED BEFORE THE COMPILE. Without this a
+# compile that failed would leave the earlier binary in place, and the run
+# would then execute code this run never produced.
+file(REMOVE "${binary}")
+
+execute_process(
+    COMMAND ${nim_command} "--nimcache:${nimcache}" "-o:${binary}" "${source}"
+    RESULT_VARIABLE size_unit_compile_rc
+    OUTPUT_VARIABLE size_unit_compile_out
+    ERROR_VARIABLE size_unit_compile_err)
+
+if(NOT size_unit_compile_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_bus_size_unit: the Nim test program did not compile "
+        "(result: ${size_unit_compile_rc})\n"
+        "${size_unit_compile_out}\n${size_unit_compile_err}")
+endif()
+
+execute_process(
+    COMMAND "${binary}"
+    RESULT_VARIABLE size_unit_run_rc
+    OUTPUT_VARIABLE size_unit_run_out
+    ERROR_VARIABLE size_unit_run_err)
+message("${size_unit_run_out}")
+
+if(NOT size_unit_run_rc EQUAL 0)
+    message(FATAL_ERROR
+        "t_bus_size_unit: the run exited ${size_unit_run_rc}\n"
+        "${size_unit_run_err}")
+endif()
+
+# The program prints `t_bus_size_unit: <N> cases passed`; failing cases make it
+# exit non-zero, which the check above already rejects. Anchoring the tail here
+# keeps a run that printed the banner but skipped the cases from passing.
+# THE `[1-9]` IS WHAT REJECTS A RUN OF ZERO CASES.
+if(NOT size_unit_run_out MATCHES "t_bus_size_unit: [1-9][0-9]* cases passed")
+    message(FATAL_ERROR
+        "t_bus_size_unit: the run exited 0 but did not report a full pass.\n"
+        "  stdout : ${size_unit_run_out}\n  stderr : ${size_unit_run_err}")
+endif()
+
+# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
+# replaced by it: the two fail on differently-shaped defects, and the anchor is
+# the cheaper of the two. `tests/case_sites.cmake` states the rules.
+include("@MCF5307_CASE_SITES_MODULE@")
+mcf5307_check_case_sites("t_bus_size_unit" "@MCF5307_SIZE_UNIT_SOURCE@"
+    "${size_unit_run_out}" 0)
+
+# THE CASE TOTAL. The rules the call above applies catch a case that stops
+# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
+# loop is one site however many rows the loop carries - and the sweep in this
+# suite is exactly such a loop. `tests/case_sites.cmake` states at
+# `mcf5307_check_case_total` why a TYPED figure is accepted here and what it
+# still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE CASE
+# COUNT.
+mcf5307_check_case_total("t_bus_size_unit" "${size_unit_run_out}" 8)
+
+]==])
+
+string(CONFIGURE "${MCF5307_SIZE_UNIT_DRIVER_TEMPLATE}"
+    MCF5307_SIZE_UNIT_DRIVER @ONLY)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t_bus_size_unit_driver.cmake"
+    "${MCF5307_SIZE_UNIT_DRIVER}")
+
+add_test(NAME t_bus_size_unit
+    COMMAND "${CMAKE_COMMAND}"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t_bus_size_unit_driver.cmake")
+
+
 # ------------------------------------------- THE CHECK ON THE VANISHED-CASE
 # CHECK ITSELF. Nothing above pins HOW MANY drivers carry
 # `mcf5307_check_case_sites`, so the mechanism that refuses to let a case
 # vanish in silence could itself vanish in silence.
 #
-# MEASURED 2026-08-13 by the gate-4.4 judge: deleting the
-# `mcf5307_check_case_sites("t_irq" ...)` line from the `t_irq` driver template
-# above left `cmake` configuring cleanly and `ctest -R ^t_irq$` reporting
-# `Passed`, WITH NO COMPLAINT ANYWHERE. The rule that a count must be derived
-# rather than typed was applied to every suite's cases and to none of the
-# suites' checks.
+# Deleting a `mcf5307_check_case_sites(...)` line from a driver template above
+# leaves `cmake` configuring cleanly and the suite reporting `Passed`, WITH NO
+# COMPLAINT ANYWHERE.
 #
 # SO THE SET IS DERIVED FROM BOTH ENDS AND THE TWO ENDS ARE COMPARED, which is
 # the discipline `case_sites.cmake` rule 2 already applies to call sites:
@@ -1883,9 +3655,7 @@ add_test(NAME t_state
 #
 # IT RUNS AT CONFIGURE TIME AND IS NOT A REGISTERED TEST, deliberately. A check
 # on whether the tests are wired up must not be a test that a selection filter
-# can leave out - which is the defect REPO-6 recorded when CI selected three of
-# eleven T0 tests and could not see a suite vanish. A configure that fails here
-# builds nothing at all.
+# can leave out. A configure that fails here builds nothing at all.
 #
 # WHAT IT DOES NOT REACH, STATED SO ITS SILENCE IS NOT READ AS COVERAGE. Both
 # sides fall together under ONE change: deleting a suite's `import
@@ -1894,12 +3664,21 @@ add_test(NAME t_state
 # same shape as `case_sites.cmake` rule 2's own residual - a call site deleted
 # from the text is deleted from the compiler's registry too - and it is not
 # closeable by comparing these two sides harder. What it does catch is either
-# half deleted on its own, which is what was measured.
+# half deleted on its own.
 #
 # A STALE BUILD TREE REPORTS HERE. Side B globs the generated drivers, so a
 # driver left behind by a deleted suite is an extra name and is red. The repair
 # is a clean configure and never a relaxation of this check.
-file(GLOB MCF5307_SUITE_SOURCES "${CMAKE_CURRENT_LIST_DIR}/t_*.nim")
+# Both lines are needed and neither answers the other's edit.
+# `CONFIGURE_DEPENDS` re-globs at build time and re-runs the configure when the
+# SET OF MATCHED FILES changes - a suite added, deleted or renamed. The
+# directory property registers each matched file INDIVIDUALLY, which is what
+# answers an edit INSIDE a file that already matched: the glob word does not
+# watch content.
+file(GLOB MCF5307_SUITE_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_LIST_DIR}/t_*.nim")
+set_property(DIRECTORY "${PROJECT_SOURCE_DIR}"
+    APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${MCF5307_SUITE_SOURCES})
 set(MCF5307_SUITES_WITH_RUNTIME_HALF "")
 foreach(mcf5307_suite_source IN LISTS MCF5307_SUITE_SOURCES)
     file(READ "${mcf5307_suite_source}" mcf5307_suite_text)
@@ -2009,85 +3788,21 @@ message(STATUS
 
 
 # ----------------------------------- THE SECOND SOURCE FOR A TYPED CASE TOTAL.
-# `tests/case_sites.cmake` accepts ONE TYPED figure per suite because a table
-# that gets shorter fails no derived check. The round-2 audit of gate 4.4 then
-# asked what stops an author who meets that red from editing the figure instead
-# of restoring the cases, and until this block the answer was NOTHING.
+# `tests/case_sites.cmake` accepts one TYPED figure per suite because a table
+# that gets shorter fails no derived check. The second source is `src/` itself:
+# it carries transcripts of runs of these suites, quoted inside the comments
+# that record cycle-mutation and mask-mutation measurements, and a transcript
+# naming a suite and a case count is a figure the driver's number can be held
+# against.
 #
-# THE ARGUMENT THAT NO SECOND SOURCE EXISTED WAS WRONG, AND THE FILE THAT MADE
-# IT NAMED THE SOURCE ELSEWHERE IN ITSELF. `src/` carries dated transcripts of
-# runs of these suites, quoted inside the comments that record cycle-mutation
-# and mask-mutation measurements, and a transcript naming a suite and a case
-# count is a figure the driver's number can be held against. It is not derived
-# from the RUN - both sides are written down - but they are written down in
-# different files, by different tasks, for different reasons, and one of them is
-# production source that a test may not edit. An author moving one to silence a
-# red has to move the other in the same change, and the other is not a test.
+# No suite is named here and no count is typed here, so a transcript added to
+# or removed from `src/` moves this check with it.
 #
-# BOTH ENDS ARE DERIVED, as they are for the wiring check above. Side A is every
-# transcript found by READING `src/`; side B is the figure read out of the
-# GENERATED driver. No suite is named here and no count is typed here, so a
-# transcript added to or removed from `src/` moves this check with it.
-#
-# THIS BLOCK PRINTED A COVERAGE FIGURE UNTIL 2026-08-13 - `<N> of the 8 typed
-# case totals are corroborated by a transcript in src/`, with the suites named -
-# AND THAT LINE IS DELETED RATHER THAN REPAIRED. It was a present-tense claim
-# about the state of the tree with nothing keeping it true, which is the shape of
-# sentence this whole mechanism exists to make unsayable. The gate-4.4 judge
-# moved it in BOTH directions at rc 0, MEASURED 2026-08-13:
-#
-#   DOWNWARD, SILENTLY. Rewording a real transcript - `held its 168 cases` to
-#   `held its 168 unit cases` - dropped the figure from 3 to 2, and so did
-#   line-wrapping the same sentence so that the suite name and the number fell on
-#   different lines. Nothing failed. A STALE FIGURE THEN SURVIVES IN `src/` with
-#   the printed line reporting a smaller coverage that no reader is watching.
-#
-#   UPWARD. Prose naming a suite and a number, in a paragraph whose own words
-#   were "nothing here was measured from a run", raised the figure to 4 and
-#   printed that suite as corroborated.
-#
-# A NUMBER THAT MOVES IN BOTH DIRECTIONS WITHOUT FAILING MEASURES THE WORDING OF
-# COMMENTS AND NOT THE COVERAGE IT NAMES. The AGREEMENT GATE below stays, because
-# it is the half that fails: a transcript this scan DOES find and that DISAGREES
-# with the driver's figure stops the configure. What is gone is the half that
-# reported how much was found, because "found" was never a count of anything an
-# author could rely on.
-#
-# THE SCAN HAS MISSED A REAL TRANSCRIPT, and the miss is recorded because the
-# repair it drove is the loop below. `src/mcf5307/logic.nim`'s "All 74
-# `t_logic` cases stayed GREEN" went unread, because the number precedes the
-# suite name there and the scan read only a number that FOLLOWED it. THAT ONE
-# IS CLOSED: the loop below now reads both orders, and the comment at the two
-# branches records what the second may and may not match.
-#
-# HOW MANY TRANSCRIPTS THE SCAN READS IS DELIBERATELY NOT WRITTEN DOWN HERE.
-# Every figure this block has carried went stale inside a single round: the
-# last one enumerated the suites it had found, and the scan was already reading
-# one the enumeration did not name by the time it was committed. Nothing in the
-# tree reads such a figure, so nothing makes it fail. What DOES fail is the
-# AGREEMENT GATE below - a transcript that disagrees with the driver's own
-# figure stops the configure and names the file, the suite and both numbers.
-#
-# A DIFFERENT MISS OF THE SAME FAMILY IS NOT CLOSED AND IS NOT CLOSEABLE HERE.
-# A figure whose suite is named by an ANAPHOR - `src/mcf5307/cpu.nim` carried
-# "that suite carries 34 cases", with `t_irq` six lines above - is outside what
-# any per-line regex can resolve, and widening this scan until it guessed would
-# make it match prose. That is still the reason no figure derived from this scan
-# is printed as coverage: what it does not find, it cannot report on.
-#
-# WHAT IT DOES NOT REACH, STATED SO ITS SILENCE IS NOT READ AS COVERAGE. A suite
-# no transcript names is not covered and this check says nothing whatever about
-# it: the typed figure is still the only guard there. Neither is a suite whose
-# transcript is written in a shape this scan does not read, and the paragraph
-# above names one. Nor does it make the transcripts a specification - they are
-# dated records of past runs, so a DELIBERATE change in a suite's case count
-# makes them red. The repair for that is the one this project already uses where
-# a transcript would otherwise quote a total that moves: MEASURED 2026-08-13,
-# `src/mcf5307/decode_types.nim` quotes `t_ea_masks` as
-# `5 of <caseTotalMustMatchTranscripts> cases failed`, a named reference in place
-# of a number, which stays true at every date and leaves this scan nothing to
-# compare. Retyping the driver's figure to agree with a stale transcript is not a
-# repair, and neither is deleting this block.
+# A suite no transcript names is not covered by this check: the typed figure is
+# still the only guard there. The transcripts are records of past runs, not a
+# specification, so a DELIBERATE change in a suite's case count makes them red.
+# The repair is a NAMED REFERENCE in place of the number in `src/`, not
+# retyping the driver's figure to agree with a stale transcript.
 file(GLOB_RECURSE MCF5307_CORE_SOURCES "${PROJECT_SOURCE_DIR}/src/*.nim")
 foreach(mcf5307_core_source IN LISTS MCF5307_CORE_SOURCES)
     # SPLIT BY HAND for the reason `tests/case_sites.cmake` gives at its own
@@ -2104,58 +3819,26 @@ foreach(mcf5307_core_source IN LISTS MCF5307_CORE_SOURCES)
             # THE SUITE NAME IS BOUNDED ON BOTH SIDES so that one suite's name
             # inside a longer one does not answer for it, and the count must be
             # DIGITS immediately before ` cases` so that the named-reference
-            # spelling above is not read as a figure.
+            # spelling above is not read as a figure. A bound on one side of a
+            # name is not a bound: without the left one, `helper_t_alu` answers
+            # for `t_alu`.
             #
-            # THE LEFT BOUND WAS MISSING UNTIL 2026-08-13 and only the right one
-            # was written. MEASURED that day: a line reading
-            # "`helper_t_alu` held its 999 cases" was read as `t_alu` quoting
-            # 999 and stopped the configure, naming a suite the line does not
-            # mention. A bound on one side of a name is not a bound.
+            # Both orders are read: a transcript may put the number BEFORE the
+            # suite name, and the second branch below reads that shape. It is
+            # bounded on both sides of the name exactly as the first is, and it
+            # requires the word `cases` to FOLLOW the name.
             #
-            # BOTH ORDERS ARE READ, AND ONLY ONE WAS UNTIL 2026-08-13. The
-            # paragraph above this loop recorded the miss and left it open:
-            # `src/mcf5307/logic.nim`'s "All 74 `t_logic` cases stayed GREEN"
-            # puts the number BEFORE the name, and a scan that reads only a
-            # number FOLLOWING the name never saw it. That is a real transcript
-            # quoting a real total, and a stale one would have survived in
-            # `src/` with nothing to say so. The second branch below reads it.
-            #
-            # WHAT THE SECOND BRANCH IS NOT ALLOWED TO DO is match a line the
-            # first branch would have rejected as prose. It is bounded on both
-            # sides of the name exactly as the first is, and it requires the
-            # word `cases` to FOLLOW the name, so a sentence that merely holds
-            # a number and a suite name in the same clause is not a figure.
-            # MEASURED 2026-08-13 over every line of `src/`: the second branch
-            # matches exactly ONE line that the first does not, and it is the
-            # `logic.nim` transcript named above.
-            #
-            # THE SECOND BRANCH DOES MATCH ORDINARY PROSE, AND IT IS KEPT
-            # ANYWAY. MEASURED 2026-08-13 by planting
-            # "Blocks 24, 25 `t_irq` cases are new" in `cpu.nim`: the configure
-            # stopped, reporting that the line quotes 25 cases. It is a real
-            # false positive and the shape is one this codebase writes often -
-            # block numbers, then a backticked suite name, then `cases`.
-            #
-            # WHAT WOULD BE TRADED FOR SILENCING IT IS THE REASON IT STAYS. The
-            # only feature separating that line from `logic.nim`'s real
-            # transcript is which noun the number counts, and no per-line
-            # regex reads nouns. Every narrowing available here - bounding the
-            # gap between the number and the name, refusing a number that
-            # follows a comma - also rejects transcripts an author may
-            # legitimately write, and a transcript this scan does not reach is
-            # a STALE FIGURE SURVIVING IN `src/` WITH NOTHING TO SAY SO. This
-            # branch exists because exactly that had already happened once.
+            # The second branch also matches ordinary prose - block numbers,
+            # then a backticked suite name, then `cases` - and is kept anyway.
+            # The only feature separating such a line from a real transcript is
+            # which noun the number counts, and no per-line regex reads nouns.
             # A false positive costs one rewording and prints the line it
-            # matched; a false negative costs nothing and says nothing.
+            # matched; a false negative leaves a stale figure in `src/` with
+            # nothing to say so.
             #
-            # NEITHER BRANCH REACHES A FIGURE WHOSE SUITE IS AN ANAPHOR, and
-            # that limit is stated because it cannot be closed here.
-            # `src/mcf5307/cpu.nim` carried "that suite carries 34 cases" with
-            # the name `t_irq` six lines above it; no widening of a per-line
-            # regex resolves "that suite", and a window over adjacent lines
-            # does not reach six. The repair for that shape is in the SOURCE -
-            # write the suite's name where the number is - and `cpu.nim` now
-            # says so at the line this scan reads.
+            # Neither branch reaches a figure whose suite is named by an
+            # anaphor. The repair for that shape is in the SOURCE: write the
+            # suite's name where the number is.
             set(mcf5307_quoted "")
             if(mcf5307_core_line MATCHES
                     "(^|[^A-Za-z0-9_])${mcf5307_suite}[^A-Za-z0-9_].*[^0-9]([0-9]+) cases")
@@ -2253,10 +3936,8 @@ add_test(NAME t_claims
         "-DCLAIMS_NIM_COMMAND=${MCF5307_CLAIMS_COMMAND}"
         -P "${CMAKE_CURRENT_LIST_DIR}/t_claims.cmake")
 
-# The application binary interface smoke test `abi_smoke`. It takes the address
-# of every function `include/mcf5307.h` declares AND the library defines, which
-# is the assertion that a renamed or dropped definition is a link error. It
-# calls `mcf5307_runtime_init()` twice and asserts both calls return.
+# ---------------------------------------------------------------------------
+# The application binary interface SMOKE test `abi_smoke`.
 #
 # This is the test the CPU-3 task CHECK names. It tests the ABI surface the
 # task's closure produces, and it asserts NO CORE BEHAVIOUR. The test takes
@@ -2336,6 +4017,13 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/abi_smoke_implemented.h"
     "${MCF5307_ABI_SMOKE_HEADER_TEXT}")
 
 add_executable(abi_smoke ${CMAKE_CURRENT_LIST_DIR}/abi_smoke.cpp)
+# `include/` AND THE BUILD DIRECTORY ARE THE WHOLE INCLUDE PATH, and leaving the
+# nimcache and the Nim library directory off it is the point. The consumer this
+# test stands in for - `gearmulator`'s `g2Lib` - has neither on its own include
+# path. Either one added here would let `include/mcf5307.h` acquire a dependency
+# on a generated header or on `nimbase.h` and still compile under this test,
+# which is the regression the test exists to catch. The build directory is on the
+# path because `abi_smoke_implemented.h` is GENERATED into it by this file.
 target_include_directories(abi_smoke PRIVATE
     "${PROJECT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_BINARY_DIR}"
@@ -2353,3 +4041,133 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
 endif()
 add_dependencies(mcf5307_tests abi_smoke)
 add_test(NAME abi_smoke COMMAND abi_smoke)
+
+# ---------------------------------------------------------------------------
+# `t0_no_local_paths` - no shipped source file names a path that exists on one
+# machine.
+#
+# A scan that read no file at all reports no hit and exits 0, which is the same
+# output a clean tree gives. The negative control fires the instrument in the
+# same run.
+#
+# The planted strings are assembled from character codes, and so are the
+# strings the case expects to read back. `tests/` is one of the scanned
+# directories, so a plant spelled out here would be found in this file.
+#
+# The exclusion is by a property and never by a name: a directory that holds
+# `CMakeCache.txt` is build output. The scratch directory the control excludes
+# is called `notbuild`, so a scanner that filtered on the name `build` fails
+# the case.
+
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t0_no_local_paths_driver.cmake" [==[
+# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
+#
+# The driver of the registered test `t0_no_local_paths`. It runs TWO CASES and
+# reports both, so that a run names each failure rather than stopping at the
+# first.
+
+set(scan_failures "")
+
+# 126 is the home shorthand and 47 is the separator. Spelling either sequence
+# here would plant it in `tests/`, which case 2 reads.
+string(ASCII 126 scan_tilde)
+string(ASCII 47 scan_slash)
+set(scan_needle_home "${scan_tilde}${scan_slash}")
+set(scan_needle_abs "${scan_slash}Users${scan_slash}")
+
+macro(scan_report scan_label scan_detail)
+    message("FAILED  ${scan_label}")
+    message("${scan_detail}")
+    list(APPEND scan_failures "${scan_label}")
+endmacro()
+
+# Step 1. Build the scanner.
+set(scan_binary "${SCAN_WORK_DIR}/t0_no_local_paths")
+file(MAKE_DIRECTORY "${SCAN_WORK_DIR}")
+file(REMOVE "${scan_binary}")
+execute_process(
+    COMMAND "${SCAN_C_COMPILER}" -std=c11 -Wall -Wextra -pedantic -Werror
+            -o "${scan_binary}" "${SCAN_SRC_DIR}/t0_no_local_paths.c"
+    RESULT_VARIABLE scan_build_rc
+    OUTPUT_VARIABLE scan_build_out
+    ERROR_VARIABLE scan_build_err)
+if(NOT scan_build_rc STREQUAL "0")
+    message(FATAL_ERROR
+        "t0_no_local_paths: the scanner did not build (result: ${scan_build_rc})\n"
+        "${scan_build_out}${scan_build_err}")
+endif()
+
+# Step 2, case 1. The scratch tree. It is removed first, so that a file left
+# by an earlier run cannot be the thing the case reads.
+set(scan_scratch "${SCAN_WORK_DIR}/negative")
+file(REMOVE_RECURSE "${scan_scratch}")
+file(WRITE "${scan_scratch}/src/planted_home.txt"
+     "a clean first line\n${scan_needle_home}Desktop${scan_slash}avoiding-cycles.md\n")
+file(WRITE "${scan_scratch}/src/planted_abs.txt"
+     "${scan_needle_abs}somebody${scan_slash}x\n")
+file(WRITE "${scan_scratch}/tests/notbuild/CMakeCache.txt"
+     "CMAKE_HOME_DIRECTORY:INTERNAL=${scan_needle_abs}somebody\n")
+file(WRITE "${scan_scratch}/tests/notbuild/log.txt"
+     "${scan_needle_home}Desktop${scan_slash}quoted-by-a-log\n")
+file(WRITE "${scan_scratch}/conformance/clean.txt" "nothing here\n")
+
+execute_process(
+    COMMAND "${scan_binary}" "${scan_scratch}" src tests conformance
+    RESULT_VARIABLE scan_negative_rc
+    OUTPUT_VARIABLE scan_negative_out
+    ERROR_VARIABLE scan_negative_err
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+set(scan_negative_expected
+"t0_no_local_paths: scanned: src tests conformance
+t0_no_local_paths: hit: src/planted_abs.txt:1: ${scan_needle_abs}
+t0_no_local_paths: hit: src/planted_home.txt:2: ${scan_needle_home}
+t0_no_local_paths: excluded: tests/notbuild
+t0_no_local_paths: FAIL: 2 hit(s)")
+
+if(NOT scan_negative_rc STREQUAL "1")
+    scan_report("case 1: the negative control"
+        "expected exit status 1, got ${scan_negative_rc}\n${scan_negative_out}${scan_negative_err}")
+elseif(NOT scan_negative_out STREQUAL "${scan_negative_expected}")
+    scan_report("case 1: the negative control"
+        "expected:\n${scan_negative_expected}\ngot:\n${scan_negative_out}${scan_negative_err}")
+else()
+    message("PASSED  case 1: the negative control")
+endif()
+
+# Step 3, case 2. The repository itself.
+execute_process(
+    COMMAND "${scan_binary}" "${SCAN_SOURCE_DIR}" src tests conformance
+    RESULT_VARIABLE scan_tree_rc
+    OUTPUT_VARIABLE scan_tree_out
+    ERROR_VARIABLE scan_tree_err
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+set(scan_tree_expected
+"t0_no_local_paths: scanned: src tests conformance
+t0_no_local_paths: excluded: none
+t0_no_local_paths: PASS: no machine-local path")
+
+if(NOT scan_tree_rc STREQUAL "0")
+    scan_report("case 2: the shipped tree"
+        "expected exit status 0, got ${scan_tree_rc}\n${scan_tree_out}${scan_tree_err}")
+elseif(NOT scan_tree_out STREQUAL "${scan_tree_expected}")
+    scan_report("case 2: the shipped tree"
+        "expected:\n${scan_tree_expected}\ngot:\n${scan_tree_out}${scan_tree_err}")
+else()
+    message("PASSED  case 2: the shipped tree")
+    message("${scan_tree_out}")
+endif()
+
+if(NOT scan_failures STREQUAL "")
+    message(FATAL_ERROR "t0_no_local_paths: failed: ${scan_failures}")
+endif()
+]==])
+
+add_test(NAME t0_no_local_paths
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSCAN_C_COMPILER=${CMAKE_C_COMPILER}"
+        "-DSCAN_SRC_DIR=${CMAKE_CURRENT_LIST_DIR}"
+        "-DSCAN_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DSCAN_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/t0_no_local_paths_work"
+        -P "${CMAKE_CURRENT_BINARY_DIR}/t0_no_local_paths_driver.cmake")

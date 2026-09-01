@@ -281,16 +281,13 @@ set(MCF5307_NIM_BUILT_PREFIX "${MCF5307_NIM_PREFIX_${MCF5307_NIM_BUILT_ENTRY}}")
 mcf5307_render_command(MCF5307_NIM_COMMAND_TEXT ${MCF5307_NIM_COMMAND})
 message(STATUS "mcf5307: nim invocation: ${MCF5307_NIM_COMMAND_TEXT}")
 
-# The contract header. It is read here and never written here. The name is set
-# at this point because the line below has to name it, and step 4a reads the
-# same variable.
+# The contract header. It is read here and it is never written here. The name is set at this point because the line below has to
+# name it, and step 4a reads the same variable.
 set(MCF5307_ABI_CONTRACT_FILE "${PROJECT_SOURCE_DIR}/include/mcf5307.h")
 
-# The smoke test's expected symbol list. It is read here and never written
-# here. Step 4a compares it against the set it measures as defined and
-# exported by the library, in both directions. It is
-# named at this point for the same reason the contract header is: the
-# dependency list below has to carry it.
+# The smoke test's symbol list. It is read here and it is never written here. Step 4a compares it against the published set of the
+# contract header above. It is named at this point for the same reason the
+# contract header is: the dependency list below has to carry it.
 set(MCF5307_ABI_SMOKE_LIST_FILE
     "${PROJECT_SOURCE_DIR}/tests/abi_smoke_symbols.inc")
 
@@ -586,7 +583,7 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # the result and never the macro. A Nim release that renames the macros changes
 # nothing here.
 #
-# `include/mcf5307.h` belongs to CPU-0. It is read here and never written here.
+# `include/mcf5307.h` is read here and never written here.
 
 # ---------------------------------------------------------------------------
 # The escape hatch, and why it is loud.
@@ -618,11 +615,8 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # way to red - the one that covers a tree whose switch reads ON while the
 # branch did not run.
 #
-# The gate costs roughly half of this project's configure time, of which the
-# controls that exist only to fire the gate's own fatal branches are about an
-# eighth. Turning it off buys that back in exchange for a build whose published
-# symbols nobody measured. To take a current figure, run `cmake` with
-# `--profiling-output=... --profiling-format=google-trace`.
+# WHAT THE GATE COSTS. A reader reaching for the switch above is usually paying
+# configure time for something else, so the shape of the cost is recorded here.
 #
 # The enumeration of what OFF skips is written once, in the warning below. The
 # docstring here and the failure message of the registered test
@@ -1310,8 +1304,8 @@ set(MCF5307_ABI_LINKER_PROVIDED
 #   NOT IMPLEMENTED    published and NOT defined.           Reported, not a
 #                                                           fault.
 #
-# THE THIRD CATEGORY IS A SEPARATE LINE AND A SEPARATE WORD. `a later cpu task
-# writes this` and `the reader could not see it` must never share a line. The
+# THE THIRD CATEGORY IS A SEPARATE LINE AND A SEPARATE WORD. `this is not
+# written yet` and `the reader could not see it` must never share a line. The
 # `defined` set is what separates them.
 
 set(MCF5307_ABI_VISIBLE "")
@@ -1667,7 +1661,7 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part t
 # with `-Wall -Wextra -pedantic -Werror`, and that is where a warning in it is
 # a failure.
 #
-# `tests/abi_stub.c` belongs to CPU-0. It is read here and never written here.
+# `tests/abi_stub.c` is read here and never written here.
 
 if(NOT EXISTS "${MCF5307_ABI_STUB_FILE}")
     message(FATAL_ERROR

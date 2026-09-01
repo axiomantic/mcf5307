@@ -1,14 +1,18 @@
-# The cpu track's reusable workflow. Task REPO-6 creates it EMPTY; the
-# cpu track fills it.
+# The cpu track's reusable workflow.
 #
 # A per-track unit is a reusable workflow and it contributes a JOB, not a step.
 # Nothing outside a callee workflow can insert a step into it, so this track
 # adds its steps inside this job, in this file, and touches `ci.yml` in zero
 # places.
 #
-# THIS JOB ASSERTS NOTHING YET AND IT SAYS SO. Task CPU-25 adds the
-# Nim pin step. Until then this job exists to give that step a file to live in and to
-# give the caller a resolvable `uses:` reference.
+# `nim-pin` asserts that `.nim-version` holds one exact version and that every
+# job pins the same one.
+#
+# It never runs `nim`. `.nim-version` selects nothing -- `mise` reads no
+# idiomatic version file, so the pin and the compiler on `PATH` are joined only
+# by `cmake/Nim.cmake`, which fails configure on a mismatch. That join is
+# exercised by the configure step of `ci.yml`'s build job. This job asserts the
+# pin's shape and its single-definition-site property.
 
 name: track-cpu
 
@@ -24,5 +28,51 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: This track has no step yet
-        run: echo "track-cpu is empty. CPU-25 adds the Nim pin step."
+
+      - name: nim-pin
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          pin_file=.nim-version
+          status=0
+
+          # 1. `.nim-version` holds one exact version. `awk END{print NR}`
+          #    counts a final line that carries no newline, so an empty file, a
+          #    second version and a stray blank line are all visible here.
+          #    `$(cat …)` strips trailing newlines and would pass all three.
+          lines=$(awk 'END { print NR }' "${pin_file}")
+          pin=$(awk 'NR == 1' "${pin_file}")
+          printf 'lines=%s pin=%s\n' "${lines}" "${pin}"
+          if [ "${lines}" -ne 1 ]; then
+            echo "FAILURE nim-pin: ${pin_file} holds ${lines} lines. It holds exactly one."
+            status=1
+          fi
+          # `grep -qxE` anchors both ends, so a range, `latest`, a two-part
+          # version, a trailing space and a CR each fail here.
+          if ! printf '%s' "${pin}" | grep -qxE '[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "FAILURE nim-pin: '${pin}' is not one exact MAJOR.MINOR.PATCH version."
+            status=1
+          fi
+
+          # 2. Every job pins the same version, asserted by making
+          #    `.nim-version` the only place a version is written. A workflow
+          #    line that both names Nim and carries a MAJOR.MINOR.PATCH literal
+          #    is a second definition site.
+          #
+          #    The scan reads every workflow file including this one. The
+          #    pattern is a character class and holds no version literal of its
+          #    own, so it does not match its own text.
+          literals=$(grep -rniE 'nim' .github/workflows/ \
+              | grep -E '[0-9]+\.[0-9]+\.[0-9]+' || true)
+          if [ -n "${literals}" ]; then
+            echo "FAILURE nim-pin: a workflow writes a Nim version literal."
+            echo "${pin_file} is the single definition site of the pin. Read it instead:"
+            printf '%s\n' "${literals}"
+            status=1
+          fi
+
+          if [ "${status}" -eq 0 ]; then
+            echo "nim-pin: ${pin_file} holds ${pin}, and no workflow writes a second one."
+          fi
+          exit "${status}"
