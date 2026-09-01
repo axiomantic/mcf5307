@@ -26,7 +26,7 @@
     {
       "name": "t0",
       "displayName": "Build the T0 test set, keep-going",
-      "description": "KEEP-GOING IS NOT OPTIONAL AND IS THE REASON THIS PRESET EXISTS. abi_smoke does not link - it takes the address of published C ABI symbols that are not implemented yet - and without keep-going the targets after it are never built, so ctest reports them Not Run and counts them failed. `-k` is the Makefile spelling and the configure preset pins that generator; Ninja's spelling is `-k 0`.",
+      "description": "KEEP-GOING IS DELIBERATE AND IT IS NOT A WAY OF IGNORING A BROKEN BUILD - the build still exits non-zero, and a target that did not build leaves its registered test Not Run, which ctest counts as failed. What `-k` buys is which tests those are: without it the targets after the first failure are never attempted, so one broken target reds every suite behind it and the report stops naming the fault. `-k` is the Makefile spelling and the configure preset pins that generator; Ninja's spelling is `-k 0`.",
       "configurePreset": "t0",
       "targets": [
         "mcf5307_tests"
@@ -51,7 +51,7 @@
     {
       "name": "t0",
       "displayName": "Run the T0 suite",
-      "description": "The name filter is the pattern .github/workflows/ci.yml carries as T0_PATTERN, and it is a SECOND COPY of it: ci.yml keeps the written roster of what the pattern excludes - abi_smoke and the mcf5307_conformance_* runs - so read the roster there rather than treating this field as its source. CTEST_NO_TESTS_ACTION carries --no-tests=error, which test presets have no field for. That flag is what makes this a check at all: a pattern that matches nothing is not a weak check, it is a check that cannot fail.",
+      "description": "The name filter is the pattern .github/workflows/ci.yml carries as T0_PATTERN, and it is a SECOND COPY of it: ci.yml keeps the written roster of what the pattern excludes - the mcf5307_conformance_* runs - so read the roster there rather than treating this field as its source. CTEST_NO_TESTS_ACTION carries --no-tests=error, which test presets have no field for. That flag is what makes this a check at all: a pattern that matches nothing is not a weak check, it is a check that cannot fail.",
       "configurePreset": "t0",
       "environment": {
         "CTEST_NO_TESTS_ACTION": "error"
