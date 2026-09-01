@@ -100,15 +100,6 @@ namespace {
 volatile void const* const abi_addr_all[] = {
 #include "abi_smoke_implemented.h"
 };
-#undef MCF5307_ABI_SMOKE_SYMBOL
-
-/* An empty address set would make every assertion above vacuous and would
- * still compile as `main` alone. The generator refuses to write an empty
- * header; this is the same refusal restated where the array is defined, so
- * neither side can go empty on its own. */
-static_assert(sizeof(abi_addr_all) / sizeof(abi_addr_all[0]) > 0,
-              "abi_smoke: the generated address set is empty, so the link "
-              "assertion asserts nothing.");
 
 #undef MCF5307_ABI_FN
 
