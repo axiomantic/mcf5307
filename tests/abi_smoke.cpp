@@ -132,10 +132,20 @@ int main() {
     /* The twice-call. `mcf5307_runtime_init()` is documented as idempotent.
      * A second call that reaches unmapped memory, that re-enters a partial
      * initialiser, or that panics is a regression in the runtime itself.
-     * The assertion is the return: the test reaches the end of `main`
-     * only if both calls returned. */
-    mcf5307_runtime_init();
-    mcf5307_runtime_init();
+     *
+     * The returned status is read, and reading it is what makes this the
+     * positive control for `t_runtime_latch`. That suite drives the status to
+     * 0 on a latch it stalls deliberately; a status call that answered 0 for
+     * every reason would satisfy it just as well. This is the only place a
+     * healthy runtime's answer is asserted, and it is asserted through the
+     * published C entry point rather than against the Nim procedure behind
+     * it. */
+    if (mcf5307_runtime_init() != 1) {
+        return 2;
+    }
+    if (mcf5307_runtime_init() != 1) {
+        return 3;
+    }
 
     /* THIS LOOP IS THE ANCHOR AND NOT A CHECK. The comparison cannot fail -
      * every element is the address of a function - and the return value is
