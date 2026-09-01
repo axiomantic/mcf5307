@@ -12,10 +12,6 @@
 ##   It is a SECOND oracle for the frame layout and it is the only one of the
 ##   two that states why the vector table is 1 MByte aligned.
 ##
-##   DESIGN SECTIONS 6.1 AND 5.2.1 are "The core" and "Bus faults and the
-##   error channel" of the NMG2 emulator DESIGN DOCUMENT
-##   (`2026-08-04-nmg2-emulator-design.md`).
-##
 ## EVERY EXPECTED VALUE IN BLOCK 1 IS A HAND-DERIVED LITERAL, written beside
 ## the bit string it came from, and NOT a second call of the procedure under
 ## test.

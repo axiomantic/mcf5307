@@ -648,9 +648,8 @@ block:
 #
 # THIS CORE TRAPS RATHER THAN TAKING THE FORMAT-ERROR VECTOR, AND THAT IS
 # UNCERTAINTY 4 IN `control.nim`'s HEADER. Vector 14 is a real exception on
-# silicon and the exception model is CPU-14's; a trap is this core's one
-# observable for "refused", the same channel every illegal size and operand
-# uses.
+# silicon; a trap is this core's one observable for "refused", the same
+# channel every illegal size and operand uses.
 
 block:
   let frame = @[(stackBase, 0x30802703'u32), (stackBase + 4'u32, 0x00000400'u32)]

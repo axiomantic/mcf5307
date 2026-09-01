@@ -4,14 +4,6 @@
 ## named in full here. A bare "section 6.1" is unreadable to a reader who holds
 ## only the repository, and none of them may be copied into it.
 ##
-##   DESIGN SECTION 6.1 is section 6 "The MCF5307 Core and the Board Model",
-##   subsection 6.1 "The core", of the NMG2 emulator DESIGN DOCUMENT
-##   (`2026-08-04-nmg2-emulator-design.md`, in the nord-modular-emulator plan
-##   set). Opened and checked: it is the section that makes the legality mask a
-##   MANDATORY property of this core - "Each opcode carries its own legality
-##   mask. An illegal mode traps." - and it is the section that sizes the core
-##   and forbids a Musashi fork.
-##
 ##   AGENTS.MD SECTION 11 is section 11 "External resources" of the
 ##   nord-modular-emulator project's `AGENTS.md`. Opened and checked: it is the
 ##   section that names the two Motorola documents this file takes instruction
@@ -41,13 +33,6 @@
 ##   `~/Development/datasheets/MCF5307UM-md/` are known wrong, so a value
 ##   taken from text extraction is not evidence; `pdftoppm -png` and read the
 ##   image.
-##
-##   CPU-6'S PLAN ROW is the CPU-6 row of section 11.3 "The instruction set" of
-##   the NMG2 emulator IMPLEMENTATION PLAN
-##   (`2026-08-04-nmg2-emulator-impl.md`). Opened and checked: its Check line
-##   reads "The test asserts a trap for at least one illegal mode for each
-##   implemented opcode", which is the property the shift block below cites it
-##   for.
 ##
 ## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_logic`. That corpus holds
 ## POSITIVE cases: an encoding this part has,
@@ -337,11 +322,11 @@ template checkMask(got: bool; want: bool; label: string) =
 const bitDirty = srBase or ccrN or ccrV or ccrC or ccrX
 
 # ---------------------------------------------------------------------------
-# BLOCKING 1. `CMP` AND `CMPA.L` ARE NOT THIS GROUP'S, AND CPU-10 HAS TAKEN
-# THEM.
+# BLOCKING 1. `CMP` AND `CMPA.L` ARE NOT THIS GROUP'S.
 #
 # Line 1011 carries EOR in opmodes 100, 101 and 110. THE OTHER FIVE OPMODES
-# ARE CPU-10'S: CMP in 000, 001 and 010, CMPA.W in 011 and CMPA.L in 111.
+# BELONG TO THE COMPARISON GROUP: CMP in 000, 001 and 010, CMPA.W in 011
+# and CMPA.L in 111.
 #
 # The sentence these rows assert: the encoding belongs to the comparison group
 # and not to the logic decoder.

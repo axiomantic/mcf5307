@@ -1344,18 +1344,12 @@ CASES = {
     #       the two right ones. N and Z come from the result. V IS CLEARED BY
     #       ALL FOUR, ASL INCLUDED.
     #
-    # ASL'S V IS SETTLED, AND THE CFPRM SETTLES IT. An earlier revision of this
-    # comment said the ColdFire Family Programmer's Reference Manual "is not on
-    # this machine" and built a two-readings hedge on that absence - whether V
-    # follows "the MSB changed at any time during the shift" or "the MSB of the
-    # result differs from the MSB of the operand", with no case allowed to pin a
-    # count where they disagree. THE RECORD WAS FALSE: the manual is on disk,
-    # and it describes NEITHER reading. Folio 4-12 gives V a flat "Always
-    # cleared" and adds "Note that CCR[V] is always cleared by ASL and ASR,
-    # unlike on the 68K family processors"; folio 4-11 says "The overflow bit is
-    # always zero". ColdFire computes no ASL overflow at all, so there is no
-    # dichotomy to hedge and no count that separates anything. The shift count
-    # of a V case is now free to be whatever the case needs.
+    # ASL'S V IS SETTLED, AND THE CFPRM SETTLES IT. Folio 4-12 gives V a flat
+    # "Always cleared" and adds "Note that CCR[V] is always cleared by ASL and
+    # ASR, unlike on the 68K family processors"; folio 4-11 says "The overflow
+    # bit is always zero". ColdFire computes no ASL overflow at all, so there
+    # is no dichotomy to hedge and no count that separates anything. The shift
+    # count of a V case is free to be whatever the case needs.
     #
     # The register shift count of zero carries no `sr`, for the same reason:
     # what a zero count does to C is a rule this project cannot cite today. The
@@ -2056,25 +2050,21 @@ CASES = {
     #       the MODIFIED word is what the handler runs under.
     "control": [
         {
-            # `nop` NOW NAMES `sr`, AND THE REASON IT DID NOT IS GONE.
+            # `nop` NAMES `sr` AND `pc`.
             #
-            # It used to name no register at all - not even `sr` - because the
-            # runner judged a register-less case by its cycle return and applied
-            # that judgement ONLY when `expected.regs` was empty. Naming `sr`
-            # therefore REMOVED the case's only assertion instead of adding one:
-            # an `sr` expectation of "unchanged" is satisfied by a NOP that never
-            # executed, since an instruction that never ran changes nothing.
+            # `conformance/runner.cpp` asserts `mcf5307_faulted`, then
+            # `mcf5307_halted`, then a non-zero cycle return, for EVERY case
+            # and before it compares one register. Without those assertions
+            # naming `sr` would REMOVE the case's only assertion instead of
+            # adding one: an `sr` expectation of "unchanged" is satisfied by
+            # a NOP that never executed, since an instruction that never ran
+            # changes nothing. Measured on the mutation "the encoding word is
+            # 0000 instead of 4e71" - a NOP that is not there - this runner
+            # reports the trap.
             #
-            # `conformance/runner.cpp` no longer works that way. It asserts
-            # `mcf5307_faulted`, then `mcf5307_halted`, then a non-zero cycle
-            # return, for EVERY case and before it compares one register.
-            # Measured on the mutation "the encoding word is 0000 instead of
-            # 4e71" - a NOP that is not there - the old runner passed the case
-            # with `sr` named and this one reports the trap.
-            #
-            # IT NOW NAMES `pc` TOO, which is the assertion that separates a NOP
-            # from every other one-word instruction in this group: the program
-            # counter advances by exactly one word and by nothing else.
+            # NAMING `pc` is the assertion that separates a NOP from every
+            # other one-word instruction in this group: the program counter
+            # advances by exactly one word and by nothing else.
             "name": "nop",
             "mnemonic": "nop",
             "instruction": "nop",

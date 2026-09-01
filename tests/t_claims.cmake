@@ -157,8 +157,7 @@ set(CLAIM_control_equivalent_EDIT_1_REPLACE "  if ctx.irqLevel != 7 and level ==
 #   budget 8 or 64.
 #
 #   THE TWENTY-FIFTH OF EACH PROFILE DOES NOT COME FROM THE PRE-TAKE SEQUENCE AT
-#   ALL, and an earlier revision of this paragraph attributed all of them to it,
-#   which is an arithmetic that stops one short. It is `mask 0 pre @[3] script
+#   ALL. It is `mask 0 pre @[3] script
 #   @[7, 3, 7] budget 64`, under each profile: ONE level-3 request before the
 #   run, and the `7, 3, 7` arrives through the RE-ENTRY SCRIPT - the board
 #   raises those three levels from inside the frame write, while the core is
@@ -848,7 +847,7 @@ endfunction()
 #   RUN OF STATEMENTS. AN ANCHOR THAT IS THE HEADER LINE AND NOTHING ELSE HAS NO
 #   REMAINING LINES, SO IT SATISFIES BOTH RULES VACUOUSLY and takes the body
 #   indentation from the next line of the FILE; the row `AG_bare_header` is that
-#   cell, and the paragraph at it records what the indent used to be instead.
+#   cell.
 #   `quit(97)` becomes the first statement of the body, so
 #   the probe answers "did this branch RUN" rather than "was this header
 #   reached". The deeper-lines rule is what refuses the multi-statement anchor
@@ -1394,14 +1393,6 @@ endfunction()
 # at all and therefore the one that proves the function fails closed; the one
 # MISCOMPILE row (R), which is how a LOUD residual stays visible; and the BARE
 # HEADER (AG), added in the same pass and described at its own row.
-#
-# WHAT WENT WITH THEM IS RECORDED HONESTLY AND NOT MINIMISED. The cut rows
-# were duplicate instances of a decision another row already exercises - a
-# second and third host keyword over a nested branch, further UPHELD rows on the
-# before-insertion path K already holds, further WITHHELD rows on the path
-# AC_inner already holds, and refusals of shapes this probe declines for want of
-# a control. Two of them anchored on `irq.nim` as it ships, and their removal is
-# why the paragraph on synthetic anchors below no longer names an exception.
 #
 # EVERY ROW CARRIES ITS EXPECTED OUTCOME AND A MISMATCH FAILS THE RUN. A driver
 # that produced verdicts and compared them against nothing is what made each of

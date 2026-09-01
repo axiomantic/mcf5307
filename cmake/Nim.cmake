@@ -586,7 +586,7 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # the result and never the macro. A Nim release that renames the macros changes
 # nothing here.
 #
-# `include/mcf5307.h` belongs to CPU-0. It is read here and never written here.
+# `include/mcf5307.h` is read here and never written here.
 
 # ---------------------------------------------------------------------------
 # The escape hatch, and why it is loud.
@@ -1667,7 +1667,7 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part t
 # with `-Wall -Wextra -pedantic -Werror`, and that is where a warning in it is
 # a failure.
 #
-# `tests/abi_stub.c` belongs to CPU-0. It is read here and never written here.
+# `tests/abi_stub.c` is read here and never written here.
 
 if(NOT EXISTS "${MCF5307_ABI_STUB_FILE}")
     message(FATAL_ERROR

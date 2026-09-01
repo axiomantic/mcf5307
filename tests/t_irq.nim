@@ -678,14 +678,10 @@ block:
 # together with the level 3's flag - reads $108. Both are separated by this
 # tuple.
 #
-# WHAT THIS TUPLE CANNOT DECIDE, AND AN EARLIER REVISION OF THIS COMMENT SAID
-# IT COULD. THE EDGE HERE IS AUTOVECTORED, so `vectorFor` returns the
-# autovector and never reads `ctx.irq7Vector` at all. A core that kept the
-# edge's FLAG and read the PRESENTED VECTOR reaches the autovector anyway and
-# is green here. The sentence this comment used to carry - that a core using
-# the currently presented vector reads $108 - was true only of a core that took
-# the presented FLAG along with it, and it read as though the stored vector
-# were under test here. It is not.
+# WHAT THIS TUPLE CANNOT DECIDE. THE EDGE HERE IS AUTOVECTORED, so
+# `vectorFor` returns the autovector and never reads `ctx.irq7Vector` at
+# all. A core that kept the edge's FLAG and read the PRESENTED VECTOR
+# reaches the autovector anyway and is green here.
 #
 # THIS BLOCK PINS THE FLAG HALF AND NOT THE VECTOR HALF. Block 19 runs this
 # same drop sequence with a VECTORED edge, and block 18 presents a vectored
@@ -938,13 +934,10 @@ block:
 # that did not return would end the process before the assertion below was
 # reached, so REACHING A VERDICT AT ALL is what decides that half.
 #
-# THE LABEL USED TO CLAIM A SECOND CLAUSE THAT NO ASSERTION REACHES, and it is
-# worth saying what went wrong with it because the shape is cheap to repeat.
-# It read "the next real context is unaffected", which is a BEFORE-AND-AFTER
-# sentence, and this block has no before: the context is created AFTER the nil
-# call, there is no run without the nil call to compare it against, and the one
-# tuple asserted below cannot tell a context that was affected from one that
-# was not. What the assertion actually decides is the take.
+# THIS BLOCK HAS NO BEFORE-AND-AFTER. The context is created AFTER the nil
+# call, there is no run without the nil call to compare it against, and the
+# one tuple asserted below cannot tell a context that was affected from one
+# that was not. What the assertion actually decides is the take.
 #
 # THE LEVEL IS 6 AND IT IS THE ONLY LEVEL-6 TAKE IN THIS FILE, which is what
 # the case adds beyond the nil call. Block 6 presents level 6 only to have it
@@ -1195,14 +1188,10 @@ block:
 # `src/` and requires this suite to go EXACTLY ONE red. A date alone would go
 # stale the moment this block was weakened; the entry reds instead.
 #
-# THE OBSERVER OF `tests/t_claims.nim` STILL CANNOT STAND IN FOR THIS BLOCK,
-# AND THE REASON THIS COMMENT USED TO GIVE HAS GONE FALSE. It read that every
-# scenario that observer presents is AUTOVECTORED, so the stored vector is
-# written and never read there, and that all 225 of its scenarios UPHELD this
-# move. That was true of the space the observer ran when the sentence was
-# written and is false of the space it runs now: it gained a PRESENTATION
-# PROFILE axis, `pVectored` clears the autovector flag and hands every call a
-# distinct vector, and the stored vector is therefore read. RE-MEASURED
+# THE OBSERVER OF `tests/t_claims.nim` STILL CANNOT STAND IN FOR THIS BLOCK.
+# Its scenario space carries a PRESENTATION PROFILE axis, `pVectored` clears
+# the autovector flag and hands every call a distinct vector, and the stored
+# vector is therefore read. RE-MEASURED
 # 2026-08-13 against this tree, by compiling that observer against a pristine
 # `src/` and against one carrying this move and comparing the two traces: 450
 # scenarios, and the move is REFUTED - 30 of the 450 separate it, the first in
