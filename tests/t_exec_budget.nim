@@ -23,8 +23,6 @@
 ## the budgeted path rather than a second copy of it. A literal here would be
 ## the defect this project keeps finding: a cost transcribed beside the code
 ## that computes it, and then left behind when the code moves.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import mcf5307/cpu
 import mcf5307/decode_types

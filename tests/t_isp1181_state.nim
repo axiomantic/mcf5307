@@ -1,6 +1,4 @@
 ## `t_isp1181_state` - the SOF tick and the ISP1181 state block.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import std/algorithm
 import std/strutils
