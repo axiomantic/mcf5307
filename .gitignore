@@ -1,0 +1,13 @@
+# Generated output. Each rule starts with a slash, which limits it to the top
+# directory of the repository, where CMake makes each tree.
+
+# The default build tree, from `cmake -S . -B build`. cmake/Nim.cmake puts the
+# Nim cache in it, at ${PROJECT_BINARY_DIR}/nimcache.
+/build/
+
+# The sanitizer build tree, from `cmake -S . -B build-asan`.
+/build-asan/
+
+# This file lists the output of this project only. Keep editor files,
+# operating system files and other personal files in your own global
+# excludes file. Do not add them here.

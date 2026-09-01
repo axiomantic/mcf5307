@@ -1,0 +1,200 @@
+/* abi_stub.c - one definition, with an empty body and external linkage, of
+ * every function `include/mcf5307.h` declares.
+ *
+ * Cases 3 and 4 of `t0_abi_header` compile AND link, and linking is what makes
+ * a renamed declaration a link error rather than nothing at all.
+ * `-fsyntax-only` never links, so the two header compiles alone cannot catch a
+ * rename. The real implementation cannot supply the definitions either: it
+ * depends on this contract, so a check that waited for it could never pass.
+ * This stub breaks that circle.
+ *
+ * `cmake/Nim.cmake` step 4a, part three compiles this file, reads the symbols
+ * the object defines with `nm`, and compares that set against the published
+ * set it parses out of the contract with a C compiler. No count is written
+ * here or there. A count is a third number beside the header and the code,
+ * and it falls behind them both.
+ *
+ * The freeze is on behaviour: every body stays empty, every return stays a
+ * fixed benign value, and nothing here emulates anything. A test that needs
+ * behaviour links the real library. The set of definitions is not frozen -
+ * it is the contract's own published set and moves when the contract moves.
+ * The gate is what makes that movement mechanical rather than remembered.
+ *
+ * A helper with internal linkage is allowed and is not measured. The gate
+ * compares external definitions, because an external definition is what the
+ * link of `t0_abi_header` resolves against. A published name defined `static`
+ * here would resolve nothing there, so the gate refuses that and says nothing
+ * about a `static` name the contract never declared.
+ *
+ * A link error needs a reference as well as a definition. `t0_abi_header.c`
+ * and `t0_abi_header.cpp` take their addresses from a fixed list of their
+ * own, and neither one names `mcf5307_set_reg`, `mcf5307_get_reg`,
+ * `mcf5307_halted` or `mcf5307_faulted`. A rename of those four is therefore
+ * caught by nothing in `t0_abi_header`, whatever this file defines. That gap
+ * belongs to those two files.
+ *
+ * `tests/abi_smoke.cpp` does take the address of every published name,
+ * through `tests/abi_smoke_symbols.inc`, and step 4a holds that list against
+ * the contract in both directions.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "mcf5307.h"
+
+/* ---------------------------------------------------------------- CPU core */
+
+void mcf5307_runtime_init(void)
+{
+}
+
+mcf5307_ctx* mcf5307_create(void* user,
+                            mcf5307_read_fn rd,
+                            mcf5307_write_fn wr,
+                            mcf5307_iack_fn iack)
+{
+    (void)user;
+    (void)rd;
+    (void)wr;
+    (void)iack;
+    return NULL;
+}
+
+void mcf5307_destroy(mcf5307_ctx* ctx)
+{
+    (void)ctx;
+}
+
+void mcf5307_reset(mcf5307_ctx* ctx, uint32_t initial_sp, uint32_t initial_pc)
+{
+    (void)ctx;
+    (void)initial_sp;
+    (void)initial_pc;
+}
+
+uint32_t mcf5307_exec(mcf5307_ctx* ctx, uint32_t max_cycles)
+{
+    (void)ctx;
+    (void)max_cycles;
+    return 0u;
+}
+
+/* The register bridge. `mcf5307_set_reg` returns 0, which the
+ * contract reads as "the write did not happen", and `mcf5307_get_reg` returns
+ * 0. Both are the fixed benign value of a stub and neither is a register. */
+int mcf5307_set_reg(mcf5307_ctx* ctx, int index, uint32_t value)
+{
+    (void)ctx;
+    (void)index;
+    (void)value;
+    return 0;
+}
+
+uint32_t mcf5307_get_reg(const mcf5307_ctx* ctx, int index)
+{
+    (void)ctx;
+    (void)index;
+    return 0u;
+}
+
+/* The run state. Both return 0, which the contract reads as "not
+ * halted" and "not faulted" - the answer it also gives for a nil context. */
+int mcf5307_halted(const mcf5307_ctx* ctx)
+{
+    (void)ctx;
+    return 0;
+}
+
+int mcf5307_faulted(const mcf5307_ctx* ctx)
+{
+    (void)ctx;
+    return 0;
+}
+
+void mcf5307_set_irq(mcf5307_ctx* ctx, int level, uint8_t vector,
+                     int autovector)
+{
+    (void)ctx;
+    (void)level;
+    (void)vector;
+    (void)autovector;
+}
+
+size_t mcf5307_state_size(void)
+{
+    return (size_t)0;
+}
+
+void mcf5307_state_save(const mcf5307_ctx* ctx, void* dst)
+{
+    (void)ctx;
+    (void)dst;
+}
+
+void mcf5307_state_load(mcf5307_ctx* ctx, const void* src)
+{
+    (void)ctx;
+    (void)src;
+}
+
+/* ------------------------------------------------ ISP1181 USB device model */
+
+isp1181_ctx* isp1181_create(void* user, isp1181_irq_fn irq, isp1181_tx_fn tx)
+{
+    (void)user;
+    (void)irq;
+    (void)tx;
+    return NULL;
+}
+
+void isp1181_destroy(isp1181_ctx* ctx)
+{
+    (void)ctx;
+}
+
+uint8_t isp1181_read(isp1181_ctx* ctx, uint32_t addr)
+{
+    (void)ctx;
+    (void)addr;
+    return (uint8_t)0;
+}
+
+void isp1181_write(isp1181_ctx* ctx, uint32_t addr, uint8_t value)
+{
+    (void)ctx;
+    (void)addr;
+    (void)value;
+}
+
+void isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
+                size_t len)
+{
+    (void)ctx;
+    (void)endpoint;
+    (void)data;
+    (void)len;
+}
+
+void isp1181_tick(isp1181_ctx* ctx, uint32_t sof_frames)
+{
+    (void)ctx;
+    (void)sof_frames;
+}
+
+size_t isp1181_state_size(void)
+{
+    return (size_t)0;
+}
+
+void isp1181_state_save(const isp1181_ctx* ctx, void* dst)
+{
+    (void)ctx;
+    (void)dst;
+}
+
+void isp1181_state_load(isp1181_ctx* ctx, const void* src)
+{
+    (void)ctx;
+    (void)src;
+}
