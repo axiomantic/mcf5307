@@ -1172,16 +1172,12 @@ block:
 # `src/` and requires this suite to go EXACTLY ONE red. Prose alone would go
 # stale the moment this block was weakened; the entry reds instead.
 #
-# THE OBSERVER OF `tests/t_claims.nim` STILL CANNOT STAND IN FOR THIS BLOCK,
-# AND THE REASON THIS COMMENT USED TO GIVE HAS GONE FALSE. It read that every
-# scenario that observer presents is AUTOVECTORED, so the stored vector is
-# written and never read there, and that all 225 of its scenarios UPHELD this
-# move. That was true of the space the observer ran when the sentence was
-# written and is false of the space it runs now: it gained a PRESENTATION
-# PROFILE axis, `pVectored` clears the autovector flag and hands every call a
-# distinct vector, and the stored vector is therefore read. Compiling that
-# observer against a pristine `src/` and against one carrying this move and
-# comparing the two traces REFUTES the move.
+# THE OBSERVER OF `tests/t_claims.nim` STILL CANNOT STAND IN FOR THIS BLOCK.
+# Its scenario space carries a PRESENTATION PROFILE axis, `pVectored` clears
+# the autovector flag and hands every call a distinct vector, and the stored
+# vector is therefore read. Compiling that observer against a pristine `src/`
+# and against one carrying this move and comparing the two traces REFUTES the
+# move.
 #
 # A SCENARIO COUNT AND THE POSITION ARE TWO DIFFERENT JOBS. A sentence carrying
 # a count of scenarios is a measurement in prose. What this block claims is
