@@ -14,8 +14,6 @@
 ## the ISP1362 data sheet, Rev. 06, which states that it integrates the
 ## ISP1181B peripheral controller - a claim of integration, not of a
 ## byte-identical command map. The ISP1181B data sheet itself was not read.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import std/strutils
 

@@ -1,7 +1,5 @@
 ## `t_lines` - the line-A and line-F opcode spaces of `tests/lines`, and the
 ## core's refusal to execute either of them.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import ./lines
 import mcf5307/cpu

@@ -1,7 +1,5 @@
 ## `t_system_control` - the ColdFire system-control instruction group: the SR
 ## and CCR transfers.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code.
 
 import mcf5307/machine
 import mcf5307/cpu
