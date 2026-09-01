@@ -40,7 +40,7 @@ proc movecSourceRegister*(ext: uint16): uint8 =
   uint8((ext shr 12) and 0x7'u16)
 
 proc movecPrivilegeViolation*(sr: uint32): bool =
-  ## THE S-BIT IS `machine.nim`'s FACT AND IS READ FROM THERE. Restating the
+  ## The S bit is `machine.nim`'s fact and is read from there. Restating the
   ## bit position here would put one fact in two files, where a later change to
   ## either leaves the other saying something the machine does not do.
   (sr and srSupervisor) == 0'u32
@@ -82,7 +82,8 @@ const
   vecPrivilegeViolation = 8'u8
 
   movecExecuteCycles = 9'u32
-    ## The manual times `movec Ry,Rc` WHOLE. `cpu.nim` adds the fetch cost to
+    ## The manual times `movec Ry,Rc` as a whole. `cpu.nim` adds the fetch cost
+    ## to
     ## this return, so this constant carries the execution part alone. The
     ## decomposition is this core's and not the manual's.
 
@@ -92,13 +93,12 @@ proc movecFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   ##
   ## The privilege is tested before the extension word is fetched, and the
   ## order is a decision the manuals do not settle. `fetchExt` can itself take
-  ## an ACCESS ERROR, so fetching first would let
-  ## an instruction the core is about to refuse for privilege report the wrong
-  ## exception instead. The stacked program counter is the same either way,
-  ## so an `RTE` from the handler re-executes the whole instruction and
-  ## re-reads the word this path did not.
+  ## an access error, so fetching first would let an instruction the core is
+  ## about to refuse for privilege report the wrong exception instead. The
+  ## stacked program counter is the same either way, so an `RTE` from the
+  ## handler re-executes the whole instruction and re-reads the word this path
+  ## did not.
   if movecPrivilegeViolation(ctx.sr):
-    # The stacked program counter is this instruction and not the next one.
     # `step` has already advanced the pc past the opcode word, so the faulting
     # address is one word back.
     takeException(ctx, vecPrivilegeViolation, ctx.pc - insWordBytes)
@@ -113,7 +113,7 @@ proc movecFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   let destination = controlRegisterFor(movecControlField(ext))
   if destination == crUnimplemented:
     # Undefined control register space produces undefined results. This core
-    # HALTS rather than running on, and `fault` stays clear: the encoding is
+    # halts rather than running on, and `fault` stays clear: the encoding is
     # valid and only its semantics are absent. A core that accepted the write
     # instead would let firmware configure a register that does not exist and
     # report nothing.
@@ -142,12 +142,12 @@ proc movecFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   movecExecuteCycles
 
 # ---------------------------------------------------------------------------
-# THE SYSTEM-CONTROL GROUP: the SR and CCR transfers.
+# The system-control group: the SR and CCR transfers.
 
 const
   ccrBits = ccrX or ccrN or ccrZ or ccrV or ccrC
-    ## The condition-code bits of the status register, bits 4 to 0. IT IS
-    ## COMPOSED FROM `machine.nim`'s OWN CONSTANTS and not written as `0x1F`,
+    ## The condition-code bits of the status register, bits 4 to 0. It is
+    ## composed from `machine.nim`'s own constants and not written as `0x1F`,
     ## for the reason `movecPrivilegeViolation` gives about the S bit: a bit
     ## position restated as a literal here is one fact in two files, and a
     ## later change to either leaves the other saying something the machine
@@ -160,7 +160,7 @@ proc systemControlFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   ## spent, 0 for an instruction that did not run.
   case d.op
   of opMoveFromSr:
-    # THE CONDITION CODES ARE NOT AFFECTED - this instruction reads the status
+    # The condition codes are not affected - this instruction reads the status
     # register and writes none of it.
     if movecPrivilegeViolation(ctx.sr):
       takeException(ctx, vecPrivilegeViolation, ctx.pc - insWordBytes)
@@ -169,15 +169,15 @@ proc systemControlFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
             mergeSized(regD(ctx, d.destReg), ctx.sr and 0xFFFF'u32, 2'u8))
     systemControlCycles
   of opMoveFromCcr:
-    # THE WRITE IS A WORD, SO THE HIGH HALF OF `Dx` SURVIVES IT. `mergeSized`
+    # The write is a word, so the high half of `Dx` survives it. `mergeSized`
     # replaces the low two bytes and nothing else.
     setRegD(ctx, d.destReg,
             mergeSized(regD(ctx, d.destReg), ctx.sr and ccrBits, 2'u8))
     systemControlCycles
   of opMoveToCcr:
-    # UNPRIVILEGED, and it writes the condition-code bits and no more - the
-    # interrupt mask, the S bit
-    # and the T bit are all outside `ccrBits` and survive unchanged. A core
+    # Unprivileged, and it writes the condition-code bits and no more - the
+    # interrupt mask, the S bit and the T bit are all outside `ccrBits` and
+    # survive unchanged. A core
     # that assigned the whole source would clear the mask and leave supervisor
     # state, which is the difference this mask is carrying.
     let src = eaRead(ctx, d.ea, 2'u8)
@@ -186,9 +186,9 @@ proc systemControlFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
     ctx.sr = (ctx.sr and not ccrBits) or (src and ccrBits)
     systemControlCycles
   of opMoveToSr:
-    # THE WHOLE WORD IS WRITTEN, which is what separates
-    # this from `MOVE to CCR` above: `0x3001B41E movew #8192,%sr` sets S and
-    # drives the interrupt mask to ZERO, and a five-bit write would leave the
+    # The whole word is written, which is what separates this from
+    # `MOVE to CCR` above: `0x3001B41E movew #8192,%sr` sets S and
+    # drives the interrupt mask to zero, and a five-bit write would leave the
     # mask at seven and the firmware waiting for an interrupt it had asked for.
     if movecPrivilegeViolation(ctx.sr):
       takeException(ctx, vecPrivilegeViolation, ctx.pc - insWordBytes)
