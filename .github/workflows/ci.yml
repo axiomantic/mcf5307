@@ -199,12 +199,6 @@ jobs:
           #    neither matches the pattern nor appears here fails this step, so
           #    "this does not run in CI" has to be a sentence somebody typed.
           #
-          #    `abi_smoke` does not LINK: it takes the address of published C
-          #    ABI symbols that are not implemented yet, so the build step above
-          #    fails before this one is reached. Its roster entry is not what
-          #    keeps it out of the run; it is here so that the day it links, the
-          #    entry has to be deleted deliberately.
-          #
           #    `mcf5307_conformance_*` are the corpus runner's groups. They
           #    need no firmware and no cross assembler at RUN time -- the
           #    assembler regenerates the corpus, and these read the committed
@@ -212,7 +206,6 @@ jobs:
           #    pending a decision about their place in this matrix, and this
           #    roster is where that open question is recorded.
           excluded=$(printf '%s\n' \
-              abi_smoke \
               mcf5307_conformance_all \
               mcf5307_conformance_alu \
               mcf5307_conformance_control \
