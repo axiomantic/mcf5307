@@ -268,7 +268,7 @@ gives `0xF4` the matching effect. This model once did not implement any of it,
 and the reason recorded here was a **missing route** rather than a decision to
 skip: `isp1181_rx` delivers an endpoint and bytes and carries no set-up flag,
 so the latch had nothing to set it. **The operator took the API decision**:
-`isp1181_setup` is a new published symbol — the twenty-fifth — and it is a
+`isp1181_setup` is a new published symbol, and it is a
 SEPARATE entry point rather than a flag on `isp1181_rx` or a sentinel endpoint
 value, so no existing caller's signature moved and no computed endpoint can
 reach the set-up path by accident.
