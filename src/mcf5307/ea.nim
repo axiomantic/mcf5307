@@ -50,9 +50,9 @@ proc isMode7*(ea: EA): bool =
 # ---------------------------------------------------------------------------
 # The addressing-mode classes.
 #
-# These are the canonical ColdFire classes (CFPRM, "Addressing Modes"). Each
-# opcode selects the class its operand must belong to, and the decoder turns
-# the class into a `EaLegality` mask.
+# These are the canonical ColdFire addressing-mode classes. Each opcode selects
+# the class its operand must belong to, and the decoder turns the class into a
+# `EaLegality` mask.
 #
 #   Data addressing      Dn, An, (An), (An)+, -(An), (d16,An), (d8,An,Xn),
 #                        (xxx).W, (xxx).L, (d16,PC), (d8,PC,Xn), #imm
@@ -61,9 +61,8 @@ proc isMode7*(ea: EA): bool =
 #   Alterable addressing Data addressing without PC-relative or immediate.
 
 const
-  # Every addressing mode. This set holds all eight values of `EAMode`, `eaAn`
-  # included, so it is not the manual's DATA class. The DATA class is
-  # `eaDataAlterableModes` below, reached through `eaDataAddressing`.
+  # EVERY ADDRESSING MODE, AND THE NAME SAYS SO. This set holds every value of
+  # `EAMode`, `eaAn` INCLUDED, so it is not the DATA class and never was.
   #
   # The `eaAn` membership is load-bearing and is not an oversight to tidy.
   # `m68k-elf-as -mcpu=5307` emits `4a88` for `tst.l %a0`, `b288` for
@@ -85,20 +84,10 @@ const
 
   eaControlModes* = {eaAnInd, eaAnDisp, eaAnIndex, eaMode7}
 
-  # The control class's mode-7 sub-variants. All four of them, `(xxx).W`
-  # included.
+  # THE CONTROL CLASS'S MODE-7 SUB-VARIANTS, `(xxx).W` INCLUDED.
   #
-  # CFPRM Rev. 3, Table 2-3, "Effective Addressing Modes and Categories", folio
-  # 2-10 - PDF PAGE 50, rendered with `pdftoppm -r 200` and read as an IMAGE.
-  # Chapter 2's folio-to-page offset is +40 and is NOT the +76 that the
-  # chapter 4 instruction folios take. The `Control` column carries an `X` on
-  # `(An)`, `(d16,An)`, `(d8,An,Xi*SF)`, `(d16,PC)`, `(d8,PC,Xi*SF)`, `(xxx).W`
-  # and `(xxx).L`, and a dash on `Dn`, `An`, `(An)+`, `-(An)` and `#<xxx>`. The
-  # four mode-7 rows among the seven are this set.
-  #
-  # `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726) answers the same
-  # twelve cells for all four readers: `jmp`, `jsr`, `lea`
-  # and `pea` each accept the seven control rows and reject the other five with
+  # `m68k-elf-as -mcpu=5307` ANSWERS THE SAME CELLS FOR EVERY READER: `jmp`,
+  # `jsr`, `lea` and `pea` each accept the control rows and reject the rest with
   # "operands mismatch". The absolute-short encodings are `4ef8 1234`,
   # `4eb8 1234`, `41f8 1234` and `4878 1234`.
   #
@@ -118,26 +107,23 @@ const
   # let the absolute forms through, at which point it admits all eight and
   # restricts nothing. The split is a property of the register field alone.
   #
-  # Measured with `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726),
-  # twelve cells each for ADDQ and SUBQ. ADDQ accepts `%d0`
-  # (`5280`), `%a0` (`5288`), `(%a0)` (`5290`), `(%a0)+` (`5298`), `-(%a0)`
-  # (`52a0`), `(4,%a0)` (`52a8 0004`), `(4,%a0,%d2)` (`52b0 2804`), `0x1234.w`
-  # (`52b8 1234`) and `0x12345678` (`52b9 1234 5678`), and rejects `(4,%pc)`,
-  # `(4,%pc,%d2)` and `#5`. SUBQ answers the same twelve - `%a0` is `5388`,
-  # `0x1234.w` is `53b8 1234`. Every mode appears among the accepted cells.
+  # `m68k-elf-as -mcpu=5307` accepts for ADDQ `%d0` (`5280`), `%a0` (`5288`),
+  # `(%a0)` (`5290`), `(%a0)+` (`5298`), `-(%a0)` (`52a0`), `(4,%a0)`
+  # (`52a8 0004`), `(4,%a0,%d2)` (`52b0 2804`), `0x1234.w` (`52b8 1234`) and
+  # `0x12345678` (`52b9 1234 5678`), and rejects `(4,%pc)`, `(4,%pc,%d2)` and
+  # `#5`. SUBQ answers the same - `%a0` is `5388`, `0x1234.w` is `53b8 1234`.
+  # Every mode appears among the accepted cells.
   #
-  # The CFPRM's `Alterable` column dashes both members of this set, and the
-  # assembler is taken as the authority. Table 2-3, folio 2-10, PDF page 50,
-  # read as a rendered image: `(xxx).W` and `(xxx).L` carry an `X` under `Data`,
-  # `Memory` and `Control` and a dash under `Alterable`. An ADDQ to an absolute
-  # destination writes memory and the pinned assembler emits it, so the column
-  # is read here as a coarse-table artefact. THAT DISAGREEMENT IS RECORDED AND
-  # NOT SETTLED.
+  # WHERE THE REFERENCE TABLE AND THE ASSEMBLER DISAGREE ABOUT THESE MEMBERS,
+  # THE ASSEMBLER IS TAKEN AS THE AUTHORITY. The table dashes both under
+  # `Alterable`, and an ADDQ to an absolute destination writes memory and the
+  # pinned assembler emits it, so the column is read here as a coarse-table
+  # artefact. THAT DISAGREEMENT IS RECORDED AND NOT SETTLED.
   eaAlterable7* = {ea7AbsW, ea7AbsL}
 
-  # Data alterable: alterable without An. CLR takes this class - measured
-  # against `m68k-elf-as -mcpu=5307`, which rejects `clr.l %a0` and accepts
-  # every other mode this set names.
+  # Data alterable: alterable without An. CLR takes this class -
+  # `m68k-elf-as -mcpu=5307` rejects `clr.l %a0` and accepts every other mode
+  # this set names.
   #
   # The multiply and divide do not take this class at either size: the
   # assembler also rejects `mulu.l 0x1234.w,%d1`, `mulu.l 0x12345678,%d1` and
@@ -151,14 +137,12 @@ const
   # alterable by the indexed mode and by the whole of mode 7, so its `ea7` set
   # is empty and no mode-7 sub-variant can be legal.
   #
-  # CFPRM folios 4-32, 4-34, 4-56 and 4-58, "Instruction Fields (Longword)":
-  # each prints a mode and register value for `Dy`, `(Ay)`, `(Ay)+`, `-(Ay)`
-  # and `(d16,Ay)` and a DASH for `Ay`, `(d8,Ay,Xi)`, `(xxx).W`, `(xxx).L`,
-  # `#<data>`, `(d16,PC)` and `(d8,PC,Xi)`. `m68k-elf-as -mcpu=5307` answers
-  # the same twelve cells for all four operations.
+  # `m68k-elf-as -mcpu=5307` accepts `Dy`, `(Ay)`, `(Ay)+`, `-(Ay)` and
+  # `(d16,Ay)` and rejects `Ay`, `(d8,Ay,Xi)`, `(xxx).W`, `(xxx).L`, `#<data>`,
+  # `(d16,PC)` and `(d8,PC,Xi)`.
   #
-  # `eaMulDivLong7` IS DEAD FOR THESE OPERATIONS AT RUN TIME. IT RECORDS THE
-  # FOLIOS AND IT CONSTRAINS NOTHING THE CORE EVALUATES. `isEaLegal` below
+  # `eaMulDivLong7` IS DEAD FOR THESE OPERATIONS AT RUN TIME AND IT CONSTRAINS
+  # NOTHING THE CORE EVALUATES. `isEaLegal` below
   # returns at `ea.mode notin leg.modes` before it reaches `ea7`, and the mode
   # set on the line above has no `eaMode7`, so the ONLY read of the field
   # anywhere in the core - `EA7(ea.reg) in leg.ea7` - is unreachable through
