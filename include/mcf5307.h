@@ -56,7 +56,7 @@ typedef enum {
 
 /* The board's two memory handlers.
  *
- * `status` is an out-parameter on both, and the core writes
+ * `status` IS AN OUT-PARAMETER ON BOTH, and the core writes
  * `MCF5307_BUS_OK` into it before every call. A board that models no fault
  * behaves exactly as it did before the parameter existed: silence means
  * success. A board that writes a non-OK value also logs the address, the
@@ -66,8 +66,10 @@ typedef enum {
  * On a read fault the returned value is ignored by the core. A board should
  * still return zero, so that a board defect does not depend on an
  * uninitialised value. */
+/* `size` is a count of bytes: 1, 2 or 4. */
 typedef uint32_t (*mcf5307_read_fn)(void* user, uint32_t addr, int size,
                                     mcf5307_bus_status* status);
+/* `size` is a count of bytes: 1, 2 or 4. */
 typedef void (*mcf5307_write_fn)(void* user, uint32_t addr, int size,
                                  uint32_t value, mcf5307_bus_status* status);
 
@@ -90,9 +92,9 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * it runs, so the registers it reads are the machine as the handler will find
  * it: a7 holding the address OF the 8-byte frame and not an address below it -
  * the frame's first longword is AT a7 and the stacked program counter at
- * `a7+4`, which is what Figure 3-7 draws - the program counter register at the
- * handler's first instruction, and the status register already carrying the
- * interrupt priority mask raised to the level being acknowledged.
+ * `a7+4` - the program counter register at the handler's first instruction,
+ * and the status register already carrying the interrupt priority mask raised
+ * to the level being acknowledged.
  *
  * The level-7 arm is decided against the presentation the call has not yet
  * overwritten. `mcf5307_set_irq` arms an edge only on a transition to level 7
@@ -115,10 +117,7 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  *
  * `mcf5307_reset` inhibits interrupt sampling for the first instruction at
  * `initial_pc`. Reset is an exception, and sampling is inhibited during the
- * first instruction of every exception handler. That is a deduction rather
- * than a quotation: User's Manual Table 3-1, closing paragraph, folio 3-13,
- * carries no reset row, and the reset exception's own entry at section 3.5.11,
- * folio 3-17, never calls the reset program counter a handler.
+ * first instruction of every exception handler.
  *
  * `mcf5307_reset` also raises the interrupt priority mask to 7 - section
  * 3.5.11, folio 3-17, "sets the processor's interrupt priority mask in the SR
@@ -129,16 +128,14 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * is therefore the only interrupt the inhibition above can defer, because it
  * is the only one a mask of 7 leaves takeable at all.
  *
- * `mcf5307_reset` also clears the latched level-7 edge and then re-observes
- * the board's last presentation. That is an inference and not a citation: the
- * manual set is silent on reset against a latched edge. The argument for it is
- * that a level 7 request must be held until the second interrupt-acknowledge
- * bus cycle has begun (section 7.6.1, folio 7-24), so an edge whose pin has
- * since been released has nothing left to acknowledge. The presentation itself
- * survives the call: it is the board's state and reset has no newer answer for
- * it. A level 7 still presented across `mcf5307_reset` is armed again, carrying
- * the vector and the autovector flag of that presentation; one the board had
- * already lowered is not. */
+ * `mcf5307_reset` ALSO CLEARS THE LATCHED LEVEL-7 EDGE AND THEN RE-OBSERVES
+ * THE BOARD'S LAST PRESENTATION. A level 7 request must be held until the
+ * second interrupt-acknowledge bus cycle has begun, so an edge whose pin has
+ * since been released has nothing left to acknowledge. The
+ * presentation itself survives the call: it is the board's state and reset has
+ * no newer answer for it. A level 7 STILL PRESENTED across `mcf5307_reset` is
+ * armed again, carrying the vector and the autovector flag of that
+ * presentation; one the board had already lowered is not. */
 
 /* Runs the Nim runtime's initialiser once. It is idempotent, and it is what
  * a C++ caller calls instead of ever naming `NimMain`. */
@@ -151,7 +148,17 @@ mcf5307_ctx* mcf5307_create(void* user,
 void mcf5307_destroy(mcf5307_ctx* ctx);
 void mcf5307_reset(mcf5307_ctx* ctx, uint32_t initial_sp, uint32_t initial_pc);
 
-/* Runs at most `max_cycles` cycles and returns the cycles actually spent. */
+/* Runs until at least `max_cycles` cycles have been spent, and returns the
+ * cycles actually spent.
+ *
+ * THE RETURN MAY BE GREATER THAN `max_cycles`, by up to the cost of one
+ * instruction. The budget is tested only at an instruction boundary, so an
+ * instruction that starts inside the budget runs to completion and its whole
+ * cost is reported. A caller that must not lose the difference carries
+ * `spent - max_cycles` forward into its next budget.
+ *
+ * It returns 0 when nothing ran: a nil or already-halted context, a budget of
+ * zero, or a first instruction that trapped. */
 uint32_t mcf5307_exec(mcf5307_ctx* ctx, uint32_t max_cycles);
 
 /* The register file, indexed by one integer:
@@ -161,23 +168,37 @@ uint32_t mcf5307_exec(mcf5307_ctx* ctx, uint32_t max_cycles);
  *                      supervisor and user stack split on ISA_A)
  *     16     the status register (low 16 bits meaningful)
  *     17     the program counter (read-only through this call)
+ *     18     VBR, the vector base register
+ *     19     CACR, the cache control register
+ *     20     ACR0
+ *     21     ACR1
+ *     22     RAMBAR0
+ *     23     RAMBAR1
+ *     24     MBAR
+ *
+ * INDICES 18 AND ABOVE ARE CONTROL REGISTERS AND NOT PART OF THE REGISTER
+ * FILE. `MOVEC` is the machine's own way to write them and it reaches nothing
+ * outside a running program, so this call is the only channel a host has: a
+ * host that must place the machine at a vector table before the firmware has
+ * written one, or that must see where a `MOVEC` put its value, has no other
+ * door. Of the seven, only VBR changes what the core does - it bases the
+ * exception vector table. The other six hold what was written and are
+ * consumed by nothing: this core models neither the cache, nor the access
+ * control regions, nor the on-chip SRAM, nor the peripheral base.
+ *
+ * `mcf5307_reset` sets all seven to zero.
  *
  * `mcf5307_set_reg` returns 1 on success and 0 for an out-of-range index or
  * a nil context; `mcf5307_get_reg` returns the register's value and 0 for an
- * out-of-range index. These are the harness's one register bridge: the
- * conformance runner sets the `initial` registers through them and reads the
- * `expected` registers back. */
+ * out-of-range index. */
 int mcf5307_set_reg(mcf5307_ctx* ctx, int index, uint32_t value);
 uint32_t mcf5307_get_reg(const mcf5307_ctx* ctx, int index);
 
 /* The core's run state, and the only way to see it across this interface.
  *
  * `mcf5307_exec` returns a cycle count and nothing else. A cycle count cannot
- * say why the core stopped, so without these two calls a caller that goes
- * through this header cannot tell an instruction that executed from an
- * instruction that trapped: a case whose instruction traps still passes
- * whenever the registers it names happen to hold the expected values, which
- * is every case that expects a register to be unchanged.
+ * say WHY the core stopped, so these two calls are what tells an instruction
+ * that executed from an instruction that trapped.
  *
  * Both return 1 for true and 0 for false, and both return 0 for a nil
  * context - a caller with no context has no halted core and no faulted one.
@@ -247,8 +268,61 @@ void isp1181_write(isp1181_ctx* ctx, uint32_t addr, uint8_t value);
 void isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
                 size_t len);
 
-/* Advances the USB frame counter and the SOFTCT timer by `sof_frames` USB
- * Start-of-Frame frames.
+/* A SET-UP packet from the host, which on the bus is a SETUP token followed
+ * by its data stage. It is a separate entry point from `isp1181_rx` and not a
+ * flag on it, because a SETUP token is not an ordinary OUT packet: its arrival
+ * flushes the control IN buffer, unstalls both control endpoints, and disables
+ * the Validate Buffer and Clear Buffer commands on both of them until the
+ * firmware issues acknowledge set up.
+ *
+ * It carries no endpoint argument. A SETUP token is defined only for a control
+ * endpoint and this model has exactly one it can receive on, so an endpoint
+ * parameter here would have a single legal value - one a computed endpoint
+ * could miss with nothing to catch it.
+ *
+ * Returns 1 when the packet was accepted into the control OUT buffer and 0
+ * otherwise. A 0 is not an error code: it is what the device answers for a nil
+ * handle, for a zero-length packet, when the stub backend is selected, and
+ * when the control OUT buffer already holds an unacknowledged set-up packet -
+ * the case the device reports in the OVERWRITE bit, which this model does not
+ * track and therefore refuses rather than silently overwriting. */
+int isp1181_setup(isp1181_ctx* ctx, const uint8_t* data, size_t len);
+
+/* The host asks the device for a packet, which on the bus is an IN token.
+ * `isp1181_rx` is the host handing a packet TO the device and this is its
+ * other half, so the two directions are driven the same way: by the host, at
+ * the moment the host chooses, with no schedule inside this model.
+ *
+ * Returns 1 when a packet was handed to `isp1181_tx_fn` before this call
+ * returned, and 0 otherwise. The callback is synchronous: a return of 1 means
+ * the host has already seen the bytes, and the pointer it was given does not
+ * outlive the call.
+ *
+ * A return of 0 is the NAK and it is not an error code. It is what the device
+ * answers when the endpoint has nothing validated, when this model carries no
+ * IN buffer for that endpoint, when the handle carries no transmit callback,
+ * and for a nil handle. A packet the device could not hand over stays in the
+ * buffer, so a later token still collects it: a 0 costs the packet nothing. */
+int isp1181_in_token(isp1181_ctx* ctx, int endpoint);
+
+/* The implementation standing behind `isp1181_read`, `isp1181_write` and
+ * `isp1181_rx`.
+ *
+ * The stub is the default and a fresh handle selects it. The stub is a device
+ * that is present in the CS3 window and inert: every read answers 0x00,
+ * nothing a write leaves becomes readable, no interrupt is raised and neither
+ * callback is ever called. The full model is a different device - it answers
+ * reads from its register file, keeps the packets `isp1181_rx` delivers, and
+ * may call back. */
+#define MCF5307_ISP1181_BACKEND_STUB 0
+#define MCF5307_ISP1181_BACKEND_FULL_MODEL 1
+
+/* Returns 1 when the handle moved and 0 when the call was refused. A nil
+ * handle and a `backend` value neither macro above names are both refused,
+ * and a refusal moves nothing. */
+int isp1181_set_backend(isp1181_ctx* ctx, int backend);
+
+/* Advances the USB frame number by `sof_frames` USB Start-of-Frame frames.
  *
  * One SOF frame is 1 ms. The unit is NOT the 96 kHz audio frame. At a 96 kHz
  * frame rate and a scheduler quantum of one audio frame, one SOF frame spans
