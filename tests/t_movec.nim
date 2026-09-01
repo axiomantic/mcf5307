@@ -261,9 +261,11 @@ proc ranAndConsumedBothWords(o: Outcome): auto =
 const accepted = (ran: true, fault: false, halted: false,
                   pc: execBase + 4'u32, d0: dirtyD, a0: dirtyA,
                   sr: srSuper, a7: stackBase)
-  ## Nothing architectural changes. The control registers this part carries are
-  ## not modelled by this core, so an accepted `MOVEC` advances the program
-  ## counter and touches no register the ABI can read.
+  ## The fields an accepted `MOVEC` leaves alone, plus the program counter it
+  ## advances by both words. The control register it writes is deliberately not
+  ## here: the `landed` cases below assert that register per destination, and
+  ## against the whole control file so a write that lands in the wrong slot
+  ## fails.
 
 # The numbers the firmware writes, plus ACR1, each driven as a whole instruction
 # rather than as a bare register number. The pair of lists is the point: the
