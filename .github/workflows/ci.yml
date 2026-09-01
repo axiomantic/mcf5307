@@ -1,5 +1,4 @@
-# The T0 job matrix. Task REPO-6 owns this file and is the only task that edits
-# one.
+# The T0 job matrix.
 #
 # THIS MATRIX IS T0 ONLY, AND IT ALWAYS WILL BE. No T1 job, no T2 job and no
 # integer-comparison job runs here. All three need a firmware byte, and no
@@ -118,9 +117,8 @@ jobs:
       # The cross assembler runs on the Linux job ONLY, because that is the one
       # job that regenerates the conformance corpus. A DIFFERENT ASSEMBLER
       # VERSION CAN EMIT DIFFERENT BYTES, so the version is pinned by the
-      # distribution package and named in `docs/toolchain.md`. The macOS and
-      # Windows jobs install no cross assembler and run the parse-and-
-      # completeness half instead.
+      # distribution package. The macOS and Windows jobs install no cross
+      # assembler and run the parse-and-completeness half instead.
       - name: Install the pinned cross assembler
         if: matrix.target == 'linux-x86-64'
         shell: bash
