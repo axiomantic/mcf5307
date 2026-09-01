@@ -179,4 +179,11 @@ proc moveFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   of opUnlk:
     result = execUnlk(ctx, d)
   else:
-    discard
+    # Unreachable from `cpu.nim`, which routes exact opcodes. It refuses rather
+    # than returning 0 because returning 0 costs nothing and halts nothing: the
+    # program counter would advance past an instruction that never executed and
+    # the core would run on into whatever followed. Refusing is the same
+    # observable `aluFamily` gives an opcode it does not carry.
+    ctx.fault = true
+    ctx.halted = true
+    result = 0'u32
