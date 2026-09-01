@@ -66,7 +66,7 @@ _Static_assert(sizeof(isp1181_tx_fn) == sizeof(void (*)(void)),
 
 int main(void)
 {
-    void (*const p01)(void) = &mcf5307_runtime_init;
+    int (*const p01)(void) = &mcf5307_runtime_init;
     mcf5307_ctx* (*const p02)(void*, mcf5307_read_fn, mcf5307_write_fn,
                               mcf5307_iack_fn) = &mcf5307_create;
     void (*const p03)(mcf5307_ctx*) = &mcf5307_destroy;

@@ -38,7 +38,7 @@ ctest --test-dir <build> --no-tests=error -R '^t0_|^t_' --output-on-failure
 ```
 
 `^t0_|^t_` is the pattern `.github/workflows/ci.yml` carries as `T0_PATTERN`.
-It excludes `abi_smoke` and the `mcf5307_conformance_*` runs; `ci.yml` keeps a
+It excludes the `mcf5307_conformance_*` runs and nothing else; `ci.yml` keeps a
 written roster of exactly those exclusions, so read the roster there rather than
 trusting this line **or the preset** — the preset is a second copy of the
 pattern, not its source.
@@ -76,11 +76,13 @@ alters the published C ABI needs it too: the consumer that links this library is
   `build/` and `build-asan/`. A `ctest --test-dir build` typed after a
   `cmake --build --preset t0` reads a different tree from the one just built.
   Pick one form per check.
-- **`-- -k` is not optional under a Makefile generator.** `abi_smoke` does not
-  link — it takes the address of published C ABI symbols that are not
-  implemented yet — and without keep-going the targets after it are never built,
-  so ctest reports them `***Not Run` and counts them failed. Ninja's spelling is
-  `-- -k 0`.
+- **`-- -k` under a Makefile generator is what keeps a build failure readable.**
+  A target that did not build leaves its registered test `***Not Run`, and ctest
+  counts that as failed. Without keep-going the targets after the first failure
+  are never attempted either, so one broken target reds every suite behind it
+  and the report stops naming which one broke. Keep-going is not a way of
+  ignoring a broken build: `cmake --build` still exits non-zero. Ninja's
+  spelling is `-- -k 0`.
 - **The Nim compile runs at CONFIGURE time**, not at build time. `src/*.nim`,
   `.nim-version`, `include/mcf5307.h`, `tests/abi_smoke_symbols.inc`,
   `tests/abi_stub.c` and `tests/t_*.nim` are registered as configure
@@ -101,14 +103,33 @@ alters the published C ABI needs it too: the consumer that links this library is
   the source read `32`, and the suite failed against a figure the tree did not
   contain. **After any restore of a list file, `touch` it before reconfiguring**,
   and confirm the pin inside the generated driver rather than in the source.
-- **`cmake --build --preset t0` does not build `t0_corpus_parses`, and
-  `ctest --preset t0` runs it.** The t0 build preset carries
-  `--target mcf5307_tests`; `t0_corpus_parses` is a separate `add_executable`
-  in `conformance/conformance_cpu.cmake` that the `^t0_|^t_` test pattern
-  matches. MEASURED: deleting the binary and running the t0 build target does
-  not bring it back, and ctest then reports it `***Not Run`, which it counts as
-  a failure. On a clean clone this reads as a real red. Build it by name —
-  `cmake --build <build> --target t0_corpus_parses` — or use the `full` preset.
+- **THE BUILD IS A REGISTERED TEST: `t0_build_is_current`.** It runs first in
+  every top-level ctest run, builds the tree it is in
+  (`cmake --build <dir> --parallel`, the command `ci.yml` already uses), and
+  fails with a banner when the build fails. Every other test carries
+  `FIXTURES_REQUIRED`, so a failed build leaves them `Not Run` instead of
+  Passed. MEASURED, and this is why it exists: with a syntax error planted in
+  `conformance/runner.cpp`, `cmake --build --preset full` exited 2 and
+  `ctest --preset full` then reported `100% tests passed, 0 tests failed out of
+  37` from the binaries of the previous successful build; the same shape gave
+  `t0_abi_smoke ... Passed` on the t0 preset. Read the two verdicts apart:
+  `t0_build_is_current (Failed)` with everything else `(Not Run)` is a BUILD
+  failure; a named test `(Failed)` while the gate Passed is a TEST failure.
+  `cmake/BuildGate.cmake` registers it and `cmake/run_build_gate.cmake` is its
+  body. It is registered only when `PROJECT_IS_TOP_LEVEL`, so a consumer's tree
+  has no gate and no fixture requirement — verified: a consumer configure lists
+  `t0_abi_gate_on` and nothing else.
+- **`cmake --build --preset t0` still does not build `t0_corpus_parses`; the
+  gate does.** The t0 build preset carries `--target mcf5307_tests`;
+  `t0_corpus_parses` is a separate `add_executable` in
+  `conformance/conformance_cpu.cmake` that the `^t0_|^t_` test pattern matches,
+  so a clean clone used to report it `***Not Run`. The gate builds the tree's
+  default target rather than a roster of targets, so the executable exists by
+  the time any test runs. MEASURED: deleting
+  `<build>/conformance/t0_corpus_parses` and running `ctest --preset t0` brings
+  it back and the test passes. The consequence is that `ctest --preset t0` is
+  now wider than the t0 BUILD preset — a break in `conformance/runner.cpp`,
+  which that preset never compiles, turns the t0 run red.
 - **Never configure this repository's own build tree with
   `-DMCF5307_ABI_GATE=OFF`.** The switch exists for a host that cannot run a
   symbol reader; it disarms step 4a whole, and the cache entry then persists
