@@ -1,6 +1,6 @@
 /* tests/abi_smoke.cpp - the application binary interface smoke test.
  *
- * Two assertions, and each one can fail.
+ * Three assertions, and each one can fail.
  *
  * (1) The link itself. The test takes the address of every function
  *     `include/mcf5307.h` declares and the library defines. A renamed
@@ -28,6 +28,22 @@
  *     asserts both calls return. The function is documented as idempotent;
  *     a re-entrant call that crashes is a regression in the runtime. C++
  *     never names `NimMain`; the C names are the whole contract.
+ *
+ * (3) The backend macro VALUES, not their names. The two
+ *     `MCF5307_ISP1181_BACKEND_*` macros are written out in
+ *     `include/mcf5307.h` and again, as Nim constants, in
+ *     `src/isp1181/stub.nim`. Every other mechanism here compares symbol
+ *     NAMES: step 4a, the committed list and the address set above would all
+ *     stay green if one side renumbered. `tests/t_isp1181_stub.nim` pins the
+ *     numbers on the Nim side only, so it would stay green too, and a C
+ *     caller passing `MCF5307_ISP1181_BACKEND_FULL_MODEL` would then be
+ *     refused - or worse, silently handed the stub.
+ *
+ *     The assertion is behavioural rather than a returned 1, because an
+ *     accepted call proves only that the number was in range. Under the full
+ *     model a byte delivered to endpoint 0 reads back through the peek
+ *     command; under the stub every read answers 0x00. Each macro is used to
+ *     select, and the read that follows says which device actually answered.
  *
  * The address-taking is the only way to make a rename a fail. The C++
  * translation unit reads no field of any function pointer, and the linker
@@ -135,6 +151,61 @@ static_assert(
     "constant again: the compiler may fold the reads in main, emit no array, "
     "and let the linker drop every symbol this test exists to require.");
 
+/* The CS3 window's two ports, and the command bytes the peek needs. These are
+ * the same numbers `tests/t_isp1181_stub.nim` drives; this test exists to say
+ * the C header's macros reach the same device that suite reaches. */
+constexpr uint32_t kDataPort = 0x13000000u;
+constexpr uint32_t kCommandPort = 0x13000010u;
+constexpr uint8_t kEndpointConfig0 = 0x20u;
+constexpr uint8_t kPeekByte = 0xD2u;
+constexpr uint8_t kDelivered = 0xA5u;
+
+/* A value neither macro names. The refusal case needs one, and it must not
+ * become a third backend by accident. */
+constexpr int kUnnamedBackend = 7;
+
+void isp_irq(void*, int) {}
+void isp_tx(void*, int, const uint8_t*, size_t) {}
+
+/* Delivers one packet to endpoint 0 and reads the first byte back. Answers
+ * 0x00 from the stub, which keeps nothing, and 0xA5 from the full model. */
+uint8_t peek_endpoint0(isp1181_ctx* h) {
+    uint8_t packet[4] = {kDelivered, 0x5Au, 0x3Cu, 0xC3u};
+    isp1181_rx(h, 0, packet, sizeof packet);
+    isp1181_write(h, kCommandPort, kEndpointConfig0);
+    isp1181_write(h, kDataPort, 0x00u);
+    isp1181_write(h, kCommandPort, kPeekByte);
+    return isp1181_read(h, kDataPort);
+}
+
+/* Non-zero on the first failure. Each return value is distinct so a red run
+ * names the case through the exit status alone. */
+int check_backend_macros() {
+    static_assert(MCF5307_ISP1181_BACKEND_STUB !=
+                      MCF5307_ISP1181_BACKEND_FULL_MODEL,
+                  "abi_smoke: the two backend macros carry the same value, so "
+                  "neither selects anything.");
+
+    isp1181_ctx* h = isp1181_create(nullptr, &isp_irq, &isp_tx);
+    if (h == nullptr) return 2;
+
+    int rc = 0;
+    if (isp1181_set_backend(h, MCF5307_ISP1181_BACKEND_FULL_MODEL) != 1) {
+        rc = 3; /* the header's full-model number is not one the model takes */
+    } else if (peek_endpoint0(h) != kDelivered) {
+        rc = 4; /* it was taken, but it did not select the full model */
+    } else if (isp1181_set_backend(h, MCF5307_ISP1181_BACKEND_STUB) != 1) {
+        rc = 5; /* the header's stub number is not one the model takes */
+    } else if (peek_endpoint0(h) != 0x00u) {
+        rc = 6; /* it was taken, but it did not select the stub */
+    } else if (isp1181_set_backend(h, kUnnamedBackend) != 0) {
+        rc = 7; /* an unnamed number was accepted, so range is not checked */
+    }
+
+    isp1181_destroy(h);
+    return rc;
+}
+
 } /* namespace */
 
 int main() {
@@ -145,6 +216,10 @@ int main() {
      * only if both calls returned. */
     mcf5307_runtime_init();
     mcf5307_runtime_init();
+
+    /* The backend macros. This runs after the runtime is up, because it is
+     * the first thing here that calls into Nim code holding state. */
+    if (const int rc = check_backend_macros(); rc != 0) return rc;
 
     /* THIS LOOP IS THE ANCHOR AND NOT A CHECK. The comparison cannot fail -
      * every element is the address of a function - and the return value is
