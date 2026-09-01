@@ -5,11 +5,11 @@
 ## without a machine to run. What the core does with a word these predicates
 ## accept is the executor's decision.
 ##
-## WHY LINE-A IS NOT DECODED. The part has a MAC unit and this core does not
+## Line-A is not decoded. The part has a MAC unit and this core does not
 ## model it, so refusing the whole space makes a firmware that reaches a MAC
 ## instruction fail loudly instead of executing something this core invented.
 ##
-## WHY LINE-F IS REFUSED RATHER THAN ACCEPTED AND DISCARDED. Line-F on this
+## Line-F is refused rather than accepted and discarded. Line-F on this
 ## part is cache and debug, both supervisor-only, so a core that accepted and
 ## discarded would succeed at a supervisor-only instruction executed in user
 ## state and would report nothing about the cache or the debug write that did
