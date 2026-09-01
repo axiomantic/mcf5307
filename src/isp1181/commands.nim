@@ -22,9 +22,6 @@
 ## The general commands - error code, unlock, scratch - are numbered by Table
 ## 109 and not adopted here: adopting a family nothing drives would be
 ## inheritance without a consumer.
-##
-## MIT licensed and clean-room with respect to GPL and LGPL code. Nothing here
-## is copied from a Philips or NXP document.
 
 type
   CommandClass* = enum
