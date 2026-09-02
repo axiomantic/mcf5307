@@ -178,7 +178,7 @@ proc reportStall(latch: var RuntimeLatch) =
   ## literal at a time: no allocation and no Nim string.
   ##
   ## Once, because a host that keeps running and retries would otherwise fill
-  ## its log with the same five lines.
+  ## its log with the same report.
   var expected = reportNotYetMade
   if not latch.reported.compareExchange(
       expected, reportMade, moAcquireRelease, moAcquire):
