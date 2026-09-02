@@ -15,9 +15,6 @@
 # nobody naming it again. The whole OFF state is therefore reportable only as
 # one line of scrollback on a run that ends in exit 0 - the shape of a check
 # that quietly does not run, which is the shape step 4a was written to end.
-# This test is the only thing in the repository that fails when the gate is
-# off: `git grep -n MCF5307_ABI_GATE` answers with `cmake/Nim.cmake` and this
-# file and nothing else.
 #
 # The cache entry is not the gate. It is the switch. A run can read `ON` out of
 # `CMakeCache.txt` and still not have run step 4a: delete the branch and keep
@@ -484,7 +481,7 @@ endif()
 # The command is the LIBRARY's command with the runtime-only and output
 # arguments removed, exactly as `t_checks_on` does, plus `--path:src` so the
 # package imports resolve. Everything else - `--mm:arc`, `--panics:on`,
-# `-d:release`, and anything a later task adds - is kept.
+# `-d:release`, and anything later added beside them - is kept.
 set(MCF5307_EA_COMMAND "")
 foreach(argument IN LISTS MCF5307_NIM_COMMAND)
     if(argument STREQUAL "--compileOnly"
@@ -2311,8 +2308,7 @@ add_test(NAME t_control_registers
 #
 # One registered name, and no corpus beside it. The corpus runner executes
 # assembled encodings, and a bus fault is raised by a board rather than by an
-# instruction, so there is no encoding to assemble. The whole of the evidence
-# for this task is the registered name below.
+# instruction, so there is no encoding to assemble.
 #
 # The flag set is taken from the compile command this configure built for the
 # library itself, so that the modules this test asserts about are built the way
@@ -2703,8 +2699,8 @@ add_test(NAME t_irq
 # THIS SUITE IS INDIFFERENT TO THE ANSWER, AND THAT IS WHY IT IS WRITTEN THIS
 # WAY. It compiles `src/mcf5307/state.nim` FROM SOURCE through `--path:src`,
 # exactly as every suite above it compiles the modules it measures, so it
-# measures the module whether or not the archive holds it. What no suite here
-# can measure is the link; `t0_abi_smoke` is the test that does.
+# measures the module whether or not the archive holds it. The link is
+# measured in `t0_abi_smoke`.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
     message(FATAL_ERROR
@@ -3341,9 +3337,8 @@ add_test(NAME t_isp1181_state
 # ---------------------------------------------------------------------------
 # `t_no_alloc` - the core allocates only inside `mcf5307_create`.
 #
-# THIS IS THE ONE SUITE IN THIS FILE WHOSE FLAG SET IS NOT THE LIBRARY'S ALONE,
-# and the addition is stated here rather than left to the reader of the list
-# below. `-d:nimAllocStats` is appended after the library's own arguments.
+# THIS SUITE'S FLAG SET IS NOT THE LIBRARY'S ALONE, and the addition is stated
+# here rather than left to the reader of the list below. `-d:nimAllocStats` is appended after the library's own arguments.
 # `system/memalloc.nim` compiles the allocator's two counters only under that
 # define; without it `getAllocStats()` compiles, returns an `AllocStats`, and
 # returns a DEFAULT one. A suite asserting zero against that build reports a

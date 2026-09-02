@@ -1,7 +1,7 @@
 # `t_claims` - the registry of the claims this repository's tests make about
 # mutations, and the driver that makes each one executable.
 #
-# THE DEFECT CLASS THIS EXISTS FOR, named by the round-2 audit of gate 4.4:
+# THE DEFECT CLASS THIS EXISTS FOR:
 # "claims the evidence does not establish". A test file may state that a change
 # to the core is unobservable, that no case separates it, or that a mutant is
 # equivalent. A FALSE CLAIM OF THAT SHAPE READS EXACTLY LIKE A TRUE ONE. It
@@ -494,8 +494,8 @@ endforeach()
 # this test ran the shape battery, printed `0 claims checked: 0 upheld, 0
 # withheld, 0 refuted` and exited 0. The claim loop is the half of this driver
 # that measures the source's own sentences; a green run that entered it zero
-# times is indistinguishable from one that entered it for every claim. The pass
-# that shrank this registry from four ids to two walked that path with nothing
+# times is indistinguishable from one that entered it for every claim. A pass
+# that shrinks this registry walks that path with nothing
 # standing at the end of it.
 #
 # THE FLOOR IS DERIVED AND NOT TYPED, and that choice is the point. A typed
@@ -1215,15 +1215,14 @@ function(_mcf5307_claims_following_indent text_name find_name out)
 endfunction()
 
 # ---- the REACHABILITY PROBE, and the verdict it withholds -------------------
-# THE DEFECT THIS EXISTS FOR, MEASURED by the gate judge. An
-# `equivalent` claim was registered whose single edit changes `alu.nim`'s
-# `if carry: sr = sr or (ccrC or ccrX)` to `if carry: sr = sr or ccrC` - a real
-# semantic break of every ADDX chain. `alu.nim` is imported by `cpu.nim`, so the
-# reached-the-compiler control above PASSED. The observer never calls
-# `setAddCc`. The driver issued UPHELD: "none of the 225 scenarios separates
-# this". THE MECHANISM MANUFACTURED EXACTLY THE KIND OF CLAIM IT EXISTS TO
-# CATCH, and in the same run the identical mutation registered as `suite-red`
-# drove `t_alu` one red.
+# THE DEFECT THIS EXISTS FOR, MEASURED by the gate judge. An `equivalent` claim
+# was registered whose single edit changes `alu.nim`'s `if carry: sr = sr or
+# (ccrC or ccrX)` to `if carry: sr = sr or ccrC` - a real semantic break of
+# every ADDX chain. The reached-the-compiler control above PASSED. The observer
+# never calls `setAddCc`. The driver issued UPHELD: "none of the 225 scenarios
+# separates this". THE MECHANISM MANUFACTURED EXACTLY THE KIND OF CLAIM IT
+# EXISTS TO CATCH, and in the same run the identical mutation registered as
+# `suite-red` drove `t_alu` one red.
 #
 # THE READ THAT WENT WRONG IS "the observer did not separate it" TAKEN FOR
 # "the observer looked". Those are the same output. The compiler control
@@ -1456,10 +1455,10 @@ endfunction()
 # ---- THE SHAPE BATTERY ------------------------------------------------------
 # WHAT NOTHING IN THIS REPOSITORY GUARDED BEFORE THIS SECTION EXISTED. The
 # reachability probe decides, for an anchor's SHAPE, where `quit(97)` goes and
-# therefore what a verdict about that anchor MEANS. Four consecutive rounds of
-# review each found a shape it decided wrongly, and each time the battery that
+# therefore what a verdict about that anchor MEANS. Review has repeatedly
+# found a shape it decided wrongly, and each time the battery that
 # found it was a scratch script that went away with the session. A shape
-# regression was therefore findable only by a human dispatching an audit.
+# regression was therefore findable only by hand.
 #
 # THE THREE ROUTES TO A FALSE UPHELD THAT REVIEW ACTUALLY FOUND, each MEASURED
 # and each a row below: a routine header taking the before-insertion,

@@ -76,7 +76,7 @@ const
   # not define, and this set is the other five.
   #
   # This set is not the manual's DATA class: `decode_types.nim` pairs it with
-  # `eaAllModes` for nine operations that accept `An`, which DATA excludes. The
+  # `eaAllModes` for the operations that accept `An`, which DATA excludes. The
   # genuine DATA-class mask is `eaDataAddressing` in `decode_types.nim`, which
   # pairs `eaDataAlterableModes` - every mode but `An` - with this set. DATA and
   # DATA ALTERABLE differ on this part in their mode-7 sub-variants alone.
@@ -92,9 +92,7 @@ const
   # `4eb8 1234`, `41f8 1234` and `4878 1234`.
   #
   # An operand class that really excludes `(xxx).W` belongs at its site as
-  # `eaControl7 - {ea7AbsW}`, not here as a second declaration. LEA and PEA
-  # were once wired to such a narrow set and trapped `lea 0x1234.w,%a0` and
-  # `pea 0x1234.w`, forms the pinned assembler emits.
+  # `eaControl7 - {ea7AbsW}`, not here as a second declaration.
   eaControl7* = {ea7AbsW, ea7AbsL, ea7PCDisp, ea7PCIndex}
 
   # The mode-7 sub-variants of a written operand. There is no companion mode

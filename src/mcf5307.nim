@@ -1,9 +1,8 @@
 ## The Nim entry module of the `mcf5307` project.
 ##
-## This module is the only Nim entry module. The build passes
-## `--nimMainPrefix:mcf5307_` for it. A second Nim library passes its own
-## prefix and exports its own `<component>_runtime_init`, and nothing else
-## changes.
+## The build passes `--nimMainPrefix:mcf5307_` for this module. A second Nim
+## library passes its own prefix and exports its own
+## `<component>_runtime_init`, and nothing else changes.
 
 # The core submodules. The entry module imports them so that the compiler
 # compiles them into this library; it never names their symbols itself. The
@@ -66,8 +65,7 @@ proc mcf5307_NimMain() {.importc: "mcf5307_NimMain", cdecl, gcsafe,
                          raises: [].}
 
 # ---------------------------------------------------------------------------
-# `mcf5307_runtime_init` - the published entry point, and the only caller of
-# the runtime entry point in this project.
+# `mcf5307_runtime_init` - the published entry point.
 #
 # The mechanism is in `mcf5307/latch` and not here. Two other modules ask the
 # same latch whether the runtime was abandoned before they allocate, and a
@@ -85,8 +83,8 @@ proc mcf5307RuntimeInit(): cint {.exportc: "mcf5307_runtime_init",
   ## error code, and mixing the two conventions inside one contract is the
   ## footgun that decided it.
   ##
-  ## What replaces the abort's guarantee. The abort existed so that a caller
-  ## could not proceed with a runtime that does not exist. C lets a caller drop
+  ## Why the status alone is not the guarantee. A caller must not proceed with
+  ## a runtime that does not exist. C lets a caller drop
   ## a return value, so the status alone would not have kept that guarantee.
   ## `mcf5307_create` and `isp1181_create` read the latch themselves and hand
   ## back no context once it is abandoned, and every other call in the contract

@@ -5,7 +5,7 @@
 ## calls no instruction-group executor.
 ##
 ## The decoder is a level-2 module beside the executors. Both levels read the
-## shared types from `decode_types`, and neither imports the other:
+## shared types from `decode_types`:
 ##
 ##     decode_types            the shared types and the EA legality table
 ##        ^          ^
@@ -257,8 +257,8 @@ proc decodeWord*(word: uint16): Decoded =
     # all. PEA's mask `word and 0xFFC0 == 0x4840` spans `4840`-`487f` and
     # covers all eight, and `eaLegalityFor(opPea)` excludes `Dn`.
     #
-    # If this arm is moved below the PEA arm, or its mask widened back to
-    # `0xFFC0`, the `swap` cases in `tests/t_move.nim` go red.
+    # This arm must not move below the PEA arm, and its mask must not widen to
+    # `0xFFC0`.
     return Decoded(op: opSwap, ea: decodeEa(word), size: 4'u8,
                    destReg: uint8(word and 0x7'u16))
   elif (word and 0xFFC0'u16) == 0x4840'u16:

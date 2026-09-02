@@ -1,11 +1,10 @@
 #!/bin/zsh
 # `reach.sh` - the mutation reach gate. A developer tool, not a test.
 #
-# It is deliberately not wired into ctest, and `tests/tests_cpu.cmake` does not
-# mention it. It rewrites source files and runs a whole second CMake
-# configure-and-build for every mutation, so a run takes minutes rather than
-# the seconds the suite takes. It is run by hand, when a test row's
-# justification is being written or being doubted.
+# It is deliberately not wired into ctest. It rewrites source files and runs a
+# whole second CMake configure-and-build for every mutation, so a run takes
+# minutes rather than the seconds the suite takes. It is run by hand, when a
+# test row's justification is being written or being doubted.
 #
 # ---------------------------------------------------------------------------
 # What "reached" means, and the limit on it. Read this before trusting a result.
@@ -74,9 +73,8 @@ W=$R/w
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
 
 # The suites the measurement reports on. `t0_abi_smoke` is left out on purpose:
-# it takes the address of every published symbol and asserts no core behaviour,
-# so no deletion inside a core module can red it and it can carry no signal
-# here. That is a property of what it asserts, not of whether it builds.
+# it takes the address of every published symbol and asserts no core behaviour.
+# That is a property of what it asserts, not of whether it builds.
 SUITES='^(t_control|t_logic|t_alu|t_move|t_ea_masks|t_sign_extend|mcf5307_conformance_all)$'
 
 if command -v md5 > /dev/null 2>&1; then

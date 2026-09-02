@@ -2,8 +2,8 @@
 ##
 ## This file exists beside `mcf5307_conformance_alu` because it carries the
 ## sticky-Z rule of ADDX/SUBX/NEGX, the trap cases for encodings this part
-## does not have, and the direct reads of `eaIsLegalFor`, none of which the
-## corpus expresses. Redundancy between a generated corpus and a hand-written
+## does not have, and the direct reads of `eaIsLegalFor`.
+## Redundancy between a generated corpus and a hand-written
 ## case is not duplication to remove.
 ##
 ## Half of this instruction group is the condition codes: `ADDX`, `SUBX` and

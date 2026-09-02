@@ -294,12 +294,11 @@ mcf5307_destroy(sweepCtx)
 # BLOCK 5. A non-OK bus status becomes an access fault, and the frame carries a
 # NON-ZERO `FS` through the core.
 #
-# THIS IS THE FIRST CASE IN THIS REPOSITORY THAT CAN SEPARATE A SPLIT `FS`
-# ENCODER FROM A CONTIGUOUS ONE. Of the defined codes `1001` is the only one
-# whose low half is not zero, so it is the only value that lands in BOTH
-# halves of the split field. Every other core-path frame this tree stacks
-# carries `FS` `0000`, where "encodes the field as zero" and "has no field"
-# produce the same longword.
+# THIS CASE SEPARATES A SPLIT `FS` ENCODER FROM A CONTIGUOUS ONE. Of the
+# defined codes `1001` is the only one whose low half is not zero, so it is
+# the only value that lands in BOTH halves of the split field. A frame carrying `FS` `0000` cannot separate
+# "encodes the field as zero" from "has no field": both produce the same
+# longword.
 #
 # THE ROW IS THE ONE THAT IS REAL SILICON. Access errors are reported only for
 # an attempted store to write-protected space. The board below refuses

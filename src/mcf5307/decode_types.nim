@@ -2,17 +2,13 @@
 ##
 ## This module is the bottom of the core, above `ea` alone. It holds the
 ## types that the decoder (`decode.nim`) and every instruction-group executor
-## both need. Those modules are siblings and neither imports the other; each
-## one reads its types from here. `cpu.nim` sits above them and owns `step`.
+## both need. Those modules are siblings; each one reads its types from here.
+## `cpu.nim` sits above them and owns `step`.
 ##
 ## The effective-address legality table lives here for the same reason. The
 ## executor modules ask whether an operand is legal before they run an
 ## instruction. The table reads an `Operation` and an `EA` and it reads no
 ## decoder state, so it belongs beside the types and not beside the decoder.
-##
-## No module re-exports this one. A caller that needs `Operation`, `Decoded`,
-## `MCF5307Ctx`, the board callback types or `eaIsLegalFor` imports
-## `mcf5307/decode_types` by name.
 
 import mcf5307/ea
 
@@ -411,14 +407,6 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # `(d8,PC,Xi)` from the mode-7 set. That is a live defect and not a latent
     # one - under the wide mask `movem.l %d0-%d1,0x400.l`, hand-assembled as
     # `48f9 0003 0000 0400`, reaches the executor and completes its store.
-    # `tests/t_move.nim` and block (13) of `tests/t_ea_masks.nim` red if the
-    # mask is widened again.
-    #
-    # A CONTROL-CLASS MASK IS TOO WIDE HERE: it would add `(d8,An,Xi)` from
-    # the mode set and `(xxx).L`, `(d16,PC)` and `(d8,PC,Xi)` from the mode-7
-    # set. Under a mask that wide, `movem.l %d0-%d1,0x400.l` - `48f9 0003 0000
-    # 0400` - reaches the executor and COMPLETES ITS STORE with `fault` false,
-    # which is the permissive core this mask exists to prevent.
     #
     # THE `ea7` SET IS EMPTY AND THAT IS NOT WHAT REJECTS A MODE-7 OPERAND,
     # for the reason `eaMulDivLong7` states in `ea.nim`: `isEaLegal` returns

@@ -19,9 +19,9 @@
  *
  * So the two are compared, and a mismatch in either direction fails the
  * configure step and names the symbols. An export that was expected and
- * disappeared - a renamed definition, a dropped one, a changed `exportc`
- * name - is caught by this file and by nothing else, because the generated
- * address set shrank with the ABI and linked clean.
+ * disappeared - a renamed definition, a dropped one, a changed `exportc` name
+ * - is caught by this file. The generated address set shrank with the ABI and
+ * linked clean. address set shrank with the ABI and linked clean.
  *
  * The file is data and not C, and nothing compiles it. Every line of it is
  * blank, is a comment, or is exactly `MCF5307_ABI_FN(<identifier>)`. There is

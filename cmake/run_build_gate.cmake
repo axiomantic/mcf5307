@@ -3,9 +3,9 @@
 #
 # It builds the tree it is run in and fails when the build fails. A ctest run whose executables were left over from an earlier
 # successful build reports Passed about source that no longer compiles, and
-# nothing in the run says so; measured twice in this repository on one day,
-# once as `37/37 green` with the build exiting 2, and once as `t0_abi_smoke
-# Passed` with the build exiting 2. Making the build a registered test puts the
+# nothing in the run says so; measured in this repository, once with the whole
+# suite reporting green and once as `t0_abi_smoke Passed`, the build exiting 2
+# both times. Making the build a registered test puts the
 # build's exit status on the same path as every other verdict, so a caller who
 # reads only ctest's summary still sees it.
 #
