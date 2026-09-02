@@ -120,18 +120,17 @@ type
     halted*: bool
     fault*: bool
 
-    # The vector base register. `machine.nim`'s `takeException` is its only
-    # reader, through `exception.nim`'s `vectorAddress`, which is where the rule
-    # about the unimplemented low bits lives. The field holds what was written
-    # to it and the mask is applied at the dispatch.
+    # The vector base register. `machine.nim`'s `takeException` reads it
+    # through `exception.nim`'s `vectorAddress`, which is where the rule about
+    # the unimplemented low bits lives. The field holds what was written to it
+    # and the mask is applied at the dispatch.
     vbr*: uint32                ## the vector base register
 
     # The rest of the control registers this part implements. `movec.nim`
-    # writes them and nothing in this core reads them: the cache, the access
-    # control regions, the on-chip SRAM and the peripheral base are not
-    # modelled, so each holds what was written and changes no behaviour. A core
-    # that dropped the write instead would let firmware configure a register
-    # and report nothing.
+    # writes them: the cache, the access control regions, the on-chip SRAM and
+    # the peripheral base are not modelled, so each holds what was written and
+    # changes no behaviour. A core that dropped the write instead would let
+    # firmware configure a register and report nothing.
     cacr*: uint32               ## the cache control register
     acr0*: uint32               ## access control register 0
     acr1*: uint32               ## access control register 1

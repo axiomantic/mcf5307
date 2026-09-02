@@ -1,14 +1,9 @@
 ## `t_bra_displacement` - `BRA` over EVERY value its displacement byte can
 ## carry, executed rather than decoded.
 ##
-## WHAT THE REST OF THE TREE PINS, AND WHY IT IS NOT THIS. Four byte
-## displacements are executed anywhere in this repository: `0x06` and `0xf8` in
-## the generated control corpus, `0xfe` in `t_control` block 5, and `0x00` in
-## the same block as the 16-bit marker. `0xff` is refused there as the 32-bit
-## marker. Every other value of the field is decoded by `t_control` block 3 and
-## RUN by nothing. A displacement is one signed byte added to one base, so the
-## whole field is 256 executions - small enough to run exhaustively, which is
-## what this file does.
+## A displacement is one signed byte added to one base, so the whole field is
+## 256 executions - small enough to run exhaustively, which is what this file
+## does.
 ##
 ## THE EXPECTED PROGRAM COUNTER IS COMPUTED FROM THE MANUAL'S RULE AND IS NOT A
 ## TABLE OF WHAT THIS CORE DOES. "The PC contains the address of the instruction

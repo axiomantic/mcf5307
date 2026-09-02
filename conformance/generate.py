@@ -357,9 +357,8 @@ CTRL_TARGET_2 = 0x00098760
 # THE EXCEPTION VECTOR TABLE. `TRAP #0-15` are vector numbers 32 to 47 at
 # vector offsets $080 to $0BC, and the vector offset is 4 x vector_number. The
 # table is based at the vector base register, whose reset value is zero, and
-# the core has no VBR register. So the
-# vector longword of `trap #n` is at 4 * (32 + n) and these two cases seed
-# exactly that.
+# these cases do not write it. So the vector longword of `trap #n` is at
+# 4 * (32 + n) and these two cases seed exactly that.
 TRAP_VECTOR_0 = 4 * 32                  # $080
 TRAP_VECTOR_15 = 4 * 47                 # $0BC
 

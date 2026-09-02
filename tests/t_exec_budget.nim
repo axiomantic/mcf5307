@@ -196,7 +196,6 @@ check(addqRun,
 # `spent <= budget` is what the saturating core satisfied, and a case written
 # `spent >= budget` passes for a core that overruns by any amount at all.
 
-#
 # THE SWEEP'S LENGTH IS A CONSTANT AND NOT A MULTIPLE OF THE MEASURED COST.
 # `mcf5307_check_case_total` in this suite's driver is a TYPED figure, and a
 # sweep whose length moved with the cost would move that figure whenever a
