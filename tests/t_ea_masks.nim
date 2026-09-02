@@ -19,9 +19,7 @@
 ##
 ##   (4) The extension-word order of absolute long addressing, with its own
 ##       control. `(xxx).L` carries the high half of the address in the first
-##       extension word. No case in `conformance/corpus/` uses an absolute-long
-##       operand at all, so nothing else in this project can see a core that
-##       reads the two words the other way round. The block near the end of
+##       extension word. The block near the end of
 ##       this file says which manual section that is and why the control is
 ##       there.
 ##
@@ -37,7 +35,7 @@
 ## whole domain, by holding each mask against a literal rather than by naming
 ## one mode.
 ##
-## Four assertions per operation, and each one can fail.
+## The assertions per operation, and each one can fail.
 ##
 ##   (1) The predicate rejects the illegal mode. This catches a mask widened
 ##       to admit the mode the entry cites, and nothing else: each entry names
@@ -69,7 +67,7 @@
 ## Two more run for the Table 3-13 entries alone, one per axis of the citation,
 ## and each holds a declared value against an independent recording of the same
 ## fact rather than against the value itself. The numbering skips (5) and (6),
-## which are the two older assertions described further down.
+## which are described further down.
 ##
 ##   (7) The page. Derived from the operation's mnemonic through the table's
 ##       own row ordering and compared against the page the entry declared.
@@ -110,7 +108,8 @@
 ##
 ## The criterion is the complement of the mask and not a roster of opcode
 ## names, so a new such operation is recognized by reading `ea.nim` rather than
-## by remembering this paragraph. Two masks meet it, for two different reasons.
+## by remembering this paragraph. The masks that meet it do so for different
+## reasons.
 ##
 ##   - MOVE, MOVEA, ADD, SUB, ADDA, SUBA, TST, CMP and CMPA carry
 ##     `eaAllModes`/`eaValid7`, which admits every addressing mode Table 3-5
@@ -154,7 +153,7 @@
 ## turns `mcf5307_conformance_move` red, because `t_move` drives MOVE
 ## register-to-register only.
 ##
-## The other two assertions the file has always carried are kept.
+## The remaining assertions are kept.
 ##
 ##   (5) The first non-zero cycle return, driven through the real ABI with a
 ##       board that returns `MCF5307_BUS_OK` and a `NOP` for every fetch. A
@@ -689,7 +688,7 @@ let coverage: seq[Coverage] = @[
   cov(opScc, famControl, mDn, mAnInd, whyDashMemory312),
   cov313(opCmpi, famControl, p313Start, imm313Dashed),
 
-  # SWAP is the opcode whose arrival exposed the hand-maintained list. Its
+  # SWAP's
   # mask is `{eaDn}` on Table 3-7 p.3-25's `Dn` operand syntax and Table
   # 3-12 p.3-27's `swap Dx` row, timed 1(0/0) under Rn with a dash in all
   # seven other columns, both read from RENDERED pages.
@@ -722,7 +721,7 @@ type RunResult = object
 
 proc runFamily(c: Coverage; operand: EA; imm: uint8 = 1'u8): RunResult =
   ## THE IMMEDIATE IS A PARAMETER SO THAT ASSERTION (8) CAN VARY IT, and its
-  ## default is the `1` every other call used before that assertion existed, so
+  ## default is `1`, so
   ## assertions (3) and (4) drive exactly the run they always drove.
   # THE BOARD IS RESET TOO, AND NOT ONLY THE CONTEXT. `board` is a single
   # global that every legal run writes through. Nothing today writes near
@@ -1000,8 +999,8 @@ block:
 # `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726) was offered all twelve
 # modes of all eight forms and answered the same 96 cells.
 #
-# `(d8,Ay,Xi)` IS THE CELL THE BRIEF FOR THIS WORK DID NOT NAME. The long form
-# was described as data-alterable-minus-absolute; the manual and the assembler
+# `(d8,Ay,Xi)` IS NARROWER THAN DATA-ALTERABLE-MINUS-ABSOLUTE. The manual and
+# the assembler
 # both drop the INDEXED mode as well, so the long mask is narrower again than
 # that. It is asserted here because a mask corrected only as far as the
 # description would still be wrong and nothing else would say so.
@@ -1301,11 +1300,10 @@ block:
         " `m68k-elf-as -mcpu=5307` answers \"operands mismatch\")")
 
 # ---------------------------------------------------------------------------
-# (17) The mode-7 sets held against their literal membership stood here and
-# was deleted. Three cases pinned `eaValid7`, `eaControl7` and `eaAlterable7`
-# against the members spelled out in them. Each of the three sets is read by an
-# arm of `eaLegalityFor` whose mask block (19) below holds against a literal,
-# so no value change to any of them can red block (17) alone.
+# (17) The mode-7 sets are not held against their literal membership here.
+# `eaValid7`, `eaControl7` and `eaAlterable7` are each read by an arm of
+# `eaLegalityFor` whose mask block (19) below holds against a literal, so no
+# value change to any of them could red such a case alone.
 #
 # The block's own admission rule is what condemns it: "a case whose condition
 # is entailed by the equality cases cannot be the sole detector of anything,
@@ -1337,7 +1335,7 @@ block:
 # The direction that forced it is narrowing, which the `coverage` table
 # structurally cannot see: every row there names one illegal mode, and a
 # narrowing removes a legal one. Block (16) closed that for ADDQ and SUBQ by
-# hand; a sweep found it open nearly everywhere else. Deleting any one legal
+# hand; this block closes it for the domain. Deleting any one legal
 # cell from any one operation's mask reds exactly one case in this block, and
 # for a large minority of cells it reds nothing else anywhere.
 #
@@ -1568,9 +1566,7 @@ block:
 # assembles 0x00123456 as 0x34560012 and every absolute-long operand reads the
 # wrong place.
 #
-# No corpus case reaches this. `conformance/corpus/` holds no `(xxx).L`
-# operand in any group, so a swap is invisible to every registered conformance
-# test. This case is what makes it visible.
+# The case below is what makes a swapped extension-word order visible.
 #
 # The case runs through the shipped C entry points and not through `eaAddr`
 # reached around the back, so it asserts the path the corpus runner drives.

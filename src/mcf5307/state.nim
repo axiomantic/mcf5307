@@ -29,13 +29,9 @@ const
     ## The version word. It moves when the payload's layout moves, and
     ## `stateLoad` refuses a block that does not carry this exact value.
     ##
-    ## Version 2 is the deferred write fault. `MCF5307Ctx` grew the `pending*`
-    ## fields that let an access error on a store be taken at the instruction
-    ## boundary, so the payload is wider and every field beyond the new ones
-    ## would be read at the wrong offset from a version-1 block. `stateLoad`
-    ## checks this word before the payload width, so such a block is refused as
-    ## `stateBadVersion` and never as a width or a checksum - the refusal names
-    ## the actual reason.
+    ## `stateLoad` checks this word before the payload width, so a block of the
+    ## wrong version is refused as `stateBadVersion` and never as a width or a
+    ## checksum - the refusal names the actual reason.
   stateHeaderBytes = 12
     ## magic, version, payload width
   stateChecksumBytes = 4

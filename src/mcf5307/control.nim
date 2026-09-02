@@ -88,8 +88,8 @@
 ##       Section 3.3, page 3-11: the processor copies SR, then sets the S-bit
 ##       and clears the T-bit. `machine.nim`'s `takeException` carries it.
 ##
-## Cycles. Nothing checks any of them, and the numbers are not a transcription
-## of the tables.
+## Cycles. The numbers are not a transcription of the tables. See the block
+## above the constants in `cpu.nim`.
 ##
 ##   Four are exact, each of them a row carrying a single cell that the one
 ##   return equals. `execScc` returns 1 and Table 3-12, folio 3-27, gives
@@ -178,9 +178,7 @@
 ##      the RTE itself. This module traps instead. A trap is this core's one
 ##      observable for "the core refused", the same channel every illegal size
 ##      and illegal operand in every group uses; `alu.nim`'s header makes the
-##      identical statement about a divide by zero. What `tests/t_control.nim`
-##      asserts is the discrimination - a format of 3 is refused and a format
-##      of 4 is not - and not the shape of the refusal.
+##      identical statement about a divide by zero.
 
 import mcf5307/decode_types
 import mcf5307/ea

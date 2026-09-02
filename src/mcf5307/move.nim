@@ -257,7 +257,7 @@ proc moveFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
     # - the legality table, not this call site, is where SWAP's operand rule
     # lives.
     #
-    # No test reaches it, and none should be written to: reaching it needs a
+    # None should be written to: reaching it needs a
     # decoder change, so a test that covered it would have to introduce the
     # very defect the mask ordering prevents.
     if not eaIsLegalFor(opSwap, d.ea):
