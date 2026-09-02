@@ -411,7 +411,7 @@ block:
   expectDecode(0x4E74'u16, opIllegal, "rtd #imm (4e74) is not this group's")
   expectDecode(0x4E76'u16, opIllegal, "trapv (4e76) is not this group's")
   expectDecode(0x4E77'u16, opIllegal, "rtr (4e77) is not this group's")
-  expectDecode(0x4E7A'u16, opIllegal, "movec (4e7a) is CPU-11's, not TRAP's")
+  expectDecode(0x4E7A'u16, opIllegal, "movec (4e7a) is not this group's")
 
   # `0cc0 | <ea>` is the 68020 `CMP2`/`CHK2` and not a `CMPI` of size 11.
   expectDecode(0x0CC0'u16, opIllegal, "cmp2/chk2 (0cc0) is not a CMPI")

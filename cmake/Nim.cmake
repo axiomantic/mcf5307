@@ -256,7 +256,7 @@ endforeach()
 if(MCF5307_NIM_ENTRY_COUNT GREATER 1)
     message(STATUS
         "mcf5307: step 2a NOTE: this build declares ${MCF5307_NIM_ENTRY_COUNT} "
-        "Nim entry modules and design section 5.5 keeps one. Each entry module "
+        "Nim entry modules and only the first is built. Each entry module "
         "beyond the first costs its own nimcache directory, its own "
         "compile-unit list, its own object library and its own "
         "`<component>_runtime_init` export. Steps 2 to 6 below build the first "
@@ -1407,7 +1407,7 @@ endforeach()
 if(NOT MCF5307_ABI_REACHABLE STREQUAL "")
     message(STATUS
         "mcf5307: step 4a NOTE: the runtime scaffolding a consumer can reach: "
-        "${MCF5307_ABI_REACHABLE}. Design section 5.4 rule 2 asks C++ not to "
+        "${MCF5307_ABI_REACHABLE}. A C++ consumer must not "
         "call it, the contract header does not declare it, and no mechanism "
         "here enforces that. This line is a report and not a check.")
 endif()

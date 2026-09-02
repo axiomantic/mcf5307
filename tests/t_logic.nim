@@ -336,9 +336,9 @@ const bitDirty = srBase or ccrN or ccrV or ccrC or ccrX
 
 block:
   expectDecode(0xB3C0'u16, opCmpa,
-    "cmpa.l %d0,%a1 (b3c0) is CPU-10's CMPA and not this group's EOR")
+    "cmpa.l %d0,%a1 (b3c0) is a CMPA and not this group's EOR")
   expectDecode(0xB280'u16, opCmp,
-    "cmp.l %d0,%d1 (b280) is CPU-10's CMP and not this group's EOR")
+    "cmp.l %d0,%d1 (b280) is a CMP and not this group's EOR")
 
   # The positive controls. The byte and word EOR opmodes are not instructions
   # on this part and they trap on the size, which is the channel
