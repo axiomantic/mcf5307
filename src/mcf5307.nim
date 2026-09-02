@@ -28,7 +28,7 @@ import isp1181/stub
 {.pop.}
 
 # The latch. It is imported outside the pushed warning mask because this
-# module names three of its symbols below.
+# module names its symbols below.
 import mcf5307/latch
 
 # ---------------------------------------------------------------------------
