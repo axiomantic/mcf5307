@@ -135,9 +135,9 @@
 ##   A table's rows and its notes can end on different pages, and a second
 ##   table on the same subject can follow the notes.
 ##
-## Two questions this module once could not settle are settled, against the
-## ColdFire Family Programmer's Reference Manual, Rev. 3, whose per-instruction
-## folios give the flag rules and the condition tests directly.
+## Questions settled against the ColdFire Family Programmer's Reference
+## Manual, Rev. 3, whose per-instruction folios give the flag rules and the
+## condition tests directly.
 ##
 ##   The sixteen condition tests. CFPRM folio 4-13, under `Bcc`, prints the
 ##   whole table: code, four-bit encoding and boolean test, over CCR[C],
@@ -147,11 +147,6 @@
 ##   `bne` 0x66, `beq` 0x67, `bvc` 0x68, `bvs` 0x69, `bpl` 0x6a, `bmi` 0x6b,
 ##   `bge` 0x6c, `blt` 0x6d, `bgt` 0x6e, `ble` 0x6f, `st` 0x50c0, `sf` 0x51c0).
 ##
-##   `tests/t_control.nim` runs all sixteen conditions over all sixteen
-##   condition-code words, for `Bcc` and again for `Scc`, against a literal
-##   16-bit vector, so a reversed condition goes red rather than merely
-##   disagreeing with this note.
-##
 ##   Whether a comparison writes X. It does not. CFPRM folio 4-28 gives CMP's
 ##   X as "Not affected". The doubt came from the User's Manual: section
 ##   3.2.1.5 ends on page 3-9 with an unattached "Set to the value of the
@@ -159,9 +154,6 @@
 ##   reads as the X rule, and a comparison is a subtraction. Read that way
 ##   every CMP would write X and would break a multi-precision sequence that
 ##   compared between its steps.
-##
-##   Every CMP, CMPA and CMPI case in `conformance/corpus/control_00.json`
-##   enters with X set and expects it set.
 ##
 ## What this module still does not know. The implementation picks a behaviour
 ## and this list says so.

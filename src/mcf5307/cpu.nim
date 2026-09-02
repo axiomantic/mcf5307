@@ -16,8 +16,6 @@
 ##        ^          ^
 ##            cpu               this module
 ##
-## `decode` and the executors are level-2 siblings. Neither imports the other.
-##
 ## A shared helper a second executor needs goes down into `mcf5307/machine`,
 ## not sideways into another executor.
 ##
@@ -61,8 +59,7 @@ import mcf5307/latch
 # The overrun is bounded by one instruction and by nothing else. The return is
 # at most `maxCycles` plus the cost of the single instruction that crossed the
 # budget, so a caller carrying the difference forward carries a bounded
-# quantity. `tests/t_exec_budget.nim` pins the exact return for every budget in
-# a sweep, and pins it against a cost it measures rather than transcribes.
+# quantity.
 #
 # The return is not clamped to the budget: a clamp gives a consumer computing
 # `spent - want` a floor-of-zero difference that can never be anything but

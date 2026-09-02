@@ -26,8 +26,8 @@
 ##      ^   ^    ^
 ##          cpu               `step`, the dispatch, and the lifecycle ABI
 ##
-## `decode` does not import this module and must not: a decoder that reaches
-## machine state inverts the layering.
+## `decode` must not import this module: a decoder that reaches machine state
+## inverts the layering.
 ##
 ## Register numbering, the condition-code bit positions and addressing-mode
 ## behaviour are taken from the ColdFire Family Programmer's Reference Manual

@@ -1,11 +1,10 @@
 #!/bin/zsh
 # `reach.sh` - the mutation reach gate. A developer tool, not a test.
 #
-# It is deliberately not wired into ctest, and `tests/tests_cpu.cmake` does not
-# mention it. It rewrites source files and runs a whole second CMake
-# configure-and-build for every mutation, so a run takes minutes rather than
-# the seconds the suite takes. It is run by hand, when a test row's
-# justification is being written or being doubted.
+# It is deliberately not wired into ctest. It rewrites source files and runs a
+# whole second CMake configure-and-build for every mutation, so a run takes
+# minutes rather than the seconds the suite takes. It is run by hand, when a
+# test row's justification is being written or being doubted.
 #
 # ---------------------------------------------------------------------------
 # What "reached" means, and the limit on it. Read this before trusting a result.
