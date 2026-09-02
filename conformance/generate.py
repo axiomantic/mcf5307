@@ -397,9 +397,8 @@ def frame_fv(fmt, vector, sr):
 #
 # This table samples the condition table; it does not pin it. Two conditions
 # that agree on both words of a pair are not separated by that pair, and the
-# corpus cannot afford the six condition-code words it takes to separate all
-# sixteen. `tests/t_control.nim` runs the FULL 16 conditions x 16 condition-code
-# words matrix and that is what pins each condition's truth table.
+# corpus cannot afford the condition-code words it takes to separate all
+# sixteen. The exhaustive condition matrix is in `tests/t_control.nim`.
 #
 # THE ENCODING OF EACH CONDITION IS MEASURED AND NOT ASSUMED. Every mnemonic
 # below was assembled by `m68k-elf-as -mcpu=5307` at generation time, which is
@@ -999,12 +998,9 @@ CASES = {
 
         # ---------------------------------- THE WORD MULTIPLY AND DIVIDE
         #
-        # THE CORPUS CARRIED NO WORD-FORM CASE OF ANY KIND before these, for
-        # the same reason the core had no word form: `decodeLogicLine` called
-        # opmodes 011 and 111 of lines 1000 and 1100 illegal. They are real
-        # instructions - `m68k-elf-as -mcpu=5307` assembles them, the
-        # reference prints a "(Word)" instruction format for each, and the
-        # timing table times them.
+        # The word forms are real instructions - `m68k-elf-as -mcpu=5307`
+        # assembles them, the reference prints a "(Word)" instruction format
+        # for each, and the timing table times them.
         #
         # EVERY EXPECTED VALUE BELOW IS DERIVED FROM THE REFERENCE AND NOT FROM
         # THIS PROJECT'S CORE. This generator takes only the ENCODING from the
@@ -1029,8 +1025,8 @@ CASES = {
             # instruction word - Dx is bits 11..9 of that word and the
             # signedness is bits 8..6 - where the long form takes both from a
             # second word it fetches. `src/mcf5307/decode.nim` states the
-            # hazard ("an executor that fetched an extension word here would
-            # consume the NEXT INSTRUCTION") and nothing asserted it.
+            # hazard: "an executor that fetched an extension word here would
+            # consume the NEXT INSTRUCTION".
             #
             # WITH A REGISTER SOURCE THERE IS NOTHING ELSE TO SEE. A memory
             # source would move the operand address and change the product
@@ -1165,11 +1161,9 @@ CASES = {
 
         # -------------------------------------------- DIVS, REMU and REMS
         #
-        # THE CORPUS CARRIED NO DIVIDE CASE OF ANY KIND before these three, so
-        # the whole DIVU/DIVS/REMU/REMS group ran here unguarded. Each case
-        # below is chosen to be DISCRIMINATING on the status word, which is the
-        # half of these instructions that a plausible wrong implementation gets
-        # wrong while still writing the right register.
+        # The divide cases below are chosen to be DISCRIMINATING on the status
+        # word, which is the half of these instructions that a plausible wrong
+        # implementation gets wrong while still writing the right register.
         {
             # AN OVERFLOW CLEARS N AND Z. The reference: "N
             # Cleared if overflow is detected", "Z Cleared if overflow is
@@ -1177,8 +1171,7 @@ CASES = {
             # and X "Not affected". The most negative value over -1 has no
             # quotient, so d1 IS UNCHANGED and only the status word moves.
             # SR_DIRTY enters with N, Z and C SET, so a core that leaves N and
-            # Z as it found them fails here - which is exactly what this
-            # project's core did until the case existed.
+            # Z as it found them fails here.
             "name": "divs_l_overflow_clears_n_and_z",
             "mnemonic": "divs.l",
             "instruction": "divs.l %d0,%d1",
@@ -1435,9 +1428,6 @@ CASES = {
             # UNCHANGED, exactly as `and_l_d1_to_memory` asserts them. The
             # runner compares only the registers a case NAMES, so a case that
             # named `sr` alone was blind to a core that clobbered either one.
-            # Measured: the mutation "zero `d.destReg` after the store" on
-            # `execAndOr`'s `<ea>`-destination path - the path AND and OR
-            # SHARE - failed `and_l_d1_to_memory` and this case PASSED it.
             "name": "or_l_d1_to_memory",
             "mnemonic": "or.l",
             "instruction": "or.l %d1,(%a0)",
@@ -1492,9 +1482,6 @@ CASES = {
             # EOR. `execEor` is a SEPARATE path from `execAndOr`, so
             # `and_l_d1_to_memory` guards nothing here, and every other EOR
             # case in this group has a data register for its destination.
-            # Measured: the mutation "zero `d.destReg` after the store" on
-            # `execEor`'s `<ea>`-destination path left the whole group green
-            # while this case named `sr` alone.
             "name": "eor_l_d1_to_memory",
             "mnemonic": "eor.l",
             "instruction": "eor.l %d1,(%a0)",

@@ -162,10 +162,9 @@ proc mergeSized*(old: uint32; value: uint32; size: uint8): uint32 =
   (old and not sizeMask(size)) or (value and sizeMask(size))
 
 proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
-  ## N and Z from the result, V and C cleared, X unchanged. This is the rule
-  ## MOVE, MOVEQ, EXT, EXTB and the ColdFire 32-bit multiply share; the
-  ## instructions that also compute a carry or an overflow set those bits
-  ## themselves in their own group's module.
+  ## N and Z from the result, V and C cleared, X unchanged. Instructions that
+  ## also compute a carry or an overflow set those bits themselves in their own
+  ## group's module.
   ctx.sr = ctx.sr and not (ccrN or ccrZ or ccrV or ccrC)
   let msb = 8 * size - 1
   if ((value shr msb) and 1'u32) != 0'u32:
@@ -603,9 +602,8 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## part does not implement.
   ##
   ## A core that stored the value and dispatched from zero would answer every
-  ## read-back correctly and take every exception to the wrong handler, so the
-  ## suite adjudicates on the handler address it lands on and never on the
-  ## value it reads back.
+  ## read-back correctly and take every exception to the wrong handler. Only
+  ## the handler address it lands on separates that core from this one.
   ##
   ## A fault inside this procedure is a double fault. Each access is checked
   ## and the procedure returns early, leaving the context halted with `fault`;
