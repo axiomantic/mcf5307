@@ -144,8 +144,8 @@ static_assert(
     "qualifier has migrated onto the pointee and the array is a plain "
     "constant again: the compiler may fold the reads in main, emit no array, "
     "and let the linker drop every symbol this test exists to require.");
-/* More threads than a developer machine has cores, so the losers are real
- * losers and not threads that started after the winner had already finished. */
+/* Enough threads that the losers are real losers and not threads that
+ * started after the winner had already finished. */
 constexpr int kRacers = 8;
 
 /* True when every racer returned from `mcf5307_runtime_init`. A thread that

@@ -263,9 +263,8 @@ proc observe(ctx: MCF5307Ctx): Outcome =
   ## block which takes a SECOND interrupt asserts the SECOND frame. Each frame
   ## is self-aligning and goes below the last (`exceptionFrameBase`), so a
   ## fixed address would keep reporting the first frame while the assertion's
-  ## label claimed the second. When nothing was taken, A7 is the reset
-  ## stack pointer
-  ## and the two words below are the zeros `freshBoard` wrote.
+  ## label claimed the second. When nothing was taken, A7 is the reset stack
+  ## pointer and the two words below are the zeros `freshBoard` wrote.
   (sp: mcf5307_get_reg(ctx, 15),
    pc: mcf5307_get_reg(ctx, 17),
    sr: mcf5307_get_reg(ctx, 16),
@@ -1415,9 +1414,9 @@ block:
 # the state the sentence above forbids.
 #
 # A STALE INHIBITION WOULD BE WRONG, AND THIS IS NOT ONE. The reset does not
-# merely FAIL TO CLEAR the field: it has an
-# exception of its own to acquire it for, and the instruction the inhibition is
-# spent on is the one the reset itself has just installed.
+# merely FAIL TO CLEAR the field: it has an exception of its own to acquire it
+# for, and the instruction the inhibition is spent on is the one the reset
+# itself has just installed.
 #
 # THE TWO CASES ARE THE TWO SIDES OF ONE BOUNDARY, and the second is not a
 # nicety. A core that took nothing at all would pass the first alone.

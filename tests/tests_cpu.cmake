@@ -2699,8 +2699,8 @@ add_test(NAME t_irq
 # THIS SUITE IS INDIFFERENT TO THE ANSWER, AND THAT IS WHY IT IS WRITTEN THIS
 # WAY. It compiles `src/mcf5307/state.nim` FROM SOURCE through `--path:src`,
 # exactly as every suite above it compiles the modules it measures, so it
-# measures the module whether or not the archive holds it. What no suite here
-# can measure is the link; `t0_abi_smoke` is the test that does.
+# measures the module whether or not the archive holds it. The link is
+# measured in `t0_abi_smoke`.
 
 if(NOT DEFINED MCF5307_NIM_COMMAND)
     message(FATAL_ERROR
@@ -3337,9 +3337,8 @@ add_test(NAME t_isp1181_state
 # ---------------------------------------------------------------------------
 # `t_no_alloc` - the core allocates only inside `mcf5307_create`.
 #
-# THIS IS THE ONE SUITE IN THIS FILE WHOSE FLAG SET IS NOT THE LIBRARY'S ALONE,
-# and the addition is stated here rather than left to the reader of the list
-# below. `-d:nimAllocStats` is appended after the library's own arguments.
+# THIS SUITE'S FLAG SET IS NOT THE LIBRARY'S ALONE, and the addition is stated
+# here rather than left to the reader of the list below. `-d:nimAllocStats` is appended after the library's own arguments.
 # `system/memalloc.nim` compiles the allocator's two counters only under that
 # define; without it `getAllocStats()` compiles, returns an `AllocStats`, and
 # returns a DEFAULT one. A suite asserting zero against that build reports a
