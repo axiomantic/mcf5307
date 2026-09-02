@@ -610,8 +610,6 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # `(d8,PC,Xi)` from the mode-7 set. That is a live defect and not a latent
     # one - under the wide mask `movem.l %d0-%d1,0x400.l`, hand-assembled as
     # `48f9 0003 0000 0400`, reaches the executor and completes its store.
-    # `tests/t_move.nim` and block (13) of `tests/t_ea_masks.nim` red if the
-    # mask is widened again.
     #
     # The CFPRM settles both directions and they are the same shape. Folio
     # 4-50 carries the register-to-memory table for `<ea>x` and folio 4-51 the

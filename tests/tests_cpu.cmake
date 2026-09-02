@@ -15,9 +15,6 @@
 # nobody naming it again. The whole OFF state was therefore reportable only as
 # one line of scrollback on a run that ends in exit 0 - the shape of a check
 # that quietly does not run, which is the shape step 4a was written to end.
-# This test is the only thing in the repository that fails when the gate is
-# off: `git grep -n MCF5307_ABI_GATE` answers with `cmake/Nim.cmake` and this
-# file and nothing else.
 #
 # The cache entry is not the gate. It is the switch. A run can read `ON` out of
 # `CMakeCache.txt` and still not have run step 4a: delete the branch and keep
@@ -149,7 +146,7 @@ if(NOT PROJECT_IS_TOP_LEVEL)
 endif()
 
 # `t0_abi_header` - the application binary interface contract. One registered
-# name, four cases, and each one can fail:
+# name, and each case below can fail:
 #
 #   1  `include/mcf5307.h` compiles as C11, warning-clean. It never links.
 #   2  the same header compiles as C++17, warning-clean. It never links.
@@ -493,7 +490,7 @@ endif()
 # The command is the LIBRARY's command with the runtime-only and output
 # arguments removed, exactly as `t_checks_on` does, plus `--path:src` so the
 # package imports resolve. Everything else - `--mm:arc`, `--panics:on`,
-# `-d:release`, and anything a later task adds - is kept.
+# `-d:release`, and anything later added beside them - is kept.
 set(MCF5307_EA_COMMAND "")
 foreach(argument IN LISTS MCF5307_NIM_COMMAND)
     if(argument STREQUAL "--compileOnly"
@@ -1462,8 +1459,7 @@ add_test(NAME t_exception
 #
 # One registered name, and no corpus beside it. The corpus runner executes
 # assembled encodings, and a bus fault is raised by a board rather than by an
-# instruction, so there is no encoding to assemble. The whole of the evidence
-# for this task is the registered name below.
+# instruction, so there is no encoding to assemble.
 #
 # THE FLAG SET IS THE LIBRARY'S OWN, taken from the compile command this
 # configure built for the library itself, so that the modules this test asserts
