@@ -739,8 +739,7 @@ check(inTokenInert == wantInTokenInert,
 # with `isp1181_write` as the firmware writes it, the packet arrives through
 # `isp1181_rx` as the bus delivers it, and what the case asserts is the
 # argument the C caller's own `isp1181_irq_fn` received. A model that set the
-# bit and never reached the callback would satisfy every Nim-side case in
-# `t_isp1181` and would leave IRQ3 dead in the consumer.
+# bit and never reached the callback would leave IRQ3 dead in the consumer.
 #
 # Every byte is a hand-written literal. `0xC2` is write interrupt enable and
 # `0x07 0x1F 0x00 0x00` is `0x00001F07` lower byte first, which is the value

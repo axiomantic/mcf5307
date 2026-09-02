@@ -18,8 +18,8 @@
 ## operand evaluation walks them. The MOVEM mask precedes the EA extension
 ## words, so the mask is fetched before the EA's own words.
 ##
-## CYCLES. The block above the constants in `cpu.nim` says why nothing checks
-## any of them. Every instruction in this group HAS a timing row, and NONE OF
+## CYCLES. See the block above the constants in `cpu.nim`. Every instruction
+## in this group HAS a timing row, and NONE OF
 ## THE RETURNS HERE WAS DERIVED FROM ONE. Some of those rows carry a SINGLE
 ## cell that the return contradicts outright, so no effective-address
 ## flattening explains them: `moveq #imm,Dx` is 1(0/0) against the 4 returned,
@@ -252,7 +252,7 @@ proc moveFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
     # - the legality table, not this call site, is where SWAP's operand rule
     # lives.
     #
-    # None should be written to: reaching it needs a
+    # No test should be written to reach it: reaching it needs a
     # decoder change, so a test that covered it would have to introduce the
     # very defect the mask ordering prevents.
     if not eaIsLegalFor(opSwap, d.ea):
