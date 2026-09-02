@@ -436,7 +436,7 @@ proc decodeWord*(word: uint16): Decoded =
     # The condition is bits 11..8 and the operand is the low six bits.
     #
     # What the 1024 words of this space are. Sixteen conditions times
-    # sixty-four effective-address values, and the split is measured:
+    # sixty-four effective-address values.
     #
     # TRAPF IS NOT IMPLEMENTED HERE, and the excluded words are left unclaimed
     # rather than decoded: deciding they were Scc would execute a TRAPF as a

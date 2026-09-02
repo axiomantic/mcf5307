@@ -361,13 +361,12 @@ check(nilStatuses == wantNilStatuses,
 # BLOCK 4A. A VERSION-1 BLOCK IS REFUSED BY NAME AND IS NEVER READ.
 #
 # THIS IS THE CASE THE VERSION WORD EXISTS FOR, AND EVERY OTHER CASE IN THIS
-# FILE IS BLIND TO IT. Version 1's payload is the same 84 bytes version 2 opens
-# with: the four `pending*` fields were APPENDED, so every version-1 field sits
-# at the offset version 2 reads it from. A reader that skipped the version word
-# would therefore load all fourteen of the older fields CORRECTLY and take the
-# four new ones from the checksum and from whatever followed the shorter block.
-# There is no corruption for a checksum to notice, because the checksum of a
-# version-1 block is honest - of a version-1 block.
+# FILE IS BLIND TO IT. Version 1's payload is shorter than version 2's and does
+# not share its field offsets, so a reader that skipped the version word would
+# decode the block from the wrong offsets and take its tail from the checksum
+# and from whatever followed the shorter block. There is no corruption for a
+# checksum to notice, because the checksum of a version-1 block is honest - of
+# a version-1 block.
 #
 # SO THE BLOCK BELOW IS A WHOLE, VALID VERSION-1 BLOCK and not a damaged version
 # -2 one: 100 bytes, its own 84-byte payload width, and its own correct FNV-1a.

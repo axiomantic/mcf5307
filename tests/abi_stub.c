@@ -4,8 +4,9 @@
  * WHY IT EXISTS. Cases 3 and 4 of `t0_abi_header` COMPILE AND LINK, and
  * linking is what makes a RENAMED declaration a link error rather than
  * nothing at all. `-fsyntax-only` never links, so the two header compiles
- * alone cannot catch a rename. This stub supplies the definitions the real
- * implementation does not yet carry.
+ * alone cannot catch a rename. This stub supplies a definition for every
+ * name the contract declares, so the two header compiles link without the
+ * real library.
  *
  * `cmake/Nim.cmake` step 4a, part three compiles this file, reads the symbols
  * the object defines with `nm`, and compares that set against the published

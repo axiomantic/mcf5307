@@ -550,9 +550,6 @@ proc eaRefWrite*(ctx: MCF5307Ctx; r: EaRef; size: uint8; value: uint32) =
 # exception model, the bus-fault channel, interrupts and `control.nim`'s own
 # format-error path all need the same frame, and `exception.nim` is a sibling
 # of `control.nim`.
-#
-# There is no vector table object, no fault-status computation and no
-# double-fault handling; this procedure is what those extend.
 
 # `srMaster` sits with the bits `takeException` writes because a status-register
 # bit position is a fact about the register and not about the exception that
@@ -604,10 +601,10 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## it, and `exception.nim`'s `vectorAddress` masks the low twenty bits the
   ## part does not implement.
   ##
-  ## The read below is the only reader of `ctx.vbr`. A core that stored the
-  ## value and dispatched from zero would answer every read-back correctly and
-  ## take every exception to the wrong handler, so the suite adjudicates on the
-  ## handler address it lands on and never on the value it reads back.
+  ## A core that stored the value and dispatched from zero would answer every
+  ## read-back correctly and take every exception to the wrong handler, so the
+  ## suite adjudicates on the handler address it lands on and never on the
+  ## value it reads back.
   ##
   ## A fault inside this procedure is a double fault. Each access is checked
   ## and the procedure returns early, leaving the context halted with `fault`;
@@ -647,12 +644,11 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
 # The `FS` argument is defaulted, and the default is the manual's answer rather
 # than this module's convenience. User's Manual section 3.4, folio 3-14, of the
 # fault status field: "This field is defined for access and address errors only
-# and written as zeros for all other types of exceptions." The two callers
-# outside this module - `control.nim`'s `TRAP` and `irq.nim`'s interrupt - are
-# both "other types", so `0000` is what the manual writes for each of them, and
-# a required parameter would make each of them state a value the manual already
-# fixes. `frameFirstLongword` keeps its own `fs` parameter undefaulted, so the
-# layout is still closed by the compiler one layer down.
+# and written as zeros for all other types of exceptions." Its callers outside
+# this module are all "other types", so `0000` is what the manual writes for
+# each of them, and a required parameter would make each of them state a value
+# the manual already fixes. `frameFirstLongword` keeps its own `fs` parameter
+# undefaulted, so the layout is still closed by the compiler one layer down.
 
 proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
                     fs: uint32 = fsNotAnAccessError) =
