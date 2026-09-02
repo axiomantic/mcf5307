@@ -530,8 +530,8 @@ message("t_claims: the registry defines ${claims_floor} claim(s) in "
 # registered claim's sentence is still in the file that makes it, about a file
 # in which no prose says it.
 #
-# SATISFACTION FROM A COMMENT IS CORRECT AND IS NOT A HOLE. Both sentences
-# registered against `.nim` files live in comments - that is where this
+# SATISFACTION FROM A COMMENT IS CORRECT AND IS NOT A HOLE. Every sentence
+# registered against a `.nim` file lives in a comment - that is where this
 # project's claims are written - so a lookup that demanded the text outside a
 # comment would refuse the only shape the mechanism has ever had. What is
 # refused is satisfaction from THIS FILE'S OWN MACHINE-READ DEFINITIONS, which
@@ -628,13 +628,13 @@ foreach(claim IN LISTS MCF5307_CLAIM_IDS)
     #
     # WHY THE RULE IS NOT "THE TEXT MUST CONTAIN THE NUMBER". That rule was
     # written first and measured against this registry before being discarded:
-    # it fires on SIX of the eight `suite-red` entries, and four of those six
-    # are correct. English states a count of one without a numeral, and this
+    # it fires on `suite-red` entries whose sentence is correct as written.
+    # English states a count of one without a numeral, and this
     # project's prose does it constantly - `A11a_suite_t_irq` quotes "this case
     # and no other case in this file", `edge_flag_suite_t_irq` and
     # `edge_vector_scope_suite_t_irq` each say "THIS BLOCK", and
     # `M3_suite_t_irq`'s zero is the qualitative "a `bool` latch cannot count".
-    # Demanding a numeral of those four would mean editing coherent prose to
+    # Demanding a numeral of those would mean editing coherent prose to
     # satisfy a checker, which inverts this file: the registry quotes the
     # source, and the source is never rewritten to fit the registry.
     #

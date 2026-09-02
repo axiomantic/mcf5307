@@ -366,11 +366,10 @@ check(nilStatuses == wantNilStatuses,
 #
 # SO THE BLOCK BELOW IS A WHOLE, VALID VERSION-1 BLOCK and not a damaged version
 # -2 one: 100 bytes, its own 84-byte payload width, and its own correct FNV-1a.
-# It is the golden vector of the version that shipped before this one, and its
-# first twelve rows are byte-for-byte the rows `goldenStampedBlock` still
-# carries - which is the point. Only the version word and the payload width
-# separate the two, and only the version word is checked before the payload is
-# decoded.
+# It is the golden vector of the version that shipped before this one, and it
+# shares its stamped register rows with `goldenStampedBlock` - which is the
+# point. Only the version word and the payload width separate the two, and
+# only the version word is checked before the payload is decoded.
 #
 # THE REFUSAL MUST BE `stateBadVersion` AND NOT `stateBadWidth`. Both are true
 # of this block and `stateLoad` tests the version first, deliberately: a caller

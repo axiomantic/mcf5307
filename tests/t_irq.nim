@@ -1132,15 +1132,15 @@ block:
 # 2026-08-13 against a copy of today's file with THIS block removed: the same
 # deletion reds block 17.
 #
-# WHY THIS BLOCK STAYS, given that block 17's re-entered edge is vectored too
-# and header item 11 records which mutations each of the two separates. Block
-# 17's vectored take is a SECOND take, reached only because the board re-enters
-# `mcf5307_set_irq` from inside the frame write - a mechanism `takeException`
-# allows through the write callback and which no document in this repository
-# describes. This block is the ordinary reading of the same rule: one vectored
-# level 7, taken FIRST, out of a context nothing has re-entered. A file that
-# pinned the stored vector only through the re-entrant path would lose the rule
-# the moment that path moved, and would report nothing while it did.
+# WHY THIS BLOCK STAYS, given that block 17's re-entered edge is vectored too.
+# Block 17's vectored take is a SECOND take, reached only because the board
+# re-enters `mcf5307_set_irq` from inside the frame write - a mechanism
+# `takeException` allows through the write callback and which no document in
+# this repository describes. This block is the ordinary reading of the same
+# rule: one vectored level 7, taken FIRST, out of a context nothing has
+# re-entered. A file that pinned the stored vector only through the re-entrant
+# path would lose the rule the moment that path moved, and would report nothing
+# while it did.
 #
 # 0x42 IS THE SAME VECTOR BLOCK 5 USES AND FOR THE SAME REASON. Table 3-1,
 # folio 3-13, puts 64-255 in the user-defined range; its slot at $108 holds

@@ -25,9 +25,8 @@
 ## writes both. On ColdFire an unequal pair is `REMU.L`/`REMS.L`, which writes
 ## the remainder only and leaves Dq alone.
 ##
-## There is no exception model yet. A divide by zero is a trap vector on
-## silicon; until the vector table exists it halts the context with `fault`,
-## which is the same channel every other illegal operand uses.
+## A divide by zero is a trap vector on silicon; this core halts the context
+## with `fault` instead, the same channel every other illegal operand uses.
 ##
 ## Cycles. The block above the constants in `cpu.nim` says why nothing checks
 ## any of them. Every instruction in this group has a timing row - ADD and SUB
@@ -411,10 +410,9 @@ proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
     # 5206), vector 5 is reserved". Folios 4-31 and 4-33 add that no registers
     # are affected and that the stack frame points at the offending opcode.
     #
-    # There is no exception model yet, so this halts with `fault` - the channel
-    # the long form already uses and the one every illegal operand in this
-    # module uses. The vector is recorded here so that it need not be
-    # re-derived.
+    # This halts with `fault` instead - the channel the long form already uses
+    # and the one every illegal operand in this module uses. The vector is
+    # recorded here so that it need not be re-derived.
     return trap(ctx)
   let dividend = regD(ctx, d.destReg)
   var quotient: uint32
@@ -465,7 +463,7 @@ proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
     # destination register is unaffected" - and the status word is fully
     # determined: V set, C cleared ("Always cleared"), N and Z cleared
     # ("Cleared if overflow is detected"), X untouched ("Not affected"). This
-    # is the same rule and the same line the long form uses above.
+    # is the same rule and the same line the long form uses below.
     ctx.sr = (ctx.sr and not (ccrC or ccrN or ccrZ)) or ccrV
     return divWordCycles
   setRegD(ctx, d.destReg, (remainder shl 16) or quotient)

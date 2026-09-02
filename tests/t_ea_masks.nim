@@ -8,9 +8,8 @@
 ## only when `eaLegalityFor` returns an empty mask. That is the same test
 ## `eaIsLegalFor` already makes, and that proc's own doc comment in
 ## `decode_types.nim` says why a second list of the same operations drifts.
-## Nothing here is skipped for being unreachable from the decoder: a skip
-## justified by reachability would have skipped `SWAP`, which the PEA mask was
-## hiding while `cpu.nim` carried the sentence "no arm produces `opSwap`".
+## Nothing here is skipped for being unreachable from the decoder: an
+## unreachable-looking operation can be one a wrong mask is hiding.
 ##
 ## The driver iterates `Operation` and requires a coverage entry for every
 ## operation whose mask is non-empty, so an operation added to the table with
