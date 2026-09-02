@@ -325,7 +325,7 @@ check(refused == wantRefused,
 #
 # The set is derived as the complement of the two hand-written lists, so it
 # needs no third list to maintain and it cannot disagree with them. It is the
-# class that carries the six commands the authority names without an opcode,
+# class that carries the commands the authority names without an opcode,
 # and its log line says a different thing from block 2's on purpose: a reader
 # who hits it has found a gap in the specification and not a decision.
 
@@ -378,8 +378,8 @@ check(speaking == wantSpeaking,
         "recorded as pending and reports the fault",
       $speaking, $wantSpeaking)
 
-# The three classes partition the byte. Without this the three sweeps above
-# could each be green over a set that left opcodes untouched.
+# The classes partition the byte. Without this the sweeps above could each be
+# green over a set that left opcodes untouched.
 type Partition = tuple[implemented: int, refused: int, illegal: int,
                        unspecified: int, total: int]
 let partition: Partition = (implemented: accepted.driven +
@@ -396,7 +396,7 @@ check(partition == wantPartition,
       "partition: the four classes cover all 256 opcodes and none twice",
       $partition, $wantPartition)
 
-# The six commands the authority names without an opcode are recorded in the
+# The commands the authority names without an opcode are recorded in the
 # model rather than left in a comment, so that the day a datasheet arrives the
 # list to close is a list and not a paragraph.
 # The list is empty and the check is kept: asserting the empty case is what
