@@ -973,8 +973,8 @@ block:
 # `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726) was offered all twelve
 # modes of all eight forms and answered the same 96 cells.
 #
-# `(d8,Ay,Xi)` IS NARROWER THAN DATA-ALTERABLE-MINUS-ABSOLUTE. The manual and
-# the assembler
+# `(d8,Ay,Xi)` IS THE CELL A DATA-ALTERABLE-MINUS-ABSOLUTE DESCRIPTION DOES
+# NOT EXCLUDE. The manual and the assembler
 # both drop the INDEXED mode as well, so the long mask is narrower again than
 # that. It is asserted here because a mask corrected only as far as the
 # description would still be wrong and nothing else would say so.
