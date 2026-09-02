@@ -627,7 +627,7 @@ let wantGeometry: seq[Geometry] = @[
   (name: "endpoint 2", capacity: 64, buffers: 2),
   (name: "endpoint 3", capacity: 64, buffers: 1)]
 check(geometry == wantGeometry,
-      "fifos: the five buffers carry design section 9.2's sizes, EP3 single",
+      "fifos: the five buffers carry the authority's sizes, EP3 single",
       $geometry, $wantGeometry)
 
 # The second packet is the whole point of the buffer count, so it is driven on
