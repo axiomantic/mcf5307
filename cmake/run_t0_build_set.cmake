@@ -10,8 +10,8 @@
 #
 # WHY THE FAILURE NEEDED A CHECK OF ITS OWN. A target that is registered but not
 # built leaves its test `***Not Run`, which is a failure ctest reports only when
-# the executable is genuinely absent at run time. Three separate things hid that
-# in this tree at once:
+# the executable is genuinely absent at run time. That failure was hidden in
+# this tree from more than one direction:
 #
 #   - `--no-tests=error` catches a `-R` pattern that selects NOTHING. It says
 #     nothing about a selected test whose binary is missing, and `AGENTS.md`
@@ -20,7 +20,7 @@
 #     every `add_executable`. It therefore produced the missing binary before any
 #     test ran -- it MASKED the omission rather than reporting it.
 #   - `.github/workflows/ci.yml` builds with `cmake --build build --parallel`,
-#     the default target again. No CI job has ever run the t0 BUILD preset.
+#     the default target again.
 #
 # So the omission was invisible from every angle while `ctest --preset t0` was
 # quietly wider than the build preset that is supposed to feed it. This check

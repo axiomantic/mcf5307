@@ -690,8 +690,8 @@ type RunResult = object
 
 proc runFamily(c: Coverage; operand: EA; imm: uint8 = 1'u8): RunResult =
   ## THE IMMEDIATE IS A PARAMETER SO THAT ASSERTION (8) CAN VARY IT, and its
-  ## default is `1`, so
-  ## assertions (3) and (4) drive exactly the run they always drove.
+  ## default is `1`, so assertions (3) and (4) drive exactly the run they
+  ## always drove.
   # THE BOARD IS RESET TOO, AND NOT ONLY THE CONTEXT. `board` is a single
   # global that every legal run writes through. Nothing today writes near
   # `execBase` - `ramBase` and `stackBase` are both far from it - so the
