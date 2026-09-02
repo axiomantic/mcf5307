@@ -998,12 +998,10 @@ CASES = {
 
         # ---------------------------------- THE WORD MULTIPLY AND DIVIDE
         #
-        # THE CORPUS CARRIED NO WORD-FORM CASE OF ANY KIND before these, for
-        # the same reason the core had no word form: `decodeLogicLine` called
-        # opmodes 011 and 111 of lines 1000 and 1100 illegal. They are real
-        # instructions - `m68k-elf-as -mcpu=5307` assembles them, the
-        # reference prints a "(Word)" instruction format for each, and the
-        # timing table times them.
+        # The word forms of multiply and divide - opmodes 011 and 111 of
+        # lines 1000 and 1100 - are real instructions: `m68k-elf-as
+        # -mcpu=5307` assembles them, the reference prints a "(Word)"
+        # instruction format for each, and the timing table times them.
         #
         # EVERY EXPECTED VALUE BELOW IS DERIVED FROM THE REFERENCE AND NOT FROM
         # THIS PROJECT'S CORE. This generator takes only the ENCODING from the
@@ -1164,9 +1162,10 @@ CASES = {
 
         # -------------------------------------------- DIVS, REMU and REMS
         #
-        # The cases below are chosen to be DISCRIMINATING on the status word,
-        # which is the half of these instructions that a plausible wrong
-        # implementation gets wrong while still writing the right register.
+        # The DIVS, REMU and REMS cases below are each chosen to be
+        # DISCRIMINATING on the status word, which is the half of these
+        # instructions that a plausible wrong implementation gets wrong while
+        # still writing the right register.
         {
             # AN OVERFLOW CLEARS N AND Z. The reference: "N
             # Cleared if overflow is detected", "Z Cleared if overflow is
