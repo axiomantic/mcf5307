@@ -142,8 +142,8 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * compiler diagnostic and not a mechanism: a toolchain that does not know the
  * attribute expands it to nothing and says so in no way at all, which is the
  * silent-success shape this project refuses to rest anything on. It is here
- * because it costs nothing and catches the mistake early on the two compilers
- * that build this library's only consumer. What actually protects a caller who
+ * because it costs nothing and catches the mistake early on gcc and clang.
+ * What actually protects a caller who
  * ignores the status is described at `mcf5307_runtime_init` below. */
 #if defined(__GNUC__) || defined(__clang__)
 #  define MCF5307_MUST_CHECK __attribute__((warn_unused_result))
