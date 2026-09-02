@@ -136,10 +136,10 @@ type
     # can fall in two different calls; a local would forget the inhibition
     # between them and the interrupt would land at the entry after all.
     #
-    # It is set by `takeException` in `machine.nim` and by nothing else, which
-    # is what makes the rule hold for every exception rather than for the one
-    # exception that happens to be implemented. A new exception path inherits
-    # the rule by arriving there, and must not set this field itself.
+    # `takeException` in `machine.nim` sets it, which is what makes the rule
+    # hold for every exception rather than for the one exception that happens
+    # to be implemented. A new exception path inherits the rule by arriving
+    # there, and must not set this field itself.
     atHandlerEntry*: bool       ## the next instruction is a handler's first
 
     # An access error on an operand write is recorded here and taken at the

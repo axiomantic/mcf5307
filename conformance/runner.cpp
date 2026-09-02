@@ -1,11 +1,5 @@
 // conformance/runner.cpp - the ColdFire conformance corpus runner.
 //
-// The logic group's registrations are left registered and failing on purpose.
-// There is no logic, bit-operation or shift executor yet, so each committed
-// logic case reaches no executor and traps. `mcf5307_conformance_all`, which
-// runs every group, fails with it. Nothing is silenced to hide that: all the
-// tests stay registered and the corpus is untouched.
-//
 // The runner registers one CTest test per group, and the group is selected by
 // the registered test name, never by a forwarded argument, because CTest does
 // not forward arguments after `--`, so each registration carries

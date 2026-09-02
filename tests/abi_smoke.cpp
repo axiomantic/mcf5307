@@ -54,10 +54,9 @@ namespace {
  * Taking the address is the assertion: a renamed or dropped definition fails
  * the link, and the test does not need to read the value to fail.
  *
- * The address set is the defined set and not the published set. This test
- * links the real library, and most of the published surface has no definition
- * yet, so an address set taken from the header is an unresolved symbol per
- * unimplemented name and no executable at all. The whole published surface is
+ * The address set is the defined set and not the published set. It is
+ * generated from what step 4a measured, so a published name with no
+ * definition cannot make this test unlinkable. The whole published surface is
  * asserted by cases 3 and 4 of `t0_abi_header`, which link it against
  * `tests/abi_stub.c`. A name nothing defines cannot be renamed and cannot be
  * dropped, so asserting it here buys no coverage those cases do not give.

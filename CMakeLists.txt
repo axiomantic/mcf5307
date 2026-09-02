@@ -5,8 +5,8 @@
 #
 # 3.20 is the floor because `--no-tests=error` is a CTest flag that the earlier
 # releases do not carry, and without that flag every `-R` check in this project
-# passes against no code at all. The requirement is on the installed CTest;
-# `.github/workflows/ci.yml` checks the installed version in every job.
+# passes against no code at all. The requirement is on the installed CTest,
+# which `.github/workflows/ci.yml` checks before it configures.
 
 cmake_minimum_required(VERSION 3.20)
 

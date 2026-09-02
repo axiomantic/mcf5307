@@ -159,7 +159,7 @@ proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
 proc boardRead(ctx: MCF5307Ctx; address: uint32; size: uint8;
                st: var Mcf5307BusStatus): uint32 =
   ## One board read, reporting what the board reported and deciding nothing.
-  ## The two callers below are the decision and they differ.
+  ## The callers below are the decision and they differ.
   st = Mcf5307BusStatus.busOk
   if ctx.readFn.isNil:
     ctx.fault = true

@@ -255,8 +255,7 @@ proc moveFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
     # `execSwap` exchange the halves of a register the operand never named.
     # For that to be correct, `eaLegalityFor(opSwap)` must still be `{eaDn}`
     # - the legality table, not this call site, is where SWAP's operand rule
-    # lives. Deleting the guard would also make `opSwap` the only arm of this
-    # `case` without the check its siblings all perform.
+    # lives.
     #
     # No test reaches it, and none should be written to: reaching it needs a
     # decoder change, so a test that covered it would have to introduce the

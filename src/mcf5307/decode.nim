@@ -232,8 +232,7 @@ proc decodeWord*(word: uint16): Decoded =
   elif (word and 0xC000'u16) == 0x0000'u16 and
       ((word shr 12) and 0x3'u16) != 0'u16:
     # `00` prefix: MOVE. The size is bits 13..12 (01 byte, 11 word, 10
-    # long; 00 is the immediate-logic group, which is not MOVE and must
-    # fall through to illegal until the logic task decodes it). The
+    # long; 00 is the immediate-logic group, which is not MOVE). The
     # destination mode is bits 8..6: 000 data register, 001 address
     # register (MOVEA), and the alterable memory modes. The destination
     # register is bits 11..9 and the source EA is the low six bits.

@@ -82,8 +82,8 @@
 # The two are separated so the failure names which one happened.
 #
 # The `t0_` prefix is what puts this name in front of CI -
-# `.github/workflows/ci.yml` runs `-R '^t0_'` in two jobs, and this name joins
-# that pattern with no edit to the workflow.
+# `.github/workflows/ci.yml` selects tests with `T0_PATTERN`, and this name
+# joins that pattern with no edit to the workflow.
 
 # The consume step. It runs on every configure, because this file is what
 # registers the test: a configure that does not reach this line registers no
@@ -1933,7 +1933,7 @@ foreach(mcf5307_driver IN LISTS MCF5307_GENERATED_DRIVERS)
                 mcf5307_hit_suite "${mcf5307_hit}")
             # A DRIVER MAY ONLY CHECK ITS OWN SUITE. Without this a single
             # driver naming every suite would satisfy the comparison
-            # below while seven runs went unexamined.
+            # below while every other suite's run went unexamined.
             if(NOT mcf5307_hit_suite STREQUAL mcf5307_driver_suite)
                 message(FATAL_ERROR
                     "tests: the generated driver ${mcf5307_driver_name} calls "

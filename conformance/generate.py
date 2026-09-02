@@ -1990,8 +1990,7 @@ CASES = {
             # and `ea7PCIndex` share `indexOperand`, so the width rule is one
             # line of code serving two addressing modes; a case that covered
             # only the PC form would leave the other half of that line
-            # unguarded. This is the only case in the corpus that reaches
-            # `(d8,An,Xn)` at all.
+            # unguarded.
             "name": "btst_b_an_index",
             "mnemonic": "btst",
             "instruction": "btst %d1,(4,%a0,%d2)",
@@ -2374,7 +2373,7 @@ CASES = {
         # register (d1) and the low six bits are the source effective address
         # (d0). Table 3-7, page 3-23, gives the operation as "Destination -
         # Source". A core that subtracted the other way round gets the sign and
-        # the carry of `cmp_l_source_greater` backwards.
+        # the carry of `cmp_l_source_greater_sets_n_and_c` backwards.
         {
             "name": "cmp_l_equal_sets_z",
             "mnemonic": "cmp.l",

@@ -1,10 +1,11 @@
 /* mcf5307.h - the C application binary interface of the MCF5307 ColdFire core
  * and the ISP1181 USB device model.
  *
- * The Nim implementation exports these symbols with `{.exportc, cdecl.}` and
- * both sides include this file. C++ owns the board and calls down into this
- * interface; nothing here calls up into C++ except through the C function
- * pointers the board installs at construction time.
+ * The Nim implementation exports these symbols with
+ * `{.exportc: "<c name>", cdecl, dynlib.}` and both sides include this file.
+ * C++ owns the board and calls down into this interface; nothing here calls
+ * up into C++ except through the C function pointers the board installs at
+ * construction time.
  *
  * What crosses: fixed-width integers, opaque pointers to context objects
  * allocated on the other side, raw byte buffers with an explicit length, and
