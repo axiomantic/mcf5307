@@ -25,8 +25,8 @@
 ## A divide by zero is a trap vector on silicon; this core halts the context
 ## with `fault` instead, the same channel every other illegal operand uses.
 ##
-## CYCLES. The block above the constants in `cpu.nim` says why nothing checks
-## any of them. `adda.l`, `suba.l`, `rems.l` and `remu.l` have no timing row at
+## CYCLES. See the block above the constants in `cpu.nim`. `adda.l`, `suba.l`,
+## `rems.l` and `remu.l` have no timing row at
 ## all, established by full enumeration of the timing pages rather than by
 ## looking at neighbours: the opcode column is not alphabetical, so a gap
 ## between neighbours proves nothing. `control.nim` records the same absence for
