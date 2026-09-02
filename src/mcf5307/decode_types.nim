@@ -2,17 +2,13 @@
 ##
 ## This module is the bottom of the core, above `ea` alone. It holds the
 ## types that the decoder (`decode.nim`) and every instruction-group executor
-## both need. Those modules are siblings and neither imports the other; each
-## one reads its types from here. `cpu.nim` sits above them and owns `step`.
+## both need. Those modules are siblings; each one reads its types from here.
+## `cpu.nim` sits above them and owns `step`.
 ##
 ## The effective-address legality table lives here for the same reason. The
 ## executor modules ask whether an operand is legal before they run an
 ## instruction. The table reads an `Operation` and an `EA` and it reads no
 ## decoder state, so it belongs beside the types and not beside the decoder.
-##
-## No module re-exports this one. A caller that needs `Operation`, `Decoded`,
-## `MCF5307Ctx`, the board callback types or `eaIsLegalFor` imports
-## `mcf5307/decode_types` by name.
 
 import mcf5307/ea
 

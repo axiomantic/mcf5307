@@ -1215,15 +1215,14 @@ function(_mcf5307_claims_following_indent text_name find_name out)
 endfunction()
 
 # ---- the REACHABILITY PROBE, and the verdict it withholds -------------------
-# THE DEFECT THIS EXISTS FOR, MEASURED by the gate judge. An
-# `equivalent` claim was registered whose single edit changes `alu.nim`'s
-# `if carry: sr = sr or (ccrC or ccrX)` to `if carry: sr = sr or ccrC` - a real
-# semantic break of every ADDX chain. `alu.nim` is imported by `cpu.nim`, so the
-# reached-the-compiler control above PASSED. The observer never calls
-# `setAddCc`. The driver issued UPHELD: "none of the 225 scenarios separates
-# this". THE MECHANISM MANUFACTURED EXACTLY THE KIND OF CLAIM IT EXISTS TO
-# CATCH, and in the same run the identical mutation registered as `suite-red`
-# drove `t_alu` one red.
+# THE DEFECT THIS EXISTS FOR, MEASURED by the gate judge. An `equivalent` claim
+# was registered whose single edit changes `alu.nim`'s `if carry: sr = sr or
+# (ccrC or ccrX)` to `if carry: sr = sr or ccrC` - a real semantic break of
+# every ADDX chain. The reached-the-compiler control above PASSED. The observer
+# never calls `setAddCc`. The driver issued UPHELD: "none of the 225 scenarios
+# separates this". THE MECHANISM MANUFACTURED EXACTLY THE KIND OF CLAIM IT
+# EXISTS TO CATCH, and in the same run the identical mutation registered as
+# `suite-red` drove `t_alu` one red.
 #
 # THE READ THAT WENT WRONG IS "the observer did not separate it" TAKEN FOR
 # "the observer looked". Those are the same output. The compiler control

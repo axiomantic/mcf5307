@@ -76,7 +76,7 @@ const
   # not define, and this set is the other five.
   #
   # This set is not the manual's DATA class: `decode_types.nim` pairs it with
-  # `eaAllModes` for nine operations that accept `An`, which DATA excludes. The
+  # `eaAllModes` for the operations that accept `An`, which DATA excludes. The
   # genuine DATA-class mask is `eaDataAddressing` in `decode_types.nim`, which
   # pairs `eaDataAlterableModes` - every mode but `An` - with this set. DATA and
   # DATA ALTERABLE differ on this part in their mode-7 sub-variants alone.
