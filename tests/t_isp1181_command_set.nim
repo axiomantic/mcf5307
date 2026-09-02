@@ -92,7 +92,7 @@ const implementedOpcodes: array[59, uint8] = [
   # protection against ... writing into an OUT buffer" - and note [4] p.106
   # gives validating an OUT endpoint buffer as unpredictable. So the opcode is
   # implemented for every endpoint this model buffers, and the direction is a
-  # run-time precondition the model refuses by name. These six are in
+  # run-time precondition the model refuses by name. These are in
   # `speaksOnFreshHandle` below, because a fresh handle has EPDIR = 0 for all
   # sixteen slots and every one of them then addresses the wrong direction.
   0x02'u8, 0x03'u8, 0x04'u8,          # endpoint 1 to 3 buffer write
