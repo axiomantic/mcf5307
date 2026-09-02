@@ -263,9 +263,8 @@ proc observe(ctx: MCF5307Ctx): Outcome =
   ## block which takes a SECOND interrupt asserts the SECOND frame. Each frame
   ## is self-aligning and goes below the last (`exceptionFrameBase`), so a
   ## fixed address would keep reporting the first frame while the assertion's
-  ## label claimed the second: block 3's steps 3 and 4 once
-  ## read the first frame's stacked program counter and never looked at the
-  ## second frame at all. When nothing was taken, A7 is the reset stack pointer
+  ## label claimed the second. When nothing was taken, A7 is the reset stack
+  ## pointer
   ## and the two words below are the zeros `freshBoard` wrote.
   (sp: mcf5307_get_reg(ctx, 15),
    pc: mcf5307_get_reg(ctx, 17),
@@ -1613,8 +1612,8 @@ block:
 # is a C ABI entry point (`include/mcf5307.h`), its guard's whole contract is
 # that the call RETURNS, and a call that did not return would end the process
 # before the assertion below was reached - so REACHING A VERDICT AT ALL is what
-# decides it. Nothing measured it before: no case in this file had ever passed
-# a nil context to this entry point.
+# decides it. No other case in this file passes a nil context to this entry
+# point.
 #
 # THE TAKE AFTER IT IS A REAL ONE AND NOT A FORMALITY, for the reason block 14
 # gives about its own: this block has no BEFORE to compare against, so the tuple

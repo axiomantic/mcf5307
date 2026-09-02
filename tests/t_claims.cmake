@@ -241,9 +241,9 @@ set(CLAIM_A11a_suite_t_irq_EDIT_2_REPLACE "  takeException(ctx, pending.vector, 
 # THE MEASURED CONSEQUENCE, and the reason both halves are registered rather
 # than one. Moving `ctx.irq7Vector = vector` OUT of the level-7 guard leaves a
 # store that still runs at the edge and is then overwritten by every later
-# presentation. MEASURED against the file an earlier round left -
-# 25 cases: that move redded NOTHING, and the observer of `tests/t_claims.nim`
-# UPHELD it over all 225 scenarios of the space IT THEN HAD, because every
+# presentation. MEASURED against an earlier, narrower observer,
+# that move redded NOTHING, and the observer of `tests/t_claims.nim`
+# UPHELD it over every scenario of the space IT THEN HAD, because every
 # scenario that file then presented was autovectored. A defect no suite and no
 # observer could see.
 #
