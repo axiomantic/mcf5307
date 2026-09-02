@@ -602,9 +602,8 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## part does not implement.
   ##
   ## A core that stored the value and dispatched from zero would answer every
-  ## read-back correctly and take every exception to the wrong handler, so the
-  ## suite adjudicates on the handler address it lands on and never on the
-  ## value it reads back.
+  ## read-back correctly and take every exception to the wrong handler; the
+  ## handler address it lands on is what distinguishes them.
   ##
   ## A fault inside this procedure is a double fault. Each access is checked
   ## and the procedure returns early, leaving the context halted with `fault`;

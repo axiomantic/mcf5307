@@ -9,8 +9,8 @@
 # job pins the same one.
 #
 # It never runs `nim`. `.nim-version` selects nothing -- `mise` reads no
-# idiomatic version file, so the pin and the compiler on `PATH` are joined only
-# by `cmake/Nim.cmake`, which fails configure on a mismatch. That join is
+# idiomatic version file. The pin and the compiler on `PATH` are joined by
+# `cmake/Nim.cmake`, which fails configure on a mismatch. That join is
 # exercised by the configure step of `ci.yml`'s build job. This job asserts the
 # pin's shape and its single-definition-site property.
 
