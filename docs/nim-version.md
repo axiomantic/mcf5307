@@ -50,8 +50,8 @@ pin, and the compiler that answered.
 This is the only mechanism that connects the repository pin to the machine
 compiler. Without it, a machine-wide pin move is silent.
 
-`.nim-version` is a declared configure dependency (`cmake/Nim.cmake:342`), so
-an edit to it re-runs the configure step.
+`.nim-version` is a declared configure dependency (`CMAKE_CONFIGURE_DEPENDS` in
+`cmake/Nim.cmake`), so an edit to it re-runs the configure step.
 
 ## Rule 3 — A major-version migration is scheduled work
 
