@@ -263,8 +263,8 @@ proc observe(ctx: MCF5307Ctx): Outcome =
   ## block which takes a SECOND interrupt asserts the SECOND frame. Each frame
   ## is self-aligning and goes below the last (`exceptionFrameBase`), so a
   ## fixed address would keep reporting the first frame while the assertion's
-  ## label claimed the second. When nothing was taken, A7 is the reset stack
-  ## pointer
+  ## label claimed the second. When nothing was taken, A7 is the reset
+  ## stack pointer
   ## and the two words below are the zeros `freshBoard` wrote.
   (sp: mcf5307_get_reg(ctx, 15),
    pc: mcf5307_get_reg(ctx, 17),
@@ -306,7 +306,7 @@ proc newCtxSr(sr: uint32): MCF5307Ctx =
   ##
   ## THE SPEND IS IN THE HELPER AND NOT IN EACH BLOCK, and the trade is worth
   ## stating. In each block it would be one more `mcf5307_exec` line per block
-  ## saying the same thing once per block, and the property it spells is pinned in
+  ## saying the same thing, and the property it spells is pinned in
   ## one place already (block 22). Here it is one line, and the price is that
   ## `execPc` rather than `execBase` is the address every other block's first
   ## frame carries - which the constant is named and commented for.

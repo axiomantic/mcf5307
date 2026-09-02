@@ -85,8 +85,8 @@ proc mcf5307RuntimeInit(): cint {.exportc: "mcf5307_runtime_init",
   ## error code, and mixing the two conventions inside one contract is the
   ## footgun that decided it.
   ##
-  ## What replaces the abort's guarantee. The abort existed so that a caller
-  ## could not proceed with a runtime that does not exist. C lets a caller drop
+  ## Why the status alone is not the guarantee. A caller must not proceed with
+  ## a runtime that does not exist. C lets a caller drop
   ## a return value, so the status alone would not have kept that guarantee.
   ## `mcf5307_create` and `isp1181_create` read the latch themselves and hand
   ## back no context once it is abandoned, and every other call in the contract
