@@ -201,7 +201,7 @@ DIRTY_A = 0x0BADC0DE   # the address-register destination seed
 # bit 1 clear too, so a core that read the wrong end of the longword also
 # answers differently. The bit number is inside a byte, so the separation is of
 # the access width alone and does not depend on how an out-of-range bit number
-# is reduced - see uncertainty 4 in `logic.nim`'s header.
+# is reduced.
 MEM_BASE = 0x2000
 MEM_SEED_BYTES = (0x02, 0x5A, 0x3C, 0xC1)
 MEM_GUARD = 0x0BADC0DE   # the longword after a longword memory destination
@@ -1542,8 +1542,7 @@ CASES = {
         # Neither case uses a bit number its operand cannot hold, and that is
         # deliberate. `logic.nim` reduces an out-of-range bit number modulo the
         # operand width, and no passage of the reference states any modulus -
-        # see uncertainty 4 in that module's header, which also says why
-        # Figure 3-8's `MODULO (OFFSET)` annotation does not settle it.
+        # and Figure 3-8's `MODULO (OFFSET)` annotation does not settle it.
         # That reduction is this core's choice, and the corpus must not pin a
         # choice no document supports. The two cases below get the same
         # discrimination out of in-range numbers:
@@ -2010,7 +2009,7 @@ CASES = {
     #   CMP, CMPA, CMPI
     #       "Destination - Source" (Table 3-7, page 3-23) with the result
     #       discarded. N, Z, V and C come from that subtraction and X is not
-    #       written. The X rule is uncertainty 2 in `control.nim`'s header: the
+    #       written. The X rule is unsettled: the
     #       same section 3.2.1.5 says X takes C's value "for arithmetic
     #       operations", which read literally would have a comparison write it.
     #       These cases assert X unchanged, so a reader who reverses that
