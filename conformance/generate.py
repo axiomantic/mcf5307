@@ -2033,9 +2033,7 @@ CASES = {
             # never executed, so it carries no assertion of its own.
             # `conformance/runner.cpp` supplies the missing one: it asserts
             # `mcf5307_faulted`, then `mcf5307_halted`, then a non-zero cycle
-            # return, before it compares one register. Measured on the mutation
-            # "the encoding word is 0000 instead of 4e71" - a NOP that is not
-            # there - the runner reports the trap.
+            # return, before it compares one register.
             #
             # `pc` separates a NOP from every other one-word instruction in this
             # group: the program counter advances by exactly one word and by

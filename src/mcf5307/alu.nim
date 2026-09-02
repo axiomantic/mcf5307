@@ -6,9 +6,8 @@
 ## register file, the board accesses and the effective-address evaluation are
 ## `mcf5307/machine`'s. The word forms are `execMulWord` and `execDivWord`.
 ##
-## This module is a sibling of `move.nim` and of `decode.nim`. It imports
-## neither, and neither imports it. An executor that reaches into another
-## executor for a helper inverts the layering one level down.
+## This module does not reach into another executor for a helper; that would
+## invert the layering one level down.
 ##
 ## Arithmetic on this part is 32-bit. `ADD.B`, `ADD.W`, `ADDA.W`, `ADDI.B`,
 ## `ADDQ.W`, `NEG.W`, `ADDX.W` and the rest of the byte and word forms are
@@ -26,11 +25,10 @@
 ## with `fault` instead, the same channel every other illegal operand uses.
 ##
 ## CYCLES. See the block above the constants in `cpu.nim`. `adda.l`, `suba.l`,
-## `rems.l` and `remu.l` have no timing row at
-## all, established by full enumeration of the timing pages rather than by
-## looking at neighbours: the opcode column is not alphabetical, so a gap
-## between neighbours proves nothing. `control.nim` records the same absence for
-## CMPA.
+## `rems.l` and `remu.l` have no timing row at all, established by full
+## enumeration of the timing pages rather than by looking at neighbours: the
+## opcode column is not alphabetical, so a gap between neighbours proves
+## nothing. `control.nim` records the same absence for CMPA.
 ##
 ## The REMx forms do not inherit the divide row. This module models them as
 ## behaviour of their own inside `execDiv` - an unequal register pair writes

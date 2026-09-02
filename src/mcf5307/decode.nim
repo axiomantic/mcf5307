@@ -5,7 +5,7 @@
 ## calls no instruction-group executor.
 ##
 ## The decoder is a level-2 module beside the executors. Both levels read the
-## shared types from `decode_types`, and neither imports the other:
+## shared types from `decode_types`:
 ##
 ##     decode_types            the shared types and the EA legality table
 ##        ^          ^
