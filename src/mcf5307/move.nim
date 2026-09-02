@@ -3,28 +3,23 @@
 ## This module executes MOVE, MOVEA, MOVEQ, MOVEM, LEA, PEA, LINK and UNLK,
 ## and nothing else. The register file, the condition-code bits, the board
 ## accesses and the effective-address evaluation live in `mcf5307/machine`,
-## which sits at the `decode_types` level and which both this module and
-## `alu.nim` import.
+## which sits at the `decode_types` level.
 ##
-## The decoder (`mcf5307/decode`) recognizes the instruction words and
-## supplies the effective address in bits 5..0 of the word; this module
-## executes them. This module and the decoder are siblings. Both read the
-## shared types from `mcf5307/decode_types`, and neither imports the other.
-## `mcf5307/cpu` sits above both: it owns `step`, and `step` is the one
-## procedure that calls the decoder and then calls `moveFamily` below.
-## The extension words of an instruction (displacements,
-## index words, immediate values, and the MOVEM register mask) live in the
-## instruction stream after the opcode word, and are consumed here as the
-## operand evaluation walks them. The MOVEM mask precedes the EA extension
-## words, so the mask is fetched before the EA's own words.
+## The decoder (`mcf5307/decode`) recognizes the instruction words and supplies
+## the effective address in bits 5..0 of the word; this module executes them.
+## The extension words of an instruction (displacements, index words, immediate
+## values, and the MOVEM register mask) live in the instruction stream after
+## the opcode word, and are consumed here as the operand evaluation walks them.
+## The MOVEM mask precedes the EA extension words, so the mask is fetched
+## before the EA's own words.
 ##
-## CYCLES. See the block above the constants in `cpu.nim`. Every instruction
-## in this group HAS a timing row, and NONE OF
-## THE RETURNS HERE WAS DERIVED FROM ONE. Some of those rows carry a SINGLE
-## cell that the return contradicts outright, so no effective-address
-## flattening explains them: `moveq #imm,Dx` is 1(0/0) against the 4 returned,
-## `swap Dx` is 1(0/0) against 4, `link.w Ay,#imm` is 2(0/1) against 8, and
-## `unlk Ax` is 3(1/0) against 6. `movem.l` is `2+n` against the `8+2n` here.
+## CYCLES. See the block above the constants in `cpu.nim`. Every instruction in
+## this group HAS a timing row, and NONE OF THE RETURNS HERE WAS DERIVED FROM
+## ONE. Some of those rows carry a SINGLE cell that the return contradicts
+## outright, so no effective-address flattening explains them: `moveq #imm,Dx`
+## is 1(0/0) against the 4 returned, `swap Dx` is 1(0/0) against 4, `link.w
+## Ay,#imm` is 2(0/1) against 8, and `unlk Ax` is 3(1/0) against 6. `movem.l`
+## is `2+n` against the `8+2n` here.
 ##
 ## Instruction semantics, register numbering and addressing-mode behaviour are
 ## taken from the ColdFire Family Programmer's Reference Manual and the
@@ -133,11 +128,6 @@ proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## of the result is set", Z as "Set if the result is zero". The result of
   ## that operation is the whole register, so N is bit 31 and Z spans all 32
   ## bits - which is the size argument of 4 below, not 2.
-  ##
-  ## `tests/t_move.nim` keeps an N-separator case on each side of the reading
-  ## that was ambiguous, `0x0000FFFF` and `0xFFFF0000`, whose halves disagree
-  ## in their top bit, so a core that took N from bit 15 goes red here rather
-  ## than merely disagreeing with this note.
   let v = regD(ctx, d.destReg)
   let swapped = (v shr 16'u32) or (v shl 16'u32)
   setRegD(ctx, d.destReg, swapped)
