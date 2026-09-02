@@ -263,9 +263,8 @@ proc observe(ctx: MCF5307Ctx): Outcome =
   ## block which takes a SECOND interrupt asserts the SECOND frame. Each frame
   ## is self-aligning and goes below the last (`exceptionFrameBase`), so a
   ## fixed address would keep reporting the first frame while the assertion's
-  ## label claimed the second: block 3's steps 3 and 4 once
-  ## read the first frame's stacked program counter and never looked at the
-  ## second frame at all. When nothing was taken, A7 is the reset stack pointer
+  ## label claimed the second. When nothing was taken, A7 is the reset stack
+  ## pointer
   ## and the two words below are the zeros `freshBoard` wrote.
   (sp: mcf5307_get_reg(ctx, 15),
    pc: mcf5307_get_reg(ctx, 17),
@@ -307,7 +306,7 @@ proc newCtxSr(sr: uint32): MCF5307Ctx =
   ##
   ## THE SPEND IS IN THE HELPER AND NOT IN EACH BLOCK, and the trade is worth
   ## stating. In each block it would be one more `mcf5307_exec` line per block
-  ## saying the same thing twenty times, and the property it spells is pinned in
+  ## saying the same thing once per block, and the property it spells is pinned in
   ## one place already (block 22). Here it is one line, and the price is that
   ## `execPc` rather than `execBase` is the address every other block's first
   ## frame carries - which the constant is named and commented for.
@@ -1013,8 +1012,8 @@ block:
 # out-of-range level away from `autovectorFor`, whose parameter is a checked
 # range and whose violation ends the process under `--panics:on`.
 #
-# THE PROPERTY RESTS ENTIRELY ON `level >= 1`, AND NOTHING MEASURED IT -
-# deleting that bound left all sixteen cases of the previous revision green.
+# THE PROPERTY RESTS ENTIRELY ON `level >= 1`, AND THIS BLOCK IS WHAT MEASURES
+# IT.
 # The presentation below is VECTORED so that the assertion reports the take a
 # core without the bound would make, rather than the range panic an
 # autovectored one would die on: `uint32(-1)` is 0xFFFFFFFF, which is greater
@@ -1411,16 +1410,12 @@ block:
 # `mcf5307_reset` DOES NOT ROUTE THROUGH `takeException`, which is where every
 # other exception in this core acquires the inhibition (`machine.nim` states
 # why the write sits on that procedure's last line), so the reset has to write
-# the field itself. It used to write `false`, which is a core that can take an
+# the field itself. Writing `false` there would be a core that can take an
 # interrupt at the reset program counter before retiring a single instruction -
 # the state the sentence above forbids.
 #
-# THE PREDECESSOR OF THIS BLOCK PINNED THE OPPOSITE ANSWER AND ITS REASONING
-# SURVIVES ITS VERDICT. It read that a reset must not carry an inhibition into a
-# machine whose program counter it has just moved, "and the first interrupt
-# after the reset would be skipped for a handler that no longer exists". The
-# premise is right - a stale inhibition would be wrong - and the conclusion was
-# wrong, because the reset does not merely FAIL TO CLEAR the field: it has an
+# A STALE INHIBITION WOULD BE WRONG, AND THIS IS NOT ONE. The reset does not
+# merely FAIL TO CLEAR the field: it has an
 # exception of its own to acquire it for, and the instruction the inhibition is
 # spent on is the one the reset itself has just installed.
 #
@@ -1617,8 +1612,8 @@ block:
 # is a C ABI entry point (`include/mcf5307.h`), its guard's whole contract is
 # that the call RETURNS, and a call that did not return would end the process
 # before the assertion below was reached - so REACHING A VERDICT AT ALL is what
-# decides it. Nothing measured it before: no case in this file had ever passed
-# a nil context to this entry point.
+# decides it. No other case in this file passes a nil context to this entry
+# point.
 #
 # THE TAKE AFTER IT IS A REAL ONE AND NOT A FORMALITY, for the reason block 14
 # gives about its own: this block has no BEFORE to compare against, so the tuple
@@ -1654,9 +1649,8 @@ block:
 # THIS IS BLOCK 25'S SHAPE FOR A PROCEDURE THAT IS NOT A C ABI ENTRY POINT, AND
 # THAT DIFFERENCE IS THE WHOLE ARGUMENT FOR THE CASE. `mcf5307_reset` and
 # `mcf5307_set_irq` guard their contexts because a C caller hands them whatever
-# it likes. `resetInterruptEdge` is reached only from Nim, and its docstring
-# named the protection it actually had: "`mcf5307_reset` in `cpu.nim` is the
-# only caller", which is a true sentence about the tree and NOT a mechanism.
+# it likes. `resetInterruptEdge` is reached only from Nim, and a sentence
+# naming its callers is a true sentence about the tree and NOT a mechanism.
 #
 # WHAT MADE IT WORTH A CASE IS THAT THE SENTENCE IS GREEN-FALSIFIABLE.
 # `mcf5307_reset`'s own nil guard returns BEFORE it reaches

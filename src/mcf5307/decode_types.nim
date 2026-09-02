@@ -414,14 +414,6 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # `(d8,PC,Xi)` from the mode-7 set. That is a live defect and not a latent
     # one - under the wide mask `movem.l %d0-%d1,0x400.l`, hand-assembled as
     # `48f9 0003 0000 0400`, reaches the executor and completes its store.
-    # `tests/t_move.nim` and block (13) of `tests/t_ea_masks.nim` red if the
-    # mask is widened again.
-    #
-    # A CONTROL-CLASS MASK IS TOO WIDE HERE: it would add `(d8,An,Xi)` from
-    # the mode set and `(xxx).L`, `(d16,PC)` and `(d8,PC,Xi)` from the mode-7
-    # set. Under a mask that wide, `movem.l %d0-%d1,0x400.l` - `48f9 0003 0000
-    # 0400` - reaches the executor and COMPLETES ITS STORE with `fault` false,
-    # which is the permissive core this mask exists to prevent.
     #
     # THE `ea7` SET IS EMPTY AND THAT IS NOT WHAT REJECTS A MODE-7 OPERAND,
     # for the reason `eaMulDivLong7` states in `ea.nim`: `isEaLegal` returns

@@ -28,7 +28,7 @@ permissions:
   contents: read
 
 env:
-  # THE T0 NAME PREFIXES THIS REPOSITORY REGISTERS. THERE ARE TWO OF THEM.
+  # THE T0 NAME PREFIXES THIS REPOSITORY REGISTERS.
   #
   # `t0_` is NOT the tier marker. A tier is a property of a check AT RUN TIME
   # -- T0 is the set of checks that run with no firmware byte -- and it is not

@@ -45,7 +45,7 @@ add_test(NAME t0_corpus_parses
 # its `--group <name>` in its own COMMAND.
 #
 # The whole-corpus test is named `mcf5307_conformance_all` and NOT
-# `mcf5307_conformance`. The shorter name is a PREFIX of all four group names,
+# `mcf5307_conformance`. The shorter name is a PREFIX of every group name,
 # so `-R ^mcf5307_conformance$` would match nothing (anchored) and an
 # unanchored `-R mcf5307_conformance` would run every one of them twice.
 #

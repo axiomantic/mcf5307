@@ -38,8 +38,8 @@ template check(got: untyped; want: untyped; label: string) =
 # The two spaces, at each end and one word outside each end.
 #
 # The neighbours are not decoration. Line 9 is the SUB family, line B is CMP
-# and EOR, and line E is the shifts; all three are decoded and executed by
-# other tasks in this group. A predicate that reached one of them would take a
+# and EOR, and line E is the shifts; all three are decoded and executed by this
+# core. A predicate that reached one of them would take a
 # working instruction away from the core, and the boundary words are the ones
 # a mask written `0xE000` rather than `0xF000` classifies differently.
 

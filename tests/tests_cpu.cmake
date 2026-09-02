@@ -15,9 +15,6 @@
 # nobody naming it again. The whole OFF state is therefore reportable only as
 # one line of scrollback on a run that ends in exit 0 - the shape of a check
 # that quietly does not run, which is the shape step 4a was written to end.
-# This test is the only thing in the repository that fails when the gate is
-# off: `git grep -n MCF5307_ABI_GATE` answers with `cmake/Nim.cmake` and this
-# file and nothing else.
 #
 # The cache entry is not the gate. It is the switch. A run can read `ON` out of
 # `CMakeCache.txt` and still not have run step 4a: delete the branch and keep
@@ -485,7 +482,7 @@ endif()
 # The command is the LIBRARY's command with the runtime-only and output
 # arguments removed, exactly as `t_checks_on` does, plus `--path:src` so the
 # package imports resolve. Everything else - `--mm:arc`, `--panics:on`,
-# `-d:release`, and anything a later task adds - is kept.
+# `-d:release`, and anything later added beside them - is kept.
 set(MCF5307_EA_COMMAND "")
 foreach(argument IN LISTS MCF5307_NIM_COMMAND)
     if(argument STREQUAL "--compileOnly"
@@ -2322,8 +2319,7 @@ add_test(NAME t_control_registers
 #
 # One registered name, and no corpus beside it. The corpus runner executes
 # assembled encodings, and a bus fault is raised by a board rather than by an
-# instruction, so there is no encoding to assemble. The whole of the evidence
-# for this task is the registered name below.
+# instruction, so there is no encoding to assemble.
 #
 # THE FLAG SET IS THE LIBRARY'S OWN, taken from the compile command this
 # configure built for the library itself, so that the modules this test asserts

@@ -1,7 +1,7 @@
 ## `t_move` - the sized write to a data register in the data-movement group.
 ##
 ## This file exists beside `mcf5307_conformance_move` because it carries
-## source-operand and zero-source variants the corpus does not, and it is the
+## source-operand and zero-source variants, and it is the
 ## control that would catch a corpus regenerated wrongly.
 ##
 ## Every case below starts the destination at 0x12345678. That is the whole
