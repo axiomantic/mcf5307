@@ -50,10 +50,9 @@
 # the t0 TEST preset selects, and nothing was there to notice. The default
 # target of the tree is not a roster, so it cannot drift out of date.
 #
-# The consequence is that T0 is now wider than its build preset.
-# `cmake --build --preset t0` still narrows
-# the build to `mcf5307_tests`; what has changed is that `ctest --preset t0`
-# no longer grades a tree it has not built. Measured: a syntax error in
+# T0 is wider than its build preset. `cmake --build --preset t0` narrows
+# the build to `mcf5307_tests`; `ctest --preset t0` does not grade a tree it
+# has not built. Measured: a syntax error in
 # `conformance/runner.cpp`, which the t0 build preset never compiles, now
 # turns `ctest --preset t0` red. T0's narrowing was always of the run; the
 # tree it runs in is the whole project.

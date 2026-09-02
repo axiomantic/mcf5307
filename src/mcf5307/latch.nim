@@ -1,8 +1,8 @@
 ## `latch` - the one-time runtime latch, its deadline, and the terminal state a
 ## stalled initializer leaves behind.
 ##
-## Why this is its own module and not part of `src/mcf5307.nim`. Two readers
-## need the latch and neither may import the entry module.
+## Why this is its own module and not part of `src/mcf5307.nim`. Readers
+## outside the entry module need the latch, and none may import that module.
 ##
 ##   `mcf5307/cpu` and `isp1181/stub` ask whether the runtime was abandoned
 ##   before they allocate anything. The entry module imports both of them, so
@@ -156,10 +156,8 @@ var initializing {.threadvar.}: bool
   ##
   ## The flag is per-thread and not per-latch, and that is exact only because a
   ## shipped build has one latch. A build with two would let an initializer of
-  ## latch A return early from a first call on latch B. `tests/t_runtime_latch`
-  ## makes several latches and nests none of their initializers, so the
-  ## condition holds there too; a second production latch would not be covered
-  ## by that and would need this flag moved into the object.
+  ## latch A return early from a first call on latch B; a second production
+  ## latch would need this flag moved into the object.
 
 proc runtimeAbandoned*(latch: var RuntimeLatch): bool =
   ## True once a waiter has reported a stall on `latch`.
