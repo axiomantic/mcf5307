@@ -21,7 +21,7 @@
 //
 // The whole parser is written here rather than importing a JSON library so
 // t0_corpus_parses has no dependency beyond the toolchain that already
-// builds every other test in this tree. It is a recursive-descent parser
+// builds it. It is a recursive-descent parser
 // over the JSON grammar subset the generator emits, and it rejects anything
 // outside that subset loudly enough to name the file, the case and the
 // field.
