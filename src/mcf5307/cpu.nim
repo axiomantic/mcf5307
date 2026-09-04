@@ -238,8 +238,7 @@ proc step(ctx: MCF5307Ctx): uint32 =
     # list does not name it. It is dispatched with the data-movement group
     # above. `decode.nim` must test `0xFFF8`/`0x4840` ahead of its PEA arm,
     # whose `0xFFC0` mask spans `4840`-`487f` and would otherwise swallow all
-    # eight SWAP encodings; `tests/t_move.nim` fails if the decoder stops
-    # producing `opSwap`.
+    # eight SWAP encodings.
     ctx.halted = true
     result = 0
   of opIllegal:

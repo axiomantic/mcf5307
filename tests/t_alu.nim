@@ -176,8 +176,8 @@ proc runIns(words: openArray[uint16];
 proc mem32(address: uint32): uint32 =
   boardReadValue(board, address, 4)
 
-# The two assertions. Each compares ONE complete tuple, so a right result with
-# a wrong flag fails and a right flag with a wrong result fails.
+# The assertion helpers. Each compares ONE complete tuple, so a right result
+# with a wrong flag fails and a right flag with a wrong result fails.
 
 proc expectD(o: Outcome; n: int; want: uint32; wantSr: uint32; label: string) =
   let got = (reg: o.d[n], sr: o.sr, fault: o.fault)
@@ -943,8 +943,7 @@ block:
   # THE DIVISOR AT 0x200 IS NON-ZERO AND THAT IS LOAD-BEARING. `runIns` zeroes
   # the board, so without the `mem` seed this case trapped on a DIVIDE BY ZERO
   # and passed both before and after the mask was split - a green that said
-  # nothing about the operand class it names. Measured: it was the one case in
-  # this task's first red run that passed for the wrong reason.
+  # nothing about the operand class it names.
   expectTrapD(runIns([0x4C78'u16, 0x1001'u16, 0x0200'u16], d = two,
                      mem = @[(0x200'u32, 4'u32)]), 1, 2'u32,
     "divu.l from an ABSOLUTE SHORT source traps")

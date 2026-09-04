@@ -1,6 +1,6 @@
 /* tests/abi_smoke.cpp - the application binary interface smoke test.
  *
- * Two assertions, and each one can fail.
+ * Each of the assertions below can fail.
  *
  * (1) The link itself. The test takes the address of every function
  *     `include/mcf5307.h` declares and the library defines. A renamed
@@ -39,8 +39,7 @@
  * published name brings that name under this test with no edit to this file
  * and no edit to the registration list.
  *
- * The test asserts no core behaviour, so it stays right across every later
- * change to the implementation.
+ * The test asserts no core behaviour.
  */
 
 #include <cstddef>
