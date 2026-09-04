@@ -4318,7 +4318,7 @@ add_test(NAME t0_no_local_paths
 # second copy for the same reason. Read the roster in `ci.yml`.
 #
 # THE SOURCE DIRECTORY IS PASSED, NOT A LIST OF FILES. The script sweeps every
-# CMake list file under it for registrations, so a fourth file that registers a
+# CMake list file under it for registrations, so a new file that registers a
 # test is covered without an edit here. A written list of files would be a roster
 # that stops covering the tree the day somebody adds to it.
 add_test(NAME t0_test_set_builds_what_it_runs
