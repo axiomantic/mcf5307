@@ -328,7 +328,7 @@ set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_REPLACE "  ctx.irqAutovector = au
 #
 # EVERY COUNT BELOW WAS MEASURED AGAINST THIS TREE by applying
 # the mutation to a copy of `src/` and running the suite, with a no-op control
-# on the same harness reporting 36 passed and 0 red.
+# on the same harness reporting no reds.
 
 # FOUR RED IS THE WHOLE OF THE CLAIM AND THE TWO GREENS ARE HALF OF IT. A
 # mutation that reddened BLOCK 5 as well would mean the deferral had changed

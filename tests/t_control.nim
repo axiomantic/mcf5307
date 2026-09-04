@@ -119,8 +119,6 @@ type Outcome = object
     ## and this suite reads only whether it is zero. The `cycles: 0` half of
     ## every trap tuple below asserts "it did not run" and asserts no count;
     ## uncertainty 3 in `control.nim`'s header says why no count is asserted.
-    ## `tests/t_exec_budget.nim` is where the cost itself is pinned, against a
-    ## figure it measures rather than transcribes.
   fault: bool
   halted: bool
   d: array[8, uint32]
