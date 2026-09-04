@@ -43,7 +43,7 @@
 #   running a mutation. That reintroduces exactly that confound.
 #
 #   The gate's whole value is that it can fail, so prove that it still can:
-#   `reach.sh selftest` runs three controls and checks all three verdicts.
+#   `reach.sh selftest` runs its controls and checks each verdict.
 #       NULL          zero source changes  -> must report NOT REACHED
 #       COMMENT_ONLY  a comment changed    -> must report NOT REACHED
 #       POSITIVE      one semantic token   -> must report REACHED
@@ -177,7 +177,7 @@ null)
   $SELF run NULL_CONTROL x x ""
   ;;
 selftest)
-  # The three controls. Each one names the verdict it must produce, so a gate
+  # The controls. Each one names the verdict it must produce, so a gate
   # that has stopped being able to fail is caught here rather than trusted.
   CMT_OLD='## `Scc Dx`: ones or zeros into the LOW BYTE of a data register.'
   CMT_NEW='## `Scc Dx`: ones or zeros into the low byte of a data register.'
