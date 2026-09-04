@@ -169,12 +169,12 @@ check(not defaultAnswer and defaultElapsed >= latchWaitMillis - 100,
       "false elapsed>=" & $(latchWaitMillis - 100))
 
 # ---------------------------------------------------------------------------
-# The refusal. A caller that dropped the status of
-# `mcf5307_runtime_init` reaches a library that will not hand it a context.
+# The refusal. A caller that dropped the status of `mcf5307_runtime_init`
+# reaches a library that will not hand it a context.
 #
 # This is the half that does not depend on the caller. The status return is
-# advice, and C lets a caller ignore advice; these two cases are what makes an
-# ignored status harmless instead of silent.
+# advice, and C lets a caller ignore advice; the refusals below are what make
+# an ignored status harmless instead of silent.
 
 let abandonedGlobalAnswer = stall(runtimeLatch, 50'i64)
 check(not abandonedGlobalAnswer,
