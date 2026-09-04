@@ -4310,7 +4310,7 @@ add_test(NAME t0_no_local_paths
 # reachable only through an `add_dependencies(mcf5307_tests <target>)` line, and
 # `conformance/conformance_cpu.cmake` registered `t0_corpus_parses` without one.
 # `cmake/run_t0_build_set.cmake` carries the rule, the parser, and the account of
-# why three existing mechanisms all passed over the omission.
+# why the existing mechanisms all passed over the omission.
 #
 # THE PATTERN HERE IS A COPY, NOT THE SOURCE. `.github/workflows/ci.yml` carries
 # it as `T0_PATTERN` together with the written roster of what it excludes, and
