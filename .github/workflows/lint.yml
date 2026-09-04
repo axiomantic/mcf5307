@@ -1,0 +1,24 @@
+# `ci.yml` calls the same reusable workflow, but `ci.yml` is
+# `workflow_dispatch` only because its build matrix costs hours of runner
+# time, so the artifact-boundary guards never run on a pull request from
+# there. This file triggers the cheap half automatically.
+#
+# Duplicate runs on a pull-request branch are expected: a push to such a
+# branch fires both the `push` and the `pull_request` trigger. The `push`
+# trigger is what covers a branch before its pull request is opened.
+
+name: Lint
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lints:
+    uses: ./.github/workflows/track-repo.yml
+    with:
+      visibility: public
