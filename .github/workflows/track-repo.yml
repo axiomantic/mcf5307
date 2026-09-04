@@ -227,7 +227,9 @@ jobs:
           pe="fixtures/proto""col/"
           pf="[._]dum""p\b"
           patterns="${pa}|${pb}|${pc}|${pd}|${pe}|${pf}"
-          # Allow-listed only when the caller is the private repository.
+          # `t1-t2.yml` is exempt because the T1 and T2 jobs legitimately name
+          # the artifact tree, and only the private repository runs them. The
+          # exemption is gated on visibility so a public caller cannot claim it.
           allow=""
           if [ "${VISIBILITY}" = "private" ]; then
             allow="t1-t2.yml"
