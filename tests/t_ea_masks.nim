@@ -781,8 +781,8 @@ proc table313ImmOf(c: Coverage): Option[Table313Imm] =
   ##
   ## THIS IS A SECOND SOURCE AND NOT A ROSTER ASSERTED AGAINST ITSELF. The
   ## executor is production code written from the manual, it is independent of
-  ## every declaration in this file, it names no opcodes, and it would answer a
-  ## thirteenth entry it has never seen.
+  ## every declaration in this file, it names no opcodes, and it would answer
+  ## an entry it has never seen.
   ##
   ## WHAT IT HOLDS THE DECLARATION AGAINST IS THE EXECUTOR AND NOT THE MANUAL'S
   ## INK, AND THAT LIMIT IS THE PRICE OF HAVING A CHECK AT ALL. An executor
