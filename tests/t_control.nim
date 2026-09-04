@@ -469,7 +469,7 @@ block:
     "bsr with an 8-bit displacement of 0xff traps: 32-bit is ISA_B")
 
   # The positive controls. A core that trapped every branch would pass the
-  # three rows above. 0xfe is the largest displacement the byte form has and
+  # rows above. 0xfe is the largest displacement the byte form has and
   # 0x00 is the 16-bit marker; both must run.
   block:
     let o = runIns([0x60FE'u16], a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase],

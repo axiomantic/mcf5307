@@ -850,8 +850,8 @@ CASES = {
     # result, clear C, and leave X alone; the multiply's V reports that the 32
     # bits written are not the whole product.
     #
-    # Half of this group is the flags. Every `sr` below was measured against a
-    # mutation the corpus would otherwise not see.
+    # Every `sr` below was measured against a mutation the corpus would
+    # otherwise not see.
     "alu": [
         {
             "name": "add_l_d0_to_d1",

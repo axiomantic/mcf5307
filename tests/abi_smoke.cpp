@@ -1,6 +1,6 @@
 /* tests/abi_smoke.cpp - the application binary interface smoke test.
  *
- * Two assertions, and each one can fail.
+ * Each of the assertions below can fail.
  *
  * (1) The link itself. The test takes the address of every function
  *     `include/mcf5307.h` declares and the library defines. A renamed
