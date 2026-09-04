@@ -1533,8 +1533,6 @@ block:
 # assembles 0x00123456 as 0x34560012 and every absolute-long operand reads the
 # wrong place.
 #
-# Block (4) is what makes a swapped extension-word order visible.
-#
 # The case runs through the shipped C entry points and not through `eaAddr`
 # reached around the back, so it asserts the path the corpus runner drives.
 #
