@@ -82,7 +82,7 @@ endif()
 add_custom_target(mcf5307_tests
     COMMENT "Building the mcf5307 T0 test set")
 
-# CMake drives Nim. Six integration steps run there, at configure time, and
+# CMake drives Nim. Its integration steps run there, at configure time, and
 # they leave `mcf5307_nim_objs`, `mcf5307` and `mcf5307::mcf5307` defined. The
 # include comes before the test directories because a test that links the core
 # needs the target to exist when its own list is read.

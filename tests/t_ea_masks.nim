@@ -401,8 +401,8 @@ static:
 ##     before `mulu`, and every opcode row on p.3-29 sorts after it. Checked
 ##     row by row against both rendered pages.
 ##
-## WHY THIS IS SAFE TO DERIVE FROM THE ENTRY'S OWN MNEMONIC: for all twelve
-## entries the `Operation` member name minus its `op` prefix IS the table
+## WHY THIS IS SAFE TO DERIVE FROM THE ENTRY'S OWN MNEMONIC: for every one of
+## these entries the `Operation` member name minus its `op` prefix IS the table
 ## row's opcode with the size suffix removed - `opAndi` against `andi.l`,
 ## `opSubx` against `subx.l`. Checked entry by entry against both rendered
 ## pages.
@@ -420,7 +420,7 @@ static:
 ## A MEMBER WHOSE NAME DOES NOT BEGIN WITH `op` fails through the `doAssert` in
 ## `table313PageOf`, which is a crash rather than a case. Assertion (10) makes
 ## the absence of such a member a property this run asserts over the WHOLE
-## enumeration, not just the twelve members `table313PageOf` is called with.
+## enumeration, not just the members `table313PageOf` is called with.
 type
   Table313Page = enum
     p313Start = "3-28"   ## where Table 3-13 begins
@@ -434,7 +434,7 @@ const table313LastRowOn328 = "mulu"
 ## (9) THE BREAK CONSTANT, HELD AGAINST `decode_types.nim`'s RECORD OF IT.
 ## Assertion (7) compares each declaration against a derivation that reads this
 ## constant, so without this the constant would be the one term in that
-## comparison with nothing behind it: moving it and the twelve declarations in
+## comparison with nothing behind it: moving it and the declarations in
 ## ONE edit moved them past each other and printed a false page as PASSED. The
 ## co-edit now has to move a second file. The comparison lives HERE and
 ## `table313LastRowOnPage328` is EXPORTED for it because this file imports the
@@ -599,7 +599,7 @@ proc cov313(op: Operation; family: Family; page: Table313Page;
   ##
   ## Every one of these rows is a `{eaDn}` mask whose cited illegal mode is
   ## `(An)`, so `legal` and `illegal` are fixed here rather than repeated
-  ## twelve times. An entry needing a different pair does not belong to this
+  ## on every row. An entry needing a different pair does not belong to this
   ## constructor and must state its own citation through `cov`.
   result = cov(op, family, mDn, mAnInd, whyDashMemory313(page, imm))
   result.page313 = some(page)
@@ -608,8 +608,8 @@ proc cov313(op: Operation; family: Family; page: Table313Page;
 let coverage: seq[Coverage] = @[
   # --- eaAllModes / eaValid7: every printed mode is legal, so the only
   # illegal operand is a reserved mode-7 encoding, which `machine.nim` also
-  # refuses on its own. These nine are NINE OF THE ELEVEN non-discriminating
-  # entries; ADDQ and SUBQ below are the other two, by a different mechanism.
+  # refuses on its own. These are non-discriminating entries; ADDQ and SUBQ
+  # below are non-discriminating too, by a different mechanism.
   cov(opMove, famMove, mDn, mReserved, whyReserved, discriminating = false),
   cov(opMovea, famMove, mDn, mReserved, whyReserved, discriminating = false,
       destMode = 1),
@@ -669,7 +669,7 @@ let coverage: seq[Coverage] = @[
   # memory column of each of these rows, so `(An)` is the cited illegal mode.
   cov(opNot, famLogic, mDn, mAnInd, whyDashMemory312),
   # The Table 3-13 rows. `imm313Timed` marks the four shift rows, which are the
-  # only ones of the twelve whose `#xxx` column is timed rather than dashed.
+  # only ones whose `#xxx` column is timed rather than dashed.
   cov313(opAndi, famLogic, p313Start, imm313Dashed),
   cov313(opOri, famLogic, p313Cont, imm313Dashed),
   cov313(opEori, famLogic, p313Start, imm313Dashed),
@@ -906,19 +906,19 @@ block:
 
   # AND EVERY TABLE 3-13 CITATION MUST CARRY A PAGE FOR (7) TO CHECK. That
   # assertion runs only where `page313` is set, so a `cov313` that stopped
-  # setting it would DELETE twelve assertions and print a smaller total with no
+  # setting it would DELETE those assertions and print a smaller total with no
   # red anywhere - the case count is printed and nothing asserts it, which is
   # the same silence this file was built to remove.
   #
   # The citation string and the `page313` field are written by one call but are
   # two different values, so each is a witness for the other: a row citing
   # Table 3-13 with no page, or a page on a row citing something else, is red.
-  # Both counts falling to ZERO is the remaining way out - twelve entries
+  # Both counts falling to ZERO is the remaining way out - every entry
   # rewritten to hand-built strings - so that is refused as well.
   #
   # `carriesImm` JOINS THE SAME EQUALITY, because assertion (8) runs exactly
   # where `imm313` is set and a `cov313` that stopped setting it would delete
-  # twelve assertions the same silent way.
+  # those assertions the same silent way.
   var cited313 = 0
   var carriesPage = 0
   var carriesImm = 0
@@ -937,7 +937,7 @@ block:
   # member that breaks it - a crash rather than a case. Checking it for the
   # whole enumeration turns "a misnamed member would crash the derivation" from
   # a sentence about a hypothetical into a property of the enumeration as it
-  # stands, and it costs one case rather than twelve.
+  # stands, and it costs one case rather than one per member.
   var misnamed: seq[string] = @[]
   for op in Operation:
     if not ($op).startsWith("op"): misnamed.add($op)
@@ -1222,7 +1222,7 @@ block:
 # ---------------------------------------------------------------------------
 # (15) The `eaJumpTarget` cell table lives in `tests/t_control.nim`, not here.
 # A block mirroring block (14) for `opJmp` and `opJsr` stood here and was
-# deleted as unable to detect anything: `t_control.nim`'s twelve-row
+# deleted as unable to detect anything: `t_control.nim`'s
 # `eaIsLegalFor(opJmp/opJsr, ...)` table enumerates the same cells with the
 # same verdicts through the same predicate, so the two compute the same
 # booleans and no mutation can separate them.

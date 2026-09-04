@@ -127,9 +127,9 @@
 ##
 ##   5. THE REGISTER SHIFT COUNT'S MODULUS. `execShift` takes it modulo 64.
 ##      Table 3-7 gives the shift operations as `X/C <- (Dy << Dx) <- 0` and
-##      states no modulus, and no other passage does. No case in the corpus or
-##      in `tests/t_logic.nim` uses a count above 31, so nothing distinguishes
-##      modulo 64 from modulo 256 or from no reduction at all.
+##      states no modulus, and no other passage does. The modulus is therefore
+##      unpinned: nothing distinguishes modulo 64 from modulo 256 or from no
+##      reduction at all.
 
 import mcf5307/decode_types
 import mcf5307/ea

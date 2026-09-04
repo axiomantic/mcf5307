@@ -1636,8 +1636,8 @@ block:
 # is a C ABI entry point (`include/mcf5307.h`), its guard's whole contract is
 # that the call RETURNS, and a call that did not return would end the process
 # before the assertion below was reached - so REACHING A VERDICT AT ALL is what
-# decides it. Nothing measured it before: the guard was added on 2026-08-13 and
-# no case in this file had ever passed a nil context to this entry point.
+# decides it. No other case in this file passes a nil context to this entry
+# point.
 #
 # THE TAKE AFTER IT IS A REAL ONE AND NOT A FORMALITY, for the reason block 14
 # gives about its own: this block has no BEFORE to compare against, so the tuple
@@ -1693,7 +1693,7 @@ block:
 # THE TAKE AFTER IT DELIBERATELY AVOIDS THE RESET PATH. It is block 2's level-3
 # take from `newCtx`, which retires the reset's own first instruction in the
 # helper, so this case is not one of those whose outcome depends on when the
-# first post-reset sample happens. The four reset entries in
+# first post-reset sample happens. The reset entries in
 # `tests/t_claims.cmake` therefore keep the counts they had, and that was
 # measured rather than assumed.
 

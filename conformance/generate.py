@@ -857,8 +857,8 @@ CASES = {
     # result, clear C, and leave X alone; the multiply's V reports that the 32
     # bits written are not the whole product.
     #
-    # Half of this group is the flags. Every `sr` below was measured against a
-    # mutation the corpus would otherwise not see.
+    # Every `sr` below was measured against a mutation the corpus would
+    # otherwise not see.
     "alu": [
         {
             "name": "add_l_d0_to_d1",
@@ -1005,12 +1005,10 @@ CASES = {
 
         # ---------------------------------- THE WORD MULTIPLY AND DIVIDE
         #
-        # THE CORPUS CARRIED NO WORD-FORM CASE OF ANY KIND before these, for
-        # the same reason the core had no word form: `decodeLogicLine` called
-        # opmodes 011 and 111 of lines 1000 and 1100 illegal. They are real
-        # instructions - `m68k-elf-as -mcpu=5307` assembles all four, CFPRM
-        # folios 4-31, 4-33, 4-55 and 4-57 each print a "(Word)" instruction
-        # format, and MCF5307 User's Manual Table 3-13 p.3-28 times all four.
+        # THESE ARE REAL INSTRUCTIONS - `m68k-elf-as -mcpu=5307` assembles all
+        # four, CFPRM folios 4-31, 4-33, 4-55 and 4-57 each print a "(Word)"
+        # instruction format, and MCF5307 User's Manual Table 3-13 p.3-28 times
+        # all four.
         #
         # EVERY EXPECTED VALUE BELOW IS DERIVED FROM THE FOLIOS AND NOT FROM
         # THIS PROJECT'S CORE. This generator takes only the ENCODING from the

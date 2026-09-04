@@ -14,14 +14,13 @@
 ## encoding, and an operand the mask admitted and the executor refused - and
 ## neither reached a corpus case.
 ##
-## An example this group carries: `decode.nim`'s ADDQ and SUBQ arms once
-## matched on `word and 0xF100` alone and claimed every `0101 cccc 11 <ea>`
-## word - 1024 words, of which 128 are `Scc Dn`, three are TRAPF and none are
-## DBcc - as an ADDQ or a SUBQ whose size field was the illegal `11`. Every
-## one of them trapped, because `alu.nim` traps a size of zero, and a trap is
-## what an unimplemented opcode looks like. The repair is the
-## `sizeField(word) != 0` guard those two arms now carry, and
-## `scc_is_not_an_addq` below is what holds it.
+## An example this group carries: an ADDQ or SUBQ arm matching on `word and
+## 0xF100` alone claims every `0101 cccc 11 <ea>` word - 1024 words, of which
+## 128 are `Scc Dn`, three are TRAPF and none are DBcc - as an ADDQ or a SUBQ
+## whose size field is the illegal `11`. Every one of them traps, because
+## `alu.nim` traps a size of zero, and a trap is what an unimplemented opcode
+## looks like. What excludes them is the `sizeField(word) != 0` guard those two
+## arms carry, and `scc_is_not_an_addq` below is what holds it.
 ##
 ## EVERY CASE ASSERTS A COMPLETE TUPLE, never one field, exactly as `t_alu`,
 ## `t_move` and `t_logic` do.
@@ -494,7 +493,7 @@ block:
     "bsr with an 8-bit displacement of 0xff traps: 32-bit is ISA_B")
 
   # The positive controls. A core that trapped every branch would pass the
-  # three rows above. 0xfe is the largest displacement the byte form has and
+  # rows above. 0xfe is the largest displacement the byte form has and
   # 0x00 is the 16-bit marker; both must run.
   block:
     let o = runIns([0x60FE'u16], a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase],

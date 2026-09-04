@@ -1029,7 +1029,7 @@ add_test(NAME t_move
 # legal operand runs and that an illegal one traps whole, and it asserts
 # nothing about the computed result of a legal run and nothing about the
 # encoding of any logic word - it hand-builds its `Decoded` objects, and the
-# six words it does put through `decodeWord` are NOP, MOVE, ADDQ, SUBQ, LEA and
+# words it does put through `decodeWord` are NOP, MOVE, ADDQ, SUBQ, LEA and
 # MOVEQ, not one logic opcode among them. Its `opBtst` entry offers `Dn` and
 # `An` and no other mode, so the PC-relative and immediate operands named above
 # are never presented to it. That leaves both defects above out of its reach
@@ -1875,8 +1875,8 @@ add_test(NAME t_state
 #
 # IT RUNS AT CONFIGURE TIME AND IS NOT A REGISTERED TEST, deliberately. A check
 # on whether the tests are wired up must not be a test that a selection filter
-# can leave out - which is the defect seen when CI selected three of
-# eleven T0 tests and could not see a suite vanish. A configure that fails here
+# can leave out - which is the defect seen when CI selected only some of
+# the T0 tests and could not see a suite vanish. A configure that fails here
 # builds nothing at all.
 #
 # WHAT IT DOES NOT REACH, STATED SO ITS SILENCE IS NOT READ AS COVERAGE. Both
@@ -2021,12 +2021,12 @@ message(STATUS
 # GENERATED driver. No suite is named here and no count is typed here, so a
 # transcript added to or removed from `src/` moves this check with it.
 #
-# THIS BLOCK PRINTED A COVERAGE FIGURE UNTIL 2026-08-13 - `<N> of the 8 typed
-# case totals are corroborated by a transcript in src/`, with the suites named -
-# AND THAT LINE IS DELETED RATHER THAN REPAIRED. It was a present-tense claim
-# about the state of the tree with nothing keeping it true, which is the shape of
-# sentence this whole mechanism exists to make unsayable. The gate-4.4 judge
-# moved it in BOTH directions at rc 0, MEASURED 2026-08-13:
+# NO COVERAGE FIGURE IS PRINTED HERE, DELIBERATELY. A line of the form `<N> of
+# the typed case totals are corroborated by a transcript in src/`, with the
+# suites named, is a present-tense claim about the state of the tree with
+# nothing keeping it true, which is the shape of sentence this whole mechanism
+# exists to make unsayable. The gate-4.4 judge moved such a figure in BOTH
+# directions at rc 0, MEASURED 2026-08-13:
 #
 #   DOWNWARD, SILENTLY. Rewording a real transcript - `held its 168 cases` to
 #   `held its 168 unit cases` - dropped the figure from 3 to 2, and so did

@@ -29,13 +29,7 @@
  * A link error needs a reference as well as a definition. `t0_abi_header.c`
  * and `t0_abi_header.cpp` take their addresses from a fixed list of their
  * own, and neither one names `mcf5307_set_reg`, `mcf5307_get_reg`,
- * `mcf5307_halted` or `mcf5307_faulted`. A rename of those four is therefore
- * caught by nothing in `t0_abi_header`, whatever this file defines. That gap
- * belongs to those two files.
- *
- * `tests/abi_smoke.cpp` does take the address of every published name,
- * through `tests/abi_smoke_symbols.inc`, and step 4a holds that list against
- * the contract in both directions.
+ * `mcf5307_halted` or `mcf5307_faulted`. That gap belongs to those two files.
  */
 
 #include <stddef.h>

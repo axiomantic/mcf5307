@@ -4,7 +4,7 @@
  *
  *   - one `_Static_assert` for each declared TYPE, so a deleted or renamed
  *     type is a COMPILE error;
- *   - eighteen address-of expressions, written out below as a FIXED LIST and
+ *   - address-of expressions, written out below as a FIXED LIST and
  *     not derived from what the header happens to hold, so a MISSING
  *     declaration is a compile error and a RENAMED one is a LINK error
  *     against `abi_stub.c`.
