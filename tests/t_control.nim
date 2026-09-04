@@ -9,10 +9,10 @@
 ## Why this file exists beside `mcf5307_conformance_control`. That corpus is
 ## positive cases: encodings this part has, run against an expected state. A
 ## positive corpus cannot see a wrongly-claimed encoding, because a stolen
-## encoding produces a passing execution of a different instruction. Two
-## shapes have shipped that way - a decoder arm claiming another opcode's
-## encoding, and an operand the mask admitted and the executor refused - and
-## neither reached a corpus case.
+## encoding produces a passing execution of a different instruction. The
+## shapes that escape it - a decoder arm claiming another opcode's encoding,
+## and an operand the mask admitted and the executor refused - do not reach a
+## corpus case.
 ##
 ## An example this group carries: an ADDQ or SUBQ arm matching on `word and
 ## 0xF100` alone claims every `0101 cccc 11 <ea>` word - 1024 words, of which
