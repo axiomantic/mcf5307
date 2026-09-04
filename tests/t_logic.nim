@@ -131,10 +131,9 @@ type Outcome = object
     ## the rows that take an exception leave the machine inside a handler, so
     ## a generous-budget reference run does not stop after one instruction.
     ##
-    ## The cost itself is pinned, and not here. `tests/t_exec_budget.nim`
-    ## holds the return of a budgeted call against a cost it measures, for
-    ## every budget in a sweep. What this field carries is the ran-or-trapped
-    ## bit the rows below actually turn on, under a name that says so.
+    ## THE COST ITSELF IS NOT PINNED HERE. What this field carries is the
+    ## ran-or-trapped bit the rows below actually turn on, under a name that
+    ## says so.
   fault: bool
   halted: bool
   d: array[8, uint32]

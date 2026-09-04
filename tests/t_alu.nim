@@ -165,8 +165,8 @@ proc runIns(words: openArray[uint16];
 proc mem32(address: uint32): uint32 =
   boardReadValue(board, address, 4)
 
-# The two assertions. Each compares one complete tuple, so a right result with
-# a wrong flag fails and a right flag with a wrong result fails.
+# The assertion helpers. Each compares one complete tuple, so a right result
+# with a wrong flag fails and a right flag with a wrong result fails.
 
 proc expectD(o: Outcome; n: int; want: uint32; wantSr: uint32; label: string) =
   let got = (reg: o.d[n], sr: o.sr, fault: o.fault)

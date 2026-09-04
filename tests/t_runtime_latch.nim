@@ -12,7 +12,7 @@
 ## documents: module initialization waits for a thread, and that thread calls
 ## the initializer again. Nothing here writes a latch state by hand.
 ##
-## The positive control is in this run and not in another test. Case 1 drives a
+## The positive control is in this run and not in another test. It drives a
 ## healthy latch through the same procedure and reads `true` out of it. Without
 ## it a `false` from the stalled latch would not be separable from a procedure
 ## that answers `false` to everything.
@@ -106,7 +106,7 @@ proc stall(target: var RuntimeLatch; waitMillis: int64): bool =
   joinThread(holder)
 
 # ---------------------------------------------------------------------------
-# Case 1 and 2. The positive control, on a latch nothing interferes with.
+# The positive control, on a latch nothing interferes with.
 
 var healthy: RuntimeLatch
 
@@ -127,7 +127,7 @@ check(not runtimeAbandoned(healthy),
       $runtimeAbandoned(healthy), "false")
 
 # ---------------------------------------------------------------------------
-# Case 4 to 7. The stall, driven by a real holder against a short deadline.
+# The stall, driven by a real holder against a short deadline.
 
 var stalled: RuntimeLatch
 let stalledAnswer = stall(stalled, 50'i64)
@@ -153,7 +153,7 @@ check(not repeatAnswer,
       $repeatAnswer, "false")
 
 # ---------------------------------------------------------------------------
-# Case 8. The default deadline is the one the library uses, and it is asserted
+# The default deadline is the one the library uses, and it is asserted
 # by measuring a wait rather than by reading the constant back. A suite that
 # compared `latchWaitMillis` against a literal would agree with itself whatever
 # the wait loop did with it.
@@ -169,7 +169,7 @@ check(not defaultAnswer and defaultElapsed >= latchWaitMillis - 100,
       "false elapsed>=" & $(latchWaitMillis - 100))
 
 # ---------------------------------------------------------------------------
-# Case 9 and 10. The refusal. A caller that dropped the status of
+# The refusal. A caller that dropped the status of
 # `mcf5307_runtime_init` reaches a library that will not hand it a context.
 #
 # This is the half that does not depend on the caller. The status return is

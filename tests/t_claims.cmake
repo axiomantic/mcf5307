@@ -320,6 +320,10 @@ set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_REPLACE "  ctx.irqAutovector = au
 # core that moved the total to the registered number, which is the shape of
 # measurement this file exists to refuse.
 #
+# EVERY COUNT BELOW WAS MEASURED AGAINST THIS TREE by applying
+# the mutation to a copy of `src/` and running the suite, with a no-op control
+# on the same harness reporting no reds.
+
 # Which cases stay green is half of the claim. A mutation that also reddened
 # the frame-content block would mean the deferral had changed what the frame
 # contains and not only when it is written, and a mutation that reddened PEA
@@ -1516,10 +1520,8 @@ endfunction()
 # the same shape take the same decision. The cost of the choice is stated
 # plainly: this battery would not notice repository source drifting until it no
 # longer CONTAINS an instance of a shape. IT GUARDS THE PROBE AND NOT THE
-# SOURCE, and the rows cut included the two that anchored on
-# `irq.nim` as it ships - which narrowed nothing, because a row that reads a
-# repository line guards the probe's decision about that line's SHAPE and never
-# the line.
+# SOURCE: a row that reads a repository line guards the probe's decision about
+# that line's SHAPE and never the line.
 #
 # WHAT THE REPOSITORY'S OWN ANCHORS ARE GUARDED BY INSTEAD is the claim loop
 # below, which reads every registered edit's FIND text out of the source it
