@@ -50,7 +50,7 @@ jobs:
     # job once one has failed, so with a plain sequential list guard N failing
     # made guards N+1..end report `skipped` -- a word that is not `success` and
     # is not `failure`, and that reads to a human as "not applicable here".
-    # These guards close FOUR DIFFERENT holes and none substitutes for another,
+    # These guards each close a DIFFERENT hole and none substitutes for another,
     # so one of them firing is the WORST moment to stop asking the others: the
     # tree is already known to be wrong, and the run silently stops saying how
     # wrong. In the artifacts repository that is not hypothetical; a staleness
