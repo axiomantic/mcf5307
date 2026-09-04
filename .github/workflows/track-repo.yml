@@ -7,11 +7,10 @@
 # therefore declares exactly one job in its own file and adds its steps inside
 # that job.
 #
-# This file exists in ALL SEVEN repositories, because the four artifact-boundary
-# lint steps run in every one of them, and a step with no file to live in runs
-# nowhere.
+# This file exists in every repository, because the artifact-boundary lint steps
+# run in all of them, and a step with no file to live in runs nowhere.
 #
-# THE FOUR STEPS CLOSE FOUR DIFFERENT HOLES AND NONE SUBSTITUTES FOR ANOTHER.
+# These steps each close a DIFFERENT hole and none substitutes for another.
 #   no-private-submodule    stops the private repository's URL and commit
 #                           hashes being published.
 #   no-clavia-payload       stops a Clavia byte reaching a public tree as a
@@ -31,10 +30,10 @@ on:
         description: >-
           The calling repository's visibility, `public` or `private`. One clause
           of the credential lint is scoped to public repositories: a `secrets.`
-          reference outside the three organization momus secrets is a defect in
-          a public repository, while inside the private one the T1 and T2 jobs
-          legitimately hold what they need. The other three steps apply to all
-          seven repositories without exception.
+          reference outside the organization momus secrets is a defect in a
+          public repository, while inside the private one the T1 and T2 jobs
+          legitimately hold what they need. The other steps apply to every
+          repository without exception.
         required: false
         type: string
         default: public
