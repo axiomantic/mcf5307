@@ -132,10 +132,9 @@ proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## the 16-bit half takes N from bit 15 and Z from the low half. This core
   ## reads it as the whole 32-bit register, because the register is what the
   ## instruction writes - the size argument is 4 and not 2 for exactly that
-  ## reason. The ambiguity is why `tests/t_move.nim` carries an N-separator
-  ## case on each side of it, `0x0000FFFF` and `0xFFFF0000`, the two shapes
-  ## whose halves disagree in their top bit. The CFPRM would close the width
-  ## question outright.
+  ## reason. The ambiguity shows on `0x0000FFFF` and `0xFFFF0000`, the two
+  ## shapes whose halves disagree in their top bit. The CFPRM would close the
+  ## width question outright.
   let v = regD(ctx, d.destReg)
   let swapped = (v shr 16'u32) or (v shl 16'u32)
   setRegD(ctx, d.destReg, swapped)

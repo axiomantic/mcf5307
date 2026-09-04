@@ -25,11 +25,6 @@
  * link of `t0_abi_header` resolves against. A published name defined `static`
  * here would resolve nothing there, so the gate refuses that and says nothing
  * about a `static` name the contract never declared.
- *
- * `tests/abi_smoke.cpp` does take the address of EVERY published name, through
- * `tests/abi_smoke_symbols.inc`, and step 4a holds that list against the
- * contract in both directions. That gate is what keeps the word `every` true,
- * and it is why no number is written beside it.
  */
 
 #include <stddef.h>

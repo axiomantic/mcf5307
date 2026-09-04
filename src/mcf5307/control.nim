@@ -95,8 +95,8 @@
 ##   1(0/0); `execRts` returns 8 and `rts` is 8(1/0); `execRte` returns 14 and
 ##   `rte` is 14(2/0); `execTrap` returns 18 and `trap #imm` is 18(1/2).
 ##
-##   Three are flattened across the effective address. `execJump` returns 5 for
-##   every operand; Table 3-15 gives `jmp`/`jsr` 5 for `(An)` and `(d16,An)`
+##   The rest are flattened across the effective address. `execJump` returns 5
+##   for every operand; Table 3-15 gives `jmp`/`jsr` 5 for `(An)` and `(d16,An)`
 ##   but 6 for the indexed forms and 1 for `xxx.wl` - 1(0/0) for `jmp` and
 ##   1(0/1) for `jsr`, whose extra write is the return address. `execTst`
 ##   returns 1 for a register and 3 otherwise; the flat 3 is five of the seven

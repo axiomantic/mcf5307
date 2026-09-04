@@ -1669,7 +1669,7 @@ block:
 # THE TAKE AFTER IT DELIBERATELY AVOIDS THE RESET PATH. It is block 2's level-3
 # take from `newCtx`, which retires the reset's own first instruction in the
 # helper, so this case is not one of those whose outcome depends on when the
-# first post-reset sample happens. The four reset entries in
+# first post-reset sample happens. The reset entries in
 # `tests/t_claims.cmake` therefore keep the counts they had, and that was
 # measured rather than assumed.
 

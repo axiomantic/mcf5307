@@ -119,8 +119,6 @@ type Outcome = object
     ## and this suite reads only whether it is zero. The `cycles: 0` half of
     ## every trap tuple below asserts "it did not run" and asserts no count;
     ## uncertainty 3 in `control.nim`'s header says why no count is asserted.
-    ## `tests/t_exec_budget.nim` is where the cost itself is pinned, against a
-    ## figure it measures rather than transcribes.
   fault: bool
   halted: bool
   d: array[8, uint32]
@@ -469,7 +467,7 @@ block:
     "bsr with an 8-bit displacement of 0xff traps: 32-bit is ISA_B")
 
   # The positive controls. A core that trapped every branch would pass the
-  # three rows above. 0xfe is the largest displacement the byte form has and
+  # rows above. 0xfe is the largest displacement the byte form has and
   # 0x00 is the 16-bit marker; both must run.
   block:
     let o = runIns([0x60FE'u16], a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase],
