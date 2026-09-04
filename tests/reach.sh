@@ -43,7 +43,7 @@
 #   running a mutation. That reintroduces exactly that confound.
 #
 #   The gate's whole value is that it can fail, so prove that it still can:
-#   `reach.sh selftest` runs three controls and checks all three verdicts.
+#   `reach.sh selftest` runs its controls and checks each verdict.
 #       NULL          zero source changes  -> must report NOT REACHED
 #       COMMENT_ONLY  a comment changed    -> must report NOT REACHED
 #       POSITIVE      one semantic token   -> must report REACHED
