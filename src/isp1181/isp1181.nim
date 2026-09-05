@@ -261,8 +261,10 @@ const
     ## table places FIFOEN at bit 7, DBLBUF at bit 5, FFOISO at bit 4 and
     ## `FFOSZ[3:0]` in the low nibble.
     ##
-    ## The position is inherited and not read from an ISP1181 document.
-    ## `docs/sources.md` carries the limit in full.
+    ## The position is inherited and not read from an ISP1181 document. The
+    ## ISP1362 data sheet claims only that its peripheral controller is
+    ## "similar to the ISP1181B in 16-bit bus mode"; similar is not identical,
+    ## and the ISP1181B data sheet was not retrieved.
   fifoEnableBit* = 0x80'u8
     ## FIFOEN in DcEndpointConfiguration. ISP1362 Rev. 06 Table 110 p.107 places
     ## it at bit 7 and Table 111 gives its meaning: "Logic 1 enables the FIFO

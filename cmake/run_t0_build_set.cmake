@@ -14,8 +14,7 @@
 # this tree from more than one direction:
 #
 #   - `--no-tests=error` catches a `-R` pattern that selects NOTHING. It says
-#     nothing about a selected test whose binary is missing, and `AGENTS.md`
-#     records that scope.
+#     nothing about a selected test whose binary is missing.
 #   - `t0_build_is_current` builds the tree's DEFAULT target, which contains
 #     every `add_executable`. It therefore produced the missing binary before any
 #     test ran -- it MASKED the omission rather than reporting it.
