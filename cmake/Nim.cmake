@@ -2184,6 +2184,13 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: contro
 # using it here is what makes the stripped name the reader answers with the
 # route name the classifier is asked about. A literal underscore would be an
 # assumption about a target, and this file measures that one already.
+# The probe sources below spell this name's signature and not just its name.
+# Every arm includes `include/mcf5307.h`, so a probe declaring a different
+# return type than the contract does is a constraint violation and the arm
+# reports a compile fault rather than the category it exists to measure. A
+# signature change to the chosen name therefore has to be made here too. That
+# coupling is real and it is not hidden: an arm that goes stale fails the
+# configure step and names the file, which is the loud direction.
 set(MCF5307_ABI_STUB_ROUTE_NAME "mcf5307_runtime_init")
 
 if(NOT "${MCF5307_ABI_STUB_ROUTE_NAME}" IN_LIST MCF5307_ABI_PUBLISHED)
@@ -2291,15 +2298,15 @@ endfunction()
 # anchor goes, the reference goes with it, and the definition goes with that.
 mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_ROUTE_CATEGORY
     MCF5307_ABI_STUB_ROUTE_DETAIL internal_route
-"static void ${MCF5307_ABI_STUB_ROUTE_NAME}(void);
+"static int ${MCF5307_ABI_STUB_ROUTE_NAME}(void);
 
 #include \"mcf5307.h\"
 
-static void ${MCF5307_ABI_STUB_ROUTE_NAME}(void) {}
+static int ${MCF5307_ABI_STUB_ROUTE_NAME}(void) { return 0; }
 
 __attribute__((used)) static void mcf5307_abi_stub_route_anchor(void)
 {
-    ${MCF5307_ABI_STUB_ROUTE_NAME}();
+    (void)${MCF5307_ABI_STUB_ROUTE_NAME}();
 }
 ")
 
@@ -2378,8 +2385,9 @@ mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_HIDDEN_CATEGORY
     MCF5307_ABI_STUB_HIDDEN_DETAIL hidden_route
 "#include \"mcf5307.h\"
 
-__attribute__((visibility(\"hidden\"))) void ${MCF5307_ABI_STUB_ROUTE_NAME}(void)
+__attribute__((visibility(\"hidden\"))) int ${MCF5307_ABI_STUB_ROUTE_NAME}(void)
 {
+    return 0;
 }
 ")
 
@@ -2412,8 +2420,9 @@ mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_LATESTATIC_CATEGORY
     MCF5307_ABI_STUB_LATESTATIC_DETAIL late_static_route
 "#include \"mcf5307.h\"
 
-static void ${MCF5307_ABI_STUB_ROUTE_NAME}(void)
+static int ${MCF5307_ABI_STUB_ROUTE_NAME}(void)
 {
+    return 0;
 }
 ")
 
