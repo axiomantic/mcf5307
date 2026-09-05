@@ -281,7 +281,7 @@ const eaBitDynamic* = EaLegality(modes: eaDataAlterableModes,
   ##
   ## What would overturn this is the ColdFire Family Programmer's Reference
   ## Manual, whose per-instruction operand table names the modes directly. It
-  ## is not on this machine (AGENTS.md section 11) and the network is closed.
+  ## is not on this machine and the network is closed.
   ## Uncertainty 3 in the `logic.nim` header is this one.
   ##
   ## It is a constant of its own and not a narrowed `eaDataAddressing`,
@@ -401,8 +401,8 @@ const eaLeaPeaTarget* = EaLegality(
   ##     carries an `x` for "Absolute Data Addressing / Short" `(xxx).W` in
   ##     the Control column, beside `(xxx).L`.
   ##
-  ## `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726, the pin in
-  ## `docs/toolchain.md`) corroborates: `lea 0x1234.w,%a0` assembles to
+  ## `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726, the pinned
+  ## assembler version) corroborates: `lea 0x1234.w,%a0` assembles to
   ## `41f8 1234`, `lea 0x8000.w,%a0` to `41f8 8000`, `lea 0x1234.w,%a3` to
   ## `47f8 1234`, `pea 0x1234.w` to `4878 1234` and `pea 0x8000.w` to
   ## `4878 8000`.
