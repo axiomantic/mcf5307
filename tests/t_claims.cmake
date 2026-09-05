@@ -58,7 +58,11 @@ set(MCF5307_CLAIM_IDS
     "reset_edge_call_suite_t_irq"
     "reset_edge_resample_suite_t_irq"
     "reset_edge_clear_suite_t_irq"
-    "write_fault_deferral_suite_t_bus_fault")
+    "write_fault_deferral_suite_t_bus_fault"
+    "one_iteration_suite_t_irq"
+    "address_error_odd_target_suite_t_control"
+    "bra_base_suite_t_bra_displacement"
+    "bra_isab_suite_t_bra_displacement")
 
 # EVERY `CLAIM_TEXT` BELOW IS QUOTED FROM ITS `CLAIM_FILE` AND IS NOT A SUMMARY
 # OF IT. The driver looks the text up in the file before it measures anything,
@@ -136,7 +140,7 @@ set(CLAIM_control_equivalent_EDIT_1_REPLACE "  if ctx.irqLevel != 7 and level ==
 #
 # THE CLAIM REGISTERED IS THE SUITE-RELATIVE ONE AND IT IS NOT "M3 IS
 # EQUIVALENT", and that distinction is why this file has two kinds. RE-MEASURED
-# 2026-08-13 against the observer AS WIDENED BY THE PRESENTATION-PROFILE AXIS:
+# against the observer AS WIDENED BY THE PRESENTATION-PROFILE AXIS:
 # 50 of its 450 scenarios SEPARATE M3 from the shipped latch, and they do NOT
 # all arrive the same way.
 #
@@ -150,7 +154,7 @@ set(CLAIM_control_equivalent_EDIT_1_REPLACE "  if ctx.irqLevel != 7 and level ==
 #
 #   TWENTY-FOUR PER PROFILE come from the PRE-TAKE sequence `7, 3, 7`, which
 #   arms the counter twice, so a THIRD interrupt is taken where the shipped
-#   latch takes two. Re-measured 2026-08-13: exactly eight (script, budget)
+#   latch takes two. Re-measured: exactly eight (script, budget)
 #   pairs separate under that sequence and all three masks separate identically,
 #   8 x 3 x 2 profiles = 48. Both of the budgets are the long ones - the third
 #   interrupt needs cycles to be reached, and every separating pair carries
@@ -227,8 +231,8 @@ set(CLAIM_A11a_suite_t_irq_EDIT_2_FIND "  takeException(ctx, pending.vector, ctx
 set(CLAIM_A11a_suite_t_irq_EDIT_2_REPLACE "  takeException(ctx, pending.vector, ctx.pc)\n  if pending.level == 7:\n    ctx.irq7Armed = false\n")
 
 # --- the two halves of the level-7 edge's stored pair -----------------------
-# THE SENTENCES THESE TWO ENTRIES CARRY WERE PROSE UNTIL 2026-08-13, AND ONE OF
-# THEM WAS FALSE WHILE EVERY SUITE WAS GREEN. `tests/t_irq.nim` block 9 said
+# THE SENTENCES THESE TWO ENTRIES CARRY WERE ONCE PROSE, AND ONE OF THEM WAS
+# FALSE WHILE EVERY SUITE WAS GREEN. `tests/t_irq.nim` block 9 said
 # its tuple separated "a core that used the CURRENTLY PRESENTED vector for the
 # armed level 7". Its edge is AUTOVECTORED, so `vectorFor` returns the
 # autovector and the stored vector is never read: the block decided the FLAG
@@ -237,15 +241,15 @@ set(CLAIM_A11a_suite_t_irq_EDIT_2_REPLACE "  takeException(ctx, pending.vector, 
 # THE MEASURED CONSEQUENCE, and the reason both halves are registered rather
 # than one. Moving `ctx.irq7Vector = vector` OUT of the level-7 guard leaves a
 # store that still runs at the edge and is then overwritten by every later
-# presentation. MEASURED 2026-08-13 against the file gate 4.4's round 4 left -
-# 25 cases: that move redded NOTHING, and the observer of `tests/t_claims.nim`
-# UPHELD it over all 225 scenarios of the space IT THEN HAD, because every
+# presentation. MEASURED against an earlier, narrower observer,
+# that move redded NOTHING, and the observer of `tests/t_claims.nim`
+# UPHELD it over every scenario of the space IT THEN HAD, because every
 # scenario that file then presented was autovectored. A defect no suite and no
 # observer could see.
 #
 # THE OBSERVER NOW REFUTES THAT MOVE, AND THAT IS WHY THE SENTENCE ABOVE CARRIES
 # THE SPACE IT WAS MEASURED IN. `tests/t_claims.nim` gained a PRESENTATION
-# PROFILE axis on 2026-08-13: `pVectored` clears the autovector flag and hands
+# PROFILE axis: `pVectored` clears the autovector flag and hands
 # every presentation a DISTINCT vector, so the stored vector is read and a later
 # presentation's vector is a different number from the edge's. MEASURED the same
 # day, with the move registered as an `equivalent` claim in a SCRATCH COPY of
@@ -293,15 +297,14 @@ set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_FILE "mcf5307/irq.nim")
 set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_FIND "  ctx.irqAutovector = autovector != 0\n")
 set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_REPLACE "  ctx.irqAutovector = autovector != 0\n  ctx.irq7Vector = vector\n")
 
-# --- The reset's own interrupt fixes ----------------------------------------
-# The reset does two separable things and the second is itself two halves, and
-# a count is only evidence about the half it moves with. Deleting the whole
-# `resetInterruptEdge` call, keeping the clear without the re-presentation, and
-# keeping the re-presentation without the clear are three different wrong cores
-# with three different signatures, and the two that share a count fail
-# different cases. A single entry would have been satisfied by any core that
-# moved the total to the registered number, which is the shape of measurement
-# this file exists to refuse.
+# --- THE INTERRUPT MODEL'S OWN TWO FIXES, WHICH WENT UNREGISTERED ----------
+# The pass that made `mcf5307_reset` acquire its own interrupt inhibition and
+# re-observe the level-7 pin registered NEITHER of them. Both carry sentences
+# naming a hypothetical wrong core - the marker this project treats as a claim
+# about COVERAGE - and both rested on a count in prose. `t_irq`'s block 19 had
+# already written the rule those two entries needed: "A date alone would go
+# stale the moment this block was weakened - the entry reds instead." It was
+# applied to the older claims and not to the new ones.
 #
 # Every count below is measured by applying the mutation to a copy of `src/`
 # and running the suite, against a no-op control on the same harness.
@@ -314,6 +317,19 @@ set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_REPLACE "  ctx.irqAutovector = au
 # is two edits because the procedure it calls is defined further down the file
 # and needs its forward declaration back.
 #
+# WHY FOUR ENTRIES AND NOT TWO. The reset does two separable things and the
+# second is itself two halves, and a count is only evidence about the half it
+# moves with. Deleting the whole `resetInterruptEdge` call, keeping the clear
+# without the re-presentation, and keeping the re-presentation without the
+# clear are three different wrong cores with three different signatures - 3, 3
+# and 1 - and the two that agree on 3 fail DIFFERENT cases. A single entry
+# would have been satisfied by any core that moved the total to the registered
+# number, which is the shape of measurement this file exists to refuse.
+#
+# EVERY COUNT BELOW WAS MEASURED AGAINST THIS TREE by applying
+# the mutation to a copy of `src/` and running the suite, with a no-op control
+# on the same harness reporting no reds.
+
 # FOUR RED IS THE WHOLE OF THE CLAIM AND THE TWO GREENS ARE HALF OF IT. A
 # mutation that reddened BLOCK 5 as well would mean the deferral had changed
 # what the frame CONTAINS and not only when it is written, and a mutation that
@@ -378,6 +394,93 @@ set(CLAIM_reset_edge_clear_suite_t_irq_EDIT_1_FILE "mcf5307/irq.nim")
 set(CLAIM_reset_edge_clear_suite_t_irq_EDIT_1_FIND "  ctx.irq7Armed = default(typeof(ctx.irq7Armed))\n")
 set(CLAIM_reset_edge_clear_suite_t_irq_EDIT_1_REPLACE "")
 
+# --- the one-iteration loop shape -------------------------------------------
+# `src/mcf5307/cpu.nim` states, inside `mcf5307_exec`'s loop: that the sample
+# and the `step` are one iteration and that making the take `continue` instead
+# would sample again before the handler had executed anything.
+# `tests/t_irq.nim` block 15 carries the case the sentence stands on - a level 7
+# armed from INSIDE the acknowledge reaches the core between its take and the
+# handler's first instruction - and block 17 arms it from inside the frame
+# write.
+#
+# The mutation is spend-after-take and it is not the inhibition flip. Setting
+# `atHandlerEntry = false` after the take instead of at the clear spends the
+# inhibition early: the sample of the next iteration is admitted, so a second
+# pending interrupt lands on an unexecuted handler entry. The flip mutation of
+# `reset_inhibit_suite_t_irq` moves the same assignment in the opposite
+# direction; the two are different wrong cores with different signatures, which
+# is why each carries its own entry.
+set(CLAIM_one_iteration_suite_t_irq_KIND "suite-red")
+set(CLAIM_one_iteration_suite_t_irq_SUITE "t_irq")
+set(CLAIM_one_iteration_suite_t_irq_EXPECT_RED 2)
+set(CLAIM_one_iteration_suite_t_irq_CLAIM_FILE "src/mcf5307/cpu.nim")
+set(CLAIM_one_iteration_suite_t_irq_CLAIM_TEXT "THE SAMPLE AND THE `step` BELOW ARE ONE ITERATION.")
+set(CLAIM_one_iteration_suite_t_irq_EDITS 1)
+set(CLAIM_one_iteration_suite_t_irq_EDIT_1_FILE "mcf5307/cpu.nim")
+set(CLAIM_one_iteration_suite_t_irq_EDIT_1_FIND "    if not ctx.atHandlerEntry:\n      if takeInterrupt(ctx):\n        if ctx.halted:\n          break\n    ctx.atHandlerEntry = false\n")
+set(CLAIM_one_iteration_suite_t_irq_EDIT_1_REPLACE "    if not ctx.atHandlerEntry:\n      if takeInterrupt(ctx):\n        if ctx.halted:\n          break\n        ctx.atHandlerEntry = false\n        continue\n    ctx.atHandlerEntry = false\n")
+
+# --- the odd control-transfer target ----------------------------------------
+# `src/mcf5307/machine.nim`'s `transferControl` refuses an odd target and takes
+# the address error, which the MCF5307 User's Manual requires of any attempted
+# execution transferring control to an odd instruction address.
+#
+# The mutation deletes the refusal and keeps the assignment. That core faults on
+# every one of these cases too, one instruction later, from the illegal-encoding
+# path, with no frame written, so the entry is registered against a suite whose
+# rows read the handler and the frame. A row that asserted `fault == true` would
+# be green under this mutation.
+#
+# `discard faultPc` keeps the parameter used. Without it the mutant fails to
+# compile under this project's flag set, and a mutation that does not compile
+# reports nothing.
+set(CLAIM_address_error_odd_target_suite_t_control_KIND "suite-red")
+set(CLAIM_address_error_odd_target_suite_t_control_SUITE "t_control")
+set(CLAIM_address_error_odd_target_suite_t_control_EXPECT_RED 6)
+set(CLAIM_address_error_odd_target_suite_t_control_CLAIM_FILE "tests/t_control.nim")
+set(CLAIM_address_error_odd_target_suite_t_control_CLAIM_TEXT "reds exactly six cases of this file, and the seventh")
+set(CLAIM_address_error_odd_target_suite_t_control_EDITS 1)
+set(CLAIM_address_error_odd_target_suite_t_control_EDIT_1_FILE "mcf5307/machine.nim")
+set(CLAIM_address_error_odd_target_suite_t_control_EDIT_1_FIND "  if (target and 1'u32) != 0'u32:\n    takeException(ctx, vecAddressError, faultPc, fsInstructionFetch)\n  else:\n    ctx.pc = target\n")
+set(CLAIM_address_error_odd_target_suite_t_control_EDIT_1_REPLACE "  discard faultPc\n  ctx.pc = target\n")
+
+# --- the branch displacement sweep ------------------------------------------
+# `tests/t_bra_displacement.nim` runs every value the displacement byte can
+# hold.
+#
+# Two entries and not one, because they are two different wrong cores and the
+# sweep separates them differently. Both red the sweep's own comparison; the
+# base mutation additionally reds the 16-bit marker row and leaves the ISA_B row
+# green, and the ISA_B mutation does the reverse.
+#
+# The base mutation moves the displacement base from the opcode's address plus
+# two to the opcode's address, which is the reading the manual's sentence exists
+# to exclude.
+#
+# The ISA_B mutation accepts `0xff` as an ordinary byte displacement. The
+# longword form first appeared in ISA_B and this part implements ISA_A; the
+# pinned assembler refuses to assemble `bra.l` under `-mcpu=5307` at all, so no
+# generated corpus case can carry this and only a hand-built word reaches it.
+set(CLAIM_bra_base_suite_t_bra_displacement_KIND "suite-red")
+set(CLAIM_bra_base_suite_t_bra_displacement_SUITE "t_bra_displacement")
+set(CLAIM_bra_base_suite_t_bra_displacement_EXPECT_RED 2)
+set(CLAIM_bra_base_suite_t_bra_displacement_CLAIM_FILE "tests/t_bra_displacement.nim")
+set(CLAIM_bra_base_suite_t_bra_displacement_CLAIM_TEXT "that base reds TWO cases of this file.")
+set(CLAIM_bra_base_suite_t_bra_displacement_EDITS 1)
+set(CLAIM_bra_base_suite_t_bra_displacement_EDIT_1_FILE "mcf5307/control.nim")
+set(CLAIM_bra_base_suite_t_bra_displacement_EDIT_1_FIND "  let base = ctx.pc\n")
+set(CLAIM_bra_base_suite_t_bra_displacement_EDIT_1_REPLACE "  let base = ctx.pc - insWordBytes\n")
+
+set(CLAIM_bra_isab_suite_t_bra_displacement_KIND "suite-red")
+set(CLAIM_bra_isab_suite_t_bra_displacement_SUITE "t_bra_displacement")
+set(CLAIM_bra_isab_suite_t_bra_displacement_EXPECT_RED 2)
+set(CLAIM_bra_isab_suite_t_bra_displacement_CLAIM_FILE "tests/t_bra_displacement.nim")
+set(CLAIM_bra_isab_suite_t_bra_displacement_CLAIM_TEXT "that marker reds TWO cases of this file.")
+set(CLAIM_bra_isab_suite_t_bra_displacement_EDITS 1)
+set(CLAIM_bra_isab_suite_t_bra_displacement_EDIT_1_FILE "mcf5307/control.nim")
+set(CLAIM_bra_isab_suite_t_bra_displacement_EDIT_1_FIND "  if d.size == 4'u8:\n    return trap(ctx)\n")
+set(CLAIM_bra_isab_suite_t_bra_displacement_EDIT_1_REPLACE "  if d.size == 4'u8:\n    discard\n")
+
 # ---------------------------------------------------------------------------
 # THE DRIVER.
 
@@ -397,7 +500,7 @@ endforeach()
 # below, because every check below is inside the claim loop and both of these
 # are ways of not entering it.
 #
-# ONE: THE REGISTRY HAS NO FLOOR. MEASURED 2026-08-13 by the gate-4.4 judge:
+# ONE: THE REGISTRY HAS NO FLOOR. MEASURED by the gate judge:
 # with `MCF5307_CLAIM_IDS` emptied and every claim's definitions left in place,
 # this test ran the shape battery, printed `0 claims checked: 0 upheld, 0
 # withheld, 0 refuted` and exited 0. The claim loop is the half of this driver
@@ -430,7 +533,7 @@ endforeach()
 # never be shown able to pass.
 #
 # THE DERIVATION READS EVERY DEFINITION FIELD AND NOT THE `_KIND` LINE ALONE.
-# MEASURED 2026-08-13: with the derivation keyed on `_KIND`, removing an id
+# MEASURED: with the derivation keyed on `_KIND`, removing an id
 # from the list AND removing that claim's ONE `_KIND` line left its other eight
 # definition lines in the file, and this check passed and printed `the registry
 # defines 2 claim(s) and runs all of them`. The paragraph above says the check
@@ -440,7 +543,7 @@ endforeach()
 # honest exit, and which the retirement note is there to record.
 #
 # THE MATCH IS ANCHORED AT THE START OF A LINE, and that is a repair and not a
-# tightening. MEASURED 2026-08-13: an unanchored pattern matched a
+# tightening. MEASURED: an unanchored pattern matched a
 # `set(CLAIM_<id>_KIND ...)` spelling written INSIDE A COMMENT, so a worked
 # example of the registry's own syntax derived a claim that does not exist and
 # stopped the configure. Every real definition below starts at column zero and
@@ -482,7 +585,7 @@ if(NOT "control_equivalent" IN_LIST MCF5307_CLAIM_IDS)
 endif()
 
 # THE CONTROL IS REQUIRED BY NAME AND BY KIND, BECAUSE THE NAME ALONE PROTECTS
-# THE NAME. MEASURED 2026-08-13 with the real compiler: changing
+# THE NAME. MEASURED with the real compiler: changing
 # `CLAIM_control_equivalent_KIND` from `equivalent` to `suite-red` and giving it
 # a SUITE and an EXPECT_RED left the id in the list, left the derived sets in
 # agreement, and ran the whole driver to `3 claims checked: 3 upheld` at rc 0 -
@@ -523,7 +626,7 @@ message("t_claims: the registry defines ${claims_floor} claim(s) in "
 # the sentence.
 #
 # DROPPING ONLY `_CLAIM_TEXT` LEFT THE REST OF THE ENTRY AS A PARKING SPACE.
-# MEASURED 2026-08-13, twice: with a claim's `CLAIM_FILE` pointed at this
+# MEASURED, twice: with a claim's `CLAIM_FILE` pointed at this
 # registry and its sentence deleted from the source, the sentence parked on an
 # `EDIT_9_FIND` line satisfied this lookup, and so did the sentence parked as
 # another entry's `CLAIM_FILE` value. Each left the check printing that every
@@ -547,7 +650,7 @@ foreach(claim IN LISTS MCF5307_CLAIM_IDS)
 
     # -- THE SENTENCE HAS A FLOOR, AND WITHOUT ONE THE LOOKUP IS A FORMALITY.
     # `string(FIND)` returns 0 for an EMPTY needle, so an emptied `CLAIM_TEXT`
-    # is satisfied by every file in the tree - MEASURED 2026-08-13, an entry
+    # is satisfied by every file in the tree - MEASURED, an entry
     # whose text was emptied and whose sentence was deleted from the source
     # passed this loop. A one-word text is the same defect with a smaller step:
     # MEASURED the same day, `move` survived the replacement of the whole
@@ -726,7 +829,7 @@ message("t_claims: every registered claim's sentence is still in the file that "
 # runs of this driver against the same build tree therefore delete and rewrite
 # each other's trees while they are being read.
 #
-# MEASURED 2026-08-13 by the gate-4.4 judge: `ctest -R ^t_claims$` started
+# MEASURED by the gate judge: `ctest -R ^t_claims$` started
 # alongside a full `ctest` over the same build tree failed with
 # `file COPY cannot set permissions ... No such file or directory`, once in
 # about seven attempts. A visible error is the LUCKY outcome. The same
@@ -809,7 +912,7 @@ endfunction()
 # and gave every other anchor the insertion BEFORE the text, licensed by the
 # sentence "any other anchor is a statement whose entry IS its execution". That
 # sentence is false of Nim, and it produced a false UPHELD twice by two routes,
-# both MEASURED 2026-08-13 by the gate-4.4 judge:
+# both MEASURED by the gate judge:
 #
 #   A ROUTINE HEADER IS NOT A STATEMENT. `proc`, `func`, `method`, `iterator`,
 #   `converter`, `template` and `macro` were in no list, so a header took the
@@ -862,7 +965,7 @@ endfunction()
 # definition - and a nested branch is a second question the one insertion does
 # not answer.
 #
-# MEASURED 2026-08-13 on repository source, `src/mcf5307/cpu.nim`. The anchor
+# MEASURED on repository source, `src/mcf5307/cpu.nim`. The anchor
 #
 #     if takeInterrupt(ctx):
 #       if ctx.halted:
@@ -920,12 +1023,12 @@ endfunction()
 #   needs no word of its own to keep it out.
 #
 # `except` IS NOT RECOGNISED, and its absence is a decision rather than an
-# oversight. MEASURED 2026-08-13: it sat in the wrong character class of the old
+# oversight. MEASURED: it sat in the wrong character class of the old
 # test, so a bare `except:` matched neither branch of it, took the
 # before-insertion, and made the pristine tree fail to COMPILE - which the driver
 # reported as "the observer does not compile", a true sentence about a cause it
 # named wrongly. A shape with no control is not a shape this probe knows it
-# handles correctly, and MEASURED 2026-08-13 no control in this repository
+# handles correctly, and MEASURED no control in this repository
 # exercises an exception handler. It is refused until a control earns it a place
 # here.
 #
@@ -1008,7 +1111,7 @@ function(_mcf5307_claims_probe_point find following_indent out_text out_kind
         # HARDCODED ASSUMPTION THAT THE TREE UNDER MEASUREMENT INDENTS BY TWO.
         # A body indented deeper than that puts `quit(97)` at one depth and the
         # body's own first statement at another, which Nim rejects. MEASURED
-        # 2026-08-13 on the `AG_bare_header` row: with the indent synthesised
+        # on the `AG_bare_header` row: with the indent synthesised
         # the row is MISCOMPILE and the table records UPHELD.
         #
         # A LENGTH IS TURNED BACK INTO SPACES AND THAT LOSES NOTHING HERE: Nim
@@ -1123,7 +1226,7 @@ function(_mcf5307_claims_following_indent text_name find_name out)
 endfunction()
 
 # ---- the REACHABILITY PROBE, and the verdict it withholds -------------------
-# THE DEFECT THIS EXISTS FOR, MEASURED 2026-08-13 by the gate-4.4 judge. An
+# THE DEFECT THIS EXISTS FOR, MEASURED by the gate judge. An
 # `equivalent` claim was registered whose single edit changes `alu.nim`'s
 # `if carry: sr = sr or (ccrC or ccrX)` to `if carry: sr = sr or ccrC` - a real
 # semantic break of every ADDX chain. `alu.nim` is imported by `cpu.nim`, so the
@@ -1181,7 +1284,7 @@ endfunction()
 # one the verdict needs must not license the verdict, so it stops the run and
 # names the anchor instead.
 #
-# MEASURED 2026-08-13, the negative control that made the distinction fire. An
+# MEASURED, the negative control that made the distinction fire. An
 # `equivalent` claim was registered in a SCRATCH COPY of this file DELETING the
 # nil-context guard of `mcf5307_set_irq` - `if ctx.isNil: return`, a real
 # semantic break over a branch no scenario of `tests/t_claims.nim` takes. With
@@ -1192,7 +1295,7 @@ endfunction()
 # one-line `if autovector: autovectorFor(level) else: vector`, was REFUSED
 # rather than measured weakly. NEITHER CONTROL IS REGISTERED HERE.
 #
-# MEASURED 2026-08-13 against the claims that are registered here:
+# MEASURED against the claims that are registered here:
 # `control_equivalent`'s single edit is REACHED, probed as the first statement
 # of the branch it opens, so this check invalidates no claim in the registry.
 function(_mcf5307_claims_reachable claim edit out out_point)
@@ -1370,7 +1473,7 @@ endfunction()
 # regression was therefore findable only by hand.
 #
 # THE THREE ROUTES TO A FALSE UPHELD THAT REVIEW ACTUALLY FOUND, each MEASURED
-# 2026-08-13 and each a row below: a routine header taking the before-insertion,
+# and each a row below: a routine header taking the before-insertion,
 # which lands at module top level (H); an anchor spanning a SIBLING arm, upheld
 # on the arm that ran (L); and a header over a NESTED dead branch, upheld on the
 # outer branch that ran (AC, paired with AC_inner).
@@ -1381,7 +1484,7 @@ endfunction()
 # UPHELD lived in exactly that untested cell. A battery is only ever evidence
 # about the cells it has.
 #
-# WHAT WAS CUT FROM THIS TABLE ON 2026-08-13, AND WHY. The table had grown a row
+# WHAT WAS CUT FROM THIS TABLE, AND WHY. The table had grown a row
 # for nearly every construct the probe recognises, and a row that has never
 # separated a right decision from a wrong one costs a Nim compile to say
 # something the row beside it already says. What is kept is: the three routes
@@ -1510,7 +1613,7 @@ set(MCF5307_SHAPE_AG_bare_header_EXPECT "UPHELD")
 # ---- THE TABLE'S OWN FLOOR --------------------------------------------------
 # THE BATTERY HAD NO FLOOR AND COULD THEREFORE SHRINK IN SILENCE, which is the
 # defect the claim registry's pre-flight above exists for, in the half of this
-# file that pre-flight does not read. MEASURED 2026-08-13 on this file with the
+# file that pre-flight does not read. MEASURED on this file with the
 # rows already cut: one id removed from `MCF5307_CLAIMS_SHAPE_IDS` with its
 # three definitions left in place ran to exit 0 and printed `7 probe shapes
 # agreed with the outcomes recorded for them`. The row that went was the
@@ -1633,7 +1736,7 @@ function(_mcf5307_claims_shape_battery out_failures out_ran)
     # AND THE PROCS MUST NOT BE THERE ALREADY. Injecting a second copy defines
     # every one of their names twice, and the compile then fails with a
     # redefinition error that names a symbol and not a cause. MEASURED
-    # 2026-08-13: a scratch harness that injects the same procs before invoking
+    # a scratch harness that injects the same procs before invoking
     # this driver produced exactly that, once per shape.
     _mcf5307_claims_occurrences(injected MCF5307_CLAIMS_SHAPE_PROCS count)
     if(NOT count EQUAL 0)

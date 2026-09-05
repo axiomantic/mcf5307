@@ -18,16 +18,13 @@
 ## operand evaluation walks them. The MOVEM mask precedes the EA extension
 ## words, so the mask is fetched before the EA's own words.
 ##
-## Cycles. The block above the constants in `cpu.nim` says why nothing checks
-## any of them. Every instruction in this group has a timing row - MOVE and
-## MOVEA in Tables 3-9 and 3-10 (folios 3-26 and 3-27), MOVEQ and LEA in Table
-## 3-13 (3-28), SWAP in Table 3-12 (3-27), and PEA, LINK, UNLK and MOVEM in
-## Table 3-14 (3-29) - and none of the returns here was derived from one. Four
-## of those rows carry a single cell that the return contradicts outright, so
-## no effective-address flattening explains them: `moveq #imm,Dx` is 1(0/0)
-## against the 4 returned, `swap Dx` is 1(0/0) against 4, `link.w Ay,#imm` is
-## 2(0/1) against 8, and `unlk Ax` is 3(1/0) against 6. `movem.l` is `2+n`
-## against the `8+2n` here.
+## CYCLES. See the block above the constants in `cpu.nim`. Every instruction
+## in this group HAS a timing row, and NONE OF
+## THE RETURNS HERE WAS DERIVED FROM ONE. Some of those rows carry a SINGLE
+## cell that the return contradicts outright, so no effective-address
+## flattening explains them: `moveq #imm,Dx` is 1(0/0) against the 4 returned,
+## `swap Dx` is 1(0/0) against 4, `link.w Ay,#imm` is 2(0/1) against 8, and
+## `unlk Ax` is 3(1/0) against 6. `movem.l` is `2+n` against the `8+2n` here.
 ##
 ## Instruction semantics, register numbering and addressing-mode behaviour are
 ## taken from the ColdFire Family Programmer's Reference Manual and the
@@ -92,16 +89,14 @@ proc execPea(ctx: MCF5307Ctx; d: Decoded): uint32 =
   result = 6'u32
 
 proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
-  ## SWAP Dn: the upper and lower 16-bit halves of a data register exchange.
-  ## Table 3-7, page 3-25: `MSW of Dn <-> LSW of Dn`.
+  ## SWAP Dn: the upper and lower 16-bit halves of a data register exchange -
+  ## `MSW of Dn <-> LSW of Dn`.
   ##
-  ## The condition codes come from section 3.2.1.5, page 3-9. There is no
-  ## per-instruction rule to find: Table 3-7's operation column carries no
-  ## condition-code clause for SWAP and Table 3-12 gives timing alone, and
-  ## those two rows are the only places the manual names SWAP at all. The
-  ## generic rule settles it. Section 3.2.1.5 opens at the foot of page 3-8
-  ## with the CCR bit-field figure and does not end there; page 3-9 carries
-  ## the per-bit definitions and fixes all five - N "Set if the most
+  ## THE CONDITION CODES COME FROM THE GENERIC CCR RULE. There is no
+  ## PER-INSTRUCTION rule to find: the OPERATION column carries no
+  ## condition-code clause for SWAP and the timing table gives timing alone,
+  ## and those rows are the only places SWAP is named at all. But the GENERIC
+  ## rule settles it. The per-bit definitions fix every one - N "Set if the most
   ## significant bit of the result is set; otherwise cleared", Z "Set if the
   ## result equals zero; otherwise cleared", V "Set if an arithmetic overflow
   ## occurs implying that the result cannot be represented in the operand
@@ -117,11 +112,11 @@ proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ##
   ## Section 3.9 is not an oracle. Two independent reasons it cannot be:
   ##
-  ##   Its removed list is not reliable. Page 3-21 names "integer division"
-  ##   among the removed instructions, while Table 3-7 on page 3-23 carries
-  ##   both a DIVS row and a DIVU row and Table 3-13 on page 3-28 times
-  ##   `divs.w`, `divu.w`, `divs.l` and `divu.l`. A list that contradicts two
-  ##   tables cannot settle a question on its own.
+  ##   It is not reliable. It names "integer division" among the removed
+  ##   instructions, while the instruction summary carries both a DIVS row and
+  ##   a DIVU row and the timing table times `divs.w`, `divu.w`, `divs.l` and
+  ##   `divu.l`. A list that contradicts the tables cannot settle a question on
+  ##   its own.
   ##
   ##   "A reduced version of the 68000 instruction set" is a claim about set
   ##   membership, not about per-instruction semantics. Table 3-7 gives ADD,
@@ -256,7 +251,7 @@ proc moveFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
     # - the legality table, not this call site, is where SWAP's operand rule
     # lives.
     #
-    # None should be written to: reaching it needs a
+    # No test should be written to reach it: reaching it needs a
     # decoder change, so a test that covered it would have to introduce the
     # very defect the mask ordering prevents.
     if not eaIsLegalFor(opSwap, d.ea):

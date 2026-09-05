@@ -54,7 +54,9 @@ template check(ok: bool; label: string; got: string; want: string) =
 const expectedLayout = @[
   ("pc", 4), ("sp", 4), ("sr", 4),
   ("dRegs", 32), ("aRegs", 28),
-  ("halted", 1), ("fault", 1),
+  ("halted", 1), ("fault", 1), ("vbr", 4),
+  ("cacr", 4), ("acr0", 4), ("acr1", 4),
+  ("rambar0", 4), ("rambar1", 4), ("mbar", 4),
   ("irqLevel", 4), ("irqVector", 1), ("irqAutovector", 1),
   ("irq7Armed", 1), ("irq7Vector", 1), ("irq7Autovector", 1),
   ("atHandlerEntry", 1),
@@ -73,9 +75,9 @@ check(measuredLayout == expectedLayout,
       $measuredLayout, $expectedLayout)
 
 let measuredSize = int(mcf5307_state_size())
-check(measuredSize == 113,
+check(measuredSize == 141,
       "size: header, payload and checksum",
-      $measuredSize, "113")
+      $measuredSize, "141")
 
 # ---------------------------------------------------------------------------
 # BLOCK 2. The header words, and the buffer every save in this file writes into.
@@ -86,7 +88,7 @@ check(measuredSize == 113,
 # one case there rather than a result returned to each caller.
 
 const
-  blockBytes = 113
+  blockBytes = 141
   guardBytes = 8
   filler = 0xEE'u8
 
@@ -131,8 +133,8 @@ let headerProbe = savedBlock(freshContext())
 let headerWords = (magic: be32(headerProbe, 0),
                    version: be32(headerProbe, 4),
                    payload: be32(headerProbe, 8))
-let wantHeaderWords = (magic: 0x4D435335'u32, version: 2'u32,
-                       payload: 97'u32)
+let wantHeaderWords = (magic: 0x4D435335'u32, version: 3'u32,
+                       payload: 125'u32)
 
 check(headerWords == wantHeaderWords,
       "header: the magic, the version word and the payload width",
@@ -253,8 +255,8 @@ for name, wantValue, gotValue in fieldPairs(stamped[], restored[]):
 # a checksum it did not also compute with the same constants.
 
 const goldenStampedBlock = @[
-  0x4D'u8, 0x43'u8, 0x53'u8, 0x35'u8, 0x00'u8, 0x00'u8, 0x00'u8, 0x02'u8,
-  0x00'u8, 0x00'u8, 0x00'u8, 0x61'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x01'u8,
+  0x4D'u8, 0x43'u8, 0x53'u8, 0x35'u8, 0x00'u8, 0x00'u8, 0x00'u8, 0x03'u8,
+  0x00'u8, 0x00'u8, 0x00'u8, 0x7D'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x01'u8,
   0xA5'u8, 0xA5'u8, 0x00'u8, 0x02'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x03'u8,
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x04'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x05'u8,
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x06'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x07'u8,
@@ -263,11 +265,14 @@ const goldenStampedBlock = @[
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x0C'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x0D'u8,
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x0E'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x0F'u8,
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x10'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x11'u8,
-  0xC3'u8, 0xC3'u8, 0x00'u8, 0x12'u8, 0x01'u8, 0x00'u8, 0x00'u8, 0x00'u8,
-  0x01'u8, 0x15'u8, 0x56'u8, 0x01'u8, 0x00'u8, 0x59'u8, 0x00'u8, 0x01'u8,
-  0x00'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x1D'u8, 0xA5'u8, 0xA5'u8, 0x00'u8,
-  0x1E'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x1F'u8, 0xC1'u8, 0xED'u8, 0x85'u8,
-  0x97'u8]
+  0xC3'u8, 0xC3'u8, 0x00'u8, 0x12'u8, 0x01'u8, 0x00'u8, 0xA5'u8, 0xA5'u8,
+  0x00'u8, 0x15'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x16'u8, 0xA5'u8, 0xA5'u8,
+  0x00'u8, 0x17'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x18'u8, 0xA5'u8, 0xA5'u8,
+  0x00'u8, 0x19'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x1A'u8, 0xA5'u8, 0xA5'u8,
+  0x00'u8, 0x1B'u8, 0x00'u8, 0x00'u8, 0x01'u8, 0x1C'u8, 0x5D'u8, 0x00'u8,
+  0x01'u8, 0x60'u8, 0x01'u8, 0x00'u8, 0x01'u8, 0xA5'u8, 0xA5'u8, 0x00'u8,
+  0x24'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x25'u8, 0xA5'u8, 0xA5'u8, 0x00'u8,
+  0x26'u8, 0x67'u8, 0x17'u8, 0x21'u8, 0x63'u8]
 
 check(stampedBytes == goldenStampedBlock,
       "wire format: the salt-0 context saves these exact bytes",
@@ -318,7 +323,7 @@ let namedStatuses = (magic: statusAfterDamage(1),
                      version: statusAfterDamage(5),
                      width: statusAfterDamage(9),
                      payload: statusAfterDamage(20),
-                     checksum: statusAfterDamage(110))
+                     checksum: statusAfterDamage(138))
 let wantNamedStatuses = (magic: stateBadMagic,
                          version: stateBadVersion,
                          width: stateBadWidth,
@@ -356,13 +361,12 @@ check(nilStatuses == wantNilStatuses,
 # BLOCK 4A. A VERSION-1 BLOCK IS REFUSED BY NAME AND IS NEVER READ.
 #
 # THIS IS THE CASE THE VERSION WORD EXISTS FOR, AND EVERY OTHER CASE IN THIS
-# FILE IS BLIND TO IT. Version 1's payload is the same 84 bytes version 2 opens
-# with: the four `pending*` fields were APPENDED, so every version-1 field sits
-# at the offset version 2 reads it from. A reader that skipped the version word
-# would therefore load all fourteen of the older fields CORRECTLY and take the
-# four new ones from the checksum and from whatever followed the shorter block.
-# There is no corruption for a checksum to notice, because the checksum of a
-# version-1 block is honest - of a version-1 block.
+# FILE IS BLIND TO IT. Version 1's payload is shorter than version 2's and does
+# not share its field offsets, so a reader that skipped the version word would
+# decode the block from the wrong offsets and take its tail from the checksum
+# and from whatever followed the shorter block. There is no corruption for a
+# checksum to notice, because the checksum of a version-1 block is honest - of
+# a version-1 block.
 #
 # SO THE BLOCK BELOW IS A WHOLE, VALID VERSION-1 BLOCK and not a damaged version
 # -2 one: 100 bytes, its own 84-byte payload width, and its own correct FNV-1a.

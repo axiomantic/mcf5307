@@ -1,12 +1,12 @@
 /* abi_stub.c - one definition, with an empty body and external linkage, of
  * every function `include/mcf5307.h` declares.
  *
- * Cases 3 and 4 of `t0_abi_header` compile AND link, and linking is what makes
- * a renamed declaration a link error rather than nothing at all.
- * `-fsyntax-only` never links, so the two header compiles alone cannot catch a
- * rename. The real implementation cannot supply the definitions either: it
- * depends on this contract, so a check that waited for it could never pass.
- * This stub breaks that circle.
+ * WHY IT EXISTS. Cases 3 and 4 of `t0_abi_header` COMPILE AND LINK, and
+ * linking is what makes a RENAMED declaration a link error rather than
+ * nothing at all. `-fsyntax-only` never links, so the two header compiles
+ * alone cannot catch a rename. This stub supplies a definition for every
+ * name the contract declares, so the two header compiles link without the
+ * real library.
  *
  * `cmake/Nim.cmake` step 4a, part three compiles this file, reads the symbols
  * the object defines with `nm`, and compares that set against the published
@@ -25,19 +25,12 @@
  * link of `t0_abi_header` resolves against. A published name defined `static`
  * here would resolve nothing there, so the gate refuses that and says nothing
  * about a `static` name the contract never declared.
- *
- * A link error needs a reference as well as a definition. `t0_abi_header.c`
- * and `t0_abi_header.cpp` take their addresses from a fixed list of their
- * own, and neither one names `mcf5307_set_reg`, `mcf5307_get_reg`,
- * `mcf5307_halted` or `mcf5307_faulted`. That gap belongs to those two files.
  */
 
 #include <stddef.h>
 #include <stdint.h>
 
 #include "mcf5307.h"
-
-/* ---------------------------------------------------------------- CPU core */
 
 void mcf5307_runtime_init(void)
 {
@@ -132,8 +125,6 @@ void mcf5307_state_load(mcf5307_ctx* ctx, const void* src)
     (void)src;
 }
 
-/* ------------------------------------------------ ISP1181 USB device model */
-
 isp1181_ctx* isp1181_create(void* user, isp1181_irq_fn irq, isp1181_tx_fn tx)
 {
     (void)user;
@@ -168,6 +159,28 @@ void isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
     (void)endpoint;
     (void)data;
     (void)len;
+}
+
+int isp1181_setup(isp1181_ctx* ctx, const uint8_t* data, size_t len)
+{
+    (void)ctx;
+    (void)data;
+    (void)len;
+    return 0;
+}
+
+int isp1181_in_token(isp1181_ctx* ctx, int endpoint)
+{
+    (void)ctx;
+    (void)endpoint;
+    return 0;
+}
+
+int isp1181_set_backend(isp1181_ctx* ctx, int backend)
+{
+    (void)ctx;
+    (void)backend;
+    return 0;
 }
 
 void isp1181_tick(isp1181_ctx* ctx, uint32_t sof_frames)

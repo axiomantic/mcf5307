@@ -1,9 +1,9 @@
 /* tests/abi_smoke_symbols.inc - the committed expectation of the exported ABI.
  *
  * It names the published symbols this project intends the library to define
- * and export. It is not the published set of `include/mcf5307.h`, which is
- * larger: a published name that is not implemented yet is declared and not
- * defined, and it does not belong here until it is.
+ * and export. It is not by definition the published set of
+ * `include/mcf5307.h`: a published name that is not implemented yet is
+ * declared and not defined, and it does not belong here until it is.
  *
  * `cmake/Nim.cmake` step 4a measures which published names the library
  * actually defines and exports, with `nm` over a real shared object, and
@@ -62,3 +62,15 @@ MCF5307_ABI_FN(mcf5307_set_irq)
 MCF5307_ABI_FN(mcf5307_state_size)
 MCF5307_ABI_FN(mcf5307_state_save)
 MCF5307_ABI_FN(mcf5307_state_load)
+MCF5307_ABI_FN(isp1181_create)
+MCF5307_ABI_FN(isp1181_destroy)
+MCF5307_ABI_FN(isp1181_read)
+MCF5307_ABI_FN(isp1181_write)
+MCF5307_ABI_FN(isp1181_rx)
+MCF5307_ABI_FN(isp1181_setup)
+MCF5307_ABI_FN(isp1181_in_token)
+MCF5307_ABI_FN(isp1181_set_backend)
+MCF5307_ABI_FN(isp1181_tick)
+MCF5307_ABI_FN(isp1181_state_size)
+MCF5307_ABI_FN(isp1181_state_save)
+MCF5307_ABI_FN(isp1181_state_load)
