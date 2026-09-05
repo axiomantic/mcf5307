@@ -24,8 +24,9 @@ deterministic. Every decision that could vary the output is fixed here:
 
 The one non-deterministic input is the assembler: a different binutils
 version can emit different bytes for the same source. That is why the
-assembler version is pinned in `docs/toolchain.md`. Regenerating under the
-pinned version is byte-identical; the CI job installs exactly that version.
+assembler version is pinned to the `BINUTILS_VERSION` constant below, which
+`main` checks before it writes anything. Regenerating under the pinned version
+is byte-identical; the CI job installs exactly that version.
 
 ## The corpus schema
 
@@ -37,7 +38,8 @@ Each file is an object with:
   "format"    int         the schema version (1).
   "group"     str         the group name, matching the file's <group> prefix.
   "binutils"  str         the pinned assembler version this file was
-                          generated with (from docs/toolchain.md).
+                          generated with: the full first line of
+                          `m68k-elf-as --version`.
   "cases"     array       the group's cases. Non-empty.
 
 Each case is an object with:
@@ -134,7 +136,8 @@ M68K_OBJCOPY = os.environ.get("M68K_OBJCOPY", "m68k-elf-objcopy")
 
 FORMAT_VERSION = 1
 
-# The pinned assembler version. Kept in step with docs/toolchain.md.
+# The pinned assembler version: the full first line of `m68k-elf-as
+# --version`. `main` refuses to regenerate under any other.
 BINUTILS_VERSION = "GNU assembler (GNU Binutils) 2.47.20260726"
 
 GROUPS = ("move", "alu", "logic", "control")
@@ -2861,7 +2864,7 @@ def main(argv):
 
     # Fail the whole run if the pinned assembler version is not the one being
     # used, so a byte-identical regeneration can never be silently produced
-    # by a different assembler. docs/toolchain.md pins the same version.
+    # by a different assembler.
     version_r = subprocess.run(
         [M68K_AS, "--version"], capture_output=True, text=True)
     first_line = version_r.stdout.splitlines()[0].strip() if version_r.stdout \
