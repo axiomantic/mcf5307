@@ -4,11 +4,11 @@
 ## named in full here. A bare "section 6.1" is unreadable to a reader who holds
 ## only the repository, and none of them may be copied into it.
 ##
-##   AGENTS.MD SECTION 11 is section 11 "External resources" of the
-##   nord-modular-emulator project's `AGENTS.md`. Opened and checked: it is the
-##   section that names the two Motorola documents this file takes instruction
-##   semantics from - the ColdFire Family Programmer's Reference Manual Rev 3
-##   and the MCF5307 User's Manual - and gives a download location for each.
+##   TWO MOTOROLA DOCUMENTS supply the instruction semantics this file
+##   asserts: the ColdFire Family Programmer's Reference Manual Rev. 3 and the
+##   MCF5307 ColdFire Integrated Microprocessor User's Manual. Neither is in
+##   this repository and neither may be copied into it; each is identified in
+##   full below so that a reader can obtain the same edition from the vendor.
 ##
 ##   THE MCF5307 USER'S MANUAL is the
 ##   document every table and page cited below refers to. Its full identity,
@@ -17,9 +17,8 @@
 ##   MCF5307UM/AD, (c) 1998 - the order number is printed at the top right of
 ##   the cover and the title is the title page. IT IS NOT IN THIS REPOSITORY,
 ##   it may not be copied into it, and a reader who has only this tree must
-##   obtain it separately from the download location AGENTS.md section 11
-##   gives. That is why every citation here names table, page and row instead
-##   of quoting.
+##   obtain it separately from the vendor. That is why every citation here
+##   names table, page and row instead of quoting.
 ##
 ##   THE COLDFIRE FAMILY PROGRAMMER'S REFERENCE MANUAL IS ON DISK at
 ##   `~/Development/datasheets/CFPRM.pdf` - Freescale, "ColdFire Family
@@ -71,8 +70,8 @@
 ##
 ## Instruction semantics, the condition-code rules and the encodings are facts
 ## about Motorola silicon; they are taken from the ColdFire Family Programmer's
-## Reference Manual and the MCF5307 User's Manual (AGENTS.md section 11) and
-## from this project's own measurements with the pinned cross assembler.
+## Reference Manual and the MCF5307 User's Manual, and from this project's own
+## measurements with the pinned cross assembler.
 
 import mcf5307/cpu
 import mcf5307/decode
