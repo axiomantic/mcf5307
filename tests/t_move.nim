@@ -218,8 +218,7 @@ block:
 # ---------------------------------------------------------------------------
 # The three-way effective-address split, and `SWAP`.
 #
-# `AGENTS.md`'s `Comments` section names the shape: an invariant with no
-# mechanism is a comment. These cases are the mechanism.
+# An invariant with no mechanism is a comment. These cases are the mechanism.
 #
 # The helpers below assert whole post-states rather than one register.
 
