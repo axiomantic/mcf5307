@@ -1,19 +1,19 @@
 ## `t_sign_extend` - the sign-extension helpers of `mcf5307/machine`.
 ##
-## WHY THE NEGATIVE HALF IS THE POINT. Sign extension REINTERPRETS the bits of
+## The negative half is the point. Sign extension reinterprets the bits of
 ## an unsigned value as a two's-complement signed value of the same width. A
 ## checked narrowing conversion (`int16(x)`, `int8(x)`) does something
 ## different: it rejects each value that the signed type cannot hold. Every
 ## input from 0x8000 to 0xFFFF - that is, every negative displacement - is
 ## such a value. The library is built with `--panics:on -d:release`, so a
 ## checked conversion there does not raise a catchable error; it ends the
-## process with a `RangeDefect`. This test compiles with THE LIBRARY'S OWN
-## FLAG SET.
+## process with a `RangeDefect`. This test compiles with the library's own
+## flag set.
 ##
 ## The helpers are not part of the C ABI and no C caller names
 ## them. This file uses `include` and not `import`: `include` puts
 ## the module's text in this program, which gives the test the private names
-## WITHOUT adding an export to the module under test. Exporting the
+## without adding an export to the module under test. Exporting the
 ## helpers to make them testable would enlarge the module's public surface for
 ## the test's convenience, and the surface is a thing the project controls.
 ##

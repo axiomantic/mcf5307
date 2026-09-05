@@ -1624,8 +1624,8 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part t
 # ---------------------------------------------------------------------------
 # Step 4a, part three. The link-partner stub gate.
 #
-# WHAT IT PROTECTS. `tests/abi_stub.c` opens by claiming one definition, with
-# an empty body, of every function the contract declares.
+# `tests/abi_stub.c` opens by claiming one definition, with an empty body, of
+# every function the contract declares.
 #
 # Nothing here reads the stub's source text, and nothing here parses C. The
 # smoke-test list above is a separate data file precisely so that its reader
@@ -1705,21 +1705,21 @@ __attribute__((used)) static void mcf5307_abi_stub_probe_internal(void) {}
 ]==])
 
 # The two probe names are this file's own instrument in that object. The
-# unpublished-export check below EXEMPTS them, and an exemption is a hole
+# unpublished-export check below exempts them, and an exemption is a hole
 # unless something closes it.
 #
-# It is safe, and the reason is measurable: THE PROBE HEADER ABOVE DEFINES BOTH
-# NAMES, so a stub that defines either one is `error: redefinition` and the
+# It is safe, and the reason is measurable: the probe header above defines both
+# names, so a stub that defines either one is `error: redefinition` and the
 # compile below exits non-zero. No verdict runs on that translation unit at
 # all, so there is no set for the exemption to hide a name in.
 set(MCF5307_ABI_STUB_INSTRUMENT
     mcf5307_abi_stub_probe_external mcf5307_abi_stub_probe_internal)
 
 # ---------------------------------------------------------------------------
-# TWO FAULTS MUST NEVER SHARE A LINE, AND THE PROBE INJECTION GAVE THIS COMPILE
-# A SECOND ONE. `tests/abi_stub.c` is compiled here with `-include` of a header
-# THIS FILE GENERATES, so the compile can now fail for a fault that is not the
-# stub's: a stub name that collides with a probe name.
+# Two faults must never share a line, and the probe injection gives this
+# compile a second one. `tests/abi_stub.c` is compiled here with `-include` of
+# a header this file generates, so the compile can fail for a fault that is not
+# the stub's: a stub name that collides with a probe name.
 #
 # The two are separated by the one thing that distinguishes them: whether the
 # compiler's own diagnostics name the generated probe header. `string(FIND)` is
@@ -2147,11 +2147,11 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: contro
 # ---------------------------------------------------------------------------
 # Control H. The internal branch's two routes, compiled on every configure run.
 #
-# A SENTENCE ABOUT WHAT A COMPILER DOES IS A MEASUREMENT AND NOT A FACT. The
-# definition has to SURVIVE to `nm`, because `nm` is what the INTERNAL branch
+# A sentence about what a compiler does is a measurement, not a fact. The
+# definition has to survive to `nm`, because `nm` is what the INTERNAL branch
 # reads. Each arm below therefore carries something that holds its definition
 # alive - a reference for arm one, `used` for arm two - and each asserts the
-# category ITS OWN object lands in.
+# category its own object lands in.
 #
 # Internal linkage plus something that keeps the definition alive gives
 # `t <name>` in the `all` pass, absent from the `-g` pass, and that is what the
@@ -2169,7 +2169,7 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: contro
 # a branch rots exactly like a sentence saying it does. Arms three and four
 # below run them.
 #
-# THE SCOPE OF THIS MEASUREMENT IS ONE TOOLCHAIN. Every answer above was read
+# The scope of this measurement is one toolchain: every answer above was read
 # from Apple clang 21.0.0 targeting arm64 Mach-O. A different compiler may emit
 # an unreferenced internal definition and reach the branch by the shorter road.
 # That would not falsify anything here: these arms compile their shapes and
@@ -2292,7 +2292,7 @@ ${mcf5307_rp_text}")
         PARENT_SCOPE)
 endfunction()
 
-# Arm one. THE FIRST ROUTE. Internal linkage from a `static` declaration ahead
+# Arm one, the first route. Internal linkage from a `static` declaration ahead
 # of the contract, and an anchor that keeps the definition from being dropped.
 # The anchor is `used` for the reason the probe header gives: without it the
 # anchor goes, the reference goes with it, and the definition goes with that.
@@ -2526,22 +2526,20 @@ if(NOT MCF5307_ABI_STUB_EXTRA STREQUAL "")
         "is `static`, and this check says nothing about a `static` one.")
 endif()
 
-# THE FLAGS ARE NOT MATCHED HERE, AND THAT IS DELIBERATE. Adding `-Werror` to
-# this compile would make a warning in the stub fail the SYMBOL gate, so one
-# line would carry two faults - the thing this step refuses everywhere else,
-# stated where the measurement shared object is built and again where `hidden`
-# is kept apart from `not implemented yet`. The warning dimension already has
-# an owner that fails on it: the registered test `t0_abi_header`.
+# The flags are deliberately not matched here. Adding `-Werror` to this compile
+# would make a warning in the stub fail the symbol gate, so one line would
+# carry two faults. The warning dimension already has an owner that fails on
+# it: the registered test `t0_abi_header`.
 #
-# THE LINE NAMES A SET AND A FILE, AND THE TWO MUST AGREE. The set printed here
-# is the stub's OWN external definitions - the same variable the two fatal
-# messages above print - and the instrument that is in the object but not in
-# the set is named, so the two numbers a reader can get are both accounted for.
-# The instrument names the EXTERNAL read actually answers with. It is computed
-# and not written down: the sentence below has to reconcile the number it
-# prints with the number a reader gets from the object, and only a measured
-# difference does that. The internal probe is in the `all` pass and not in this
-# one, so naming both here would overstate by one in the other direction.
+# The status line names a set and a file, and the two must agree. The set
+# printed here is the stub's own external definitions - the same variable the
+# two fatal messages above print - and the instrument that is in the object but
+# not in the set is named, so the two numbers a reader can get are both
+# accounted for. The instrument is computed rather than written down, because
+# only a measured difference reconciles the printed number with the number a
+# reader gets from the object. The internal probe is in the `all` pass and not
+# in this one, so naming both here would overstate by one in the other
+# direction.
 set(MCF5307_ABI_STUB_EXTERNAL_INSTRUMENT "")
 foreach(name IN LISTS MCF5307_ABI_STUB_EXTERNAL)
     if(name IN_LIST MCF5307_ABI_STUB_INSTRUMENT)
