@@ -3360,8 +3360,9 @@ add_test(NAME t_isp1181_state
 # make, and that is why the property is stated against a counter rather than
 # against a byte figure.
 #
-# NOTHING HERE SUPPRESSES A RUN-TIME CHECK. The two defines AGENTS.md forbids -
-# `--checks:off` and `-d:danger` - are neither added nor implied by this one,
+# NOTHING HERE SUPPRESSES A RUN-TIME CHECK. The two defines that would -
+# `--checks:off` and `-d:danger`, which this project does not use - are
+# neither added nor implied by this one,
 # and the strip loop below removes no check-bearing argument.
 #
 # THE SUITE'S OWN `mcf5307_create` CASE IS WHAT ENFORCES THIS BLOCK. Drop the
