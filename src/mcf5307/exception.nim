@@ -9,7 +9,7 @@
 ## does reconcile them. No constant below names vector 5, 12 or 13.
 
 # The defined set for this part. Every other value of the field is reserved.
-# CONSTANTS AND NOT AN ENUM BECAUSE THE RESERVED VALUES ARE REAL: a frame read
+# Constants and not an enum because the reserved values are real: a frame read
 # back from memory can hold any value the field can carry, and converting one to
 # an enum with holes under `--panics:on` ends the process instead of reporting
 # it.

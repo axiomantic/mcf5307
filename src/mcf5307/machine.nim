@@ -26,8 +26,8 @@
 ##      ^   ^    ^
 ##          cpu               `step`, the dispatch, and the lifecycle ABI
 ##
-## `decode` does not import this module and must not: a decoder that reaches
-## machine state inverts the layering.
+## `decode` must not import this module: a decoder that reaches machine state
+## inverts the layering.
 ##
 ## Register numbering, the condition-code bit positions and addressing-mode
 ## behaviour are taken from the ColdFire Family Programmer's Reference Manual
@@ -260,12 +260,12 @@ proc stackingWrite(ctx: MCF5307Ctx; address: uint32; size: uint8;
 # `decode_types.nim` holds, or a check after the executor returns, which
 # `cpu.nim`'s `step` holds.
 #
-# THE WRITE PATH NEEDS NO UNWIND, WHICH IS WHY IT IS WIRED AND THE READ IS NOT.
+# The write path needs no unwind, which is why it is wired and the read is not.
 # The rule's one named exception is the operand write, and the reason is that
 # "all programming model updates associated with the write instruction are
 # completed". An executor that carries on after a write fault is doing what the
-# reference requires. That the only access error this part
-# raises is a store to write-protected space puts the real case on this side too.
+# reference requires. The only access error this part raises is a store to
+# write-protected space, which puts the real case on this side too.
 
 proc readMem*(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
   stackingRead(ctx, address, size)

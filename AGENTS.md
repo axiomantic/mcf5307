@@ -119,17 +119,28 @@ alters the published C ABI needs it too: the consumer that links this library is
   body. It is registered only when `PROJECT_IS_TOP_LEVEL`, so a consumer's tree
   has no gate and no fixture requirement — verified: a consumer configure lists
   `t0_abi_gate_on` and nothing else.
-- **`cmake --build --preset t0` still does not build `t0_corpus_parses`; the
-  gate does.** The t0 build preset carries `--target mcf5307_tests`;
-  `t0_corpus_parses` is a separate `add_executable` in
-  `conformance/conformance_cpu.cmake` that the `^t0_|^t_` test pattern matches,
-  so a clean clone used to report it `***Not Run`. The gate builds the tree's
-  default target rather than a roster of targets, so the executable exists by
-  the time any test runs. MEASURED: deleting
-  `<build>/conformance/t0_corpus_parses` and running `ctest --preset t0` brings
-  it back and the test passes. The consequence is that `ctest --preset t0` is
-  now wider than the t0 BUILD preset — a break in `conformance/runner.cpp`,
-  which that preset never compiles, turns the t0 run red.
+- **THE T0 BUILD PRESET BUILDS EVERY EXECUTABLE THE T0 TEST PRESET RUNS, AND
+  `t0_test_set_builds_what_it_runs` IS WHAT KEEPS IT THAT WAY.** The build
+  preset carries `--target mcf5307_tests` and nothing else, so a T0-selected
+  test whose `COMMAND` names an executable target reaches it only through an
+  `add_dependencies(mcf5307_tests <target>)` line — the convention the root
+  `CMakeLists.txt` states where it creates the aggregate. `t0_corpus_parses` was
+  registered in `conformance/conformance_cpu.cmake` without one, and three
+  mechanisms hid that at once: `--no-tests=error` only catches a `-R` pattern
+  that selects nothing; `t0_build_is_current` builds the tree's DEFAULT target,
+  so it produced the binary before any test ran and MASKED the omission; and
+  `ci.yml` builds with `cmake --build build --parallel`, the default target
+  again, so no CI job has ever run the t0 build preset. MEASURED on a deleted
+  build tree: before, `cmake --build --preset t0` left
+  `<build>/conformance/t0_corpus_parses` absent; after, it is built by that
+  command. The check reads the registration lists as text — CMake has no
+  readable `COMMAND` test property, and directory-scoped test properties need
+  3.28, above the 3.20 floor. It refuses any COMMAND shape other than
+  `"${CMAKE_COMMAND}"` or a bare target name rather than guessing at a third.
+  `ctest --preset t0` is still WIDER than the t0 build preset in one direction
+  that is deliberate: the gate builds the default target, so a break in
+  `conformance/runner.cpp`, which the build preset never compiles, turns the t0
+  run red.
 - **Never configure this repository's own build tree with
   `-DMCF5307_ABI_GATE=OFF`.** The switch exists for a host that cannot run a
   symbol reader; it disarms step 4a whole, and the cache entry then persists
@@ -214,6 +225,10 @@ of the alternative.
 
 Never write these in a comment:
 
+- **A plan-task ID or a design-document pointer.** `CPU-nn`, `INT-nn`, `W3-nnnn`,
+  "§24.6 row ...", "task ...", "plan section ...", "step 2 of ...". They point
+  into a ledger that lives in another repository, and they renumber. State the
+  FACT; drop the citation.
 - **A count** — cases, tests, scenarios, mutations, symbols, files, or lines.
   The next change makes it wrong, and nothing catches it.
 - **A present-tense claim about what the tests cover**, or about what a wrong
@@ -256,6 +271,34 @@ layout is also computed in `machine.nim`" earns its place and stays, provided it
 asserts no exclusivity and no sequence. What goes is ONLY, FIRST, NEXT, and
 "does not name": those are the falsifiable forms, and that difference is the
 whole of the rule.
+
+**A DATASHEET CITATION IS NOT A PLAN REFERENCE, and it stays.** "CFPRM Rev. 3
+§2.2.11", "MCF5307 User's Manual §9.4", an ISP1181 register table — these name a
+primary source the reader needs to check the line beside them, they belong to a
+published document that does not renumber under us, and this tree's prose is
+mostly hardware explanation of exactly that kind. **Do not cull them by
+pattern-match against the plan-reference rule.** The plan rule is about pointers
+into our own process; a manual citation is a measured fact with its provenance
+attached.
+
+**A measured fact earns its place only while it stays measured.** A comment
+about the hardware or a format — a register address, a bit position, a field
+width, an endianness — is safe, because the thing it describes cannot change
+under it. A comment about OUR OWN implementation choice rots the moment the
+implementation changes, and it keeps a comment's authority while it does. **When
+you change behaviour, the comment above it is part of the change.**
+
+**A mixed block is split, not judged whole.** One block often holds a
+restatement of the code AND a real why — a hazard, an ordering that is
+load-bearing, a deliberate duplication. Edit inside the block: cut the
+restatement, keep the why. Do not delete a whole block because part of it is
+noise, and do not keep a whole block because part of it is real.
+
+**Prove a prose pass changed no code, mechanically.** Never assert "comments
+only" by eye. For Nim and CMake, that proof is the stripper protocol stated
+below, with its calibration. For a Python helper, the stronger route is to parse
+the file before and after, strip docstrings, and compare `ast.dump`, which also
+proves no string literal and no constant moved.
 
 **An invariant with no mechanism is a comment.** If a property must hold, make
 something go red when it stops holding. If no portable mechanism exists, say so
@@ -308,6 +351,25 @@ the line the comment describes. Change nothing else.
 
 ## Gotchas
 
+- **USE THE GDB DEBUGGER EARLY AND OFTEN for anything the MCF5307 stub can
+  reach.** This repo ships the stub and the G2 harness exposes it as
+  `g2TestConsole --gdb` (see `gearmulator/AGENTS.md`, "Debugging the MCF5307
+  with GDB"). For any runtime question about firmware execution — is this
+  routine reached, who writes this address, what do the registers hold — a
+  breakpoint or watchpoint is the FIRST tool to reach for, before static
+  disassembly and before adding probe scaffolds to test files. Static analysis
+  enumerates candidate paths; the debugger tells you which one ran. Reserve
+  scaffolds for what the stub cannot reach (DSP-side state, whole-run
+  statistics). When dispatching a subagent on firmware work, state this in the
+  dispatch prompt explicitly — an agent that defaults to print-probes and
+  disassembly wastes the instrument this project already built.
+- **FOR STATIC STRUCTURE QUESTIONS, USE THE GHIDRA DECOMPILER** — full setup,
+  working recipe, and the decompile-vs-breakpoint decision table are in
+  `nmg2-artifacts/AGENTS.md` §0.1 (project at `/tmp/ghidra_nmg2`, language
+  `68000:BE:32:Coldfire`, base address `0x30000400`; Java scripts only —
+  Ghidra 12 dropped Python). Decompile answers "what does this code do / who
+  calls it"; the debugger answers "did it run". Decompile to plan breakpoints,
+  break to confirm; neither alone is evidence.
 - A build that succeeds is not a check. Verify the artifact a step should have
   produced, not the exit status. A stale binary left by a failed compile makes a
   test runner report a pass that describes code which no longer exists.

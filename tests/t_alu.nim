@@ -14,23 +14,12 @@
 ## `mcf5307_get_reg` - so that a pass here is a pass of the shipped path and
 ## not of an internal helper reached around the back.
 ##
-## EVERY CASE ASSERTS A COMPLETE TUPLE, never one field. A case that changes a
-## register asserts (that register, the whole status register, `fault`). A case
-## that must TRAP asserts (the register it must not have changed, `fault`,
-## `halted`, the cycle return).
-##
 ## The trap cases are the green-mirage control of the group. Byte and word
 ## arithmetic does not exist on this part, and neither does an `ADDI` to
 ## memory, a `NEG` to memory, a PC-relative `ADDQ` destination or a 64-bit
-## `MULU.L`. Each one below was checked against
-## `m68k-elf-as -mcpu=5307`, which REJECTS every one of them; the assembler is
-## the ground truth for what the part has, and the corresponding encodings are
-## asserted here to trap.
-##
-## Instruction semantics, the condition-code rules and the encodings are taken
-## from the ColdFire Family Programmer's Reference Manual and the MCF5307
-## User's Manual, and from this project's own measurements with the pinned
-## cross assembler.
+## `MULU.L`. Each one below was checked against `m68k-elf-as -mcpu=5307`,
+## which rejects every one of them; the assembler is the ground truth for what
+## the part has, and the corresponding encodings are asserted here to trap.
 
 import std/strutils
 import mcf5307/cpu
@@ -58,8 +47,8 @@ proc checkImpl(site: int; ok: bool; label: string; got: string; want: string) =
 
 
 template check(ok: bool; label: string; got: string; want: string) =
-  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
-  ## `declaredSites` by the `static` below, and once at RUN TIME into
+  ## The call site is recorded twice - once at compile time into
+  ## `declaredSites` by the `static` below, and once at run time into
   ## `executedSites`, by the implementation and only when it reaches a
   ## verdict. `tests/case_sites.nim` states what the pair is for and
   ## `tests/case_sites.cmake` states the rules the driver applies.
@@ -176,7 +165,7 @@ proc runIns(words: openArray[uint16];
 proc mem32(address: uint32): uint32 =
   boardReadValue(board, address, 4)
 
-# The assertion helpers. Each compares ONE complete tuple, so a right result
+# The assertion helpers. Each compares one complete tuple, so a right result
 # with a wrong flag fails and a right flag with a wrong result fails.
 
 proc expectD(o: Outcome; n: int; want: uint32; wantSr: uint32; label: string) =
@@ -366,7 +355,7 @@ block:
     "clr.l sets Z, clears N, V and C, and leaves X alone")
 
   # clr.w and clr.b exist on this part (the assembler accepts both) and each
-  # clears ITS OWN WIDTH ALONE.
+  # clears its own width alone.
   expectD(runIns([0x4240'u16], d = [0x12345678'u32, 0, 0, 0, 0, 0, 0, 0]),
     0, 0x12340000'u32, srBase or ccrZ, "clr.w clears the low word alone")
   expectD(runIns([0x4200'u16], d = [0x12345678'u32, 0, 0, 0, 0, 0, 0, 0]),
@@ -395,7 +384,7 @@ block:
   expectD(runIns([0x48C0'u16], d = [0x00007FFF'u32, 0, 0, 0, 0, 0, 0, 0]),
     0, 0x00007FFF'u32, srBase, "ext.l of a positive word leaves it positive")
 
-  # extb.l %d0 = 49c0: the low BYTE becomes the whole register, which is a
+  # extb.l %d0 = 49c0: the low byte becomes the whole register, which is a
   # different instruction from ext.l and a different result for the same input.
   expectD(runIns([0x49C0'u16], d = [0x12345680'u32, 0, 0, 0, 0, 0, 0, 0]),
     0, 0xFFFFFF80'u32, srBase or ccrN, "extb.l extends the byte into the long")
@@ -413,7 +402,7 @@ block:
   # V stays clear even when the 32 bits written are not the whole product.
   # 0x10000 squared is 0x1_0000_0000, whose low 32 bits are zero, so this case
   # really is indistinguishable from a multiply by zero on this part, and V is
-  # always cleared by MULU on this family. THE CASE ENTERS WITH V SET.
+  # always cleared by MULU on this family. The case enters with V set.
   expectD(runIns([0x4C00'u16, 0x1000'u16],
                  d = [0x10000'u32, 0x10000'u32, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrV),
@@ -429,24 +418,24 @@ block:
     1, 0xA0000000'u32, srBase or ccrN,
     "mulu.l sets N from bit 31 of the unsigned product")
 
-  # muls.l %d0,%d1 = 4c00 1800. THE SIGNED FLAG IS BIT 11 OF THE SECOND WORD.
+  # muls.l %d0,%d1 = 4c00 1800. The signed flag is bit 11 of the second word.
   # -1 * 3 is -3 unsigned-wrong and signed-right.
   expectD(runIns([0x4C00'u16, 0x1800'u16],
                  d = [0xFFFFFFFF'u32, 3, 0, 0, 0, 0, 0, 0]),
     1, 0xFFFFFFFD'u32, srBase or ccrN, "muls.l -1 * 3 = -3")
 
-  # MULS CLEARS V ON THE SAME TERMS. -0x10000 * 0x10000 is -0x1_0000_0000,
-  # which no signed 32-bit result holds, and V is STILL clear: V is always
-  # cleared by MULS on this family. THE CASE ENTERS WITH V SET.
+  # MULS clears V on the same terms. -0x10000 * 0x10000 is -0x1_0000_0000,
+  # which no signed 32-bit result holds, and V is still clear: V is always
+  # cleared by MULS on this family. The case enters with V set.
   expectD(runIns([0x4C00'u16, 0x1800'u16],
                  d = [0xFFFF0000'u32, 0x10000'u32, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrV),
     1, 0'u32, srBase or ccrZ, "muls.l losing the whole product CLEARS V")
 
-  # NOTHING SEPARATES MULS.L FROM MULU.L. The low
-  # 32 bits of a 32x32 product do not depend on how the sign bits are read, and
-  # every flag comes from those 32 bits, so the signed bit is UNOBSERVABLE in
-  # this form. Both enter with V set.
+  # Nothing separates MULS.L from MULU.L. The low 32 bits of a 32x32 product
+  # do not depend on how the sign bits are read, and every flag comes from
+  # those 32 bits, so the signed bit is unobservable in this form. Both enter
+  # with V set.
   expectD(runIns([0x4C00'u16, 0x1800'u16],
                  d = [0xFFFFFFFF'u32, 0xFFFFFFFF'u32, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrV),
@@ -477,8 +466,8 @@ block:
     1, 0'u32, srBase or ccrZ, "divu.l of the same two words is 0")
 
 block:
-  # remu.l %d0,%d2:%d1 = 4c40 1002. Dq is d1 and Dr is d2. COLDFIRE'S REMx.L
-  # PRODUCES THE REMAINDER ONLY: d2 takes the remainder and d1 IS UNCHANGED.
+  # remu.l %d0,%d2:%d1 = 4c40 1002. Dq is d1 and Dr is d2. ColdFire's REMx.L
+  # produces the remainder only: d2 takes the remainder and d1 is unchanged.
   let o = runIns([0x4C40'u16, 0x1002'u16], d = [5'u32, 17, 0, 0, 0, 0, 0, 0])
   let got = (d1: o.d[1], d2: o.d[2], sr: o.sr, fault: o.fault)
   let want = (d1: 17'u32, d2: 2'u32, sr: srBase, fault: false)
@@ -495,11 +484,10 @@ block:
   check(gotS == wantS, "rems.l -17 rem 5 = -2, signed by the dividend",
     $gotS, $wantS)
 
-  # N AND Z COME FROM THE QUOTIENT, NOT FROM THE REMAINDER THE INSTRUCTION
-  # WRITES. N is set if the quotient is negative and Z if it is zero, while the
-  # register still takes the REMAINDER, so the two halves of each case below
-  # come from different
-  # numbers, which is the whole point.
+  # N and Z come from the quotient, not from the remainder the instruction
+  # writes. N is set if the quotient is negative and Z if it is zero, while the
+  # register still takes the remainder, so the two halves of each case below
+  # come from different numbers.
 
   # Z separates them: 20 / 5 is a quotient of 4 with a remainder of zero. The
   # remainder rule sets Z, the quotient rule clears it. d2 takes the remainder
@@ -531,13 +519,13 @@ block:
     1, 0x80000000'u32, srBase or ccrV,
     "divs.l of the most negative value by -1 sets V and writes nothing")
 
-  # AN OVERFLOW CLEARS N AND Z RATHER THAN LEAVING THEM AS IT FOUND THEM.
+  # An overflow clears N and Z rather than leaving them as it found them.
   # N and Z are cleared if overflow is detected, and otherwise take the
   # quotient's sign and zero-ness.
   #
   # This case enters with N, Z and C set and X set. It pins all five bits at
   # once: V set, N cleared, Z cleared, C cleared ("C Always cleared" on both
-  # folios), and X CARRIED THROUGH UNCHANGED ("X Not affected").
+  # folios), and X carried through unchanged ("X Not affected").
   expectD(runIns([0x4C40'u16, 0x1801'u16],
                  d = [0xFFFFFFFF'u32, 0x80000000'u32, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrN or ccrZ or ccrC or ccrX),
@@ -557,16 +545,16 @@ block:
 # ---------------------------------------------------------------------------
 # MULU.W, MULS.W, DIVU.W and DIVS.W - the single-word forms.
 #
-# THIS PART HAS THEM, AND BOTH ORACLES SAY SO:
+# This part has them, and both oracles say so:
 #
 #   - `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726) assembles
 #     `mulu.w %d1,%d0` to `c0c1`, `muls.w %d1,%d0` to `c1c1`,
-#     `divu.w %d1,%d0` to `80c1` and `divs.w %d1,%d0` to `81c1`. It REJECTS
+#     `divu.w %d1,%d0` to `80c1` and `divs.w %d1,%d0` to `81c1`. It rejects
 #     the two divides at `-mcpu=5206` and `-mcpu=5202`, which is the part
 #     without a divide unit and not the absence of a word form.
 #   - The word forms are `16 x 16 -> 32` for MULS and MULU and
 #     `32-bit Dx / 16-bit <ea>y -> (16r:16q) in Dx` for DIVS and DIVU, and each
-#     carries an `Instruction Format: (Word)` diagram that IS the encoding
+#     carries an `Instruction Format: (Word)` diagram that is the encoding
 #     above.
 #
 # The word form carries no extension word. The long form is the 68020 two-word
@@ -575,7 +563,7 @@ block:
 # bits 8..6.
 
 block:
-  # (a) THE DECODER. Asserted directly rather than inferred from a mask.
+  # (a) The decoder. Asserted directly rather than inferred from a mask.
   #
   # The tuple carries the size, which is what separates the word form from the
   # long one and what the executor branches on, and `destReg`, which is where
@@ -597,14 +585,14 @@ block:
   expectD(runIns([0xC2C0'u16], d = [3'u32, 4, 0, 0, 0, 0, 0, 0]),
     1, 12'u32, srBase, "mulu.w 3 * 4 = 12")
 
-  # THE UPPER WORD OF EITHER OPERAND IS IGNORED ON INPUT: a register operand is
-  # the low-order word. Both registers carry a distinctive upper half here.
+  # The upper word of either operand is ignored on input: a register operand
+  # is the low-order word. Both registers carry a distinctive upper half here.
   expectD(runIns([0xC2C0'u16],
                  d = [0xDEAD0003'u32, 0xBEEF0004'u32, 0, 0, 0, 0, 0, 0]),
     1, 12'u32, srBase,
     "mulu.w IGNORES the upper word of the source AND of the destination")
 
-  # ALL 32 BITS OF THE PRODUCT ARE SAVED.
+  # All 32 bits of the product are saved.
   expectD(runIns([0xC2C0'u16], d = [0xFFFF'u32, 3, 0, 0, 0, 0, 0, 0]),
     1, 0x0002FFFD'u32, srBase,
     "mulu.w 0xFFFF * 3 = 0x2FFFD - all 32 bits of the product are written")
@@ -627,9 +615,9 @@ block:
     1, 0xFFFFFFFD'u32, srBase or ccrN,
     "muls.w IGNORES the upper word of the source AND of the destination")
 
-  # V IS ALWAYS CLEARED ON THIS PART, and the word form inherits that from the
+  # V is always cleared on this part, and the word form inherits that from the
   # same condition-code table the long form reads, and there is no second
-  # table for the word form. THE CASE ENTERS WITH V SET.
+  # table for the word form. The case enters with V set.
   expectD(runIns([0xC2C0'u16], d = [0'u32, 5, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrV),
     1, 0'u32, srBase or ccrZ, "mulu.w by zero CLEARS V and sets Z")
@@ -638,8 +626,8 @@ block:
     1, 0'u32, srBase or ccrZ, "muls.w by zero CLEARS V and sets Z")
 
 block:
-  # (d) DIVU.W. `divu.w %d0,%d1` is `82c0`. THE RESULT IS ONE LONGWORD HOLDING
-  # TWO HALVES: the 16-bit quotient is in the lower word and the 16-bit
+  # (d) DIVU.W. `divu.w %d0,%d1` is `82c0`. The result is one longword holding
+  # two halves: the 16-bit quotient is in the lower word and the 16-bit
   # remainder is in the upper word of the destination.
   expectD(runIns([0x82C0'u16], d = [3'u32, 17, 0, 0, 0, 0, 0, 0]),
     1, 0x00020005'u32, srBase,
@@ -661,7 +649,7 @@ block:
     1, 0x0002FFFB'u32, srBase or ccrN,
     "divs.w 17 / -3 = -5 remainder +2, truncating toward zero")
 
-  # THE REMAINDER TAKES THE DIVIDEND'S SIGN.
+  # The remainder takes the dividend's sign.
   expectD(runIns([0x83C0'u16],
                  d = [3'u32, 0xFFFFFFEF'u32, 0, 0, 0, 0, 0, 0]),
     1, 0xFFFEFFFB'u32, srBase or ccrN,
@@ -676,12 +664,12 @@ block:
     "divs.w -17 / -5 = +3 remainder -2: N comes from the QUOTIENT, not bit 31")
 
 block:
-  # (f) THE WORD-FORM OVERFLOW. An overflow occurs if the quotient is larger
+  # (f) The word-form overflow. An overflow occurs if the quotient is larger
   # than a 16-bit (.W) or 32-bit (.L) integer, and the destination register is
   # then unaffected.
   #
-  # EACH CASE ENTERS WITH N, Z AND C SET AND X SET, so it pins all five bits:
-  # V set, N and Z CLEARED, C cleared and X carried through.
+  # Each case enters with N, Z and C set and X set, so it pins all five bits:
+  # V set, N and Z cleared, C cleared and X carried through.
   expectD(runIns([0x82C0'u16], d = [1'u32, 0x00100000'u32, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrN or ccrZ or ccrC or ccrX),
     1, 0x00100000'u32, srBase or ccrV or ccrX,
@@ -717,9 +705,9 @@ block:
     "divs.w whose quotient is -32769 DOES overflow")
 
 block:
-  # (g) DIVISION BY ZERO IS A TRAP. An attempt to divide by zero results in a
-  # divide-by-zero exception and NO REGISTERS ARE AFFECTED; it takes vector 5
-  # at offset 0x014, of class Fault. THERE IS NO EXCEPTION MODEL YET, so the
+  # (g) Division by zero is a trap. An attempt to divide by zero results in a
+  # divide-by-zero exception and no registers are affected; it takes vector 5
+  # at offset 0x014, of class Fault. There is no exception model yet, so the
   # core halts with `fault`, which is the channel the long form already uses.
   expectTrapD(runIns([0x82C0'u16], d = [0'u32, 17, 0, 0, 0, 0, 0, 0]),
     1, 17'u32, "divu.w by zero traps")
@@ -738,11 +726,11 @@ block:
     1, 17'u32, "divs.w by a source whose LOW WORD is zero traps")
 
 block:
-  # (h) THE WORD FORM'S OPERAND CLASS IS WIDER THAN THE LONG FORM'S, and these
-  # cases execute the three modes that separate them. The word operand table
+  # (h) The word form's operand class is wider than the long form's, and these
+  # cases execute the modes that separate them. The word operand table
   # carries `(xxx).W`, `(xxx).L`, `#<data>`, `(d16,PC)` and `(d8,PC,Xi)` where
   # the longword table prints a dash for every one.
-  # `m68k-elf-as -mcpu=5307` agrees on all twelve modes of all eight forms.
+  # `m68k-elf-as -mcpu=5307` agrees on every mode of every form.
   #
   # `mulu.w #5,%d1` is `c2fc 0005`.
   expectD(runIns([0xC2FC'u16, 0x0005'u16], d = [0'u32, 4, 0, 0, 0, 0, 0, 0]),
@@ -751,7 +739,7 @@ block:
   expectD(runIns([0x83FC'u16, 0x0003'u16], d = [0'u32, 17, 0, 0, 0, 0, 0, 0]),
     1, 0x00020005'u32, srBase, "divs.w takes an IMMEDIATE source")
   # `mulu.w (4,%pc),%d1` is `c2fa 0004`. The PC-relative base is the address
-  # OF the displacement word - `machine.nim` says so at `fetchExt` - which is
+  # of the displacement word - `machine.nim` says so at `fetchExt` - which is
   # 0x102 here, so the operand word is at 0x106.
   expectD(runIns([0xC2FA'u16, 0x0004'u16], d = [0'u32, 4, 0, 0, 0, 0, 0, 0],
                  mem = @[(0x104'u32, 0x00000007'u32)]),
@@ -766,8 +754,8 @@ block:
   # width for a data-register source - `eaRead` hands back the whole register
   # at either size - so only a memory operand separates a two-byte read from a
   # four-byte one. `divu.w 0x200.w,%d1` is `82f8 0200`; the seed puts the
-  # divisor in the HIGH half of the longword at 0x200, so a four-byte read
-  # yields 0x00030000, narrows to zero and TRAPS instead of dividing.
+  # divisor in the high half of the longword at 0x200, so a four-byte read
+  # yields 0x00030000, narrows to zero and traps instead of dividing.
   expectD(runIns([0x82F8'u16, 0x0200'u16], d = [0'u32, 17, 0, 0, 0, 0, 0, 0],
                  mem = @[(0x200'u32, 0x00030000'u32)]),
     1, 0x00020005'u32, srBase, "divu.w takes an ABSOLUTE SHORT source")
@@ -779,7 +767,7 @@ block:
     1, 0x0002FFFB'u32, srBase or ccrN, "divs.w takes an INDIRECT source")
 
   # And an address register is outside both tables. `mulu.w %a0,%d1` is
-  # `c2c8`; the `Ay` row is dashed on every one of the eight tables and the
+  # `c2c8`; the `Ay` row is dashed on every one of the tables and the
   # assembler rejects it at every size.
   let o = runIns([0xC2C8'u16], d = [0'u32, 4, 0, 0, 0, 0, 0, 0],
                  a = [7'u32, 0, 0, 0, 0, 0, 0, 0])
@@ -788,14 +776,14 @@ block:
   check(got == want, "mulu.w from an address register traps", $got, $want)
 
 block:
-  # (i) The three address-register sources, where the program counter is the
+  # (i) The address-register sources, where the program counter is the
   # only witness. `(%a0)`, `(%a0)+` and `-(%a0)` read no word from the
   # instruction stream, so an executor that fetched an extension word here -
   # the word form has none, and `src/mcf5307/decode.nim` names the hazard -
   # writes the same destination register, the same status word and the same
   # address register, and leaves the pc two bytes high. The cases above whose
   # source word comes from the instruction stream catch such a fetch on the
-  # operand value; `divs.w takes an INDIRECT source` has no value to move and
+  # operand value; `divs.w takes an indirect source` has no value to move and
   # stays green.
   #
   # The address register is not a second witness. `eaAddr` increments and
@@ -895,14 +883,14 @@ block:
   # mulu.l (4,%pc),%d1 - the multiply source admits no PC-relative mode.
   expectTrapD(runIns([0x4C3A'u16, 0x1000'u16, 0x0004'u16], d = two), 1, 2'u32,
     "mulu.l from a PC-relative source traps")
-  # THE LONG FORM IS NARROWER THAN DATA ALTERABLE, AND THESE TWO ARE THE
-  # DIFFERENCE. The longword operand table dashes `(xxx).W`, `(xxx).L` AND
+  # The long form is narrower than data alterable, and these cases are the
+  # difference. The longword operand table dashes `(xxx).W`, `(xxx).L` and
   # `(d8,Ay,Xi)`, keeping only `Dy`, `(Ay)`, `(Ay)+`, `-(Ay)` and `(d16,Ay)`
   # for all four operations. `m68k-elf-as -mcpu=5307` rejects
   # `mulu.l 0x1234.w,%d1`, `mulu.l 0x12345678,%d1` and
-  # `mulu.l (4,%a0,%d2),%d1` and accepts the five.
+  # `mulu.l (4,%a0,%d2),%d1` and accepts the kept modes.
   #
-  # THE WORD FORM ADMITS BOTH OF THESE, which is why one mask cannot serve
+  # The word form admits these, which is why one mask cannot serve
   # both sizes and `eaLegalityFor` takes the size.
   #
   # mulu.l 0x200.w,%d1 = 4c38 1000 0200.
@@ -918,10 +906,10 @@ block:
     "mulu.l from an INDEXED source traps")
   # divu.l 0x200.w,%d1 = 4c78 1001 0200 - the divide narrows identically.
   #
-  # THE DIVISOR AT 0x200 IS NON-ZERO AND THAT IS LOAD-BEARING. `runIns` zeroes
-  # the board, so without the `mem` seed this case trapped on a DIVIDE BY ZERO
-  # and passed both before and after the mask was split - a green that said
-  # nothing about the operand class it names.
+  # The divisor at 0x200 is non-zero and that is load-bearing. `runIns` zeroes
+  # the board, so without the `mem` seed this case traps on a divide by zero
+  # whatever the mask says - a green that would say nothing about the operand
+  # class it names.
   expectTrapD(runIns([0x4C78'u16, 0x1001'u16, 0x0200'u16], d = two,
                      mem = @[(0x200'u32, 4'u32)]), 1, 2'u32,
     "divu.l from an ABSOLUTE SHORT source traps")
@@ -939,7 +927,7 @@ block:
 # These are not redundant with the trap cases above. Widening the ADDQ mask to
 # data addressing and re-running every case above changes nothing:
 # `addq.l #1,(4,%pc)` still traps, because `eaResolve` in `mcf5307/machine`
-# resolves no operand it cannot write and rejects the same three mode-7
+# resolves no operand it cannot write and rejects the same mode-7
 # sub-variants a second time. Defence in depth is correct and it also makes
 # the two defences indistinguishable from the outside.
 #
@@ -954,8 +942,8 @@ proc checkMaskImpl(site: int; got: bool; want: bool; label: string) =
 
 
 template checkMask(got: bool; want: bool; label: string) =
-  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
-  ## `declaredSites` by the `static` below, and once at RUN TIME into
+  ## The call site is recorded twice - once at compile time into
+  ## `declaredSites` by the `static` below, and once at run time into
   ## `executedSites`, by the implementation and only when it reaches a
   ## verdict. `tests/case_sites.nim` states what the pair is for and
   ## `tests/case_sites.cmake` states the rules the driver applies.
@@ -1022,7 +1010,7 @@ block:
   checkMask(isEaLegal(eaMemoryAlterable, decodeEa(0x3A'u16)), false,
     "the memory-alterable mask rejects (d16,PC)")
 
-# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
+# The registry lines. They are data and not a verdict: this
 # program reports what its text declares and what its run adjudicated,
 # and the registered test's driver is what compares them - and what
 # compares the declared count against the call sites in this file.

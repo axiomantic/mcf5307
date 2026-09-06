@@ -50,12 +50,11 @@
 # the t0 TEST preset selects, and nothing was there to notice. The default
 # target of the tree is not a roster, so it cannot drift out of date.
 #
-# T0 is wider than its build preset. `cmake --build --preset t0` narrows
-# the build to `mcf5307_tests`; `ctest --preset t0` does not grade a tree it
-# has not built. Measured: a syntax error in
-# `conformance/runner.cpp`, which the t0 build preset never compiles, now
-# turns `ctest --preset t0` red. T0's narrowing was always of the run; the
-# tree it runs in is the whole project.
+# T0 is wider than its build preset. `cmake --build --preset t0` narrows the
+# build to `mcf5307_tests`; `ctest --preset t0` does not grade a tree it has
+# not built. Measured: a syntax error in `conformance/runner.cpp`, which the t0
+# build preset never compiles, now turns `ctest --preset t0` red. T0's
+# narrowing was always of the run; the tree it runs in is the whole project.
 #
 # The cost. The gate runs an incremental build. On an already-built tree that
 # is a no-op walk of the dependency graph; on a t0 tree it additionally builds
