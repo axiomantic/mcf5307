@@ -175,10 +175,5 @@ jobs:
       - name: Run the T0 suite under the sanitizers
         run: ctest --test-dir build-asan --no-tests=error -R "${T0_PATTERN}" --output-on-failure
 
-  track-repo:
-    uses: ./.github/workflows/track-repo.yml
-    with:
-      visibility: public
-
   track-cpu:
     uses: ./.github/workflows/track-cpu.yml
