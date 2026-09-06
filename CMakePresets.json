@@ -1,0 +1,81 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "t0",
+      "displayName": "T0 - the tree the T0 suite runs in",
+      "description": "There is no configure-time narrowing in this repository and that is a real answer rather than a missing one: the Nim compile is a configure step and produces the whole library, and conformance/ is entered whenever this project is top level with no option to turn it off. The narrowing this preset carries is in the build and test presets that name it. It pins the generator because the build preset's keep-going flag is spelled differently per generator, and it puts the build tree outside the source tree so it cannot be confused with the build/ and build-asan/ trees .gitignore reserves for the raw invocations and for CI. Never add MCF5307_ABI_GATE=OFF here: the switch disarms step 4a whole and the cache entry then persists silently through later builds.",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceParentDir}/build-${sourceDirName}/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "full",
+      "displayName": "Full - the same tree, kept apart so a narrow run does not reuse it",
+      "description": "Identical configuration to t0. The difference between narrow and full in this repository is entirely in what gets built and what gets run, not in what gets configured. It has its own binaryDir so that a full build and a narrow build do not overwrite each other's object files.",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceParentDir}/build-${sourceDirName}/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "t0",
+      "displayName": "Build the T0 test set, keep-going",
+      "description": "KEEP-GOING IS NOT OPTIONAL AND IS THE REASON THIS PRESET EXISTS. abi_smoke does not link - it takes the address of published C ABI symbols that are not implemented yet - and without keep-going the targets after it are never built, so ctest reports them Not Run and counts them failed. `-k` is the Makefile spelling and the configure preset pins that generator; Ninja's spelling is `-k 0`.",
+      "configurePreset": "t0",
+      "targets": [
+        "mcf5307_tests"
+      ],
+      "nativeToolOptions": [
+        "-k"
+      ],
+      "jobs": 0
+    },
+    {
+      "name": "full",
+      "displayName": "Build everything, keep-going",
+      "description": "Adds the conformance runner and its corpus to the t0 set. Keep-going for the same reason.",
+      "configurePreset": "full",
+      "nativeToolOptions": [
+        "-k"
+      ],
+      "jobs": 0
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "t0",
+      "displayName": "Run the T0 suite",
+      "description": "The name filter is the pattern .github/workflows/ci.yml carries as T0_PATTERN, and it is a SECOND COPY of it: ci.yml keeps the written roster of what the pattern excludes - abi_smoke and the mcf5307_conformance_* runs - so read the roster there rather than treating this field as its source. CTEST_NO_TESTS_ACTION carries --no-tests=error, which test presets have no field for. That flag is what makes this a check at all: a pattern that matches nothing is not a weak check, it is a check that cannot fail.",
+      "configurePreset": "t0",
+      "environment": {
+        "CTEST_NO_TESTS_ACTION": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "^t0_|^t_"
+        }
+      },
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "full",
+      "displayName": "Run everything including the conformance corpus",
+      "description": "The T0 run leaves the conformance corpus unexecuted, so a change to the core's decode, ALU, logic or control behaviour needs this one. A change that alters the published C ABI needs more than this: the consumer that links this library is gearmulator's g2Lib and nothing in this tree builds it.",
+      "configurePreset": "full",
+      "environment": {
+        "CTEST_NO_TESTS_ACTION": "error"
+      },
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

@@ -22,6 +22,11 @@ import mcf5307/logic
 import mcf5307/machine
 import mcf5307/move
 import mcf5307/state
+# The ISP1181 device model. It is a sibling of the core rather than a part of
+# it, and it is named here for the same reason the core submodules are: the
+# compiler builds a module this entry module reaches and no other.
+import isp1181/state
+import isp1181/stub
 {.pop.}
 
 # ---------------------------------------------------------------------------
@@ -67,11 +72,10 @@ proc mcf5307_NimMain() {.importc: "mcf5307_NimMain", cdecl.}
 # The deadline uses a monotonic clock and not the wall clock. `time` is wrong
 # here for two separate reasons.
 #
-#   Its resolution is one second, and the deadline would be `time() + 5`. The
-#   start is truncated to a whole second and the comparison is truncated again,
-#   so the true wait is anything between four and five seconds. Measured over
-#   six runs of a harness in which one thread claims the latch and never
-#   releases it: 4.53, 4.99, 4.99, 4.99, 4.99 and 4.99 seconds.
+#   Its resolution is one second, and the deadline is `time() + 5`. The start
+#   is truncated to a whole second and the comparison is truncated again, so
+#   the true wait is anything between four and five seconds rather than the
+#   five the constant names.
 #
 #   `time` reads the SETTABLE wall clock. An operator, NTP or a container start
 #   can step it backwards at any moment. A backward step moves the deadline
@@ -127,7 +131,7 @@ else:
 # ---------------------------------------------------------------------------
 # The one-time latch.
 #
-# It holds four states in one atomic word. Measured on Nim 2.2.10, the C
+# It holds its state in one atomic word. Measured on Nim 2.2.10, the C
 # translation is a file-scope `_Atomic NI64` with no initializer. Its value is
 # therefore zero before any Nim code runs, and the generated module initializer
 # holds no write to it. The latch needs no initializing call of its own.
@@ -145,18 +149,9 @@ const
 
 # How long a caller waits for another thread to finish the initializer.
 #
-# The bound is a trade and the margin is measured. `mcf5307_runtime_init` was
-# timed with `clock_gettime(CLOCK_MONOTONIC)` around the call, one measurement
-# per process because the latch is one-time, over 20 processes on this host
-# (macOS 26.5.1, arm64, Nim 2.2.10, clang -O2):
-#
-#   8000 5000 5000 5000 6000 6000 3000 6000 6000 7000
-#   5000 7000 4000 6000 7000 5000 5000 6000 5000 5000    nanoseconds
-#
-#   minimum 3.0 us, maximum 8.0 us, mean 5.6 us.
-#
-# A runtime initializer that needs five seconds is already broken. A wait with
-# no bound cannot report a stall at all, and that outcome is worse.
+# THE BOUND IS A TRADE, AND IT SITS FAR ABOVE ANY INITIALIZER RUN OBSERVED ON
+# THIS HOST. A runtime initializer that needs five seconds is already broken. A
+# wait with no bound cannot report a stall at all, and that outcome is worse.
 #
 # The unit is milliseconds because the clock below reports milliseconds.
 const latchWaitMillis = 5000'i64
@@ -172,8 +167,8 @@ var latch: Atomic[int]
 # There is a third case and this flag cannot see it. Another thread may call
 # this procedure while the initializing thread waits for that same thread. The
 # flag is false on the caller, so the caller waits, and the two threads then
-# wait for each other. Measured: the unbounded loop held that deadlock at 98.8%
-# of a core, with no diagnostic and no end. The deadline below ends it.
+# wait for each other. An unbounded loop holds that deadlock spinning, with no
+# diagnostic and no end. The deadline below ends it.
 var initializing {.threadvar.}: bool
 
 proc mcf5307LatchStalled() {.noreturn.} =

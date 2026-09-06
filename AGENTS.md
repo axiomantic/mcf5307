@@ -9,11 +9,114 @@ Repository: `axiomantic/mcf5307`. Licence: MIT.
 
 ## Build and test
 
+### Narrow — the T0 suite
+
+There is **no configure-time narrowing in this repository.** The Nim compile is
+a configure step and produces the whole library, and `conformance/` is entered
+whenever this project is top level, with no option to turn it off. Narrowing is
+therefore a build-target choice and a `ctest -R` choice, and nothing else.
+
+**Use the preset.** It carries the target, the keep-going flag and the pattern,
+so none of the three can be dropped by hand.
+
 ```bash
-cmake -S . -B build
-cmake --build build
-ctest --test-dir build
+cmake --preset t0
+cmake --build --preset t0
+ctest --preset t0
 ```
+
+`cmake --list-presets`, `--list-presets=build` and `--list-presets=test` name
+the rest. `CMakePresets.json` is committed: this repository is original work and
+has no upstream to conflict with.
+
+The raw form, which is what the preset expands to:
+
+```bash
+cmake -S . -B <build> -DCMAKE_BUILD_TYPE=Release
+cmake --build <build> --parallel --target mcf5307_tests -- -k
+ctest --test-dir <build> --no-tests=error -R '^t0_|^t_' --output-on-failure
+```
+
+`^t0_|^t_` is the pattern `.github/workflows/ci.yml` carries as `T0_PATTERN`.
+It excludes `abi_smoke` and the `mcf5307_conformance_*` runs; `ci.yml` keeps a
+written roster of exactly those exclusions, so read the roster there rather than
+trusting this line **or the preset** — the preset is a second copy of the
+pattern, not its source.
+
+`--no-tests=error` has no test-preset field. The preset carries it as the
+environment variable `CTEST_NO_TESTS_ACTION`, which needs CMake 3.26 or later —
+above this project's declared 3.20 floor. On an older CTest the preset runs
+without that guard while the raw form still has it.
+
+### Full
+
+```bash
+cmake --preset full
+cmake --build --preset full
+ctest --preset full
+```
+
+The raw form:
+
+```bash
+cmake -S . -B <build> -DCMAKE_BUILD_TYPE=Release
+cmake --build <build> --parallel -- -k
+ctest --test-dir <build> --no-tests=error --output-on-failure
+```
+
+The narrow run leaves the conformance corpus unexecuted, so a change to the
+core's decode, ALU, logic or control behaviour needs the full run. A change that
+alters the published C ABI needs it too: the consumer that links this library is
+`gearmulator`'s `g2Lib`, and nothing in this tree builds that.
+
+### Traps
+
+- **The presets build OUTSIDE the source tree**, at
+  `../build-mcf5307/<preset>/`, and the raw forms above build inside it at
+  `build/` and `build-asan/`. A `ctest --test-dir build` typed after a
+  `cmake --build --preset t0` reads a different tree from the one just built.
+  Pick one form per check.
+- **`-- -k` is not optional under a Makefile generator.** `abi_smoke` does not
+  link — it takes the address of published C ABI symbols that are not
+  implemented yet — and without keep-going the targets after it are never built,
+  so ctest reports them `***Not Run` and counts them failed. Ninja's spelling is
+  `-- -k 0`.
+- **The Nim compile runs at CONFIGURE time**, not at build time. `src/*.nim`,
+  `.nim-version`, `include/mcf5307.h`, `tests/abi_smoke_symbols.inc`,
+  `tests/abi_stub.c` and `tests/t_*.nim` are registered as configure
+  dependencies, so an ordinary edit to one of them re-runs the configure by
+  itself. A change those paths do not cover reaches nothing until
+  `cmake -S . -B <build>` runs again.
+- **A LIST FILE IS A DEPENDENCY BY MTIME, AND A RESTORE THAT REWINDS MTIME
+  DEFEATS IT.** The per-suite drivers under `<build>/tests/*_driver.cmake` are
+  GENERATED from templates inside `tests/tests_cpu.cmake`, and the case-total
+  pins (`mcf5307_check_case_total`) live in the template, not in the driver.
+  CMake does re-generate them when it sees the list file as newer — an ordinary
+  edit is picked up by `cmake --build` on its own, with no explicit configure.
+  **What it does NOT pick up is a list file whose mtime went BACKWARDS**: a `mv`
+  from a `sed -i.bak` backup, a `git checkout` of an older blob, or a copied
+  tree all leave the stale driver in place, and the suite is then graded against
+  a pin that is on nobody's disk. MEASURED: restoring `tests/tests_cpu.cmake`
+  from a `.bak` left a driver carrying a deliberately wrong pin of `999` while
+  the source read `32`, and the suite failed against a figure the tree did not
+  contain. **After any restore of a list file, `touch` it before reconfiguring**,
+  and confirm the pin inside the generated driver rather than in the source.
+- **`cmake --build --preset t0` does not build `t0_corpus_parses`, and
+  `ctest --preset t0` runs it.** The t0 build preset carries
+  `--target mcf5307_tests`; `t0_corpus_parses` is a separate `add_executable`
+  in `conformance/conformance_cpu.cmake` that the `^t0_|^t_` test pattern
+  matches. MEASURED: deleting the binary and running the t0 build target does
+  not bring it back, and ctest then reports it `***Not Run`, which it counts as
+  a failure. On a clean clone this reads as a real red. Build it by name —
+  `cmake --build <build> --target t0_corpus_parses` — or use the `full` preset.
+- **Never configure this repository's own build tree with
+  `-DMCF5307_ABI_GATE=OFF`.** The switch exists for a host that cannot run a
+  symbol reader; it disarms step 4a whole, and the cache entry then persists
+  silently through later builds. Scratch trees only.
+- On this host `xcode-select` points at CommandLineTools while full Xcode is
+  installed. The Unix-Makefiles configure resolves an SDK without help; prefix
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` only if a step
+  fails to find one. `tests/reach.sh` sets it defensively for the same reason.
 
 Requirements: CMake 3.20 or later, and the exact Nim version named in
 `.nim-version`. The configure step reads `.nim-version`, runs `nim --version`,
@@ -97,6 +200,17 @@ Never write these in a comment:
   test is the only durable statement about coverage.
 - **A note about history** ("this used to...", "an earlier version..."). Git
   holds that.
+- **An enumeration whose length is the claim.** A stale enumeration is a stale
+  count with the number spelled out. Delete the word "four" from "any of those
+  four values" and the list above it still says four. It goes wrong by the
+  mechanism the word did.
+- **A path that does not resolve.** A comment that names a file, a script, a
+  test, or a type must name one that exists.
+- **A claim about the rest of the tree.** A comment describes the code beside
+  it. Do not write what else imports this module, what its only consumer is,
+  which task consumes it next, or what another file does not name. The import
+  graph answers those and stays right; a sentence about them is derivable, goes
+  stale the moment another task moves, and records no decision.
 
 **One exception, and it is the only one.** A number that a mechanism reads and
 checks at build time or at test time may stay. The check is then the source of
@@ -106,6 +220,22 @@ that no mechanism reads is a liability.
 **A date does not rescue a stale claim.** This tree has changed several times
 within one day. A date discriminates nothing at that rate.
 
+**The path rule is the one a machine can decide, and that is why it is stated
+apart from the others.** Each other rule here needs a reader's judgement about
+what a sentence claims. "Every path-shaped token resolves" is a regular
+expression and a file test. Write the check. Do not trust a sweep to hold.
+
+**A path that MOVED is corrected. A path that never existed is deleted.** A moved
+path has a correct target, so give it one. A named script that exists nowhere has
+no target, so the sentence goes — unless the sentence records a known GAP, and
+then the gap moves to a tracked item BEFORE the comment goes.
+
+**A cross-reference that helps a reader NAVIGATE still stands.** "The frame
+layout is also computed in `machine.nim`" earns its place and stays, provided it
+asserts no exclusivity and no sequence. What goes is ONLY, FIRST, NEXT, and
+"does not name": those are the falsifiable forms, and that difference is the
+whole of the rule.
+
 **An invariant with no mechanism is a comment.** If a property must hold, make
 something go red when it stops holding. If no portable mechanism exists, say so
 once at the site and record the acceptance — do not let a good comment stand in
@@ -113,21 +243,69 @@ for a check.
 
 ### Scope: code we authored
 
-This repository is original work, so the rule applies throughout. Do not delete
-or rewrite comments to satisfy this rule as a sweep; repair a comment when you
-change the line it describes.
+This repository is original work, so the rule applies throughout. Repair a
+comment when you change the line the comment describes.
+
+**A sweep is permitted only when the sweep carries a mechanical proof that the
+change is comment-only.** Strip the comments from the pre-change version of a
+file. Strip the comments from the post-change version of the same file. The two
+stripped outputs must be byte-identical. Produce that proof per file.
+
+**Calibrate the stripper before you trust the stripper.** Delete a declaration
+on purpose, and show that the stripper reports the file as changed. Change an
+identifier on purpose, and show that the stripper reports the file as changed.
+Put a comment marker inside a string literal, and show that the stripper leaves
+that line intact. A stripper whose negative controls have never fired is a
+claim, not a mechanism.
+
+**Calibrate at the nesting depth the file uses.** `tests/tests_cpu.cmake` holds
+complete CMake driver scripts inside `[==[ ]==]` bracket arguments. A bracket
+argument is a string literal to the outer file, so a correct single-level
+stripper reports `tests/tests_cpu.cmake` as changed. A proof over that file
+needs a stripper that recurses into bracket arguments. Plant the negative
+controls inside a bracket argument, not only outside one.
+
+**A Python docstring is a string expression, not a comment.** A comment-only
+proof therefore reports a docstring edit as a change. A sweep may still edit a
+docstring that carries a forbidden claim, but only with three extra proofs.
+Show a token-level diff where no non-comment, non-string token differs, and name
+every string token that does. Show that `__doc__` has no consumer, because a
+program that prints its own docstring changes behaviour when the docstring
+changes. Show that any generated output is byte-identical. Without all three,
+leave the docstring alone.
+
+**Calibrate the docstring case too.** Anchor a positive control on a real
+comment token chosen by the language's own tokenizer, not by a text search. A
+search finds markdown headings inside docstrings and reports a broken control as
+a broken stripper. Exclude the shebang: a tokenizer calls `#!` a comment, and
+removing it changes how the file runs.
+
+**The test suite must pass after the sweep, at the established count.**
+
+**Without that proof the earlier rule stands.** Repair a comment when you change
+the line the comment describes. Change nothing else.
 
 ## Gotchas
 
-- `xcode-select` on this machine points at CommandLineTools while full Xcode is
-  installed. A CMake configure may need a `DEVELOPER_DIR` prefix. No `sudo`
-  required.
 - A build that succeeds is not a check. Verify the artifact a step should have
   produced, not the exit status. A stale binary left by a failed compile makes a
   test runner report a pass that describes code which no longer exists.
 - `git grep` skips untracked files. Use `grep -r`, `rg`, or `git grep
   --untracked` before claiming something appears nowhere, and name the tool
   beside the claim.
+
+## Corrections
+
+**The sweep rule was amended.** The rule under "Scope: code we authored" once
+forbade a comment sweep outright. The prohibition existed to stop an unverified
+bulk edit — a large diff across lines that nothing tests. That risk is real, and
+that risk is measurable. A sweep that measures the risk away is not the change
+the prohibition was written to stop. The rule now admits a sweep that carries
+the comment-only proof, and the rule refuses a sweep without the proof.
+
+A sweep run under the earlier rule removed comment lines from eleven files. That
+sweep carried the proof the amended rule now requires. The rule changed to admit
+that class of change. The removal stands.
 
 ## Related
 

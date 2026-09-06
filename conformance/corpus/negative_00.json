@@ -1,0 +1,246 @@
+{
+  "format": 1,
+  "group": "negative",
+  "binutils": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "seed": {
+    "regs": {
+      "d0": 100,
+      "d1": 3,
+      "a0": 1024,
+      "a7": 2048,
+      "sr": 9984,
+      "pc": 256
+    }
+  },
+  "cases": [
+    {
+      "name": "dbra_traps",
+      "instruction": "dbra %d0,target",
+      "mnemonic": "dbra",
+      "encoding": ["51c8", "001e"],
+      "outcome": "trap",
+      "neighbour": "scc_st_executes",
+      "oracle": {
+        "accepted_by": ["-m68000"],
+        "rejected_by": ["-mcpu=5307"]
+      }
+    },
+    {
+      "name": "exg_traps",
+      "instruction": "exg %d0,%d1",
+      "mnemonic": "exg",
+      "encoding": ["c141"],
+      "outcome": "trap",
+      "neighbour": "and_l_executes",
+      "oracle": {
+        "accepted_by": ["-m68000"],
+        "rejected_by": ["-mcpu=5307"]
+      }
+    },
+    {
+      "name": "rol_l_traps",
+      "instruction": "rol.l #1,%d0",
+      "mnemonic": "rol.l",
+      "encoding": ["e398"],
+      "outcome": "trap",
+      "neighbour": "lsl_l_immediate_executes",
+      "oracle": {
+        "accepted_by": ["-m68000"],
+        "rejected_by": ["-mcpu=5307"]
+      }
+    },
+    {
+      "name": "memory_shift_traps",
+      "instruction": "lsl.w (%a0)",
+      "mnemonic": "lsl.w",
+      "encoding": ["e3d0"],
+      "outcome": "trap",
+      "neighbour": "lsl_l_register_executes",
+      "oracle": {
+        "accepted_by": ["-m68000"],
+        "rejected_by": ["-mcpu=5307"]
+      }
+    },
+    {
+      "name": "movem_predecrement_traps",
+      "instruction": "movem.l %d0-%d1,-(%a0)",
+      "mnemonic": "movem.l",
+      "encoding": ["48e0", "c000"],
+      "outcome": "trap",
+      "neighbour": "movem_indirect_executes",
+      "oracle": {
+        "accepted_by": ["-m68000"],
+        "rejected_by": ["-mcpu=5307"]
+      }
+    },
+    {
+      "name": "byte_arithmetic_traps",
+      "instruction": "add.b %d0,%d1",
+      "mnemonic": "add.b",
+      "encoding": ["d200"],
+      "outcome": "trap",
+      "neighbour": "add_l_executes",
+      "oracle": {
+        "accepted_by": ["-m68000"],
+        "rejected_by": ["-mcpu=5307"]
+      }
+    },
+    {
+      "name": "word_arithmetic_traps",
+      "instruction": "add.w %d0,%d1",
+      "mnemonic": "add.w",
+      "encoding": ["d240"],
+      "outcome": "trap",
+      "neighbour": "muls_w_executes",
+      "oracle": {
+        "accepted_by": ["-m68000"],
+        "rejected_by": ["-mcpu=5307"]
+      }
+    },
+    {
+      "name": "bcc_displacement_ff_traps",
+      "instruction": "bra.l target",
+      "mnemonic": "bra.l",
+      "encoding": ["60ff", "0000", "001e"],
+      "outcome": "trap",
+      "neighbour": "bra_w_executes",
+      "oracle": {
+        "accepted_by": ["-mcpu=68020"],
+        "rejected_by": ["-mcpu=5307", "-m68000"]
+      }
+    },
+
+    {
+      "name": "scc_st_executes",
+      "instruction": "st %d0",
+      "mnemonic": "st",
+      "encoding": ["50c0"],
+      "outcome": "execute",
+      "neighbour": null,
+      "oracle": {
+        "accepted_by": ["-mcpu=5307", "-m68000"],
+        "rejected_by": []
+      }
+    },
+    {
+      "name": "and_l_executes",
+      "instruction": "and.l %d1,%d0",
+      "mnemonic": "and.l",
+      "encoding": ["c081"],
+      "outcome": "execute",
+      "neighbour": null,
+      "oracle": {
+        "accepted_by": ["-mcpu=5307", "-m68000"],
+        "rejected_by": []
+      }
+    },
+    {
+      "name": "lsl_l_immediate_executes",
+      "instruction": "lsl.l #1,%d0",
+      "mnemonic": "lsl.l",
+      "encoding": ["e388"],
+      "outcome": "execute",
+      "neighbour": null,
+      "oracle": {
+        "accepted_by": ["-mcpu=5307", "-m68000"],
+        "rejected_by": []
+      }
+    },
+    {
+      "name": "lsl_l_register_executes",
+      "instruction": "lsl.l %d1,%d0",
+      "mnemonic": "lsl.l",
+      "encoding": ["e3a8"],
+      "outcome": "execute",
+      "neighbour": null,
+      "oracle": {
+        "accepted_by": ["-mcpu=5307", "-m68000"],
+        "rejected_by": []
+      }
+    },
+    {
+      "name": "movem_indirect_executes",
+      "instruction": "movem.l %d0-%d1,(%a0)",
+      "mnemonic": "movem.l",
+      "encoding": ["48d0", "0003"],
+      "outcome": "execute",
+      "neighbour": null,
+      "oracle": {
+        "accepted_by": ["-mcpu=5307", "-m68000"],
+        "rejected_by": []
+      }
+    },
+    {
+      "name": "add_l_executes",
+      "instruction": "add.l %d0,%d1",
+      "mnemonic": "add.l",
+      "encoding": ["d280"],
+      "outcome": "execute",
+      "neighbour": null,
+      "oracle": {
+        "accepted_by": ["-mcpu=5307", "-m68000"],
+        "rejected_by": []
+      }
+    },
+    {
+      "name": "muls_w_executes",
+      "instruction": "muls.w %d1,%d0",
+      "mnemonic": "muls.w",
+      "encoding": ["c1c1"],
+      "outcome": "execute",
+      "neighbour": null,
+      "oracle": {
+        "accepted_by": ["-mcpu=5307", "-m68000"],
+        "rejected_by": []
+      }
+    },
+    {
+      "name": "mulu_w_executes",
+      "instruction": "mulu.w %d1,%d0",
+      "mnemonic": "mulu.w",
+      "encoding": ["c0c1"],
+      "outcome": "execute",
+      "neighbour": null,
+      "oracle": {
+        "accepted_by": ["-mcpu=5307", "-m68000"],
+        "rejected_by": []
+      }
+    },
+    {
+      "name": "divs_w_executes",
+      "instruction": "divs.w %d1,%d0",
+      "mnemonic": "divs.w",
+      "encoding": ["81c1"],
+      "outcome": "execute",
+      "neighbour": null,
+      "oracle": {
+        "accepted_by": ["-mcpu=5307", "-m68000"],
+        "rejected_by": []
+      }
+    },
+    {
+      "name": "divu_w_executes",
+      "instruction": "divu.w %d1,%d0",
+      "mnemonic": "divu.w",
+      "encoding": ["80c1"],
+      "outcome": "execute",
+      "neighbour": null,
+      "oracle": {
+        "accepted_by": ["-mcpu=5307", "-m68000"],
+        "rejected_by": []
+      }
+    },
+    {
+      "name": "bra_w_executes",
+      "instruction": "bra.w target",
+      "mnemonic": "bra.w",
+      "encoding": ["6000", "001e"],
+      "outcome": "execute",
+      "neighbour": null,
+      "oracle": {
+        "accepted_by": ["-mcpu=5307", "-m68000"],
+        "rejected_by": []
+      }
+    }
+  ]
+}
