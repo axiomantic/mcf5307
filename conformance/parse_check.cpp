@@ -28,6 +28,7 @@
 //
 
 #include <cstdint>
+#include <exception>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -441,6 +442,9 @@ int main(int argc, char** argv) {
     } catch (const CheckFailure& e) {
       std::cerr << "invalid " << path << ": " << e.what << "\n";
       failures.push_back("check failure in " + group + suffix);
+    } catch (const std::exception& e) {
+      std::cerr << "error loading " << path << ": " << e.what() << "\n";
+      failures.push_back("error loading " + group + suffix);
     }
   }
 
