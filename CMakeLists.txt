@@ -88,6 +88,13 @@ add_custom_target(mcf5307_tests
 # needs the target to exist when its own list is read.
 include(cmake/Nim.cmake)
 
+# The build gate. It registers `t0_build_is_current` -- at top level only --
+# and defines `mcf5307_require_current_build()`, which each registration list
+# calls at its own end to put its own tests behind that gate. It is included
+# before the test directories because the function must exist when their lists
+# are read, and after `enable_testing()` because it registers a test.
+include(cmake/BuildGate.cmake)
+
 # `tests/` is entered in every tree and `conformance/` only at top level.
 # `tests/tests_cpu.cmake` registers the ABI-gate assertion and then returns
 # unless this project is top-level, so a consumer inherits that one test, no

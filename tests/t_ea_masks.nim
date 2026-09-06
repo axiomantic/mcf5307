@@ -1036,7 +1036,7 @@ block:
 
   # THE SIZE-LESS ENTRY POINT ANSWERS THE LONG MASK, and that is asserted
   # rather than left to the reader of `decode_types.nim`. Every one of the
-  # twenty-odd call sites that does not pass a size reaches this overload, so
+  # call sites that does not pass a size reaches this overload, so
   # which of the two masks it picks is a property the tests must pin: the
   # narrow one traps a word operand it should have allowed, which is loud,
   # and the wide one executes a long operand the silicon rejects, which is
@@ -1532,8 +1532,6 @@ block:
 # contains the low-order part." A core that reads them the other way round
 # assembles 0x00123456 as 0x34560012 and every absolute-long operand reads the
 # wrong place.
-#
-# The case below is what makes a swapped extension-word order visible.
 #
 # The case runs through the shipped C entry points and not through `eaAddr`
 # reached around the back, so it asserts the path the corpus runner drives.
