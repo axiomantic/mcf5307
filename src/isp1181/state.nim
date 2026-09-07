@@ -179,7 +179,7 @@ proc isp1181Restore*(ctx: ISP1181Ctx; src: pointer): Isp1181StateStatus =
 
 proc isp1181_state_load*(ctx: ISP1181Ctx; src: pointer)
     {.exportc: "isp1181_state_load", cdecl, dynlib.} =
-  ## The refusal is dropped here: `include/mcf5307.h` gives this entry point no
+  ## The refusal is dropped here: `include/mcf5407.h` gives this entry point no
   ## result, no out-parameter and no status call to carry it out to C. What a C
   ## caller is left with is the state it already had.
   discard isp1181Restore(ctx, src)

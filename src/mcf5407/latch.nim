@@ -1,16 +1,16 @@
 ## `latch` - the one-time runtime latch, its deadline, and the terminal state a
 ## stalled initializer leaves behind.
 ##
-## Why this is its own module and not part of `src/mcf5307.nim`. Readers
+## Why this is its own module and not part of `src/mcf5407.nim`. Readers
 ## outside the entry module need the latch, and none may import that module.
 ##
-##   `mcf5307/cpu` and `isp1181/stub` ask whether the runtime was abandoned
+##   `mcf5407/cpu` and `isp1181/stub` ask whether the runtime was abandoned
 ##   before they allocate anything. The entry module imports both of them, so
 ##   an import the other way is a cycle.
 ##
 ##   `tests/t_runtime_latch` drives the latch directly. The entry module
-##   declares `mcf5307_NimMain`, which exists only in a build carrying
-##   `--nimMainPrefix:mcf5307_`; every Nim suite strips that flag, so a suite
+##   declares `mcf5407_NimMain`, which exists only in a build carrying
+##   `--nimMainPrefix:mcf5407_`; every Nim suite strips that flag, so a suite
 ##   that reached the latch through the entry module would not link.
 ##
 ## Nothing here needs the Nim runtime. `runtimeInitOnce` is what brings the
@@ -56,13 +56,13 @@ import system/ansi_c
 # unmeasured. This host is macOS and it builds the other branch.
 
 when defined(windows):
-  proc mcf5307TickCount(): uint64 {.
+  proc mcf5407TickCount(): uint64 {.
       importc: "GetTickCount64", header: "<windows.h>", stdcall.}
 
   proc monotonicMillis*(): int64 =
-    int64(mcf5307TickCount())
+    int64(mcf5407TickCount())
 
-  proc mcf5307Yield(): cint {.
+  proc mcf5407Yield(): cint {.
       importc: "SwitchToThread", header: "<windows.h>",
       stdcall, discardable.}
 else:
@@ -70,14 +70,14 @@ else:
   # own and the C compiler supplies the real layout. `clong` is the type of
   # both members on macOS and on 64-bit Linux.
   type
-    MCF5307TimeSpec {.importc: "struct timespec", header: "<time.h>".} = object
+    MCF5407TimeSpec {.importc: "struct timespec", header: "<time.h>".} = object
       tv_sec: clong
       tv_nsec: clong
 
-  let mcf5307ClockMonotonic {.importc: "CLOCK_MONOTONIC",
+  let mcf5407ClockMonotonic {.importc: "CLOCK_MONOTONIC",
       header: "<time.h>".}: cint
 
-  proc mcf5307ClockGetTime(clockId: cint; target: ptr MCF5307TimeSpec): cint {.
+  proc mcf5407ClockGetTime(clockId: cint; target: ptr MCF5407TimeSpec): cint {.
       importc: "clock_gettime", header: "<time.h>", discardable.}
 
   proc monotonicMillis*(): int64 =
@@ -87,11 +87,11 @@ else:
     ## this procedure runs before the Nim runtime exists and there is no
     ## failure channel to report into. `CLOCK_MONOTONIC` is mandatory in POSIX
     ## 2008 and the call fails only for an invalid clock identifier.
-    var now: MCF5307TimeSpec
-    discard mcf5307ClockGetTime(mcf5307ClockMonotonic, addr now)
+    var now: MCF5407TimeSpec
+    discard mcf5407ClockGetTime(mcf5407ClockMonotonic, addr now)
     int64(now.tv_sec) * 1000'i64 + int64(now.tv_nsec) div 1_000_000'i64
 
-  proc mcf5307Yield(): cint {.
+  proc mcf5407Yield(): cint {.
       importc: "sched_yield", header: "<sched.h>", discardable.}
 
 # ---------------------------------------------------------------------------
@@ -137,8 +137,8 @@ const reportNotYetMade = 0
 const reportMade = 1
 
 var runtimeLatch*: RuntimeLatch
-  ## The one instance the published ABI uses. `mcf5307_runtime_init` drives
-  ## this one, `mcf5307_create` and `isp1181_create` read it, and no shipped
+  ## The one instance the published ABI uses. `mcf5407_runtime_init` drives
+  ## this one, `mcf5407_create` and `isp1181_create` read it, and no shipped
   ## build makes another.
 
 var initializing {.threadvar.}: bool
@@ -163,9 +163,9 @@ proc runtimeAbandoned*(latch: var RuntimeLatch): bool =
   ## True once a waiter has reported a stall on `latch`.
   ##
   ## This is the refusal every other entry point reads. A C caller may drop the
-  ## status `mcf5307_runtime_init` returns - the language allows it and no
+  ## status `mcf5407_runtime_init` returns - the language allows it and no
   ## attribute can make it impossible - so the library may not depend on the
-  ## caller having read it. `mcf5307_create` and `isp1181_create` ask this
+  ## caller having read it. `mcf5407_create` and `isp1181_create` ask this
   ## question instead and hand back no context when the answer is true.
   latch.state.load(moAcquire) == latchAbandoned
 
@@ -182,7 +182,7 @@ proc reportStall(latch: var RuntimeLatch) =
       expected, reportMade, moAcquireRelease, moAcquire):
     return
   discard c_fputs(
-    "mcf5307_runtime_init: the Nim runtime initializer did not finish.\n",
+    "mcf5407_runtime_init: the Nim runtime initializer did not finish.\n",
     cstderr)
   discard c_fputs(
     "Another thread claimed the one-time latch and did not release it.\n",
@@ -190,12 +190,12 @@ proc reportStall(latch: var RuntimeLatch) =
   discard c_fputs(
     "One known cause: module initialization waits for a thread.\n", cstderr)
   discard c_fputs(
-    "That thread then calls mcf5307_runtime_init itself.\n", cstderr)
+    "That thread then calls mcf5407_runtime_init itself.\n", cstderr)
   discard c_fputs(
     "The runtime is not initialized, so this library will create no context.\n",
     cstderr)
   discard c_fputs(
-    "mcf5307_runtime_init reports 0 to this caller and to every later one.\n",
+    "mcf5407_runtime_init reports 0 to this caller and to every later one.\n",
     cstderr)
 
 proc runtimeInitOnce*(latch: var RuntimeLatch;
@@ -227,7 +227,7 @@ proc runtimeInitOnce*(latch: var RuntimeLatch;
   ## recurses without bound. A latch claimed before it terminates.
   ##
   ## The second hazard is concurrency. Nim 2.2 builds with threads on, and
-  ## `include/mcf5307.h` promises an idempotent call with no single-thread
+  ## `include/mcf5407.h` promises an idempotent call with no single-thread
   ## precondition. A plain boolean lets two threads both read false and both
   ## run the initializer. The compare-and-exchange admits exactly one of them.
   ##
@@ -291,4 +291,4 @@ proc runtimeInitOnce*(latch: var RuntimeLatch;
           return true
       reportStall(latch)
       return false
-    mcf5307Yield()
+    mcf5407Yield()

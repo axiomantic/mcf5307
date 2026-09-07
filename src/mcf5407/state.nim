@@ -1,7 +1,7 @@
 ## `state` - the snapshot of the core, as a flat block of bytes.
 ##
 ## The block holds no pointer, and that is a property of the walk below rather
-## than of a list kept by hand. `MCF5307Ctx` carries the board's cookie and the
+## than of a list kept by hand. `MCF5407Ctx` carries the board's cookie and the
 ## board's callbacks, and none of them means anything in another process or
 ## after the board is rebuilt; the walk skips them by type. A field of a type
 ## the walk has no encoding for stops the compile naming the field - which is
@@ -20,7 +20,7 @@
 ## one state. Big-endian is also the order the board reads through, so a reader
 ## comparing a snapshot against a memory dump reads one order and not two.
 
-import mcf5307/decode_types
+import mcf5407/decode_types
 
 const
   stateMagic* = 0x4D435335'u32
@@ -52,7 +52,7 @@ type
     stateSave
     stateLoad
 
-  Mcf5307CtxObj = typeof(default(MCF5307Ctx)[])
+  Mcf5407CtxObj = typeof(default(MCF5407Ctx)[])
 
   StateBuf = ptr UncheckedArray[uint8]
 
@@ -81,7 +81,7 @@ proc stateChecksum(buf: StateBuf; upTo: int): uint32 =
   for index in 0 ..< upTo:
     result = (result xor uint32(buf[index])) * 16777619'u32
 
-proc stateWalk(ctx: var Mcf5307CtxObj; buf: StateBuf; op: StateOp;
+proc stateWalk(ctx: var Mcf5407CtxObj; buf: StateBuf; op: StateOp;
                layout: ptr seq[(string, int)]): int =
   ## Walks the payload once and returns its width in bytes.
   ##
@@ -98,8 +98,8 @@ proc stateWalk(ctx: var Mcf5307CtxObj; buf: StateBuf; op: StateOp;
   for name, value in fieldPairs(ctx):
     when value is pointer:
       discard
-    elif value is Mcf5307ReadFn or value is Mcf5307WriteFn or
-         value is Mcf5307IackFn:
+    elif value is Mcf5407ReadFn or value is Mcf5407WriteFn or
+         value is Mcf5407IackFn:
       discard
     else:
       let started = at
@@ -136,15 +136,15 @@ proc stateWalk(ctx: var Mcf5307CtxObj; buf: StateBuf; op: StateOp;
               value[index] = getBe32(buf, at)
             at += 4
           else:
-            {.error: "mcf5307/state: an array of a type the walk cannot encode".}
+            {.error: "mcf5407/state: an array of a type the walk cannot encode".}
       else:
-        {.error: "mcf5307/state: a context field the walk cannot encode".}
+        {.error: "mcf5407/state: a context field the walk cannot encode".}
       if layout != nil:
         layout[].add((name, at - started))
   at
 
 proc statePayloadWidth(): int =
-  var probe: Mcf5307CtxObj
+  var probe: Mcf5407CtxObj
   stateWalk(probe, nil, stateMeasure, nil)
 
 const statePayloadBytes = statePayloadWidth()
@@ -152,15 +152,15 @@ const statePayloadBytes = statePayloadWidth()
 proc stateLayout*(): seq[(string, int)] =
   ## The name and the byte width of every context field the snapshot carries,
   ## in the order the block carries them.
-  var probe: Mcf5307CtxObj
+  var probe: Mcf5407CtxObj
   discard stateWalk(probe, nil, stateMeasure, addr result)
 
-proc mcf5307_state_size*(): csize_t
-    {.exportc: "mcf5307_state_size", cdecl, dynlib.} =
+proc mcf5407_state_size*(): csize_t
+    {.exportc: "mcf5407_state_size", cdecl, dynlib.} =
   csize_t(stateHeaderBytes + statePayloadBytes + stateChecksumBytes)
 
-proc mcf5307_state_save*(ctx: MCF5307Ctx; dst: pointer)
-    {.exportc: "mcf5307_state_save", cdecl, dynlib.} =
+proc mcf5407_state_save*(ctx: MCF5407Ctx; dst: pointer)
+    {.exportc: "mcf5407_state_save", cdecl, dynlib.} =
   if ctx.isNil or dst.isNil:
     return
   let buf = cast[StateBuf](dst)
@@ -172,8 +172,8 @@ proc mcf5307_state_save*(ctx: MCF5307Ctx; dst: pointer)
   putBe32(buf, stateHeaderBytes + statePayloadBytes,
           stateChecksum(buf, stateHeaderBytes + statePayloadBytes))
 
-proc stateLoad*(ctx: MCF5307Ctx; src: pointer): StateStatus =
-  ## Restores the core from a block `mcf5307_state_save` wrote, or names the
+proc stateLoad*(ctx: MCF5407Ctx; src: pointer): StateStatus =
+  ## Restores the core from a block `mcf5407_state_save` wrote, or names the
   ## reason it will not.
   ##
   ## Every check precedes the decode, and the order is the point. The context
@@ -196,10 +196,10 @@ proc stateLoad*(ctx: MCF5307Ctx; src: pointer): StateStatus =
                     stateLoad, nil)
   stateOk
 
-proc mcf5307_state_load*(ctx: MCF5307Ctx; src: pointer)
-    {.exportc: "mcf5307_state_load", cdecl, dynlib.} =
+proc mcf5407_state_load*(ctx: MCF5407Ctx; src: pointer)
+    {.exportc: "mcf5407_state_load", cdecl, dynlib.} =
   ## The refusal is dropped here and it is not lost. `stateLoad` names it, and
-  ## `include/mcf5307.h` gives this entry point no result, no out-parameter and
+  ## `include/mcf5407.h` gives this entry point no result, no out-parameter and
   ## no status call to carry it out to C. What a C caller is left with is the
   ## state it already had, which is the strongest report a `void` signature
   ## admits.

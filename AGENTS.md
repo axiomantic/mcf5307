@@ -1,11 +1,11 @@
-# mcf5307 — agent instructions
+# mcf5407 — agent instructions
 
 An emulator for the Motorola MCF5407 ColdFire processor, and a model of the
 Philips ISP1181 USB device controller. The core is written in Nim. CMake drives
 the Nim compiler and produces a static library plus a C header for a C or C++
 caller.
 
-Repository: `axiomantic/mcf5307`. Licence: MIT.
+Repository: `axiomantic/mcf5407`. Licence: MIT.
 
 ## Build and test
 
@@ -33,12 +33,12 @@ The raw form, which is what the preset expands to:
 
 ```bash
 cmake -S . -B <build> -DCMAKE_BUILD_TYPE=Release
-cmake --build <build> --parallel --target mcf5307_tests -- -k
+cmake --build <build> --parallel --target mcf5407_tests -- -k
 ctest --test-dir <build> --no-tests=error -R '^t0_|^t_' --output-on-failure
 ```
 
 `^t0_|^t_` is the pattern `.github/workflows/ci.yml` carries as `T0_PATTERN`.
-It excludes the `mcf5307_conformance_*` runs and nothing else; `ci.yml` keeps a
+It excludes the `mcf5407_conformance_*` runs and nothing else; `ci.yml` keeps a
 written roster of exactly those exclusions, so read the roster there rather than
 trusting this line **or the preset** — the preset is a second copy of the
 pattern, not its source.
@@ -72,7 +72,7 @@ alters the published C ABI needs it too: the consumer that links this library is
 ### Traps
 
 - **The presets build OUTSIDE the source tree**, at
-  `../build-mcf5307/<preset>/`, and the raw forms above build inside it at
+  `../build-mcf5407/<preset>/`, and the raw forms above build inside it at
   `build/` and `build-asan/`. A `ctest --test-dir build` typed after a
   `cmake --build --preset t0` reads a different tree from the one just built.
   Pick one form per check.
@@ -84,7 +84,7 @@ alters the published C ABI needs it too: the consumer that links this library is
   ignoring a broken build: `cmake --build` still exits non-zero. Ninja's
   spelling is `-- -k 0`.
 - **The Nim compile runs at CONFIGURE time**, not at build time. `src/*.nim`,
-  `.nim-version`, `include/mcf5307.h`, `tests/abi_smoke_symbols.inc`,
+  `.nim-version`, `include/mcf5407.h`, `tests/abi_smoke_symbols.inc`,
   `tests/abi_stub.c` and `tests/t_*.nim` are registered as configure
   dependencies, so an ordinary edit to one of them re-runs the configure by
   itself. A change those paths do not cover reaches nothing until
@@ -92,7 +92,7 @@ alters the published C ABI needs it too: the consumer that links this library is
 - **A LIST FILE IS A DEPENDENCY BY MTIME, AND A RESTORE THAT REWINDS MTIME
   DEFEATS IT.** The per-suite drivers under `<build>/tests/*_driver.cmake` are
   GENERATED from templates inside `tests/tests_cpu.cmake`, and the case-total
-  pins (`mcf5307_check_case_total`) live in the template, not in the driver.
+  pins (`mcf5407_check_case_total`) live in the template, not in the driver.
   CMake does re-generate them when it sees the list file as newer — an ordinary
   edit is picked up by `cmake --build` on its own, with no explicit configure.
   **What it does NOT pick up is a list file whose mtime went BACKWARDS**: a `mv`
@@ -121,9 +121,9 @@ alters the published C ABI needs it too: the consumer that links this library is
   `t0_abi_gate_on` and nothing else.
 - **THE T0 BUILD PRESET BUILDS EVERY EXECUTABLE THE T0 TEST PRESET RUNS, AND
   `t0_test_set_builds_what_it_runs` IS WHAT KEEPS IT THAT WAY.** The build
-  preset carries `--target mcf5307_tests` and nothing else, so a T0-selected
+  preset carries `--target mcf5407_tests` and nothing else, so a T0-selected
   test whose `COMMAND` names an executable target reaches it only through an
-  `add_dependencies(mcf5307_tests <target>)` line — the convention the root
+  `add_dependencies(mcf5407_tests <target>)` line — the convention the root
   `CMakeLists.txt` states where it creates the aggregate. `t0_corpus_parses` was
   registered in `conformance/conformance_cpu.cmake` without one, and three
   mechanisms hid that at once: `--no-tests=error` only catches a `-R` pattern
@@ -142,7 +142,7 @@ alters the published C ABI needs it too: the consumer that links this library is
   `conformance/runner.cpp`, which the build preset never compiles, turns the t0
   run red.
 - **Never configure this repository's own build tree with
-  `-DMCF5307_ABI_GATE=OFF`.** The switch exists for a host that cannot run a
+  `-DMCF5407_ABI_GATE=OFF`.** The switch exists for a host that cannot run a
   symbol reader; it disarms step 4a whole, and the cache entry then persists
   silently through later builds. Scratch trees only.
 - On this host `xcode-select` points at CommandLineTools while full Xcode is
@@ -158,11 +158,11 @@ Targets:
 
 | Target | Content |
 |---|---|
-| `mcf5307` | The static library. The core and the ISP1181 model. |
-| `mcf5307_tests` | The unit tests. |
-| `mcf5307_conformance` | The runner for the generated ColdFire conformance corpus. |
+| `mcf5407` | The static library. The core and the ISP1181 model. |
+| `mcf5407_tests` | The unit tests. |
+| `mcf5407_conformance` | The runner for the generated ColdFire conformance corpus. |
 
-CMake exports `mcf5307::mcf5307` for a consumer.
+CMake exports `mcf5407::mcf5407` for a consumer.
 
 ### The `--no-tests=error` convention
 
@@ -176,15 +176,15 @@ flag in listing mode, and do not remove the flag for tidiness.
 
 | Path | Content |
 |---|---|
-| `src/mcf5307.nim` | The library entry point. |
-| `src/mcf5307/` | The core modules: decode, effective address, ALU, logic, move, control, exception, interrupt, CPU and machine. |
-| `include/mcf5307.h` | The hand-written public C header. Not generated. |
+| `src/mcf5407.nim` | The library entry point. |
+| `src/mcf5407/` | The core modules: decode, effective address, ALU, logic, move, control, exception, interrupt, CPU and machine. |
+| `include/mcf5407.h` | The hand-written public C header. Not generated. |
 | `tests/` | Nim unit tests, plus the C and C++ ABI gate tests. |
 | `conformance/` | The generated ColdFire conformance corpus, its generator, and the runner. |
 | `cmake/Nim.cmake` | The Nim toolchain integration. |
 
 Test naming: `t_*` for the Nim unit tests, `t0_*` for the ABI and gate tests,
-`mcf5307_conformance_*` for the conformance runs. Read the registered names out
+`mcf5407_conformance_*` for the conformance runs. Read the registered names out
 of the build tree with `ctest --test-dir build -N` rather than counting them by
 hand.
 
@@ -252,6 +252,36 @@ The conformance corpus is assembled with `-mcpu=5307`, which is Revision A, so
 it cannot hold a Revision B case. That flag is what keeps the corpus and the
 implemented subset in agreement, and it is the thing to change first if the
 decision is reopened.
+
+## `-mcpu=5307` is not a leftover rename
+
+**The cross assembler is still invoked as `m68k-elf-as -mcpu=5307`, and the
+disassembler as `m68k-elf-objdump -m m68k:5307`. That is deliberate.** A sweep
+that "finishes the rename" by changing these to `5407` would be wrong, and this
+section exists so that nobody does it twice.
+
+`-mcpu` selects an ISA FAMILY in binutils, not a device. `-mcpu=5307` selects
+ColdFire ISA_A, which is exactly the subset this core implements; `-mcpu=5407`
+selects ISA_B, which adds the Revision B forms the section above records as
+deliberately unimplemented. The flag names the ISA the encodings were assembled
+under, and it is provenance: the corpus records `"-mcpu=5307"` beside each case
+because that is the invocation that produced those bytes.
+
+**Changing the flag would widen the corpus past the implemented subset.** One
+of the 204 conformance cases changes acceptance between the two flags - a
+negative case that ISA_B accepts - so a switch to `-mcpu=5407` would turn a
+case this core correctly refuses into one the assembler will build. None of the
+196 positive cases change.
+
+Change the flag on the day Revision B is implemented, and regenerate the corpus
+in the same change. Not before, and never as part of a rename.
+
+**Every other `5307` in this tree is one of two things**: a citation of the
+*MCF5307 User's Manual*, which is a real document this project still reads and
+still cites where a fact comes from it, or `MCF5307UM` in that manual's
+designation and filename. Neither is a stale identifier. The identifiers, the
+module paths, the C ABI, the CMake targets and the repository name are all
+`mcf5407`.
 
 ## The clean-room rule
 

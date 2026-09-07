@@ -48,7 +48,7 @@
 # Every value is ONE quoted argument, because two arguments would make a list
 # and a list carries a `;` into the text it replaces.
 
-set(MCF5307_CLAIM_IDS
+set(MCF5407_CLAIM_IDS
     "control_equivalent"
     "M3_suite_t_irq"
     "A11a_suite_t_irq"
@@ -127,7 +127,7 @@ set(CLAIM_control_equivalent_KIND "equivalent")
 set(CLAIM_control_equivalent_CLAIM_FILE "tests/t_claims.cmake")
 set(CLAIM_control_equivalent_CLAIM_TEXT "swapping the two operands of that `and` changes no reachable state.")
 set(CLAIM_control_equivalent_EDITS 1)
-set(CLAIM_control_equivalent_EDIT_1_FILE "mcf5307/irq.nim")
+set(CLAIM_control_equivalent_EDIT_1_FILE "mcf5407/irq.nim")
 set(CLAIM_control_equivalent_EDIT_1_FIND "  if level == 7 and ctx.irqLevel != 7:")
 set(CLAIM_control_equivalent_EDIT_1_REPLACE "  if ctx.irqLevel != 7 and level == 7:")
 
@@ -185,21 +185,21 @@ set(CLAIM_M3_suite_t_irq_EXPECT_RED 0)
 set(CLAIM_M3_suite_t_irq_CLAIM_FILE "tests/t_irq.nim")
 set(CLAIM_M3_suite_t_irq_CLAIM_TEXT "a `bool` latch cannot count")
 set(CLAIM_M3_suite_t_irq_EDITS 4)
-set(CLAIM_M3_suite_t_irq_EDIT_1_FILE "mcf5307/decode_types.nim")
+set(CLAIM_M3_suite_t_irq_EDIT_1_FILE "mcf5407/decode_types.nim")
 set(CLAIM_M3_suite_t_irq_EDIT_1_FIND "irq7Armed*: bool            ## a rising edge to level 7 is latched")
 set(CLAIM_M3_suite_t_irq_EDIT_1_REPLACE "irq7Armed*: int             ## a rising edge to level 7 is latched")
-set(CLAIM_M3_suite_t_irq_EDIT_2_FILE "mcf5307/irq.nim")
+set(CLAIM_M3_suite_t_irq_EDIT_2_FILE "mcf5407/irq.nim")
 set(CLAIM_M3_suite_t_irq_EDIT_2_FIND "    ctx.irq7Armed = true")
 set(CLAIM_M3_suite_t_irq_EDIT_2_REPLACE "    inc ctx.irq7Armed")
-set(CLAIM_M3_suite_t_irq_EDIT_3_FILE "mcf5307/irq.nim")
+set(CLAIM_M3_suite_t_irq_EDIT_3_FILE "mcf5407/irq.nim")
 set(CLAIM_M3_suite_t_irq_EDIT_3_FIND "    ctx.irq7Armed = false")
 set(CLAIM_M3_suite_t_irq_EDIT_3_REPLACE "    dec ctx.irq7Armed")
-set(CLAIM_M3_suite_t_irq_EDIT_4_FILE "mcf5307/irq.nim")
+set(CLAIM_M3_suite_t_irq_EDIT_4_FILE "mcf5407/irq.nim")
 set(CLAIM_M3_suite_t_irq_EDIT_4_FIND "  if ctx.irq7Armed:")
 set(CLAIM_M3_suite_t_irq_EDIT_4_REPLACE "  if ctx.irq7Armed > 0:")
 
 # --- A11a, the latch clear moved to just after the stacking ------------------
-# `src/mcf5307/irq.nim` clears the level-7 latch BEFORE `takeException`. A11a
+# `src/mcf5407/irq.nim` clears the level-7 latch BEFORE `takeException`. A11a
 # moves the clear to just after it and before the halted check. The two
 # positions differ only for a board that reaches the core WHILE the frame is
 # being stacked, because `takeException` stacks through the board's own write
@@ -223,10 +223,10 @@ set(CLAIM_A11a_suite_t_irq_EXPECT_RED 1)
 set(CLAIM_A11a_suite_t_irq_CLAIM_FILE "tests/t_irq.nim")
 set(CLAIM_A11a_suite_t_irq_CLAIM_TEXT "that move reds this case and no other case in this file")
 set(CLAIM_A11a_suite_t_irq_EDITS 2)
-set(CLAIM_A11a_suite_t_irq_EDIT_1_FILE "mcf5307/irq.nim")
+set(CLAIM_A11a_suite_t_irq_EDIT_1_FILE "mcf5407/irq.nim")
 set(CLAIM_A11a_suite_t_irq_EDIT_1_FIND "  if pending.level == 7:\n    ctx.irq7Armed = false\n\n")
 set(CLAIM_A11a_suite_t_irq_EDIT_1_REPLACE "\n")
-set(CLAIM_A11a_suite_t_irq_EDIT_2_FILE "mcf5307/irq.nim")
+set(CLAIM_A11a_suite_t_irq_EDIT_2_FILE "mcf5407/irq.nim")
 set(CLAIM_A11a_suite_t_irq_EDIT_2_FIND "  takeException(ctx, pending.vector, ctx.pc)\n")
 set(CLAIM_A11a_suite_t_irq_EDIT_2_REPLACE "  takeException(ctx, pending.vector, ctx.pc)\n  if pending.level == 7:\n    ctx.irq7Armed = false\n")
 
@@ -280,7 +280,7 @@ set(CLAIM_edge_flag_suite_t_irq_EXPECT_RED 1)
 set(CLAIM_edge_flag_suite_t_irq_CLAIM_FILE "tests/t_irq.nim")
 set(CLAIM_edge_flag_suite_t_irq_CLAIM_TEXT "THIS BLOCK PINS THE FLAG HALF AND NOT THE VECTOR HALF.")
 set(CLAIM_edge_flag_suite_t_irq_EDITS 1)
-set(CLAIM_edge_flag_suite_t_irq_EDIT_1_FILE "mcf5307/irq.nim")
+set(CLAIM_edge_flag_suite_t_irq_EDIT_1_FILE "mcf5407/irq.nim")
 set(CLAIM_edge_flag_suite_t_irq_EDIT_1_FIND "    return (true, 7, vectorFor(7, ctx.irq7Vector, ctx.irq7Autovector))\n")
 set(CLAIM_edge_flag_suite_t_irq_EDIT_1_REPLACE "    return (true, 7, vectorFor(7, ctx.irq7Vector, ctx.irqAutovector))\n")
 
@@ -290,10 +290,10 @@ set(CLAIM_edge_vector_scope_suite_t_irq_EXPECT_RED 1)
 set(CLAIM_edge_vector_scope_suite_t_irq_CLAIM_FILE "tests/t_irq.nim")
 set(CLAIM_edge_vector_scope_suite_t_irq_CLAIM_TEXT "THAT MOVE REDS NO CASE OF THAT FILE AND IT REDS THIS BLOCK.")
 set(CLAIM_edge_vector_scope_suite_t_irq_EDITS 2)
-set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_1_FILE "mcf5307/irq.nim")
+set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_1_FILE "mcf5407/irq.nim")
 set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_1_FIND "    ctx.irq7Vector = vector\n")
 set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_1_REPLACE "")
-set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_FILE "mcf5307/irq.nim")
+set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_FILE "mcf5407/irq.nim")
 set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_FIND "  ctx.irqAutovector = autovector != 0\n")
 set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_REPLACE "  ctx.irqAutovector = autovector != 0\n  ctx.irq7Vector = vector\n")
 
@@ -306,7 +306,7 @@ set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_REPLACE "  ctx.irqAutovector = au
 # Every count below is measured by applying the mutation to a copy of `src/`
 # and running the suite, against a no-op control on the same harness.
 # ---------------------------------------------------------------------------
-# The deferred write fault. `src/mcf5307/writeMem` records an access error on a
+# The deferred write fault. `src/mcf5407/writeMem` records an access error on a
 # store and `cpu.nim`'s `step` takes the vector at the instruction boundary,
 # because MCF5307 User's Manual section 3.5.1, printed page 3-15, requires the
 # faulting instruction's programming-model updates to complete first. THAT
@@ -340,10 +340,10 @@ set(CLAIM_write_fault_deferral_suite_t_bus_fault_EXPECT_RED 4)
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_CLAIM_FILE "tests/t_bus_fault.nim")
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_CLAIM_TEXT "EXACTLY FOUR RED. Four and not")
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDITS 2)
-set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_1_FILE "mcf5307/machine.nim")
-set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_1_FIND "proc boardRead(ctx: MCF5307Ctx; address: uint32; size: uint8;\n")
-set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_1_REPLACE "proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;\n                            fs: uint32; stackedSr: uint32)\n\nproc boardRead(ctx: MCF5307Ctx; address: uint32; size: uint8;\n")
-set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_2_FILE "mcf5307/machine.nim")
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_1_FILE "mcf5407/machine.nim")
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_1_FIND "proc boardRead(ctx: MCF5407Ctx; address: uint32; size: uint8;\n")
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_1_REPLACE "proc takeExceptionCopiedSr*(ctx: MCF5407Ctx; vector: uint8; stackedPc: uint32;\n                            fs: uint32; stackedSr: uint32)\n\nproc boardRead(ctx: MCF5407Ctx; address: uint32; size: uint8;\n")
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_2_FILE "mcf5407/machine.nim")
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_2_FIND "    ctx.pendingWriteFault = true\n    ctx.pendingFaultStatus = faultStatusFor(st, operandWrite)\n    ctx.pendingStackedSr = ctx.sr and 0xFFFF'u32\n    ctx.pendingStackedPc = ctx.pc\n")
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_2_REPLACE "    takeExceptionCopiedSr(ctx, vecAccessError, ctx.pc,\n                          faultStatusFor(st, operandWrite), ctx.sr and 0xFFFF'u32)\n")
 
@@ -353,7 +353,7 @@ set(CLAIM_reset_inhibit_suite_t_irq_EXPECT_RED 6)
 set(CLAIM_reset_inhibit_suite_t_irq_CLAIM_FILE "tests/t_irq.nim")
 set(CLAIM_reset_inhibit_suite_t_irq_CLAIM_TEXT "EXACTLY SIX red. Six and not two,")
 set(CLAIM_reset_inhibit_suite_t_irq_EDITS 1)
-set(CLAIM_reset_inhibit_suite_t_irq_EDIT_1_FILE "mcf5307/cpu.nim")
+set(CLAIM_reset_inhibit_suite_t_irq_EDIT_1_FILE "mcf5407/cpu.nim")
 set(CLAIM_reset_inhibit_suite_t_irq_EDIT_1_FIND "  ctx.atHandlerEntry = true\n")
 set(CLAIM_reset_inhibit_suite_t_irq_EDIT_1_REPLACE "  ctx.atHandlerEntry = false\n")
 
@@ -363,18 +363,18 @@ set(CLAIM_reset_edge_call_suite_t_irq_EXPECT_RED 3)
 set(CLAIM_reset_edge_call_suite_t_irq_CLAIM_FILE "tests/t_irq.nim")
 set(CLAIM_reset_edge_call_suite_t_irq_CLAIM_TEXT "a reset that does neither reds three cases of this file")
 set(CLAIM_reset_edge_call_suite_t_irq_EDITS 1)
-set(CLAIM_reset_edge_call_suite_t_irq_EDIT_1_FILE "mcf5307/cpu.nim")
+set(CLAIM_reset_edge_call_suite_t_irq_EDIT_1_FILE "mcf5407/cpu.nim")
 set(CLAIM_reset_edge_call_suite_t_irq_EDIT_1_FIND "  resetInterruptEdge(ctx)\n")
 set(CLAIM_reset_edge_call_suite_t_irq_EDIT_1_REPLACE "  discard\n")
 
 set(CLAIM_reset_edge_resample_suite_t_irq_KIND "suite-red")
 set(CLAIM_reset_edge_resample_suite_t_irq_SUITE "t_irq")
 set(CLAIM_reset_edge_resample_suite_t_irq_EXPECT_RED 3)
-set(CLAIM_reset_edge_resample_suite_t_irq_CLAIM_FILE "src/mcf5307/irq.nim")
+set(CLAIM_reset_edge_resample_suite_t_irq_CLAIM_FILE "src/mcf5407/irq.nim")
 set(CLAIM_reset_edge_resample_suite_t_irq_CLAIM_TEXT "reset that clears without re-observing reds three cases of `t_irq`")
 set(CLAIM_reset_edge_resample_suite_t_irq_EDITS 1)
-set(CLAIM_reset_edge_resample_suite_t_irq_EDIT_1_FILE "mcf5307/irq.nim")
-set(CLAIM_reset_edge_resample_suite_t_irq_EDIT_1_FIND "  mcf5307_set_irq(ctx, level, vector, autovector)\n")
+set(CLAIM_reset_edge_resample_suite_t_irq_EDIT_1_FILE "mcf5407/irq.nim")
+set(CLAIM_reset_edge_resample_suite_t_irq_EDIT_1_FIND "  mcf5407_set_irq(ctx, level, vector, autovector)\n")
 set(CLAIM_reset_edge_resample_suite_t_irq_EDIT_1_REPLACE "  discard (level, vector, autovector)\n")
 
 # THIS ENTRY'S ANCHOR IS THE `default` SPELLING, AND THAT IS A SECOND REASON
@@ -385,15 +385,15 @@ set(CLAIM_reset_edge_resample_suite_t_irq_EDIT_1_REPLACE "  discard (level, vect
 set(CLAIM_reset_edge_clear_suite_t_irq_KIND "suite-red")
 set(CLAIM_reset_edge_clear_suite_t_irq_SUITE "t_irq")
 set(CLAIM_reset_edge_clear_suite_t_irq_EXPECT_RED 1)
-set(CLAIM_reset_edge_clear_suite_t_irq_CLAIM_FILE "src/mcf5307/irq.nim")
+set(CLAIM_reset_edge_clear_suite_t_irq_CLAIM_FILE "src/mcf5407/irq.nim")
 set(CLAIM_reset_edge_clear_suite_t_irq_CLAIM_TEXT "clearing reds exactly one (`reset_edge_clear_suite_t_irq`)")
 set(CLAIM_reset_edge_clear_suite_t_irq_EDITS 1)
-set(CLAIM_reset_edge_clear_suite_t_irq_EDIT_1_FILE "mcf5307/irq.nim")
+set(CLAIM_reset_edge_clear_suite_t_irq_EDIT_1_FILE "mcf5407/irq.nim")
 set(CLAIM_reset_edge_clear_suite_t_irq_EDIT_1_FIND "  ctx.irq7Armed = default(typeof(ctx.irq7Armed))\n")
 set(CLAIM_reset_edge_clear_suite_t_irq_EDIT_1_REPLACE "")
 
 # --- the one-iteration loop shape -------------------------------------------
-# `src/mcf5307/cpu.nim` states, inside `mcf5307_exec`'s loop: that the sample
+# `src/mcf5407/cpu.nim` states, inside `mcf5407_exec`'s loop: that the sample
 # and the `step` are one iteration and that making the take `continue` instead
 # would sample again before the handler had executed anything.
 # `tests/t_irq.nim` block 15 carries the case the sentence stands on - a level 7
@@ -411,15 +411,15 @@ set(CLAIM_reset_edge_clear_suite_t_irq_EDIT_1_REPLACE "")
 set(CLAIM_one_iteration_suite_t_irq_KIND "suite-red")
 set(CLAIM_one_iteration_suite_t_irq_SUITE "t_irq")
 set(CLAIM_one_iteration_suite_t_irq_EXPECT_RED 2)
-set(CLAIM_one_iteration_suite_t_irq_CLAIM_FILE "src/mcf5307/cpu.nim")
+set(CLAIM_one_iteration_suite_t_irq_CLAIM_FILE "src/mcf5407/cpu.nim")
 set(CLAIM_one_iteration_suite_t_irq_CLAIM_TEXT "THE SAMPLE AND THE `step` BELOW ARE ONE ITERATION.")
 set(CLAIM_one_iteration_suite_t_irq_EDITS 1)
-set(CLAIM_one_iteration_suite_t_irq_EDIT_1_FILE "mcf5307/cpu.nim")
+set(CLAIM_one_iteration_suite_t_irq_EDIT_1_FILE "mcf5407/cpu.nim")
 set(CLAIM_one_iteration_suite_t_irq_EDIT_1_FIND "    if not ctx.atHandlerEntry:\n      if takeInterrupt(ctx):\n        if ctx.halted:\n          break\n    ctx.atHandlerEntry = false\n")
 set(CLAIM_one_iteration_suite_t_irq_EDIT_1_REPLACE "    if not ctx.atHandlerEntry:\n      if takeInterrupt(ctx):\n        if ctx.halted:\n          break\n        ctx.atHandlerEntry = false\n        continue\n    ctx.atHandlerEntry = false\n")
 
 # --- the odd control-transfer target ----------------------------------------
-# `src/mcf5307/machine.nim`'s `transferControl` refuses an odd target and takes
+# `src/mcf5407/machine.nim`'s `transferControl` refuses an odd target and takes
 # the address error, which the MCF5407 User's Manual section 2.8.2, Table 2-22,
 # the Address Error row, folio 2-34, requires of "an attempted execution
 # transferring control to an odd instruction address (that is, if bit 0 of the
@@ -440,7 +440,7 @@ set(CLAIM_address_error_odd_target_suite_t_control_EXPECT_RED 6)
 set(CLAIM_address_error_odd_target_suite_t_control_CLAIM_FILE "tests/t_control.nim")
 set(CLAIM_address_error_odd_target_suite_t_control_CLAIM_TEXT "reds exactly six cases of this file, and the seventh")
 set(CLAIM_address_error_odd_target_suite_t_control_EDITS 1)
-set(CLAIM_address_error_odd_target_suite_t_control_EDIT_1_FILE "mcf5307/machine.nim")
+set(CLAIM_address_error_odd_target_suite_t_control_EDIT_1_FILE "mcf5407/machine.nim")
 set(CLAIM_address_error_odd_target_suite_t_control_EDIT_1_FIND "  if (target and 1'u32) != 0'u32:\n    takeException(ctx, vecAddressError, faultPc, fsInstructionFetch)\n  else:\n    ctx.pc = target\n")
 set(CLAIM_address_error_odd_target_suite_t_control_EDIT_1_REPLACE "  discard faultPc\n  ctx.pc = target\n")
 
@@ -467,7 +467,7 @@ set(CLAIM_bra_base_suite_t_bra_displacement_EXPECT_RED 2)
 set(CLAIM_bra_base_suite_t_bra_displacement_CLAIM_FILE "tests/t_bra_displacement.nim")
 set(CLAIM_bra_base_suite_t_bra_displacement_CLAIM_TEXT "that base reds TWO cases of this file.")
 set(CLAIM_bra_base_suite_t_bra_displacement_EDITS 1)
-set(CLAIM_bra_base_suite_t_bra_displacement_EDIT_1_FILE "mcf5307/control.nim")
+set(CLAIM_bra_base_suite_t_bra_displacement_EDIT_1_FILE "mcf5407/control.nim")
 set(CLAIM_bra_base_suite_t_bra_displacement_EDIT_1_FIND "  let base = ctx.pc\n")
 set(CLAIM_bra_base_suite_t_bra_displacement_EDIT_1_REPLACE "  let base = ctx.pc - insWordBytes\n")
 
@@ -477,7 +477,7 @@ set(CLAIM_bra_isab_suite_t_bra_displacement_EXPECT_RED 2)
 set(CLAIM_bra_isab_suite_t_bra_displacement_CLAIM_FILE "tests/t_bra_displacement.nim")
 set(CLAIM_bra_isab_suite_t_bra_displacement_CLAIM_TEXT "that marker reds TWO cases of this file.")
 set(CLAIM_bra_isab_suite_t_bra_displacement_EDITS 1)
-set(CLAIM_bra_isab_suite_t_bra_displacement_EDIT_1_FILE "mcf5307/control.nim")
+set(CLAIM_bra_isab_suite_t_bra_displacement_EDIT_1_FILE "mcf5407/control.nim")
 set(CLAIM_bra_isab_suite_t_bra_displacement_EDIT_1_FIND "  if d.size == 4'u8:\n    return trap(ctx)\n")
 set(CLAIM_bra_isab_suite_t_bra_displacement_EDIT_1_REPLACE "  if d.size == 4'u8:\n    discard\n")
 
@@ -501,7 +501,7 @@ endforeach()
 # are ways of not entering it.
 #
 # ONE: THE REGISTRY HAS NO FLOOR. MEASURED by the gate judge:
-# with `MCF5307_CLAIM_IDS` emptied and every claim's definitions left in place,
+# with `MCF5407_CLAIM_IDS` emptied and every claim's definitions left in place,
 # this test ran the shape battery, printed `0 claims checked: 0 upheld, 0
 # withheld, 0 refuted` and exited 0. The claim loop is the half of this driver
 # that measures the source's own sentences; a green run that entered it zero
@@ -514,7 +514,7 @@ endforeach()
 # honestly would have to lower it - the same edit, reading the same way, as the
 # deletion this check exists to refuse. What is derived instead is the set of
 # claims this file DEFINES: each `set(CLAIM_<id>_KIND ...)` above declares one,
-# and the defined set and `MCF5307_CLAIM_IDS` must agree exactly.
+# and the defined set and `MCF5407_CLAIM_IDS` must agree exactly.
 #
 #   An id dropped from the list while its definitions stay is the silent
 #   unregistration named above.
@@ -564,18 +564,18 @@ endforeach()
 list(LENGTH claims_definition_lines claims_definition_line_count)
 list(REMOVE_DUPLICATES claims_defined)
 list(SORT claims_defined)
-set(claims_listed ${MCF5307_CLAIM_IDS})
+set(claims_listed ${MCF5407_CLAIM_IDS})
 list(SORT claims_listed)
 if(NOT "${claims_defined}" STREQUAL "${claims_listed}")
     message(FATAL_ERROR
         "t_claims: the registry defines [${claims_defined}] and runs "
         "[${claims_listed}], and the two do not agree. A claim DEFINED here "
-        "and absent from MCF5307_CLAIM_IDS is never measured while its "
+        "and absent from MCF5407_CLAIM_IDS is never measured while its "
         "definition still reads as coverage; a claim LISTED here and not "
         "defined would be measured against nothing. A claim is retired by "
         "removing BOTH, with the reason in the retirement note above.")
 endif()
-if(NOT "control_equivalent" IN_LIST MCF5307_CLAIM_IDS)
+if(NOT "control_equivalent" IN_LIST MCF5407_CLAIM_IDS)
     message(FATAL_ERROR
         "t_claims: control_equivalent is not registered. It is the POSITIVE "
         "CONTROL for the equivalence path: without it, a run of this driver "
@@ -639,7 +639,7 @@ message("t_claims: the registry defines ${claims_floor} claim(s) in "
 # comment would refuse the only shape the mechanism has ever had. What is
 # refused is satisfaction from THIS FILE'S OWN MACHINE-READ DEFINITIONS, which
 # no reader reads as a claim.
-foreach(claim IN LISTS MCF5307_CLAIM_IDS)
+foreach(claim IN LISTS MCF5407_CLAIM_IDS)
     set(claims_sentence_path
         "${CLAIMS_SOURCE_DIR}/${CLAIM_${claim}_CLAIM_FILE}")
     if(NOT EXISTS "${claims_sentence_path}")
@@ -723,7 +723,7 @@ foreach(claim IN LISTS MCF5307_CLAIM_IDS)
     # for it. `reset_inhibit_suite_t_irq` quoted "requires `t_irq` to go" and
     # stopped before "EXACTLY SIX"; `reset_edge_clear_suite_t_irq` quoted "a
     # reset that re-observes without" and stopped before "clearing reds exactly
-    # one". Rewriting `tests/t_irq.nim` to say EXACTLY TWO and `src/mcf5307/
+    # one". Rewriting `tests/t_irq.nim` to say EXACTLY TWO and `src/mcf5407/
     # irq.nim` to say exactly nine left the configure at rc 0 and this driver
     # at `9 claims checked: 9 upheld, 0 refuted` - a production source file
     # stating a number the registry contradicts, with nothing in the tree
@@ -867,7 +867,7 @@ set(claims_observer "${CLAIMS_SOURCE_DIR}/tests/t_claims.nim")
 # `<out>_COMPILE_RC`, `<out>_RC` and `<out>_OUTPUT` in the caller's scope. A
 # compile failure is REPORTED AND NOT FATAL here, because one caller - the
 # reached-the-compiler control - requires exactly that.
-function(_mcf5307_claims_run source tree tag out)
+function(_mcf5407_claims_run source tree tag out)
     set(binary "${CLAIMS_WORK_DIR}/${tag}.bin")
     set(cache "${CLAIMS_WORK_DIR}/${tag}.nimcache")
     # THE BINARY OF AN EARLIER RUN IS REMOVED BEFORE THE COMPILE. Without this
@@ -937,7 +937,7 @@ endfunction()
 # default it replaces FABRICATED one.
 #
 # WHAT IS RECOGNISED. The set is written out here, and the refusal message in
-# `_mcf5307_claims_reachable` writes it out again for the author who never opens
+# `_mcf5407_claims_reachable` writes it out again for the author who never opens
 # this file. TWO PROSE COPIES OF ONE SET CAN DISAGREE WITH IT AND WITH EACH
 # OTHER, and that cost is taken deliberately: neither reader can act without it,
 # and THE CODE BELOW IS THE ONLY AUTHORITY. A shape added to one prose copy and
@@ -965,7 +965,7 @@ endfunction()
 # definition - and a nested branch is a second question the one insertion does
 # not answer.
 #
-# MEASURED on repository source, `src/mcf5307/cpu.nim`. The anchor
+# MEASURED on repository source, `src/mcf5407/cpu.nim`. The anchor
 #
 #     if takeInterrupt(ctx):
 #       if ctx.halted:
@@ -1039,7 +1039,7 @@ endfunction()
 # enclosing scope rather than the line. This is the test that refuses the dead
 # routine header above, and it refuses it WITHOUT KNOWING THAT `proc` IS A WORD,
 # which is the property the keyword list never had.
-function(_mcf5307_claims_probe_point find following_indent out_text out_kind
+function(_mcf5407_claims_probe_point find following_indent out_text out_kind
         out_point out_reason)
     string(REGEX MATCH "^[^\n]*" first "${find}")
     string(REGEX MATCH "^[ \t]*" indent "${first}")
@@ -1192,7 +1192,7 @@ endfunction()
 # BOTH TAKE THEIR TEXTS BY NAME. A CMake function argument holding a `;` arrives
 # split into two arguments, and an anchor's text is the one place a `;` is most
 # likely; a name costs one dereference and removes the hazard outright.
-function(_mcf5307_claims_occurrences text_name find_name out)
+function(_mcf5407_claims_occurrences text_name find_name out)
     string(REPLACE "${${find_name}}" "" stripped "${${text_name}}")
     string(LENGTH "${${text_name}}" text_length)
     string(LENGTH "${stripped}" stripped_length)
@@ -1204,7 +1204,7 @@ endfunction()
 # -1 when the anchor is the last thing in the file. The probe uses it to tell a
 # STATEMENT from a line that OPENS something, which is the one test in it that
 # consults the file rather than a list of words.
-function(_mcf5307_claims_following_indent text_name find_name out)
+function(_mcf5407_claims_following_indent text_name find_name out)
     string(FIND "${${text_name}}" "${${find_name}}" at)
     string(LENGTH "${${find_name}}" find_length)
     string(LENGTH "${${text_name}}" text_length)
@@ -1269,7 +1269,7 @@ endfunction()
 # this branch run" instead of "was this header reached".
 #
 # WHICH ANCHORS TAKE WHICH INSERTION, AND WHICH TAKE NEITHER, IS DECIDED BY
-# `_mcf5307_claims_probe_point` ABOVE, WHICH RECOGNISES A NAMED SET OF SHAPES AND
+# `_mcf5407_claims_probe_point` ABOVE, WHICH RECOGNISES A NAMED SET OF SHAPES AND
 # REFUSES EVERYTHING ELSE. The paragraph at that function records the two false
 # UPHELDs the opposite default produced and why extending a keyword list is not
 # the repair for them. Nothing here restates the set: one place to read it is one
@@ -1285,7 +1285,7 @@ endfunction()
 #
 # MEASURED, the negative control that made the distinction fire. An
 # `equivalent` claim was registered in a SCRATCH COPY of this file DELETING the
-# nil-context guard of `mcf5307_set_irq` - `if ctx.isNil: return`, a real
+# nil-context guard of `mcf5407_set_irq` - `if ctx.isNil: return`, a real
 # semantic break over a branch no scenario of `tests/t_claims.nim` takes. With
 # the `quit(97)` before the header the probe reported REACHED and the driver
 # reported `UPHELD ... every line it edits IS reached`. With it inside the
@@ -1297,7 +1297,7 @@ endfunction()
 # MEASURED against the claims that are registered here:
 # `control_equivalent`'s single edit is REACHED, probed as the first statement
 # of the branch it opens, so this check invalidates no claim in the registry.
-function(_mcf5307_claims_reachable claim edit out out_point)
+function(_mcf5407_claims_reachable claim edit out out_point)
     # THE FIND TEXT IS READ FROM THE REGISTRY AND NOT PASSED IN. A CMake
     # function argument holding a `;` would arrive split into two arguments,
     # and the registry's texts are the one place a `;` is most likely.
@@ -1314,7 +1314,7 @@ function(_mcf5307_claims_reachable claim edit out out_point)
     # THE TEXT MUST OCCUR EXACTLY ONCE. At two occurrences the probe cannot say
     # WHICH of them a moved trace reached, and "one of the two is reached" does
     # not license a verdict about the other.
-    _mcf5307_claims_occurrences(text CLAIM_${claim}_EDIT_${edit}_FIND
+    _mcf5407_claims_occurrences(text CLAIM_${claim}_EDIT_${edit}_FIND
         occurrences)
     if(NOT occurrences EQUAL 1)
         message(FATAL_ERROR
@@ -1337,10 +1337,10 @@ function(_mcf5307_claims_reachable claim edit out out_point)
         endif()
     endif()
 
-    _mcf5307_claims_following_indent(text CLAIM_${claim}_EDIT_${edit}_FIND
+    _mcf5407_claims_following_indent(text CLAIM_${claim}_EDIT_${edit}_FIND
         following_indent)
 
-    _mcf5307_claims_probe_point("${find}" "${following_indent}" inserted kind
+    _mcf5407_claims_probe_point("${find}" "${following_indent}" inserted kind
         point reason)
     if(kind STREQUAL "REFUSED")
         message(FATAL_ERROR
@@ -1387,7 +1387,7 @@ function(_mcf5307_claims_reachable claim edit out out_point)
     string(REPLACE "${find}" "${inserted}" text "${text}")
     file(WRITE "${path}" "${text}")
 
-    _mcf5307_claims_run("${claims_observer}" "${probe}/src" "${tag}" PROBE)
+    _mcf5407_claims_run("${claims_observer}" "${probe}/src" "${tag}" PROBE)
     if(NOT PROBE_COMPILE_RC EQUAL 0)
         message(FATAL_ERROR
             "t_claims: ${claim} edit ${edit}: the observer does not compile "
@@ -1423,14 +1423,14 @@ endfunction()
 # upheld count - the claim count less the refuted and the withheld - could be
 # driven NEGATIVE by a claim's prose. Escaping the separator at the append is
 # what keeps the three printed counts arithmetic about claims.
-function(_mcf5307_claims_one_element name)
+function(_mcf5407_claims_one_element name)
     string(REPLACE ";" "\\;" escaped "${${name}}")
     set(${name} "${escaped}" PARENT_SCOPE)
 endfunction()
 
 # The number of RED cases in a suite's output. Every suite prints one
 # `FAILED  <label>` line per red case.
-function(_mcf5307_claims_red output out)
+function(_mcf5407_claims_red output out)
     string(REGEX MATCHALL "\nFAILED  " hits "\n${output}")
     list(LENGTH hits count)
     set(${out} "${count}" PARENT_SCOPE)
@@ -1439,7 +1439,7 @@ endfunction()
 # The FIRST line at which two traces differ, one from each. A refutation that
 # printed both whole traces would print four hundred lines and bury the one
 # that matters.
-function(_mcf5307_claims_first_difference left right out_left out_right)
+function(_mcf5407_claims_first_difference left right out_left out_right)
     string(REPLACE ";" "\\;" left "${left}")
     string(REPLACE ";" "\\;" right "${right}")
     string(REPLACE "\n" ";" left "${left}")
@@ -1534,18 +1534,18 @@ endfunction()
 # below, which reads every registered edit's FIND text out of the source it
 # names and refuses to measure a claim whose text is not there.
 
-set(MCF5307_CLAIMS_SHAPE_PROCS "type MjShapeEnum = enum
+set(MCF5407_CLAIMS_SHAPE_PROCS "type MjShapeEnum = enum
   mjShapeA = 1
   mjShapeB = 2
 
-proc mjNeverCalled(ctx: MCF5307Ctx, n: int): int =
+proc mjNeverCalled(ctx: MCF5407Ctx, n: int): int =
   var mjacc = 0
   mjacc = mjacc + 1
   if n > 100000:
     mjacc = mjacc + 1
   mjacc
 
-proc mjProbeShapes(ctx: MCF5307Ctx, level: int): int =
+proc mjProbeShapes(ctx: MCF5407Ctx, level: int): int =
   var acc = 0
   if level >= 0:
     acc = acc + 2
@@ -1560,13 +1560,13 @@ proc mjProbeShapes(ctx: MCF5307Ctx, level: int): int =
   acc
 
 ")
-set(MCF5307_CLAIMS_SHAPE_HOST "mcf5307/irq.nim")
-set(MCF5307_CLAIMS_SHAPE_HOST_ANCHOR "proc mcf5307_set_irq*(ctx: MCF5307Ctx; level: cint; vector: uint8;\n")
-set(MCF5307_CLAIMS_SHAPE_CALL_FIND "  if ctx.isNil:\n    return\n")
-set(MCF5307_CLAIMS_SHAPE_CALL_REPLACE
+set(MCF5407_CLAIMS_SHAPE_HOST "mcf5407/irq.nim")
+set(MCF5407_CLAIMS_SHAPE_HOST_ANCHOR "proc mcf5407_set_irq*(ctx: MCF5407Ctx; level: cint; vector: uint8;\n")
+set(MCF5407_CLAIMS_SHAPE_CALL_FIND "  if ctx.isNil:\n    return\n")
+set(MCF5407_CLAIMS_SHAPE_CALL_REPLACE
     "  if ctx.isNil:\n    return\n  discard mjProbeShapes(ctx, int(level))\n")
 
-set(MCF5307_CLAIMS_SHAPE_IDS
+set(MCF5407_CLAIMS_SHAPE_IDS
     "F_one_line_if"
     "H_dead_proc_header"
     "K_last_statement"
@@ -1577,43 +1577,43 @@ set(MCF5307_CLAIMS_SHAPE_IDS
     "AG_bare_header"
     )
 
-set(MCF5307_SHAPE_F_one_line_if_WHAT "a one-line `if <condition>: <effect>` - no body line to become the first statement of")
-set(MCF5307_SHAPE_F_one_line_if_FIND "  if level > 70000: acc = acc + 17\n")
-set(MCF5307_SHAPE_F_one_line_if_EXPECT "REFUSED")
+set(MCF5407_SHAPE_F_one_line_if_WHAT "a one-line `if <condition>: <effect>` - no body line to become the first statement of")
+set(MCF5407_SHAPE_F_one_line_if_FIND "  if level > 70000: acc = acc + 17\n")
+set(MCF5407_SHAPE_F_one_line_if_EXPECT "REFUSED")
 
-set(MCF5307_SHAPE_H_dead_proc_header_WHAT "the header of a proc with no call site anywhere - a routine header is not a statement - false UPHELD route 1")
-set(MCF5307_SHAPE_H_dead_proc_header_FIND "proc mjNeverCalled(ctx: MCF5307Ctx, n: int): int =\n")
-set(MCF5307_SHAPE_H_dead_proc_header_EXPECT "REFUSED")
+set(MCF5407_SHAPE_H_dead_proc_header_WHAT "the header of a proc with no call site anywhere - a routine header is not a statement - false UPHELD route 1")
+set(MCF5407_SHAPE_H_dead_proc_header_FIND "proc mjNeverCalled(ctx: MCF5407Ctx, n: int): int =\n")
+set(MCF5407_SHAPE_H_dead_proc_header_EXPECT "REFUSED")
 
-set(MCF5307_SHAPE_K_last_statement_WHAT "the last statement of a proc every scenario calls - THE POSITIVE CONTROL - a battery that upholds nothing is as useless as a probe that refuses everything")
-set(MCF5307_SHAPE_K_last_statement_FIND "  acc\n")
-set(MCF5307_SHAPE_K_last_statement_EXPECT "UPHELD")
+set(MCF5407_SHAPE_K_last_statement_WHAT "the last statement of a proc every scenario calls - THE POSITIVE CONTROL - a battery that upholds nothing is as useless as a probe that refuses everything")
+set(MCF5407_SHAPE_K_last_statement_FIND "  acc\n")
+set(MCF5407_SHAPE_K_last_statement_EXPECT "UPHELD")
 
-set(MCF5307_SHAPE_L_multi_statement_WHAT "an edit spanning a whole two-armed `if` - a SIBLING arm - false UPHELD route 2, refused by the deeper-lines rule")
-set(MCF5307_SHAPE_L_multi_statement_FIND "  if level >= 0:\n    acc = acc + 2\n  else:\n    acc = acc + 23\n")
-set(MCF5307_SHAPE_L_multi_statement_EXPECT "REFUSED")
+set(MCF5407_SHAPE_L_multi_statement_WHAT "an edit spanning a whole two-armed `if` - a SIBLING arm - false UPHELD route 2, refused by the deeper-lines rule")
+set(MCF5407_SHAPE_L_multi_statement_FIND "  if level >= 0:\n    acc = acc + 2\n  else:\n    acc = acc + 23\n")
+set(MCF5407_SHAPE_L_multi_statement_EXPECT "REFUSED")
 
-set(MCF5307_SHAPE_R_enum_member_WHAT "an enumeration member, which reads as an assignment - A KNOWN RESIDUAL RECORDED AS IT STANDS: an enumeration member reads as an assignment, so the insertion lands in a `type` section and the compile fails. The run is LOUD and no verdict is fabricated; the expectation records the behaviour so that a change to it is visible")
-set(MCF5307_SHAPE_R_enum_member_FIND "  mjShapeB = 2\n")
-set(MCF5307_SHAPE_R_enum_member_EXPECT "MISCOMPILE")
+set(MCF5407_SHAPE_R_enum_member_WHAT "an enumeration member, which reads as an assignment - A KNOWN RESIDUAL RECORDED AS IT STANDS: an enumeration member reads as an assignment, so the insertion lands in a `type` section and the compile fails. The run is LOUD and no verdict is fabricated; the expectation records the behaviour so that a change to it is visible")
+set(MCF5407_SHAPE_R_enum_member_FIND "  mjShapeB = 2\n")
+set(MCF5407_SHAPE_R_enum_member_EXPECT "MISCOMPILE")
 
-set(MCF5307_SHAPE_AC_if_over_nested_WHAT "an `if` header whose body is a NESTED dead `if` - false UPHELD route 3, the cell the A..V table had no shape for")
-set(MCF5307_SHAPE_AC_if_over_nested_FIND "  if level > -1:\n    if level > 40000:\n      acc = acc + 47\n")
-set(MCF5307_SHAPE_AC_if_over_nested_EXPECT "REFUSED")
+set(MCF5407_SHAPE_AC_if_over_nested_WHAT "an `if` header whose body is a NESTED dead `if` - false UPHELD route 3, the cell the A..V table had no shape for")
+set(MCF5407_SHAPE_AC_if_over_nested_FIND "  if level > -1:\n    if level > 40000:\n      acc = acc + 47\n")
+set(MCF5407_SHAPE_AC_if_over_nested_EXPECT "REFUSED")
 
-set(MCF5307_SHAPE_AC_inner_WHAT "the NESTED dead `if` of AC anchored alone - REFUSING THIS WOULD LOSE A REAL MEASUREMENT")
-set(MCF5307_SHAPE_AC_inner_FIND "    if level > 40000:\n      acc = acc + 47\n")
-set(MCF5307_SHAPE_AC_inner_EXPECT "WITHHELD")
+set(MCF5407_SHAPE_AC_inner_WHAT "the NESTED dead `if` of AC anchored alone - REFUSING THIS WOULD LOSE A REAL MEASUREMENT")
+set(MCF5407_SHAPE_AC_inner_FIND "    if level > 40000:\n      acc = acc + 47\n")
+set(MCF5407_SHAPE_AC_inner_EXPECT "WITHHELD")
 
-set(MCF5307_SHAPE_AG_bare_header_WHAT "a BARE HEADER WITH NO BODY LINE IN THE ANCHOR, over a body indented DEEPER THAN THE HEADER PLUS TWO - THE CELL THE TABLE HAD NO ROW FOR WHILE THE ONLY REGISTERED equivalent CLAIM RAN THROUGH IT. `CLAIM_control_equivalent_EDIT_1_FIND` is a header line and nothing else, so the walk over the anchor's remaining lines never executes and neither the deeper-lines rule nor the straight-line-run rule runs on it. The body indent was SYNTHESISED as the header's plus two, which is a hardcoded assumption about how this tree indents rather than a reading of the file; this row's body is indented by four so that the assumption is wrong for it. MEASURED 2026-08-13 with the indent synthesised: MISCOMPILE, `invalid indentation`, against the UPHELD recorded here")
-set(MCF5307_SHAPE_AG_bare_header_FIND "  if level > -3:")
-set(MCF5307_SHAPE_AG_bare_header_EXPECT "UPHELD")
+set(MCF5407_SHAPE_AG_bare_header_WHAT "a BARE HEADER WITH NO BODY LINE IN THE ANCHOR, over a body indented DEEPER THAN THE HEADER PLUS TWO - THE CELL THE TABLE HAD NO ROW FOR WHILE THE ONLY REGISTERED equivalent CLAIM RAN THROUGH IT. `CLAIM_control_equivalent_EDIT_1_FIND` is a header line and nothing else, so the walk over the anchor's remaining lines never executes and neither the deeper-lines rule nor the straight-line-run rule runs on it. The body indent was SYNTHESISED as the header's plus two, which is a hardcoded assumption about how this tree indents rather than a reading of the file; this row's body is indented by four so that the assumption is wrong for it. MEASURED 2026-08-13 with the indent synthesised: MISCOMPILE, `invalid indentation`, against the UPHELD recorded here")
+set(MCF5407_SHAPE_AG_bare_header_FIND "  if level > -3:")
+set(MCF5407_SHAPE_AG_bare_header_EXPECT "UPHELD")
 
 # ---- THE TABLE'S OWN FLOOR --------------------------------------------------
 # THE BATTERY HAD NO FLOOR AND COULD THEREFORE SHRINK IN SILENCE, which is the
 # defect the claim registry's pre-flight above exists for, in the half of this
 # file that pre-flight does not read. MEASURED on this file with the
-# rows already cut: one id removed from `MCF5307_CLAIMS_SHAPE_IDS` with its
+# rows already cut: one id removed from `MCF5407_CLAIMS_SHAPE_IDS` with its
 # three definitions left in place ran to exit 0 and printed `7 probe shapes
 # agreed with the outcomes recorded for them`. The row that went was the
 # WITHHELD control, so the run that lost it reported nothing but a smaller
@@ -1624,7 +1624,7 @@ set(MCF5307_SHAPE_AG_bare_header_EXPECT "UPHELD")
 # honestly would have to lower it - the same edit, reading the same way, as the
 # deletion this check refuses. What is derived is the set of rows this file
 # DEFINES: each `WHAT`, `FIND` and `EXPECT` line declares one, and the defined
-# set and `MCF5307_CLAIMS_SHAPE_IDS` must agree exactly.
+# set and `MCF5407_CLAIMS_SHAPE_IDS` must agree exactly.
 #
 #   An id dropped from the list while its definitions stay is the silent shrink
 #   measured above.
@@ -1656,41 +1656,41 @@ set(MCF5307_SHAPE_AG_bare_header_EXPECT "UPHELD")
 file(READ "${CMAKE_CURRENT_LIST_FILE}" claims_shape_registry_text)
 set(claims_shape_definition_fields "WHAT|FIND|EXPECT")
 string(REGEX MATCHALL
-    "\nset\\(MCF5307_SHAPE_[A-Za-z0-9_+]+_(${claims_shape_definition_fields}) "
+    "\nset\\(MCF5407_SHAPE_[A-Za-z0-9_+]+_(${claims_shape_definition_fields}) "
     claims_shape_definition_lines "${claims_shape_registry_text}")
 set(claims_shapes_defined "")
 foreach(line IN LISTS claims_shape_definition_lines)
     string(REGEX REPLACE
-        "^\nset\\(MCF5307_SHAPE_(.+)_(${claims_shape_definition_fields}) $"
+        "^\nset\\(MCF5407_SHAPE_(.+)_(${claims_shape_definition_fields}) $"
         "\\1" claims_shape_id "${line}")
     list(APPEND claims_shapes_defined "${claims_shape_id}")
 endforeach()
 list(LENGTH claims_shape_definition_lines claims_shape_definition_line_count)
 list(REMOVE_DUPLICATES claims_shapes_defined)
 list(SORT claims_shapes_defined)
-set(claims_shapes_listed ${MCF5307_CLAIMS_SHAPE_IDS})
+set(claims_shapes_listed ${MCF5407_CLAIMS_SHAPE_IDS})
 list(SORT claims_shapes_listed)
 if(NOT "${claims_shapes_defined}" STREQUAL "${claims_shapes_listed}")
     message(FATAL_ERROR
         "t_claims: the shape table defines [${claims_shapes_defined}] and runs "
         "[${claims_shapes_listed}], and the two do not agree. A row DEFINED "
-        "here and absent from MCF5307_CLAIMS_SHAPE_IDS is never run while its "
+        "here and absent from MCF5407_CLAIMS_SHAPE_IDS is never run while its "
         "definition still reads as a cell this battery has; a row LISTED here "
         "and not defined would be run against nothing. A row is cut by "
         "removing BOTH, with the reason in the record above the table.")
 endif()
-if(NOT "K_last_statement" IN_LIST MCF5307_CLAIMS_SHAPE_IDS)
+if(NOT "K_last_statement" IN_LIST MCF5407_CLAIMS_SHAPE_IDS)
     message(FATAL_ERROR
-        "t_claims: K_last_statement is not in MCF5307_CLAIMS_SHAPE_IDS. It is "
+        "t_claims: K_last_statement is not in MCF5407_CLAIMS_SHAPE_IDS. It is "
         "the POSITIVE CONTROL for this battery: without it, a run has shown "
         "that the probe can REFUSE an anchor and has shown nothing about "
         "whether it can reach a verdict, and every REFUSED row it prints is a "
         "refusal from a mechanism never demonstrated able to do anything else.")
 endif()
-if(NOT MCF5307_SHAPE_K_last_statement_EXPECT STREQUAL "UPHELD")
+if(NOT MCF5407_SHAPE_K_last_statement_EXPECT STREQUAL "UPHELD")
     message(FATAL_ERROR
         "t_claims: K_last_statement records the outcome "
-        "'${MCF5307_SHAPE_K_last_statement_EXPECT}' and it must record "
+        "'${MCF5407_SHAPE_K_last_statement_EXPECT}' and it must record "
         "'UPHELD'. It is the POSITIVE CONTROL and nothing else: under any "
         "other recorded outcome the battery no longer requires the probe to "
         "reach a verdict, and the check above protects only the name. If this "
@@ -1706,28 +1706,28 @@ message("t_claims: the shape table defines ${claims_shape_floor} shape(s) in "
 # outcome is not the one recorded for it. A FAILURE IS COLLECTED AND NOT FATAL,
 # for the reason the claim loop below collects its refutations: a run that
 # stopped at the first would hide which of the remaining shapes still hold.
-function(_mcf5307_claims_shape_battery out_failures out_ran)
+function(_mcf5407_claims_shape_battery out_failures out_ran)
     set(failures "")
     set(ran 0)
     set(tree "${CLAIMS_WORK_DIR}/shape-battery")
     file(REMOVE_RECURSE "${tree}")
     file(COPY "${CLAIMS_SOURCE_DIR}/src" DESTINATION "${tree}")
-    set(host "${tree}/src/${MCF5307_CLAIMS_SHAPE_HOST}")
+    set(host "${tree}/src/${MCF5407_CLAIMS_SHAPE_HOST}")
     file(READ "${host}" injected)
 
     # THE HOST ANCHOR MUST OCCUR ONCE, AND IT IS UNIQUE BY CONSTRUCTION. It is
-    # the first line of `mcf5307_set_irq`'s own signature, so it carries the
+    # the first line of `mcf5407_set_irq`'s own signature, so it carries the
     # proc's name; a second copy of it would be a redefinition the Nim compiler
     # refuses before this driver ever runs. At zero the procs are not injected
     # and every shape below would report on an anchor that is not in the file.
-    _mcf5307_claims_occurrences(injected MCF5307_CLAIMS_SHAPE_HOST_ANCHOR count)
+    _mcf5407_claims_occurrences(injected MCF5407_CLAIMS_SHAPE_HOST_ANCHOR count)
     if(NOT count EQUAL 1)
         message(FATAL_ERROR
             "t_claims: the shape battery's host anchor occurs ${count} time(s) "
-            "in ${MCF5307_CLAIMS_SHAPE_HOST}, and it must occur exactly once:\n"
-            "      ${MCF5307_CLAIMS_SHAPE_HOST_ANCHOR}\n"
+            "in ${MCF5407_CLAIMS_SHAPE_HOST}, and it must occur exactly once:\n"
+            "      ${MCF5407_CLAIMS_SHAPE_HOST_ANCHOR}\n"
             "    THE ANCHOR IN `tests/t_claims.cmake` NO LONGER IDENTIFIES ONE "
-            "PLACE - NARROW IT. It is `MCF5307_CLAIMS_SHAPE_HOST_ANCHOR` in "
+            "PLACE - NARROW IT. It is `MCF5407_CLAIMS_SHAPE_HOST_ANCHOR` in "
             "this file, and it must match the signature of the one proc the "
             "probe procs are injected in front of. This is a fault in the "
             "anchor and not in the source that moved under it.")
@@ -1737,17 +1737,17 @@ function(_mcf5307_claims_shape_battery out_failures out_ran)
     # redefinition error that names a symbol and not a cause. MEASURED
     # a scratch harness that injects the same procs before invoking
     # this driver produced exactly that, once per shape.
-    _mcf5307_claims_occurrences(injected MCF5307_CLAIMS_SHAPE_PROCS count)
+    _mcf5407_claims_occurrences(injected MCF5407_CLAIMS_SHAPE_PROCS count)
     if(NOT count EQUAL 0)
         message(FATAL_ERROR
             "t_claims: the shape battery's probe procs are ALREADY in "
-            "${MCF5307_CLAIMS_SHAPE_HOST} (${count} time(s)). Injecting them "
+            "${MCF5407_CLAIMS_SHAPE_HOST} (${count} time(s)). Injecting them "
             "again would define every one of their names twice. Either the "
             "source tree carries them, or a caller injected them before "
             "invoking this driver.")
     endif()
-    string(REPLACE "${MCF5307_CLAIMS_SHAPE_HOST_ANCHOR}"
-        "${MCF5307_CLAIMS_SHAPE_PROCS}${MCF5307_CLAIMS_SHAPE_HOST_ANCHOR}"
+    string(REPLACE "${MCF5407_CLAIMS_SHAPE_HOST_ANCHOR}"
+        "${MCF5407_CLAIMS_SHAPE_PROCS}${MCF5407_CLAIMS_SHAPE_HOST_ANCHOR}"
         injected "${injected}")
 
     # THE CALL ANCHOR IS RESOLVED INSIDE THE HOST PROC AND NOWHERE ELSE, AND
@@ -1766,32 +1766,32 @@ function(_mcf5307_claims_shape_battery out_failures out_ran)
     #
     # THE HOST ANCHOR IS THE PROC'S OWN SIGNATURE and cannot be duplicated, so
     # searching only the text that FOLLOWS it and taking the FIRST match names
-    # "the nil guard at the head of `mcf5307_set_irq`" and can name nothing
+    # "the nil guard at the head of `mcf5407_set_irq`" and can name nothing
     # else. Every other proc in the file may now guard its context freely.
-    string(FIND "${injected}" "${MCF5307_CLAIMS_SHAPE_HOST_ANCHOR}"
+    string(FIND "${injected}" "${MCF5407_CLAIMS_SHAPE_HOST_ANCHOR}"
            claims_host_at)
-    string(LENGTH "${MCF5307_CLAIMS_SHAPE_HOST_ANCHOR}" claims_host_length)
+    string(LENGTH "${MCF5407_CLAIMS_SHAPE_HOST_ANCHOR}" claims_host_length)
     math(EXPR claims_body_at "${claims_host_at} + ${claims_host_length}")
     string(SUBSTRING "${injected}" 0 ${claims_body_at} claims_host_head)
     string(SUBSTRING "${injected}" ${claims_body_at} -1 claims_host_body)
 
-    string(FIND "${claims_host_body}" "${MCF5307_CLAIMS_SHAPE_CALL_FIND}"
+    string(FIND "${claims_host_body}" "${MCF5407_CLAIMS_SHAPE_CALL_FIND}"
            claims_call_at)
     if(claims_call_at EQUAL -1)
         message(FATAL_ERROR
             "t_claims: the shape battery's call anchor does not appear "
             "anywhere after the host proc's signature in "
-            "${MCF5307_CLAIMS_SHAPE_HOST}:\n"
-            "      ${MCF5307_CLAIMS_SHAPE_CALL_FIND}\n"
+            "${MCF5407_CLAIMS_SHAPE_HOST}:\n"
+            "      ${MCF5407_CLAIMS_SHAPE_CALL_FIND}\n"
             "    THE ANCHOR IN `tests/t_claims.cmake` NO LONGER MATCHES THE "
-            "SOURCE - REPAIR IT. It is `MCF5307_CLAIMS_SHAPE_CALL_FIND` in "
+            "SOURCE - REPAIR IT. It is `MCF5407_CLAIMS_SHAPE_CALL_FIND` in "
             "this file, and the probe call is injected directly after it, so "
             "it must match a statement the host proc reaches on every call. "
             "Without it the battery would report on shapes it never placed.")
     endif()
     string(SUBSTRING "${claims_host_body}" 0 ${claims_call_at}
            claims_call_before)
-    string(LENGTH "${MCF5307_CLAIMS_SHAPE_CALL_FIND}" claims_call_length)
+    string(LENGTH "${MCF5407_CLAIMS_SHAPE_CALL_FIND}" claims_call_length)
     math(EXPR claims_call_end "${claims_call_at} + ${claims_call_length}")
     string(SUBSTRING "${claims_host_body}" ${claims_call_end} -1
            claims_call_after)
@@ -1800,12 +1800,12 @@ function(_mcf5307_claims_shape_battery out_failures out_ran)
     # `;` when it is expanded back into a string - which lands a stray
     # separator in the middle of the file and mangles the semicolons in this
     # host proc's own signature.
-    set(injected "${claims_host_head}${claims_call_before}${MCF5307_CLAIMS_SHAPE_CALL_REPLACE}${claims_call_after}")
+    set(injected "${claims_host_head}${claims_call_before}${MCF5407_CLAIMS_SHAPE_CALL_REPLACE}${claims_call_after}")
     file(WRITE "${host}" "${injected}")
 
     # THE INERTNESS CONTROL. Every reading below is a comparison against this
     # trace, so an injection that moved it would make all of them meaningless.
-    _mcf5307_claims_run("${claims_observer}" "${tree}/src" "shape-battery-base"
+    _mcf5407_claims_run("${claims_observer}" "${tree}/src" "shape-battery-base"
         BATTERY_BASE)
     if(NOT BATTERY_BASE_COMPILE_RC EQUAL 0)
         message(FATAL_ERROR
@@ -1826,25 +1826,25 @@ function(_mcf5307_claims_shape_battery out_failures out_ran)
             "below would mean what it says.")
     endif()
 
-    foreach(shape IN LISTS MCF5307_CLAIMS_SHAPE_IDS)
-        set(find "${MCF5307_SHAPE_${shape}_FIND}")
-        set(expect "${MCF5307_SHAPE_${shape}_EXPECT}")
+    foreach(shape IN LISTS MCF5407_CLAIMS_SHAPE_IDS)
+        set(find "${MCF5407_SHAPE_${shape}_FIND}")
+        set(expect "${MCF5407_SHAPE_${shape}_EXPECT}")
 
         # A SHAPE WHOSE ANCHOR IS NOT IN THE FILE IS A FAILURE AND NOT A SKIP.
         # A silently dropped row is a cell the battery reports on and does not
         # have, which is the defect the whole section exists for.
-        _mcf5307_claims_occurrences(injected MCF5307_SHAPE_${shape}_FIND count)
+        _mcf5407_claims_occurrences(injected MCF5407_SHAPE_${shape}_FIND count)
         if(NOT count EQUAL 1)
             set(entry
-                "${shape}: its anchor occurs ${count} times in the injected ${MCF5307_CLAIMS_SHAPE_HOST} and the battery reports on ONE. The table in tests/t_claims.cmake is stale with respect to the probe procs it anchors in.")
-            _mcf5307_claims_one_element(entry)
+                "${shape}: its anchor occurs ${count} times in the injected ${MCF5407_CLAIMS_SHAPE_HOST} and the battery reports on ONE. The table in tests/t_claims.cmake is stale with respect to the probe procs it anchors in.")
+            _mcf5407_claims_one_element(entry)
             list(APPEND failures "${entry}")
             continue()
         endif()
 
-        _mcf5307_claims_following_indent(injected MCF5307_SHAPE_${shape}_FIND
+        _mcf5407_claims_following_indent(injected MCF5407_SHAPE_${shape}_FIND
             following_indent)
-        _mcf5307_claims_probe_point("${find}" "${following_indent}" inserted
+        _mcf5407_claims_probe_point("${find}" "${following_indent}" inserted
             kind point reason)
 
         if(kind STREQUAL "REFUSED")
@@ -1853,7 +1853,7 @@ function(_mcf5307_claims_shape_battery out_failures out_ran)
         else()
             string(REPLACE "${find}" "${inserted}" probed "${injected}")
             file(WRITE "${host}" "${probed}")
-            _mcf5307_claims_run("${claims_observer}" "${tree}/src"
+            _mcf5407_claims_run("${claims_observer}" "${tree}/src"
                 "shape-${shape}" PROBED)
             file(WRITE "${host}" "${injected}")
             math(EXPR ran "${ran}+1")
@@ -1880,8 +1880,8 @@ function(_mcf5307_claims_shape_battery out_failures out_ran)
             message("t_claims:   shape ${shape}: ${actual}, and ${expect} is "
                     "recorded for it")
             set(entry
-                "${shape} is ${actual} and the table records ${expect}. The shape is ${MCF5307_SHAPE_${shape}_WHAT}. The probe said: ${detail}. EITHER THE PROBE HAS CHANGED WHAT IT MEASURES OR THE TABLE IS WRONG, and the second is a repair only when the first has been ruled out: this table is what stands between a changed probe and a verdict whose meaning has quietly changed with it.")
-            _mcf5307_claims_one_element(entry)
+                "${shape} is ${actual} and the table records ${expect}. The shape is ${MCF5407_SHAPE_${shape}_WHAT}. The probe said: ${detail}. EITHER THE PROBE HAS CHANGED WHAT IT MEASURES OR THE TABLE IS WRONG, and the second is a repair only when the first has been ruled out: this table is what stands between a changed probe and a verdict whose meaning has quietly changed with it.")
+            _mcf5407_claims_one_element(entry)
             list(APPEND failures "${entry}")
         endif()
     endforeach()
@@ -1896,7 +1896,7 @@ endfunction()
 # unless the trace can be produced at all.
 message("t_claims: the pristine tree is ${CLAIMS_SOURCE_DIR}/src")
 
-_mcf5307_claims_run("${claims_observer}" "${CLAIMS_SOURCE_DIR}/src"
+_mcf5407_claims_run("${claims_observer}" "${CLAIMS_SOURCE_DIR}/src"
     "observer-baseline" OBSERVER_BASE)
 if(NOT OBSERVER_BASE_COMPILE_RC EQUAL 0)
     message(FATAL_ERROR
@@ -1924,8 +1924,8 @@ message("t_claims: the observer ran ${claims_scenario_count} scenarios against "
 # IT RUNS BEFORE THE CLAIM LOOP AND ITS RESULT IS CARRIED TO THE END. A battery
 # placed after the final report would never run in a tree where a claim is
 # refuted, and a refutation is an outcome this driver exists to produce.
-list(LENGTH MCF5307_CLAIMS_SHAPE_IDS claims_shape_count)
-_mcf5307_claims_shape_battery(claims_battery_failures claims_shapes_compiled)
+list(LENGTH MCF5407_CLAIMS_SHAPE_IDS claims_shape_count)
+_mcf5407_claims_shape_battery(claims_battery_failures claims_shapes_compiled)
 list(LENGTH claims_battery_failures claims_battery_failure_count)
 message("t_claims: the shape battery ran ${claims_shape_count} shapes "
         "(${claims_shapes_compiled} of them needed a compile) and "
@@ -1956,7 +1956,7 @@ set(claims_withheld "")
 # reaching the branch would satisfy the first alone.
 set(claims_equivalent_ran 0)
 
-foreach(claim IN LISTS MCF5307_CLAIM_IDS)
+foreach(claim IN LISTS MCF5407_CLAIM_IDS)
     set(kind "${CLAIM_${claim}_KIND}")
     set(work "${CLAIMS_WORK_DIR}/${claim}")
     file(REMOVE_RECURSE "${work}")
@@ -2023,8 +2023,8 @@ foreach(claim IN LISTS MCF5307_CLAIM_IDS)
         file(REMOVE_RECURSE "${control}")
         file(COPY "${work}/src" DESTINATION "${control}")
         file(APPEND "${control}/src/${relative}"
-            "\nlet mcf5307ClaimsReachedTheCompiler = ((((\n")
-        _mcf5307_claims_run("${claims_program}" "${control}/src"
+            "\nlet mcf5407ClaimsReachedTheCompiler = ((((\n")
+        _mcf5407_claims_run("${claims_program}" "${control}/src"
             "${claim}-control" CONTROL)
         if(CONTROL_COMPILE_RC EQUAL 0)
             message(FATAL_ERROR
@@ -2040,7 +2040,7 @@ foreach(claim IN LISTS MCF5307_CLAIM_IDS)
     # -- the claim itself -----------------------------------------------------
     if(kind STREQUAL "equivalent")
         math(EXPR claims_equivalent_ran "${claims_equivalent_ran}+1")
-        _mcf5307_claims_run("${claims_observer}" "${work}/src"
+        _mcf5407_claims_run("${claims_observer}" "${work}/src"
             "${claim}-mutant" MUTANT)
         if(NOT MUTANT_COMPILE_RC EQUAL 0)
             message(FATAL_ERROR
@@ -2062,7 +2062,7 @@ foreach(claim IN LISTS MCF5307_CLAIM_IDS)
             set(unreached "")
             set(edit 1)
             while(edit LESS_EQUAL CLAIM_${claim}_EDITS)
-                _mcf5307_claims_reachable("${claim}" "${edit}" reach
+                _mcf5407_claims_reachable("${claim}" "${edit}" reach
                     reach_point)
                 message("t_claims:   reachability probe, edit ${edit} "
                         "${CLAIM_${claim}_EDIT_${edit}_FILE}: ${reach} "
@@ -2078,7 +2078,7 @@ foreach(claim IN LISTS MCF5307_CLAIM_IDS)
                 message("t_claims:   WITHHELD")
                 set(entry
                     "${claim}: WITHHELD, NOT UPHELD. ${CLAIM_${claim}_CLAIM_FILE} claims: ${CLAIM_${claim}_CLAIM_TEXT}. The observer's ${claims_scenario_count} scenarios produced the same trace before and after the mutation, and they would have produced the same trace whatever the mutation said, because no scenario EXECUTES ${unreached_text}: a `quit(97)` inserted there against the PRISTINE tree left the run exiting 0 with the trace unmoved. An insertion point nothing executes separates nothing, so this run is not evidence for the claim and must not be recorded as it. The two honest repairs are to give the observer a scenario that executes it, or to stop registering this claim as `equivalent` and register what the suites actually measure instead. RELAXING THIS CHECK IS NOT ONE OF THEM.")
-                _mcf5307_claims_one_element(entry)
+                _mcf5407_claims_one_element(entry)
                 list(APPEND claims_withheld "${entry}")
             else()
                 message("t_claims:   UPHELD: none of the "
@@ -2091,25 +2091,25 @@ foreach(claim IN LISTS MCF5307_CLAIM_IDS)
                         "it is the absence of a witness in a bounded space.")
             endif()
         else()
-            _mcf5307_claims_first_difference("${OBSERVER_BASE_OUTPUT}"
+            _mcf5407_claims_first_difference("${OBSERVER_BASE_OUTPUT}"
                 "${MUTANT_OUTPUT}" shipped mutated)
             message("t_claims:   REFUTED")
             set(entry
                 "${claim}: REFUTED. ${CLAIM_${claim}_CLAIM_FILE} claims: ${CLAIM_${claim}_CLAIM_TEXT}. A scenario separates the mutation from the shipped code, so the state it changes IS reachable through the public interface:\n      shipped: ${shipped}\n      mutated: ${mutated}\n    The claim is false, and no rewording of it is a repair. Either the mutation is wrong for the core, or the file must stop claiming what this scenario disproves.")
-            _mcf5307_claims_one_element(entry)
+            _mcf5407_claims_one_element(entry)
             list(APPEND claims_refuted "${entry}")
         endif()
     elseif(kind STREQUAL "suite-red")
         set(suite "${CLAIM_${claim}_SUITE}")
 
-        _mcf5307_claims_run("${claims_program}" "${CLAIMS_SOURCE_DIR}/src"
+        _mcf5407_claims_run("${claims_program}" "${CLAIMS_SOURCE_DIR}/src"
             "${claim}-suite-baseline" SUITE_BASE)
         if(NOT SUITE_BASE_COMPILE_RC EQUAL 0)
             message(FATAL_ERROR
                 "t_claims: ${claim}: ${suite} does not compile against the "
                 "pristine tree.\n${SUITE_BASE_OUTPUT}")
         endif()
-        _mcf5307_claims_red("${SUITE_BASE_OUTPUT}" base_red)
+        _mcf5407_claims_red("${SUITE_BASE_OUTPUT}" base_red)
         if(NOT base_red EQUAL 0)
             message(FATAL_ERROR
                 "t_claims: ${claim}: ${suite} is ${base_red} RED against the "
@@ -2117,7 +2117,7 @@ foreach(claim IN LISTS MCF5307_CLAIM_IDS)
                 "nothing while the count before it is not zero.")
         endif()
 
-        _mcf5307_claims_run("${claims_program}" "${work}/src"
+        _mcf5407_claims_run("${claims_program}" "${work}/src"
             "${claim}-suite-mutant" SUITE_MUTANT)
         if(NOT SUITE_MUTANT_COMPILE_RC EQUAL 0)
             message(FATAL_ERROR
@@ -2131,12 +2131,12 @@ foreach(claim IN LISTS MCF5307_CLAIM_IDS)
                 "printed no summary line, so it did not run to the end and "
                 "its red count is not a count of anything.")
         endif()
-        _mcf5307_claims_red("${SUITE_MUTANT_OUTPUT}" mutant_red)
+        _mcf5407_claims_red("${SUITE_MUTANT_OUTPUT}" mutant_red)
         if(NOT mutant_red EQUAL CLAIM_${claim}_EXPECT_RED)
             message("t_claims:   REFUTED")
             set(entry
                 "${claim}: ${suite} went ${mutant_red} RED and the registry expects ${CLAIM_${claim}_EXPECT_RED}. ${CLAIM_${claim}_CLAIM_FILE} claims: ${CLAIM_${claim}_CLAIM_TEXT}. A count that has moved is a fact about the suite, and it belongs in the file that claims it.")
-            _mcf5307_claims_one_element(entry)
+            _mcf5407_claims_one_element(entry)
             list(APPEND claims_refuted "${entry}")
         else()
             message("t_claims:   UPHELD: ${suite} is ${base_red} red before "
@@ -2160,7 +2160,7 @@ if(claims_equivalent_ran LESS 1)
         "longer does.")
 endif()
 
-list(LENGTH MCF5307_CLAIM_IDS claim_count)
+list(LENGTH MCF5407_CLAIM_IDS claim_count)
 list(LENGTH claims_refuted refuted_count)
 list(LENGTH claims_withheld withheld_count)
 math(EXPR upheld_count "${claim_count}-${refuted_count}-${withheld_count}")

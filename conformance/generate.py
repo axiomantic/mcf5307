@@ -96,7 +96,7 @@ than pin an accident of this implementation. The authority here is the
 ColdFire Family Programmer's Reference Manual.
 
 Every case is judged on the core's run state before any value is compared.
-`conformance/runner.cpp` asserts `mcf5307_faulted`, then `mcf5307_halted`,
+`conformance/runner.cpp` asserts `mcf5407_faulted`, then `mcf5407_halted`,
 then a non-zero cycle return, for every case and whatever registers the case
 names. A case whose instruction traps therefore fails even when the registers
 it names hold the expected values - which is the whole class of case that
@@ -151,7 +151,7 @@ GROUPS = ("move", "alu", "logic", "control")
 # part comes out of reset with: supervisor set, interrupt mask 7, every
 # condition code clear.
 #
-# These are the same five bit positions `src/mcf5307/machine.nim` names, and
+# These are the same five bit positions `src/mcf5407/machine.nim` names, and
 # the same `srBase` `tests/t_alu.nim` and `tests/t_move.nim` name.
 
 SR_BASE = 0x2700      # supervisor, interrupt mask 7, every condition code clear
@@ -258,7 +258,7 @@ ABS_L_SWAPPED = 0x00040003
 # `(xxx).W` addresses 0xFFFF8000 upward, the runner's board is 1 MiB, and a
 # case whose operand access reports `busUnmapped` traps and fails on the run
 # state rather than on the address. See the uncertainty note in
-# `src/mcf5307/machine.nim`.
+# `src/mcf5407/machine.nim`.
 ABS_W_ADDR = MEM_BASE
 
 # Where the encoding is placed. The runner defaults to this, and every
@@ -1053,7 +1053,7 @@ CASES = {
             # COUNTER IS THE ONLY PLACE THAT SHOWS IT. The word form is ONE
             # instruction word - Dx is bits 11..9 of that word and the
             # signedness is bits 8..6 - where the long form takes both from a
-            # second word it fetches. `src/mcf5307/decode.nim` states the
+            # second word it fetches. `src/mcf5407/decode.nim` states the
             # hazard: "an executor that fetched an extension word here would
             # consume the NEXT INSTRUCTION".
             #
@@ -1159,7 +1159,7 @@ CASES = {
             # if the quotient is "larger than a 16-bit (.W) signed integer"
             # and do not define "larger" at the asymmetric end of the range.
             # -32768 IS a 16-bit signed integer, so under the reading taken by
-            # `src/mcf5307/alu.nim` - which marks it at the comparison that
+            # `src/mcf5407/alu.nim` - which marks it at the comparison that
             # decides it - -65536 / 2 does NOT overflow and writes a quotient
             # of 0x8000 with a remainder of 0.
             #
@@ -1343,7 +1343,7 @@ CASES = {
     #       carry bit for arithmetic operations; otherwise not affected or set
     #       to a specified result". A logical operation is neither an addition
     #       nor a subtraction, so V and C are cleared and X is left alone. This
-    #       is the same rule `setNzClearVc` in `src/mcf5307/machine.nim`
+    #       is the same rule `setNzClearVc` in `src/mcf5407/machine.nim`
     #       already carries for MOVE.
     #
     #   BTST, BSET, BCLR, BCHG
@@ -2071,7 +2071,7 @@ CASES = {
             # An `sr` expectation of "unchanged" is satisfied by a NOP that
             # never executed, so it carries no assertion of its own.
             # `conformance/runner.cpp` supplies the missing one: it asserts
-            # `mcf5307_faulted`, then `mcf5307_halted`, then a non-zero cycle
+            # `mcf5407_faulted`, then `mcf5407_halted`, then a non-zero cycle
             # return, before it compares one register.
             #
             # `pc` separates a NOP from every other one-word instruction in this
@@ -2557,7 +2557,7 @@ CASES = {
         # (xxx).l".
         #
         # JMP AND JSR CARRY A MASK OF THEIR OWN, AND THE REASON IS NOT
-        # `(xxx).W`. `eaJumpTarget` in `src/mcf5307/decode_types.nim` is the
+        # `(xxx).W`. `eaJumpTarget` in `src/mcf5407/decode_types.nim` is the
         # class of a BRANCH TARGET and `eaLeaPeaTarget` is the class of an
         # ADDRESS an instruction computes. The two are equal BY MEASUREMENT
         # rather than by definition, and folding them together would let a

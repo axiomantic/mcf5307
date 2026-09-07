@@ -4,7 +4,7 @@
 ## SUBX, NEG, NEGX, CLR, EXT, EXTB, MULU, MULS, DIVU and DIVS in BOTH their
 ## word and their long forms, and the REMx.L forms, AND NOTHING ELSE. The
 ## register file, the board accesses and the effective-address evaluation are
-## `mcf5307/machine`'s. The word forms are `execMulWord` and `execDivWord`.
+## `mcf5407/machine`'s. The word forms are `execMulWord` and `execDivWord`.
 ##
 ## This module does not reach into another executor for a helper; that would
 ## invert the layering one level down.
@@ -69,14 +69,14 @@
 ## User's Manual, and from this project's own measurements with the pinned
 ## cross assembler.
 
-import mcf5307/decode_types
-import mcf5307/ea
-import mcf5307/machine
+import mcf5407/decode_types
+import mcf5407/ea
+import mcf5407/machine
 
 # ---------------------------------------------------------------------------
 # Trapping.
 
-proc trap(ctx: MCF5307Ctx): uint32 =
+proc trap(ctx: MCF5407Ctx): uint32 =
   ## Halt the context with `fault`. Every illegal size, illegal operand mode
   ## and divide by zero in this module ends here, so that "the core refused"
   ## is one observable and not several.
@@ -97,7 +97,7 @@ proc trap(ctx: MCF5307Ctx): uint32 =
 # sequence ends with Z set exactly when every word of the result was zero. An
 # ordinary ADD would set Z from its own word and lose the earlier words.
 
-proc setAddCc(ctx: MCF5307Ctx; src, dst, res: uint32; carry: bool;
+proc setAddCc(ctx: MCF5407Ctx; src, dst, res: uint32; carry: bool;
               sticky: bool) =
   let overflow = ((src xor res) and (dst xor res) and 0x80000000'u32) != 0'u32
   var sr = ctx.sr and not (ccrN or ccrV or ccrC or ccrX)
@@ -110,7 +110,7 @@ proc setAddCc(ctx: MCF5307Ctx; src, dst, res: uint32; carry: bool;
   if carry: sr = sr or (ccrC or ccrX)
   ctx.sr = sr
 
-proc setSubCc(ctx: MCF5307Ctx; src, dst, res: uint32; borrow: bool;
+proc setSubCc(ctx: MCF5407Ctx; src, dst, res: uint32; borrow: bool;
               sticky: bool) =
   let overflow = ((src xor dst) and (dst xor res) and 0x80000000'u32) != 0'u32
   var sr = ctx.sr and not (ccrN or ccrV or ccrC or ccrX)
@@ -134,13 +134,13 @@ proc subWithBorrow(dst, src: uint32; borrowIn: uint32):
   (uint32((uint64(dst) - subtrahend) and 0xFFFFFFFF'u64),
    uint64(dst) < subtrahend)
 
-proc xBit(ctx: MCF5307Ctx): uint32 =
+proc xBit(ctx: MCF5407Ctx): uint32 =
   if (ctx.sr and ccrX) != 0'u32: 1'u32 else: 0'u32
 
 # ---------------------------------------------------------------------------
 # ADD and SUB, both directions.
 
-proc execAddSub(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
+proc execAddSub(ctx: MCF5407Ctx; d: Decoded; isSub: bool): uint32 =
   ## `<ea> op Dn -> Dn` when `dirToEa` is false, `Dn op <ea> -> <ea>` when it
   ## is true. The two directions carry different operand masks: the first
   ## reads any data-addressing mode, and the second writes a memory-alterable
@@ -184,7 +184,7 @@ proc execAddSub(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   # read 3 and 4. The V4 pipeline is why it is 1 now.
   1'u32
 
-proc execAddSubA(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
+proc execAddSubA(ctx: MCF5407Ctx; d: Decoded; isSub: bool): uint32 =
   ## ADDA.L and SUBA.L. They touch no condition code: an address computation
   ## must not disturb the flags a following conditional branch reads.
   if d.size != 4'u8:
@@ -202,7 +202,7 @@ proc execAddSubA(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   # manual gives no reason for. Still a choice, not a measurement.
   1'u32
 
-proc execAddSubI(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
+proc execAddSubI(ctx: MCF5407Ctx; d: Decoded; isSub: bool): uint32 =
   ## ADDI.L and SUBI.L. The long immediate is the two words after the opcode.
   if d.size != 4'u8:
     return trap(ctx)
@@ -222,7 +222,7 @@ proc execAddSubI(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   # cell 1(0/0). Was 6.
   1'u32
 
-proc execAddSubQ(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
+proc execAddSubQ(ctx: MCF5407Ctx; d: Decoded; isSub: bool): uint32 =
   ## ADDQ.L and SUBQ.L. An address register destination sets no condition
   ## code, exactly as ADDA does; every other destination sets them all.
   if d.size != 4'u8:
@@ -249,7 +249,7 @@ proc execAddSubQ(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   # `(d8,An,Xi*SF)`. Was 4.
   1'u32
 
-proc execAddSubX(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
+proc execAddSubX(ctx: MCF5407Ctx; d: Decoded; isSub: bool): uint32 =
   ## ADDX.L Dy,Dx and SUBX.L Dy,Dx. The register form is the only one this
   ## part has; the `-(Ay),-(Ax)` form of the 68000 arrives here with an
   ## address-register operand and the legality mask rejects it.
@@ -272,7 +272,7 @@ proc execAddSubX(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
 # ---------------------------------------------------------------------------
 # NEG, NEGX and CLR.
 
-proc execNeg(ctx: MCF5307Ctx; d: Decoded; extended: bool): uint32 =
+proc execNeg(ctx: MCF5407Ctx; d: Decoded; extended: bool): uint32 =
   ## NEG.L and NEGX.L: `0 - Dn` and `0 - Dn - X`. C is set whenever a borrow
   ## left the word, which for NEG is exactly "the operand was not zero".
   if d.size != 4'u8:
@@ -288,7 +288,7 @@ proc execNeg(ctx: MCF5307Ctx; d: Decoded; extended: bool): uint32 =
   # single cell 1(0/0) each. Was 4.
   1'u32
 
-proc execClr(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execClr(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## CLR.B/.W/.L. N, V and C take fixed values, Z is always set, and X is
   ## untouched - a clear is not an arithmetic result and must not disturb a
   ## multi-precision sequence in progress.
@@ -309,7 +309,7 @@ proc execClr(ctx: MCF5307Ctx; d: Decoded): uint32 =
 # ---------------------------------------------------------------------------
 # EXT and EXTB.
 
-proc execExt(ctx: MCF5307Ctx; d: Decoded; fromByte: bool): uint32 =
+proc execExt(ctx: MCF5407Ctx; d: Decoded; fromByte: bool): uint32 =
   ## EXT.W (byte into word), EXT.L (word into long) and EXTB.L (byte into
   ## long). EXT.W writes the low word alone and the upper half of the
   ## register is untouched, so N comes from bit 15 of a word result and from
@@ -340,7 +340,7 @@ const
   mulDivSignedBit = 0x0800'u16   ## bit 11: MULS/DIVS rather than MULU/DIVU
   mulDivWideBit = 0x0400'u16     ## bit 10: the 68020 64-bit form
 
-proc execMulWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execMulWord(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## MULU.W and MULS.W: `16 x 16 -> 32`, one instruction word, no extension.
   ##
   ## CFPRM folios 4-55 (MULS) and 4-57 (MULU), word form: "the multiplier and
@@ -386,7 +386,7 @@ proc execMulWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # not a change here. The number did not move; the part underneath it did.
   3'u32
 
-proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execMul(ctx: MCF5407Ctx; d: Decoded): uint32 =
   if not eaIsLegalFor(d.op, d.ea, d.size):
     return trap(ctx)
   if d.size == 2'u8:
@@ -445,7 +445,7 @@ const divWordCycles = 20'u32
   ## indexed, so 20 named one cell there and names six here. The constant did
   ## not move; the part underneath it did.
 
-proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execDivWord(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## DIVU.W and DIVS.W: a 32-bit dividend in Dx over a 16-bit source, with
   ## both halves of the answer packed into Dx.
   ##
@@ -533,7 +533,7 @@ proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   setNzClearVc(ctx, quotient, 2)
   divWordCycles
 
-proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execDiv(ctx: MCF5407Ctx; d: Decoded): uint32 =
   if not eaIsLegalFor(d.op, d.ea, d.size):
     return trap(ctx)
   if d.size == 2'u8:
@@ -602,9 +602,9 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
 # ---------------------------------------------------------------------------
 # The dispatch entry `step` calls.
 
-proc aluFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
+proc aluFamily*(ctx: MCF5407Ctx; word: uint16; d: Decoded): uint32 =
   ## Execute one integer-arithmetic instruction. Called from `step` in
-  ## `mcf5307/cpu` with the opcode word and the decoded operation. Returns a
+  ## `mcf5407/cpu` with the opcode word and the decoded operation. Returns a
   ## placeholder cycle count excluding the fetch - see the cycle block in
   ## `cpu.nim` - and halts the context with `fault` set on an illegal size, an
   ## illegal effective address or a divide by zero.

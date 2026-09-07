@@ -241,7 +241,7 @@ non-isochronous packet twice and does not agree with itself:
 | §15.2.1, p.113 | The same bound written as *"bulk/interrupt endpoint: N ≤ 32"*. |
 
 Two places reach 64 and one says 32. **No side is picked here**, and nothing in
-this repository asserts a bound of its own: `include/mcf5307.h` publishes
+this repository asserts a bound of its own: `include/mcf5407.h` publishes
 `isp1181_slot_buffer`, which decodes the size out of the configuration byte the
 firmware wrote for that endpoint, and a caller that needs a bound reads it from
 that answer rather than from a constant. §12.3.3, p.51 is what makes a buffer size a packet size at all
@@ -603,7 +603,7 @@ line, rather than overwriting silently. An overwrite with no bit to report it
 is the plausible wrong outcome the model refuses everywhere else.
 
 
-**`isp1181_tx_fn` carries no contract of its own in `include/mcf5307.h`.** Its
+**`isp1181_tx_fn` carries no contract of its own in `include/mcf5407.h`.** Its
 sibling `isp1181_irq_fn` has a paragraph; the transmit callback has none, so
 what a zero-length transmit would mean to a host is unstated. `queueIn` refuses
 an empty packet for that reason rather than choosing a meaning. What the header

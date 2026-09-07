@@ -1,6 +1,6 @@
 ## `t_alu` - the integer-arithmetic instruction group.
 ##
-## This file exists beside `mcf5307_conformance_alu` because it carries the
+## This file exists beside `mcf5407_conformance_alu` because it carries the
 ## sticky-Z rule of ADDX/SUBX/NEGX, the trap cases for encodings this part
 ## does not have, and the direct reads of `eaIsLegalFor`.
 ## Redundancy between a generated corpus and a hand-written
@@ -10,8 +10,8 @@
 ## `NEGX` read X, the sticky-Z rule of those three is a rule about Z alone, and
 ## the overflow of `MULS.L` is observable in V and nowhere else. This file is
 ## where those are asserted, and it asserts them through the same entry points
-## the corpus uses - `mcf5307_reset`, `mcf5307_set_reg`, `mcf5307_exec`,
-## `mcf5307_get_reg` - so that a pass here is a pass of the shipped path and
+## the corpus uses - `mcf5407_reset`, `mcf5407_set_reg`, `mcf5407_exec`,
+## `mcf5407_get_reg` - so that a pass here is a pass of the shipped path and
 ## not of an internal helper reached around the back.
 ##
 ## The trap cases are the green-mirage control of the group. Byte and word
@@ -22,11 +22,11 @@
 ## the part has, and the corresponding encodings are asserted here to trap.
 
 import std/strutils
-import mcf5307/cpu
-import mcf5307/decode
-import mcf5307/decode_types
-import mcf5307/ea
-import mcf5307/machine
+import mcf5407/cpu
+import mcf5407/decode
+import mcf5407/decode_types
+import mcf5407/ea
+import mcf5407/machine
 
 var failures: seq[string]
 import ./case_sites
@@ -79,21 +79,21 @@ proc boardReadValue(b: TestBoard; address: uint32; size: int): uint32 =
     result = (result shl 8) or uint32(b.bytes[int(address) + i])
 
 proc bRead(user: pointer; address: uint32; size: cint;
-           status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+           status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return 0'u32
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardReadValue(b[], address, int(size))
 
 proc bWrite(user: pointer; address: uint32; size: cint; value: uint32;
-            status: ptr Mcf5307BusStatus) {.cdecl.} =
+            status: ptr Mcf5407BusStatus) {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardWrite(b[], address, int(size), value)
 
 proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
@@ -123,7 +123,7 @@ proc runIns(words: openArray[uint16];
             sr: uint32 = srBase;
             mem: seq[(uint32, uint32)] = @[]): Outcome =
   ## Place `words` at `execBase`, set the register file and the status
-  ## register, run one `mcf5307_exec`, and report the whole machine state.
+  ## register, run one `mcf5407_exec`, and report the whole machine state.
   for i in 0 ..< memSize:
     board.bytes[i] = 0'u8
   for i in 0 ..< words.len:
@@ -132,35 +132,35 @@ proc runIns(words: openArray[uint16];
     boardWrite(board, address, 4, value)
 
   let sp = if a[7] == 0'u32: stackBase else: a[7]
-  let ctx = mcf5307_create(addr board, bRead, bWrite, bIack)
-  mcf5307_reset(ctx, sp, execBase)
+  let ctx = mcf5407_create(addr board, bRead, bWrite, bIack)
+  mcf5407_reset(ctx, sp, execBase)
   for i in 0 .. 7:
-    discard mcf5307_set_reg(ctx, cint(i), d[i])
+    discard mcf5407_set_reg(ctx, cint(i), d[i])
   for i in 0 .. 6:
-    discard mcf5307_set_reg(ctx, cint(8 + i), a[i])
-  # The status register is set last: `mcf5307_reset` writes it, so an earlier
+    discard mcf5407_set_reg(ctx, cint(8 + i), a[i])
+  # The status register is set last: `mcf5407_reset` writes it, so an earlier
   # write would be overwritten and every X-reading case would silently run
   # with X clear.
-  discard mcf5307_set_reg(ctx, 16, sr)
+  discard mcf5407_set_reg(ctx, 16, sr)
 
   # One instruction, and the budget is what stops the loop after it. The
   # memory after the encoding is zero, and 0x0000 is not an instruction this
   # part has, so a generous budget would fetch it, halt with `fault`, and make
   # every case here report a fault that its own instruction did not cause.
-  # `mcf5307_exec` executes one instruction whenever the budget is smaller
+  # `mcf5407_exec` executes one instruction whenever the budget is smaller
   # than that instruction's cost, and every cost is above one.
   #
   # The return is therefore 1 for an instruction that ran and 0 for one that
   # trapped, which is exactly the distinction the trap cases assert.
-  result.cycles = mcf5307_exec(ctx, 1'u32)
+  result.cycles = mcf5407_exec(ctx, 1'u32)
   result.fault = ctx.fault
   result.halted = ctx.halted
   for i in 0 .. 7:
-    result.d[i] = mcf5307_get_reg(ctx, cint(i))
-    result.a[i] = mcf5307_get_reg(ctx, cint(8 + i))
-  result.sr = mcf5307_get_reg(ctx, 16)
-  result.pc = mcf5307_get_reg(ctx, 17)
-  mcf5307_destroy(ctx)
+    result.d[i] = mcf5407_get_reg(ctx, cint(i))
+    result.a[i] = mcf5407_get_reg(ctx, cint(8 + i))
+  result.sr = mcf5407_get_reg(ctx, 16)
+  result.pc = mcf5407_get_reg(ctx, 17)
+  mcf5407_destroy(ctx)
 
 proc mem32(address: uint32): uint32 =
   boardReadValue(board, address, 4)
@@ -801,7 +801,7 @@ block:
   # (i) The address-register sources, where the program counter is the
   # only witness. `(%a0)`, `(%a0)+` and `-(%a0)` read no word from the
   # instruction stream, so an executor that fetched an extension word here -
-  # the word form has none, and `src/mcf5307/decode.nim` names the hazard -
+  # the word form has none, and `src/mcf5407/decode.nim` names the hazard -
   # writes the same destination register, the same status word and the same
   # address register, and leaves the pc two bytes high. The cases above whose
   # source word comes from the instruction stream catch such a fetch on the
@@ -949,7 +949,7 @@ block:
 #
 # These are not redundant with the trap cases above. Widening the ADDQ mask to
 # data addressing and re-running every case above changes nothing:
-# `addq.l #1,(4,%pc)` still traps, because `eaResolve` in `mcf5307/machine`
+# `addq.l #1,(4,%pc)` still traps, because `eaResolve` in `mcf5407/machine`
 # resolves no operand it cannot write and rejects the same mode-7
 # sub-variants a second time. Defence in depth is correct and it also makes
 # the two defences indistinguishable from the outside.

@@ -25,7 +25,7 @@
 ##
 ## The re-entry script is the axis a hand-written case does not think
 ## of: `takeException` stacks the frame THROUGH THE BOARD'S WRITE CALLBACK, so
-## a board may call `mcf5307_set_irq` from inside a take, between the latch
+## a board may call `mcf5407_set_irq` from inside a take, between the latch
 ## clear and the acknowledge. That is the only way this interface can change
 ## the interrupt state in the middle of an exception, and it is exactly where
 ## the order of two statements inside `takeInterrupt` becomes visible.
@@ -45,11 +45,11 @@
 
 import std/strutils
 
-import mcf5307/cpu
-import mcf5307/decode_types
-import mcf5307/exception
-import mcf5307/irq
-import mcf5307/machine
+import mcf5407/cpu
+import mcf5407/decode_types
+import mcf5407/exception
+import mcf5407/irq
+import mcf5407/machine
 
 const
   memSize = 0x1000
@@ -77,7 +77,7 @@ type
 var board: TestBoard
 var vectorReads: seq[uint32]
 var acks: seq[string]
-var ctxRef: MCF5307Ctx
+var ctxRef: MCF5407Ctx
 
 # THE RE-ENTRY SCRIPT AND THE WRITE IT FIRES ON. `writeScript` is a sequence of
 # levels the board presents from inside the FIRST bus write of the run, which
@@ -94,16 +94,16 @@ var writesSeen = 0
 var presentationProfile: PresentationProfile
 var presentationsMade = 0
 
-proc present(ctx: MCF5307Ctx; level: int) =
+proc present(ctx: MCF5407Ctx; level: int) =
   ## ONE PRESENTATION, AND THE ONE PLACE IN THIS FILE THAT NAMES A VECTOR OR A
   ## FLAG. Both call sites - the pre-take sequence and the re-entry script - go
   ## through here, so a scenario cannot present under one profile and re-enter
   ## under another.
   case presentationProfile
   of pAutovectored:
-    mcf5307_set_irq(ctx, cint(level), userVector, 1)
+    mcf5407_set_irq(ctx, cint(level), userVector, 1)
   of pVectored:
-    mcf5307_set_irq(ctx, cint(level),
+    mcf5407_set_irq(ctx, cint(level),
                     vectoredBase + uint8(presentationsMade mod vectoredCount), 0)
   inc presentationsMade
 
@@ -117,23 +117,23 @@ proc boardReadValue(b: TestBoard; address: uint32; size: int): uint32 =
     result = (result shl 8) or uint32(b.bytes[int(address) + i])
 
 proc bRead(user: pointer; address: uint32; size: cint;
-           status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+           status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return 0'u32
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   if address < vectorTableBytes:
     vectorReads.add(address)
   boardReadValue(b[], address, int(size))
 
 proc bWrite(user: pointer; address: uint32; size: cint; value: uint32;
-            status: ptr Mcf5307BusStatus) {.cdecl.} =
+            status: ptr Mcf5407BusStatus) {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardWrite(b[], address, int(size), value)
   # THE RE-ENTRY. It happens AFTER the write has been performed, so the frame
   # the core is stacking is not disturbed by it, and only on the first write of
@@ -151,10 +151,10 @@ proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
   ## do not separate an acknowledge made at the wrong point in the sequence
   ## from one made at the right point.
   acks.add("(level " & $int(level) & " vector " & $int(vector) &
-           " sp 0x" & toHex(mcf5307_get_reg(ctxRef, 15)) &
-           " pc 0x" & toHex(mcf5307_get_reg(ctxRef, 17)) &
+           " sp 0x" & toHex(mcf5407_get_reg(ctxRef, 15)) &
+           " pc 0x" & toHex(mcf5407_get_reg(ctxRef, 17)) &
            " reads " & $vectorReads.len &
-           " sr 0x" & toHex(mcf5307_get_reg(ctxRef, 16)) & ")")
+           " sr 0x" & toHex(mcf5407_get_reg(ctxRef, 16)) & ")")
 
 proc freshBoard() =
   for i in 0 ..< memSize:
@@ -202,23 +202,23 @@ proc scenario(ipm: uint32; pre: seq[int]; script: seq[int];
   freshBoard()
   presentationProfile = profile
   writeScript = script
-  let ctx = mcf5307_create(addr board, bRead, bWrite, bIack)
+  let ctx = mcf5407_create(addr board, bRead, bWrite, bIack)
   ctxRef = ctx
-  mcf5307_reset(ctx, startSp, execBase)
-  discard mcf5307_set_reg(ctx, 16, srWithIpm(ipm))
+  mcf5407_reset(ctx, startSp, execBase)
+  discard mcf5407_set_reg(ctx, 16, srWithIpm(ipm))
   for level in pre:
     present(ctx, level)
-  discard mcf5307_exec(ctx, budget)
-  let sp = mcf5307_get_reg(ctx, 15)
+  discard mcf5407_exec(ctx, budget)
+  let sp = mcf5407_get_reg(ctx, 15)
   result = "sp 0x" & toHex(sp) &
-    " pc 0x" & toHex(mcf5307_get_reg(ctx, 17)) &
-    " sr 0x" & toHex(mcf5307_get_reg(ctx, 16)) &
-    " halted " & $(mcf5307_halted(ctx) != 0) &
+    " pc 0x" & toHex(mcf5407_get_reg(ctx, 17)) &
+    " sr 0x" & toHex(mcf5407_get_reg(ctx, 16)) &
+    " halted " & $(mcf5407_halted(ctx) != 0) &
     " frame 0x" & toHex(mem32(sp)) &
     " framePc 0x" & toHex(mem32(sp + 4'u32)) &
     " acks " & $acks &
     " reads " & $vectorReads
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 const
   masks = [0'u32, 3'u32, 7'u32]

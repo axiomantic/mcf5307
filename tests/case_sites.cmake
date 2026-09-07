@@ -2,8 +2,8 @@
 # its suite. Every generated `t_*` driver in
 # `tests/tests_cpu.cmake` includes this file and calls BOTH of its functions
 # exactly once:
-# `mcf5307_check_case_sites`, whose rules are stated below, and
-# `mcf5307_check_case_total`, which fails on a table that got shorter. That
+# `mcf5407_check_case_sites`, whose rules are stated below, and
+# `mcf5407_check_case_total`, which fails on a table that got shorter. That
 # every driver carries both is not left to the reader: `tests/tests_cpu.cmake`
 # compares, at configure time, the set of suites carrying the run-time half
 # against the set of generated drivers calling each function, and a driver
@@ -25,7 +25,7 @@
 # reading the suite's own text - so adding a case updates the expectation and
 # nothing has to be maintained.
 #
-# RULE 5's OFF-GREEN-PATH COUNT AND `mcf5307_check_case_total`'s CASE TOTAL ARE
+# RULE 5's OFF-GREEN-PATH COUNT AND `mcf5407_check_case_total`'s CASE TOTAL ARE
 # TYPED. Both
 # are recorded in the driver template beside the suite they govern, and each
 # states its own trade where it is defined.
@@ -67,8 +67,8 @@
 # defect-report. Its site never runs on a green tree, so rule 3 says nothing,
 # the case total says nothing, and rules 1 and 2 stay balanced. Only a recorded
 # count notices. The figure is typed for the same reason the case total is, and
-# the trade is stated once, at `mcf5307_check_case_total` below.
-function(mcf5307_check_case_sites suite source run_output
+# the trade is stated once, at `mcf5407_check_case_total` below.
+function(mcf5407_check_case_sites suite source run_output
         off_green_path_expected)
     # ---- the source side of rule 2 ------------------------------------------
     # THE FILE IS SPLIT BY HAND AND NOT WITH `file(STRINGS)`. These suites are
@@ -148,9 +148,9 @@ function(mcf5307_check_case_sites suite source run_output
     endif()
 
     # ---- rule 1 -------------------------------------------------------------
-    _mcf5307_case_site_registry("${suite}" "declared" "${run_output}" declared)
-    _mcf5307_case_site_registry("${suite}" "executed" "${run_output}" executed)
-    _mcf5307_case_site_registry("${suite}" "off-green-path" "${run_output}"
+    _mcf5407_case_site_registry("${suite}" "declared" "${run_output}" declared)
+    _mcf5407_case_site_registry("${suite}" "executed" "${run_output}" executed)
+    _mcf5407_case_site_registry("${suite}" "off-green-path" "${run_output}"
         off_green_path)
 
     list(LENGTH declared declared_count)
@@ -249,7 +249,7 @@ endfunction()
 # own principle: the program reports and the driver judges, so a mutation that
 # breaks the suite cannot also grade it. The second is that adding a case
 # to a suite MOVES THAT SUITE'S PRINTED TOTAL, and a suite's total may be
-# quoted as a transcript inside `src/mcf5307/`, which a test
+# quoted as a transcript inside `src/mcf5407/`, which a test
 # may not edit. Closing a drift hole by creating new drifts in production
 # source is not a repair. A driver-side comparison adds no case and moves no
 # total.
@@ -263,7 +263,7 @@ endfunction()
 # WHAT IT DOES NOT REACH. It pins the COUNT and not WHICH cases ran, so one
 # block deleted and another of the same size added in a single change passes.
 # And it says nothing about whether a case ASSERTS anything.
-function(mcf5307_check_case_total suite run_output expected)
+function(mcf5407_check_case_total suite run_output expected)
     string(REGEX MATCH "${suite}: ([0-9]+) cases passed" matched "${run_output}")
     if(matched STREQUAL "")
         message(FATAL_ERROR
@@ -284,7 +284,7 @@ function(mcf5307_check_case_total suite run_output expected)
             "row took six assertions with it and printed 68 for 74, exit 0, "
             "`Passed`.\n"
             "  If the change was deliberate, move the figure in the driver "
-            "template beside this suite's `mcf5307_check_case_total` call and "
+            "template beside this suite's `mcf5407_check_case_total` call and "
             "say in the commit what the cases were. If it was not, the cases "
             "are missing. THE FIGURE IS TYPED; `tests/case_sites.cmake` states "
             "why that trade was taken, and `tests/tests_cpu.cmake` holds the "
@@ -295,7 +295,7 @@ endfunction()
 
 # One registry line out of the run's output, as a list of line numbers. A
 # missing line is FATAL: it is what a run that stopped early looks like.
-function(_mcf5307_case_site_registry suite kind run_output out)
+function(_mcf5407_case_site_registry suite kind run_output out)
     string(REGEX MATCH "${suite}: check sites ${kind}:([^\n]*)"
         matched "${run_output}")
     if(matched STREQUAL "")

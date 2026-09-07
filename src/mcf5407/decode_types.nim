@@ -1,4 +1,4 @@
-## Shared types for the mcf5307 instruction-group modules.
+## Shared types for the mcf5407 instruction-group modules.
 ##
 ## This module is the bottom of the core, above `ea` alone. It holds the
 ## types that the decoder (`decode.nim`) and every instruction-group executor
@@ -10,7 +10,7 @@
 ## instruction. The table reads an `Operation` and an `EA` and it reads no
 ## decoder state, so it belongs beside the types and not beside the decoder.
 
-import mcf5307/ea
+import mcf5407/ea
 
 type
   Operation* {.pure.} = enum
@@ -43,12 +43,12 @@ type
     opCmp, opCmpa, opCmpi
     # `MOVEC` is a group of one: it shares no encoding shape, no size field
     # and no effective address with any member above, and
-    # `src/mcf5307/movec.nim` is its executor.
+    # `src/mcf5407/movec.nim` is its executor.
     opMovec
     opMoveFromSr, opMoveFromCcr, opMoveToCcr, opMoveToSr
     opIllegal
 
-  # A value and not a `ref`, which is the opposite choice from `MCF5307Ctx`
+  # A value and not a `ref`, which is the opposite choice from `MCF5407Ctx`
   # below and is deliberate. One of these is produced for each instruction
   # decoded and none of them outlives the dispatch that reads it, so a `ref`
   # would put an allocation and a free on the execute path, which must stay
@@ -87,27 +87,27 @@ type
                      ## other.
 
   # ---------------------------------------------------------------------------
-  # The bus-status values and the board callbacks, matching `include/mcf5307.h`
-  # exactly. `Mcf5307BusStatus` has the width of a C `int` so that the
+  # The bus-status values and the board callbacks, matching `include/mcf5407.h`
+  # exactly. `Mcf5407BusStatus` has the width of a C `int` so that the
   # out-parameter the board writes has the ABI the header declares.
 
-  Mcf5307BusStatus* {.size: sizeof(cint), pure.} = enum
+  Mcf5407BusStatus* {.size: sizeof(cint), pure.} = enum
     busOk          = 0  ## the access completed
     busUnmapped    = 1  ## no device answers at this address
     busSizeIllegal = 2  ## the width is not one the device accepts
     busFault       = 3  ## the device answers and reports a fault of its own
 
-  Mcf5307ReadFn* = proc(user: pointer; address: uint32; size: cint;
-                        status: ptr Mcf5307BusStatus): uint32 {.cdecl.}
-  Mcf5307WriteFn* = proc(user: pointer; address: uint32; size: cint;
-                         value: uint32; status: ptr Mcf5307BusStatus) {.cdecl.}
-  Mcf5307IackFn* = proc(user: pointer; level: cint; vector: uint8) {.cdecl.}
+  Mcf5407ReadFn* = proc(user: pointer; address: uint32; size: cint;
+                        status: ptr Mcf5407BusStatus): uint32 {.cdecl.}
+  Mcf5407WriteFn* = proc(user: pointer; address: uint32; size: cint;
+                         value: uint32; status: ptr Mcf5407BusStatus) {.cdecl.}
+  Mcf5407IackFn* = proc(user: pointer; level: cint; vector: uint8) {.cdecl.}
 
-  MCF5307Ctx* = ref object
+  MCF5407Ctx* = ref object
     user*: pointer
-    readFn*: Mcf5307ReadFn 
-    writeFn*: Mcf5307WriteFn 
-    iackFn*: Mcf5307IackFn 
+    readFn*: Mcf5407ReadFn 
+    writeFn*: Mcf5407WriteFn 
+    iackFn*: Mcf5407IackFn 
     pc*: uint32
     sp*: uint32
     sr*: uint32
@@ -136,7 +136,7 @@ type
     rambar1*: uint32            ## the second SRAM base address register
     mbar*: uint32               ## the peripheral module base address register
 
-    # The interrupt input. `mcf5307/irq` owns every rule about these fields;
+    # The interrupt input. `mcf5407/irq` owns every rule about these fields;
     # they live here because the context type lives here and `irq.nim` is above
     # this module.
     #
@@ -162,7 +162,7 @@ type
     # sampling for
     # interrupts during the first instruction of all exception handlers."
     #
-    # It is a field and not a local of `mcf5307_exec` because the caller owns
+    # It is a field and not a local of `mcf5407_exec` because the caller owns
     # the boundary. A budget can expire on the instruction that takes the
     # exception, so the handler's entry and the handler's first instruction
     # can fall in two different calls; a local would forget the inhibition

@@ -1,7 +1,7 @@
-## `t_state` - the snapshot block of `mcf5307/state`.
+## `t_state` - the snapshot block of `mcf5407/state`.
 ##
 ##   1. THE EXPECTED FIELD LIST IS WRITTEN BY HAND AND `stateLayout` DERIVES
-##      THE OTHER SIDE FROM `MCF5307Ctx`. Holding a hand-written list against a
+##      THE OTHER SIDE FROM `MCF5407Ctx`. Holding a hand-written list against a
 ##      derived one is what makes a field ENTERING THE SNAPSHOT a decision
 ##      somebody takes, alongside the version word that moves with it.
 ##
@@ -9,10 +9,10 @@
 ##
 ## Nothing here is a fact about Motorola silicon.
 
-import mcf5307/cpu
-import mcf5307/decode_types
-import mcf5307/irq
-import mcf5307/state
+import mcf5407/cpu
+import mcf5407/decode_types
+import mcf5407/irq
+import mcf5407/state
 
 var failures: seq[string]
 import ./case_sites
@@ -48,7 +48,7 @@ template check(ok: bool; label: string; got: string; want: string) =
 # BLOCK 1. The field list and the size, written out.
 #
 # THE EXPECTED LIST IS WRITTEN BY HAND AND THE MEASURED ONE IS DERIVED FROM
-# `MCF5307Ctx`. Holding a hand-written list against a derived one is what makes
+# `MCF5407Ctx`. Holding a hand-written list against a derived one is what makes
 # a context field arriving in the snapshot visible.
 
 const expectedLayout = @[
@@ -74,7 +74,7 @@ check(measuredLayout == expectedLayout,
       "layout: the snapshot carries these context fields at these widths",
       $measuredLayout, $expectedLayout)
 
-let measuredSize = int(mcf5307_state_size())
+let measuredSize = int(mcf5407_state_size())
 check(measuredSize == 149,
       "size: header, payload and checksum",
       $measuredSize, "149")
@@ -92,12 +92,12 @@ const
   guardBytes = 8
   filler = 0xEE'u8
 
-proc freshContext(): MCF5307Ctx =
+proc freshContext(): MCF5407Ctx =
   new(result)
 
 var everySaveStayedInBounds = true
 
-proc savedBlock(ctx: MCF5307Ctx): seq[uint8] =
+proc savedBlock(ctx: MCF5407Ctx): seq[uint8] =
   ## The saved block, out of a buffer whose surrounding bytes carry filler.
   ##
   ## WHETHER THE SAVE STAYED INSIDE THE BUFFER IS ACCUMULATED INTO ONE FLAG AND
@@ -109,7 +109,7 @@ proc savedBlock(ctx: MCF5307Ctx): seq[uint8] =
   var raw: array[guardBytes + blockBytes + guardBytes, uint8]
   for index in 0 ..< raw.len:
     raw[index] = filler
-  mcf5307_state_save(ctx, addr raw[guardBytes])
+  mcf5407_state_save(ctx, addr raw[guardBytes])
   result = newSeq[uint8](blockBytes)
   for index in 0 ..< blockBytes:
     result[index] = raw[guardBytes + index]
@@ -143,7 +143,7 @@ check(headerWords == wantHeaderWords,
 # ---------------------------------------------------------------------------
 # BLOCK 3. One field at a time, through a save and a load.
 #
-# THE STAMP WALKS `MCF5307Ctx` RATHER THAN A LIST, so a field added to the
+# THE STAMP WALKS `MCF5407Ctx` RATHER THAN A LIST, so a field added to the
 # context is stamped, compared and counted with no edit here. THE BOOLEANS
 # ALTERNATE rather than all reading true, because a uniform stamp cannot
 # separate two boolean fields from each other.
@@ -159,13 +159,13 @@ check(headerWords == wantHeaderWords,
 # stamp has no arm for would otherwise be left at its default under BOTH salts,
 # and the case comparing it would then read one default against the other.
 
-proc stampContext(ctx: MCF5307Ctx; salt: uint32) =
+proc stampContext(ctx: MCF5407Ctx; salt: uint32) =
   var seed = 1'u32 + salt
   for name, value in fieldPairs(ctx[]):
     when value is pointer:
       discard
-    elif value is Mcf5307ReadFn or value is Mcf5307WriteFn or
-         value is Mcf5307IackFn:
+    elif value is Mcf5407ReadFn or value is Mcf5407WriteFn or
+         value is Mcf5407IackFn:
       discard
     elif value is bool:
       value = (seed and 1'u32) == 1'u32
@@ -200,8 +200,8 @@ var equalUnderBothSalts: seq[string]
 for name, zeroValue, oneValue in fieldPairs(stamped[], restored[]):
   when zeroValue is pointer:
     discard
-  elif zeroValue is Mcf5307ReadFn or zeroValue is Mcf5307WriteFn or
-       zeroValue is Mcf5307IackFn:
+  elif zeroValue is Mcf5407ReadFn or zeroValue is Mcf5407WriteFn or
+       zeroValue is Mcf5407IackFn:
     discard
   elif zeroValue is array:
     for index in low(zeroValue) .. high(zeroValue):
@@ -225,8 +225,8 @@ check(restoreStatus == stateOk,
 for name, wantValue, gotValue in fieldPairs(stamped[], restored[]):
   when wantValue is pointer:
     discard
-  elif wantValue is Mcf5307ReadFn or wantValue is Mcf5307WriteFn or
-       wantValue is Mcf5307IackFn:
+  elif wantValue is Mcf5407ReadFn or wantValue is Mcf5407WriteFn or
+       wantValue is Mcf5407IackFn:
     discard
   else:
     check(gotValue == wantValue, "round trip: " & name,
@@ -287,13 +287,13 @@ check(stampedBytes == goldenStampedBlock,
 # that cannot tell a wrong version from a corrupted payload cannot tell an
 # upgrade from a fault.
 
-proc renderContext(ctx: MCF5307Ctx): string =
+proc renderContext(ctx: MCF5407Ctx): string =
   ## Every field of the context, as one string.
   for name, value in fieldPairs(ctx[]):
     when value is pointer:
       discard
-    elif value is Mcf5307ReadFn or value is Mcf5307WriteFn or
-         value is Mcf5307IackFn:
+    elif value is Mcf5407ReadFn or value is Mcf5407WriteFn or
+         value is Mcf5407IackFn:
       discard
     else:
       result.add(name & "=" & $value & " ")
@@ -426,14 +426,14 @@ check((status: versionStatus, state: afterVersionRefusal) ==
 # it was REACHED: the alternative to the guard's `return` is a write through a
 # null pointer, which ends the run rather than failing a comparison.
 
-proc bufferAfterSave(ctx: MCF5307Ctx; toNilDestination: bool): seq[uint8] =
+proc bufferAfterSave(ctx: MCF5407Ctx; toNilDestination: bool): seq[uint8] =
   var raw: array[guardBytes + blockBytes + guardBytes, uint8]
   for index in 0 ..< raw.len:
     raw[index] = filler
   if toNilDestination:
-    mcf5307_state_save(ctx, nil)
+    mcf5407_state_save(ctx, nil)
   else:
-    mcf5307_state_save(ctx, addr raw[guardBytes])
+    mcf5407_state_save(ctx, addr raw[guardBytes])
   result = newSeq[uint8](raw.len)
   for index in 0 ..< raw.len:
     result[index] = raw[index]
@@ -444,12 +444,12 @@ for index in 0 ..< untouchedBuffer.len:
 
 let afterNilContext = bufferAfterSave(nil, false)
 check(afterNilContext == untouchedBuffer,
-      "damage: mcf5307_state_save writes nothing when the context is nil",
+      "damage: mcf5407_state_save writes nothing when the context is nil",
       $afterNilContext, $untouchedBuffer)
 
 let afterNilDestination = bufferAfterSave(freshContext(), true)
 check(afterNilDestination == untouchedBuffer,
-      "damage: mcf5307_state_save returns when the destination is nil",
+      "damage: mcf5407_state_save returns when the destination is nil",
       $afterNilDestination, $untouchedBuffer)
 
 # ---------------------------------------------------------------------------
@@ -459,18 +459,18 @@ check(afterNilDestination == untouchedBuffer,
 # process.
 
 proc boardReadA(user: pointer; address: uint32; size: cint;
-                status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
-  status[] = Mcf5307BusStatus.busOk
+                status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
+  status[] = Mcf5407BusStatus.busOk
   0'u32
 
 proc boardReadB(user: pointer; address: uint32; size: cint;
-                status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
-  status[] = Mcf5307BusStatus.busOk
+                status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
+  status[] = Mcf5407BusStatus.busOk
   1'u32
 
 proc boardWriteFn(user: pointer; address: uint32; size: cint; value: uint32;
-                  status: ptr Mcf5307BusStatus) {.cdecl.} =
-  status[] = Mcf5307BusStatus.busOk
+                  status: ptr Mcf5407BusStatus) {.cdecl.} =
+  status[] = Mcf5407BusStatus.busOk
 
 proc boardIackA(user: pointer; level: cint; vector: uint8) {.cdecl.} =
   discard
@@ -522,22 +522,22 @@ type CoreBoard = object
 var coreBoard: CoreBoard
 
 proc coreRead(user: pointer; address: uint32; size: cint;
-              status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+              status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   let board = cast[ptr CoreBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return 0'u32
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   for offset in 0 ..< int(size):
     result = (result shl 8) or uint32(board.bytes[int(address) + offset])
 
 proc coreWrite(user: pointer; address: uint32; size: cint; value: uint32;
-               status: ptr Mcf5307BusStatus) {.cdecl.} =
+               status: ptr Mcf5407BusStatus) {.cdecl.} =
   let board = cast[ptr CoreBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   for offset in 0 ..< int(size):
     board.bytes[int(address) + offset] =
       uint8((value shr ((int(size) - 1 - offset) * 8)) and 0xFF'u32)
@@ -545,7 +545,7 @@ proc coreWrite(user: pointer; address: uint32; size: cint; value: uint32;
 proc coreIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
   discard
 
-proc freshCore(): MCF5307Ctx =
+proc freshCore(): MCF5407Ctx =
   for index in 0 ..< memSize:
     coreBoard.bytes[index] = 0'u8
   var at = int(execBase)
@@ -553,13 +553,13 @@ proc freshCore(): MCF5307Ctx =
     coreBoard.bytes[at] = uint8(opAddqD1 shr 8)
     coreBoard.bytes[at + 1] = uint8(opAddqD1 and 0xFF'u16)
     at += 2
-  result = mcf5307_create(addr coreBoard, coreRead, coreWrite, coreIack)
-  mcf5307_reset(result, 0x800'u32, execBase)
-  mcf5307_set_irq(result, 3.cint, 0x45'u8, 0.cint)
+  result = mcf5407_create(addr coreBoard, coreRead, coreWrite, coreIack)
+  mcf5407_reset(result, 0x800'u32, execBase)
+  mcf5407_set_irq(result, 3.cint, 0x45'u8, 0.cint)
 
-proc runInstructions(ctx: MCF5307Ctx; count: int) =
+proc runInstructions(ctx: MCF5407Ctx; count: int) =
   for step in 0 ..< count:
-    discard mcf5307_exec(ctx, 1'u32)
+    discard mcf5407_exec(ctx, 1'u32)
 
 let core = freshCore()
 runInstructions(core, runBeforeSave)
@@ -586,12 +586,12 @@ check(secondContinuation == firstContinuation,
       "core: the same instructions after the load reach the same state",
       secondContinuation, firstContinuation)
 
-mcf5307_destroy(core)
+mcf5407_destroy(core)
 
 # ---------------------------------------------------------------------------
 # BLOCK 7. The published C entry points that carry no failure channel.
 #
-# `mcf5307_state_load` IS DECLARED `void` IN `include/mcf5307.h`, so a C caller
+# `mcf5407_state_load` IS DECLARED `void` IN `include/mcf5407.h`, so a C caller
 # is told nothing about a refusal. The only channel left is the state of its
 # own core, so that is what is read here.
 
@@ -601,24 +601,24 @@ let cSnapshot = savedBlock(cCaller)
 let cSaved = renderContext(cCaller)
 
 runInstructions(cCaller, runAfterSave)
-mcf5307_state_load(cCaller, unsafeAddr cSnapshot[0])
+mcf5407_state_load(cCaller, unsafeAddr cSnapshot[0])
 let cAfterLoad = renderContext(cCaller)
 
 check(cAfterLoad == cSaved,
-      "C ABI: mcf5307_state_load restores the state the block carries",
+      "C ABI: mcf5407_state_load restores the state the block carries",
       cAfterLoad, cSaved)
 
 let cDamaged = perturbed(cSnapshot, 20)
 runInstructions(cCaller, runAfterSave)
 let cBeforeRefusal = renderContext(cCaller)
-mcf5307_state_load(cCaller, unsafeAddr cDamaged[0])
+mcf5407_state_load(cCaller, unsafeAddr cDamaged[0])
 let cAfterRefusal = renderContext(cCaller)
 
 check(cAfterRefusal == cBeforeRefusal,
-      "C ABI: mcf5307_state_load leaves the core alone when it refuses",
+      "C ABI: mcf5407_state_load leaves the core alone when it refuses",
       cAfterRefusal, cBeforeRefusal)
 
-mcf5307_destroy(cCaller)
+mcf5407_destroy(cCaller)
 
 # ---------------------------------------------------------------------------
 # BLOCK 8. Every save in this file stayed inside the buffer it was given.
@@ -634,7 +634,7 @@ mcf5307_destroy(cCaller)
 # decides whether an overrun happens at all.
 
 check(everySaveStayedInBounds,
-      "bounds: every save wrote inside mcf5307_state_size and nowhere else",
+      "bounds: every save wrote inside mcf5407_state_size and nowhere else",
       $everySaveStayedInBounds, "true")
 
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
