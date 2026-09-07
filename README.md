@@ -43,7 +43,7 @@ versions.
 ```
 cmake -S . -B build
 cmake --build build
-ctest --test-dir build
+ctest --test-dir build --no-tests=error
 ```
 
 ## The Nim version policy
