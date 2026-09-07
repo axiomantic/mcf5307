@@ -31,7 +31,7 @@ CMake exports `mcf5307::mcf5307` for a program that uses this library.
 
 ## Requirements
 
-- CMake 3.20 or later.
+- CMake 3.26 or later.
 - The Nim compiler. The version must agree with `.nim-version`.
 
 The CMake configure step reads `.nim-version`, runs `nim --version`, and stops
