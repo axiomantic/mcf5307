@@ -363,6 +363,7 @@ void validateCase(const Value& c, const std::string& where) {
   }
 
   const Value* encoding = c.find("encoding");
+  if (encoding == nullptr) failCheck(where + " carries no \"encoding\"");
   validateEncoding(*encoding, where);
 
   const Value* initial = c.find("initial");

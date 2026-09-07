@@ -3,12 +3,16 @@
 # Each test is registered in the list that governs its own directory:
 # `tests/tests_cpu.cmake` or `conformance/conformance_cpu.cmake`.
 #
-# 3.20 is the floor because `--no-tests=error` is a CTest flag that the earlier
-# releases do not carry, and without that flag every `-R` check in this project
-# passes against no code at all. The requirement is on the installed CTest,
-# which `.github/workflows/ci.yml` checks before it configures.
+# 3.21 is the floor, and two separate requirements set it. `--no-tests=error`
+# is a CTest flag that releases before 3.20 do not carry, and without that flag
+# every `-R` check in this project passes against no code at all.
+# `PROJECT_IS_TOP_LEVEL`, which guards the test tree below and the build gate,
+# was added in 3.21: on 3.20 it is simply undefined, so every guard reading it
+# takes the consumer branch and the suite disappears while `ctest` still
+# reports a pass. The requirement is on the installed CTest and CMake, which
+# `.github/workflows/ci.yml` checks before it configures.
 
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.21)
 
 project(mcf5307
     VERSION 0.1.0
