@@ -19,12 +19,32 @@ half true; nothing checks the second half except this file.
 revision name an edition. A hash names the copy a measurement was taken
 against, which is the thing a later reader actually has to reproduce.
 
+**A REPOSITORY NAME IS NOT A PATH.** The rule above bans a location on
+somebody's disk. It does not ban naming another repository of this project,
+because that name is true on every machine that can clone it, which is the
+property a path lacks.
+
+The distinction is recorded because its absence did damage. This table used to
+answer "where it lives" with **"Not in this repository"** for a document that
+was, in fact, held in a sibling repository of this same project. Readers took
+the phrase to mean the document was unavailable and parked claims as
+unverifiable that a copy at the pinned hash could have settled. So where a
+copy is held in a project repository, this table NAMES that repository. Where
+no project repository holds it, this table says so, and the instruction stays
+what it always was: obtain the document by its designation and check the hash
+before using a value from it.
+
+**Being able to reach a copy does not weaken the hash rule; it is what makes
+the hash rule usable.** A reader who has a copy still checks the hash, because
+the register pins an edition and a re-issued PDF under the same title is a
+different document.
+
 ## The documents
 
 | Cited in a header as | Document | Where it lives |
 |---|---|---|
-| "the ColdFire Family Programmer's Reference Manual", "…, Rev. 3" | *CFPRM, ColdFire® Family Programmer's Reference Manual*, Freescale Semiconductor. Vendor designation `CFPRM`. Revision 3. | **Not in this repository.** Obtain the PDF from the vendor archive by its designation. |
-| "the MCF5307 User's Manual", "… (1998)", "the manual's timing tables" | Motorola, *MCF5307 ColdFire Integrated Microprocessor User's Manual*, `MCF5307UM/AD`, 1998. 456 pages, scanned paper. SHA-256 `86cbcc8c9caa933fe10275a975a78d914df86771df9f0bc22d03de8b1aff91fa`. | **Not in this repository.** Obtain the PDF by its designation and check the hash before using a value from it. |
+| "the ColdFire Family Programmer's Reference Manual", "…, Rev. 3" | *CFPRM, ColdFire® Family Programmer's Reference Manual*, Freescale Semiconductor. Vendor designation `CFPRM`. Revision 3. Title page states `Document Number: CFPRM`, `Rev. 3`. SHA-256 `c2d02191e4427c7af89862e756d759bf4de93b632a2c6e8c44602a075a1627d6`, 2,897,839 bytes. | **No repository of this project holds it.** Obtain the PDF from the vendor archive by its designation and check the hash before using a value from it. The hash was taken from a copy outside version control, so it pins the edition read but names no copy a later reader can reach. |
+| "the MCF5307 User's Manual", "… (1998)", "the manual's timing tables" | Motorola, *MCF5307 ColdFire Integrated Microprocessor User's Manual*, `MCF5307UM/AD`, 1998. 456 pages, scanned paper. SHA-256 `86cbcc8c9caa933fe10275a975a78d914df86771df9f0bc22d03de8b1aff91fa`. | Not in THIS repository. **A copy at the pinned hash is held in this project's artifacts repository, `axiomantic/nmg2-artifacts`, under its `datasheets/` directory.** That repository is private and holds third-party material: read it, do not copy the PDF into this one. A reader without access obtains the PDF by its designation. Either way, check the hash before using a value from it. |
 | "the authority" (`src/isp1181/`), for everything except the data-flow command opcodes | **UNNAMED.** See below. | Unknown. |
 | "Table 109 of the ISP1362 data sheet, Rev. 06", "ISP1362 Rev. 06 Table 143", "ISP1362 Rev. 06 p.53" (`src/isp1181/commands.nim`, `src/isp1181/isp1181.nim`, `tests/t_isp1181.nim`, `tests/t_isp1181_command_set.nim`) | ST-NXP Wireless, *ISP1362 — Single-chip USB On-The-Go controller*, Product data sheet, doc id `ISP1362_6`, Rev. 06, 21 January 2009. 149 pages. SHA-256 `4deba3293e2c10bd3e93c159c50a3ba111d138f389a1456e8484a361e307a856`, 4,264,300 bytes. | **Not in this repository.** Obtain the PDF by its designation and revision, and check the hash before using a value from it. **It is not a document about the part this model names — see "The inherited command map" below before using a value from it.** |
 | Not yet cited in any header. Corroborates the DcEndpointConfiguration, DcEndpointStatus and DcInterrupt readings recorded below. | Philips Semiconductors, *ISP1362 Embedded Programming Guide*, application note `AN10008-01`, internal Rev. 0.9, June 2002. 99 pages. SHA-256 `77ce2e5c3cd82969f1465b068e36ffb7335fe99823ef69479d59d3ab15d34aa3`. | **Not in this repository.** Obtain by its designation and check the hash. **It is an APPLICATION NOTE and not a data sheet, and it is about the ISP1362 and not the ISP1181B — the inheritance limit below applies to it unchanged.** |
