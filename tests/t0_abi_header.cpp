@@ -20,8 +20,6 @@
 
 #include "mcf5307.h"
 
-/* ------------------------------- one static_assert for each declared type */
-
 static_assert(sizeof(mcf5307_ctx*) == sizeof(void*),
               "mcf5307_ctx must be declared as an opaque context type");
 static_assert(sizeof(isp1181_ctx*) == sizeof(void*),
@@ -57,7 +55,6 @@ static_assert(sizeof(isp1181_tx_fn) == sizeof(void (*)()),
 
 int main()
 {
-    /* The mcf5307_* functions. */
     void (*const p01)() = &mcf5307_runtime_init;
     mcf5307_ctx* (*const p02)(void*, mcf5307_read_fn, mcf5307_write_fn,
                               mcf5307_iack_fn) = &mcf5307_create;
@@ -69,7 +66,6 @@ int main()
     void (*const p08)(const mcf5307_ctx*, void*) = &mcf5307_state_save;
     void (*const p09)(mcf5307_ctx*, const void*) = &mcf5307_state_load;
 
-    /* The isp1181_* functions. */
     isp1181_ctx* (*const p10)(void*, isp1181_irq_fn,
                               isp1181_tx_fn) = &isp1181_create;
     void (*const p11)(isp1181_ctx*) = &isp1181_destroy;

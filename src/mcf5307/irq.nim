@@ -19,14 +19,13 @@
 ## one transition from a lower level request to a level 7 request occurred."
 ##
 ## This module implements the edge half of level 7 and not the level half,
-## which is a deliberate divergence from the manual. The rule here is
-## edge-only: an edge arms one interrupt, a held level arms no second one, and
-## the core clears the latch when it takes the interrupt. Section 7.6.1's
-## second numbered sequence describes a case that rule cannot produce - a
-## handler that lowers the interrupt mask sees a second level 7 interrupt "even
-## though no transition has occurred on the interrupt control pins". No level-7
-## source is programmed in this project, so nothing here can reach the
-## difference.
+## which is a deliberate divergence from the manual. The rule is edge-only: an
+## edge arms one interrupt, a held level arms no second one, and the core
+## clears the latch when it takes the interrupt. Section 7.6.1's second
+## numbered sequence describes a case that rule cannot produce - a handler
+## which LOWERS the interrupt mask sees a second level 7 interrupt "even though
+## no transition has occurred on the interrupt control pins". The G2 programs
+## no level-7 source, so nothing in this project can reach the difference.
 ##
 ## The order inside `takeInterrupt` is the manual's four steps, and the
 ## acknowledge is the one place it is not. Section 3.3, folio 3-11, puts the
@@ -96,7 +95,7 @@ proc resetInterruptEdge*(ctx: MCF5307Ctx) =
   ## What a RESET does to the level-7 edge latch: clear it, then re-observe the
   ## pin.
   ##
-  ## This is an inference, not a citation: the manuals are silent. Section
+  ## This is an inference and not a citation: the manuals are silent. Section
   ## 3.5.11, folio 3-17, enumerates the reset exception's effects and names no
   ## pending-interrupt state among them; sections 7.6 and 7.6.1, folios 7-23
   ## and 7-24, give level 7 its trigger type and never mention reset. Two
@@ -112,12 +111,12 @@ proc resetInterruptEdge*(ctx: MCF5307Ctx) =
   ##   hardware takes. Section 7.6.1, folio 7-24: "The level 7 request on IRQ7
   ##   must be held until the second interrupt-acknowledge bus cycle has begun
   ##   to ensure that the interrupt is recognized." A latched edge whose pin has
-  ##   since been released has nothing left for an acknowledge cycle to
-  ##   acknowledge, and keeping it models a state the hardware cannot reach. A
-  ##   pin still asserted across the reset is the other case entirely: the
+  ##   since been released therefore has nothing left for an acknowledge cycle
+  ##   to acknowledge, and keeping it models a state the hardware cannot reach.
+  ##   A pin STILL ASSERTED across the reset is the other case entirely: the
   ##   detector's history is back at "last seen level 0", so its next
   ##   observation is a transition from a lower request to the level 7 request
-  ##   and the core re-arms itself.
+  ##   and the core RE-ARMS ITSELF.
   ##
   ## Putting the stored history back to 0 and re-presenting the board's own last
   ## presentation is exactly what a detector reset to level 0 does at its next
@@ -174,7 +173,7 @@ proc pendingInterrupt*(ctx: MCF5307Ctx): tuple[take: bool, level: int,
   ## Levels 1 to 6 are tested against the presentation and nothing else.
   ## Section 3.2.2.1, folio 3-10: "Interrupt requests are inhibited for all
   ## priority levels less than or equal to the current priority", so the test
-  ## is strictly greater than. Section 7.6, folio 7-23, states it from the
+  ## is STRICTLY GREATER THAN. Section 7.6, folio 7-23, states it from the
   ## other side: "When an interrupt request has a priority higher than the
   ## value in the mask, the ColdFire core makes the request a pending
   ## interrupt." A `>=` here would take a level the hardware inhibits, and a
@@ -201,7 +200,7 @@ proc takeInterrupt*(ctx: MCF5307Ctx): bool =
   if pending.level == 7:
     ctx.irq7Armed = false
 
-  # The stacked program counter is the next instruction: Table 3-1, folio
+  # The stacked program counter is the NEXT instruction: Table 3-1, folio
   # 3-13, gives vectors 25-31 a stacked program counter of "Next", and its
   # footnote defines Next as "the PC of the next instruction that follows the
   # instruction that caused the fault". This runs at an instruction boundary,
@@ -213,11 +212,11 @@ proc takeInterrupt*(ctx: MCF5307Ctx): bool =
   # Section 3.3, folio 3-11: "The occurrence of an interrupt exception also
   # forces the M-bit to be cleared and the interrupt priority mask to be set
   # to the level of the current interrupt request." `takeException` has
-  # already set S and cleared T and has already stacked the copy of the
-  # status register taken before any of it, so this write cannot reach the
-  # frame. Section 7.6.1's second sequence depends on this mask write for
-  # level 7 as much as for any other level: "the interrupt mask will be set
-  # back to level 7".
+  # already set S and cleared T and has already stacked the COPY of the status
+  # register taken before any of it, so this write cannot reach the frame.
+  # Section 7.6.1's second sequence depends on this mask write for level 7 as
+  # much as for any other level: "the interrupt mask will be set back to level
+  # 7".
   ctx.sr = (ctx.sr and not srMaster and not srIpmMask) or
            (uint32(pending.level) shl srIpmShift)
 

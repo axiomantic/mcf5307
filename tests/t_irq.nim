@@ -224,10 +224,11 @@ proc freshBoard() =
   # first instruction in the same pass that takes the interrupt: section 7.6,
   # folio 7-23, "the MCF5307 device executes at least one instruction in an
   # interrupt exception handler before recognizing another interrupt request".
-  # A block that ran past its single NOP would decode the ZERO word beyond it,
-  # and a zero word is not a NOP - MEASURED 2026-08-12 with one NOP per
-  # handler, the core halted on it and three later cases then asserted a take
-  # that could not happen for a reason that had nothing to do with interrupts.
+  # A block that ran past its single NOP
+  # would decode the ZERO word beyond it, and a zero word is not a NOP -
+  # measured with one NOP per handler, the core halted on it and later cases
+  # then asserted a take that could not happen for a reason that had nothing to
+  # do with interrupts.
   # `halted` is in every asserted tuple below so that the same shape cannot
   # hide again. Four NOPs is 8 bytes, the handlers are 16 apart, and no block
   # here executes more than three handler instructions.
@@ -264,9 +265,8 @@ proc observe(ctx: MCF5307Ctx): Outcome =
   ## block which takes a SECOND interrupt asserts the SECOND frame. Each frame
   ## is self-aligning and goes below the last (`exceptionFrameBase`), so a
   ## fixed address would keep reporting the first frame while the assertion's
-  ## label claimed the second - MEASURED 2026-08-12, block 3's steps 3 and 4
-  ## read the first frame's stacked program counter and never looked at the
-  ## second frame at all. When nothing was taken, A7 is the reset stack pointer
+  ## label claimed the second. When nothing was taken, A7 is the reset stack
+  ## pointer
   ## and the two words below are the zeros `freshBoard` wrote.
   (sp: mcf5307_get_reg(ctx, 15),
    pc: mcf5307_get_reg(ctx, 17),
@@ -505,9 +505,9 @@ block:
 # CAN BREAK. The vector fields are overwritten with the same values twice and a
 # second write of the same value is invisible; the FLAG is the field a model
 # that accumulated instead of overwriting would toggle. A first attempt at this
-# repair moved the block to a VECTORED presentation and lost that - MEASURED
-# 2026-08-12, a `mcf5307_set_irq` whose flag assignment was `xor` instead of
-# `=` went from one red case to none. The presented `vector` here is
+# repair moved the block to a VECTORED presentation and lost that: a
+# `mcf5307_set_irq` whose flag assignment was `xor` instead of `=` went from
+# one red case to none. The presented `vector` here is
 # `otherVector`, which the flag makes the core ignore, so a toggled flag lands
 # on `handlerVec67` where this block's assertion sees it.
 
@@ -639,10 +639,10 @@ block:
 # ---------------------------------------------------------------------------
 # BLOCK 8. LEVEL 7 PRESENTED TWICE ARMS ONLY ONE.
 #
-# The same sentence of section 7.6.1 read from the other side: the second
-# call presents the level that is already presented, so no transition
-# occurred and no second interrupt is armed. This is also the level-7 half of
-# the idempotence rule.
+# The same sentence of section 7.6.1 read from the other side: the second call
+# presents the level that is already presented, so no transition occurred and
+# no second interrupt is armed. This is also the level-7 half of the
+# idempotence rule.
 
 block:
   let ctx = newCtx(0)
@@ -751,22 +751,22 @@ block:
 # BLOCK 11. THE LEVEL 7 THAT IS RE-PRESENTED AFTER ITS TAKE IS NOT A SECOND
 # EDGE.
 #
-# This is the board's normal behaviour and not an exotic one: two calls with
-# the same arguments have the same effect as one, so the board may call it
-# unconditionally after every recomputation. A board that does exactly that,
-# with IRQ7 still asserted,
-# calls `mcf5307_set_irq(7, ...)` again after the core has already taken the
-# level 7 interrupt - which is the sequence below and the one section 7.6.1,
-# folio 7-24, forbids a second recognition for: "if IRQ7 remains asserted, the
-# MCF5307 device will only recognize one level 7 interrupt because only one
-# transition from a lower level request to a level 7 request occurred."
+# THIS IS THE BOARD'S DOCUMENTED NORMAL BEHAVIOUR AND NOT AN EXOTIC ONE.
+# Two calls with the same arguments have the same effect as one, so the board
+# may call it unconditionally after every recomputation. A board that does
+# exactly that, with IRQ7 still asserted, calls `mcf5307_set_irq(7, ...)` again
+# after the core has already taken the level 7 interrupt - which is the
+# sequence below and the one section 7.6.1, folio 7-24, forbids a second
+# recognition for: "if IRQ7 remains asserted, the MCF5307 device will only
+# recognize one level 7 interrupt because only one transition from a lower
+# level request to a level 7 request occurred."
 #
 # BLOCK 8 DOES NOT REACH THIS AND CANNOT. Its two calls both happen BEFORE the
 # take, so the two arms land on a latch that is still armed from the first, and
 # `irq7Armed` being a `bool` makes arming twice indistinguishable from arming
 # once. What decides block 8 is therefore THE TYPE OF THE FIELD and not the
-# `and ctx.irqLevel != 7` guard in `mcf5307_set_irq` - MEASURED 2026-08-12,
-# deleting that guard left all sixteen cases of the previous revision green.
+# `and ctx.irqLevel != 7` guard in `mcf5307_set_irq`: deleting that guard
+# reddens nothing.
 # THE TAKE MUST HAPPEN BETWEEN THE TWO CALLS, because only then is the latch
 # consumed and only then can a second arm produce a second interrupt.
 
@@ -967,11 +967,11 @@ block:
 # Section 7.6, folio 7-23: "the MCF5307 device executes at least one
 # instruction in an interrupt exception handler before recognizing another
 # interrupt request." Table 3-1's closing paragraph, folio 3-13, states the
-# same rule for every handler. `src/mcf5307/cpu.nim` quotes both and says its
-# sample and its `step` are ONE iteration for exactly this reason, and that
-# "making the take `continue` instead would sample again before the handler had
-# executed anything". THAT SENTENCE HAD NO TEST - MEASURED 2026-08-12, adding
-# the `continue` left all sixteen cases of the previous revision green.
+# same rule for every handler. `src/mcf5307/cpu.nim` says its sample and its
+# `step` are ONE iteration for exactly this reason, and that making the take
+# `continue` instead would sample again before the handler had executed
+# anything. THAT
+# SENTENCE HAD NO TEST: adding the `continue` once reddened nothing.
 #
 # IT WENT UNTESTED BECAUSE THE INTERFACE MAKES A SECOND PENDING INTERRUPT HARD
 # TO ARRANGE. The board presents ONE level, and a take raises the mask to that
@@ -1058,7 +1058,7 @@ block:
 # rising edge. With the shipped order the latch is already clear when that edge
 # arrives, so the edge ARMS and a second interrupt is taken. With the clear
 # moved to just after `takeException` the same edge is wiped by a clear that
-# runs after it, and the second interrupt never happens - MEASURED 2026-08-13:
+# runs after it, and the second interrupt never happens:
 # that move reds this case and no other case in this file.
 #
 # THE RE-ENTERED EDGE IS VECTORED AND THE FIRST IS NOT, so the second take must
@@ -1120,17 +1120,10 @@ block:
 # record that it is. THE VECTOR HALF NEEDS A
 # LEVEL 7 THAT IS ITSELF VECTORED, because under the flag `vectorFor` returns
 # the autovector without reading the stored field at all, so no autovectored
-# presentation can separate a stored vector from a dropped one -
-# MEASURED 2026-08-13 AGAINST THE FILE AS ROUND 2 LEFT IT, which carried
-# neither this block nor block 17: deleting `ctx.irq7Vector = vector` from
-# `mcf5307_set_irq` redded none of that file's 23 cases.
-#
-# THE TREE HAS TO BE NAMED, and its predecessor here named none. This block and
-# block 17 landed in the SAME pass, so "before this block existed" picks out two
-# different files - the one round 2 left, and today's file with this block taken
-# out - and the sentence is true of the first and false of the second. MEASURED
-# 2026-08-13 against a copy of today's file with THIS block removed: the same
-# deletion reds block 17.
+# presentation can separate a stored vector from a dropped one. Against a file
+# carrying neither this block nor block 17, deleting `ctx.irq7Vector = vector`
+# from `mcf5307_set_irq` reddened nothing; against a copy of this file with
+# THIS block removed, the same deletion reds block 17.
 #
 # WHY THIS BLOCK STAYS, given that block 17's re-entered edge is vectored too.
 # Block 17's vectored take is a SECOND take, reached only because the board
@@ -1179,29 +1172,24 @@ block:
 # to overwrite it. Block 17's re-entry is itself the last presentation, so a
 # store outside the guard writes the value the block already expects. ONLY A
 # LEVEL-7 EDGE FOLLOWED BY A DIFFERENT PRESENTATION REACHES IT, and only when
-# the edge is vectored. MEASURED 2026-08-13 against the file as gate 4.4's
-# round 4 left it, which is blocks 1 to 18 and 25 cases:
+# the edge is vectored. Measured against the file as it stood before this
+# block:
 # THAT MOVE REDS NO CASE OF THAT FILE AND IT REDS THIS BLOCK.
 #
-# THAT SENTENCE IS REGISTERED AND NOT ONLY DATED. `tests/t_claims.cmake`
+# THAT SENTENCE IS REGISTERED AND NOT ONLY WRITTEN DOWN. `tests/t_claims.cmake`
 # carries it as `edge_vector_scope_suite_t_irq`, applies the move to a copy of
-# `src/` and requires this suite to go EXACTLY ONE red. A date alone would go
+# `src/` and requires this suite to go EXACTLY ONE red. Prose alone would go
 # stale the moment this block was weakened; the entry reds instead.
 #
 # THE OBSERVER OF `tests/t_claims.nim` STILL CANNOT STAND IN FOR THIS BLOCK.
 # Its scenario space carries a PRESENTATION PROFILE axis, `pVectored` clears
 # the autovector flag and hands every call a distinct vector, and the stored
-# vector is therefore read. RE-MEASURED
-# 2026-08-13 against this tree, by compiling that observer against a pristine
-# `src/` and against one carrying this move and comparing the two traces: 450
-# scenarios, and the move is REFUTED - 30 of the 450 separate it, the first in
-# trace order being `mask 0 pre @[7, 7] script @[] budget 8 profile pVectored`,
-# where the shipped core acknowledges vector 0x50 and enters its handler at
-# 0x580 and the mutated one acknowledges 0x51 and enters at 0x590.
+# vector is therefore read. Compiling that observer against a pristine `src/`
+# and against one carrying this move and comparing the two traces REFUTES the
+# move.
 #
-# THE COUNT IS DATED AND THE POSITION IS REGISTERED, WHICH ARE TWO DIFFERENT
-# JOBS. A sentence carrying a count of scenarios is a measurement and can only
-# ever be dated; that is what the paragraph above is. What this block claims is
+# A SCENARIO COUNT AND THE POSITION ARE TWO DIFFERENT JOBS. A sentence carrying
+# a count of scenarios is a measurement in prose. What this block claims is
 # SUITE-RELATIVE - that exactly one case of THIS file reds under the move - and
 # that is not a measurement in prose at all: `edge_vector_scope_suite_t_irq` in
 # `tests/t_claims.cmake` applies the move and requires this suite to go exactly
@@ -1269,8 +1257,9 @@ block:
 # and Table 3-1's sentence both govern.
 #
 # THE BUDGET IS ONE CYCLE PER CALL, so each call runs exactly one instruction:
-# `mcf5307_exec` saturates rather than counting (the cycle block at the head of
-# `src/mcf5307/cpu.nim`), and every instruction here costs more than one.
+# the loop tests the budget only BEFORE a step (the cycle block at the head of
+# `src/mcf5307/cpu.nim`), and every instruction here costs more than one. The
+# RETURN of each call is the instruction's whole cost and is discarded here.
 
 block:
   let ctx = newCtx(0)
@@ -1428,7 +1417,7 @@ block:
 # during the first instruction of all exception handlers." ALL exception
 # handlers. Section 3.5.11, folio 3-17 (PDF page 74), is the RESET EXCEPTION's
 # own entry, so the code at the reset program counter is the first instruction
-# of an exception handler and that sentence governs it.
+# of an exception handler and that rule governs it.
 #
 # `mcf5307_reset` DOES NOT ROUTE THROUGH `takeException`, which is where every
 # other exception in this core acquires the inhibition (`machine.nim` states
@@ -1453,10 +1442,10 @@ block:
 # two of them, and block 13's step 2, block 23's held pin, block 24 and block 25
 # hold the other four. WEAKENING ANY ONE OF THE SIX MOVES THE COUNT AND THE
 # ENTRY REDS - which is the whole reason the number is registered and not
-# merely dated. MEASURED 2026-08-13 by weakening this block's two assertions to
-# compare `.halted` alone: the suite stayed GREEN at 36 and every derived check
-# stayed silent, and the mutation then redded 4 where the registry expects 6 -
-# so `reset_inhibit_suite_t_irq` REFUTED at rc 8 where nothing else had spoken.
+# merely written down. Weakening this block's two assertions to compare
+# `.halted` alone leaves the suite green and every derived check silent, and
+# the mutation then reds fewer cases than the registry expects, so
+# `reset_inhibit_suite_t_irq` refutes where nothing else had spoken.
 
 block:
   let ctx = newCtxAtReset(srWithIpm(0))
@@ -1676,8 +1665,8 @@ block:
 # it likes. `resetInterruptEdge` is reached only from Nim, and a sentence
 # naming its callers is a true sentence about the tree and NOT a mechanism.
 #
-# WHAT MADE IT WORTH A CASE IS THAT THE SENTENCE IS GREEN-FALSIFIABLE. MEASURED
-# 2026-08-13: `mcf5307_reset`'s own nil guard returns BEFORE it reaches
+# WHAT MADE IT WORTH A CASE IS THAT THE SENTENCE IS GREEN-FALSIFIABLE.
+# `mcf5307_reset`'s own nil guard returns BEFORE it reaches
 # `resetInterruptEdge`, so block 25 does not exercise this path at all and no
 # case in this file ever passed a nil context to this procedure. A SECOND
 # CALLER COULD BE ADDED WITH EVERY REGISTERED TEST STILL GREEN, and the first

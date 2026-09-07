@@ -1,18 +1,17 @@
 ## `t_bus_fault` - the bus-fault channel of `mcf5307/bus`.
 ##
-## THE DOCUMENTS THIS FILE CITES ARE OUTSIDE THIS REPOSITORY and each is named
-## in full, so that a citation can be checked without knowing this project.
+## The document this file cites is outside this repository and is named in
+## full, so that a citation can be checked without knowing this project.
 ##
 ##   THE MCF5307 USER'S MANUAL: Motorola, "MCF5307 ColdFire Integrated
 ##   Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998. Every
 ##   citation below names its section, table and folio page.
 ##
-## EVERY EXPECTED VALUE BELOW IS A HAND-DERIVED LITERAL, written beside the bit
-## string or the manual row it came from, and NOT a second call of the
-## procedure under test.
+## EVERY EXPECTED VALUE BELOW IS A HAND-DERIVED LITERAL and NOT a second call
+## of the procedure under test.
 ##
-## The fault status encodings are facts about Motorola silicon, from the User's
-## Manual named above.
+## The fault status encodings are facts about Motorola silicon, from the
+## MCF5307 User's Manual named above.
 
 import std/strutils
 
@@ -65,11 +64,14 @@ template checkEq(got: uint32; want: uint32; label: string) =
 # BLOCK 1. The mapping from a bus status to a fault status code.
 #
 # User's Manual section 3.4, Table 3-3, "Fault Status Encodings", folio 3-14
-# (PDF page 71), read as a page image 2026-08-14, gives the whole defined set
-# for this part: `0000` not an access or address error, `0100` error on
-# instruction fetch, `1000` error on operand write, `1001` attempted write to
-# write-protected space, `1100` error on operand read. Every other value of the
-# four bits is Reserved.
+# (PDF page 71), gives the defined fault status encodings for this part:
+# `0000` not an access or address error, `0100` error on instruction fetch,
+# `1000` error on operand write, `1001` attempted write to write-protected
+# space, and `1100` error on operand read. Every other value of the four bits
+# is Reserved.
+#
+# THE MAPPING TABLE assigns codes to the non-OK bus statuses, and each expected
+# value below is the code that table's own row prints.
 
 checkEq(faultStatusFor(Mcf5307BusStatus.busFault, operandWrite),
         0b1001'u32,
@@ -241,9 +243,9 @@ proc runTrap(rd: Mcf5307ReadFn; wr: Mcf5307WriteFn): Outcome =
 
 # THE EXPECTED OUTCOME IS HAND-DERIVED. A7 is 0x800 with its low two bits 00,
 # so Table 3-2, folio 3-14, gives FORMAT 4 and a frame at 0x800 - 8. `trap #0`
-# is one word, and Table 3-1 gives vectors 32 to 47 a stacked program counter
-# of "Next", so the stacked value is `execBase + 2`. `FS` is 0000: Table 3-3
-# defines the field for access and address errors only.
+# is one word and Table 3-1 gives a trap a stacked program counter of "Next",
+# so the stacked value is `execBase + 2`. `FS` is 0000: Table 3-3 defines the
+# field for access and address errors only.
 #   0100 | 00 | 00100000 | 00 | 0010011100000000 -> 0x40802700
 const wantTrap: Outcome = (sp: frameBase, pc: trapHandler, sr: srReset,
                            halted: false, fault: false,
@@ -263,9 +265,9 @@ check(explicit == wantTrap,
 # BLOCK 4. The core originates no bus status of its own.
 #
 # `MCF5307_BUS_UNMAPPED` and `MCF5307_BUS_SIZE_ILLEGAL` have no producer on
-# this part - User's Manual section 3.5.1, folio 3-14, holds that access errors
-# are reported only for a store to write-protected space - so the only thing
-# that can raise one is a board's own decode.
+# this part - User's Manual section 3.5.1, folio 3-14, holds that an access
+# error is reported only for a store to write-protected space - so the only
+# thing that can raise one is a board's own decode.
 #
 # THE SWEEP IS THE ASSERTION: every access below is answered by a pair
 # of callbacks that report nothing at all, across the whole address range and
@@ -304,13 +306,12 @@ mcf5307_destroy(sweepCtx)
 # BLOCK 5. A non-OK bus status becomes an access fault, and the frame carries a
 # NON-ZERO `FS` through the core.
 #
-# THIS IS THE FIRST CASE IN THIS REPOSITORY THAT CAN SEPARATE A SPLIT `FS`
-# ENCODER FROM A CONTIGUOUS ONE. User's Manual Table 3-3, folio 3-14, defines
-# five codes - `0000`, `0100`, `1000`, `1001`, `1100` - and `1001` is the only
-# one whose low half is not zero, so it is the only value that lands in BOTH
-# halves of the split field. Every other core-path frame this tree stacks
-# carries `FS` `0000`, where "encodes the field as zero" and "has no field"
-# produce the same longword.
+# BLOCK 5 SEPARATES A SPLIT `FS` ENCODER FROM A CONTIGUOUS ONE. Of the
+# codes User's Manual Table 3-3, folio 3-14, defines, `1001` is the only one
+# whose low half is not zero, so it is the only value that lands in BOTH
+# halves of the split field. A frame carrying `FS` `0000` cannot separate
+# "encodes the field as zero" from "has no field": both produce the same
+# longword.
 #
 # THE ROW IS THE ONE THAT IS REAL SILICON. User's Manual section 3.5.1, folio
 # 3-14, verbatim: access errors are "only reported in conjunction with an
@@ -459,7 +460,7 @@ check(doubleFault == wantDoubleFault,
 # Measured, with the vector taken: `d1` came back 0 over its
 # sentinel, and the frame itself was correct - `0x4C082700`, `FS` `1100`.
 #
-# THE FIX IS NOT WRITABLE FROM THE FILES THIS TASK DECLARES. It needs a
+# THE FIX IS NOT WRITABLE FROM THE FILES THIS SUITE COVERS. It needs a
 # pending-fault field on `MCF5307Ctx` in `src/mcf5307/decode_types.nim`, or a
 # check after the executor returns in `src/mcf5307/cpu.nim`'s `step`.
 #

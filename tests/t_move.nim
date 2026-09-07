@@ -1,7 +1,7 @@
 ## `t_move` - the sized write to a data register in the data-movement group.
 ##
 ## This file exists beside `mcf5307_conformance_move` because it carries
-## source-operand and zero-source variants the corpus does not, and it is the
+## source-operand and zero-source variants, and it is the
 ## control that would catch a corpus regenerated wrongly.
 ##
 ## Every case below starts the destination at 0x12345678. That is the whole
@@ -265,7 +265,7 @@ proc expectFault(o: Outcome; label: string) =
 #     (The row does not survive `pdftotext`; a text-extracted search for
 #     "SWAP" over the whole manual returns only the Table 3-12 timing row.)
 #   - Table 3-12, "One Operand Instruction Execution Times", page 3-27:
-#     `swap | Dx | Rn 1(0/0)` and a dash in all seven other columns, which is
+#     `swap | Dx | Rn 1(0/0)` and a dash in every other column, which is
 #     this project's legality oracle for "a data register and nothing else".
 #   - Section 3.9, page 3-21, lists the removed instruction groups - BCD, bit
 #     field, logical rotate, decrement and branch, integer division, and
@@ -280,47 +280,46 @@ proc expectFault(o: Outcome; label: string) =
 #     fixed-point multiply that rounds by adding a half and then takes the
 #     high word.
 #
-# The condition codes are manual-derived, from section 3.2.1.5, page 3-9.
-# No per-instruction rule exists to read: Table 3-7's operation column for
-# SWAP reads `MSW of Dn <-> LSW of Dn` with no condition-code clause and
-# Table 3-12 gives timing only, and those two rows are the only places the
-# manual names SWAP. The generic rule is what settles it. Section 3.2.1.5
-# opens at the foot of page 3-8 with the CCR bit-field figure and does not
-# end there; page 3-9 defines each bit - N "Set if the most significant bit
-# of the result is set; otherwise cleared", Z "Set if the result equals
-# zero; otherwise cleared", V "Set if an arithmetic overflow occurs implying
-# that the result cannot be represented in the operand size; otherwise
-# cleared", C "Set if a carryout of the operand MSB occurs for an addition,
-# or if a borrow occurs in a subtraction; otherwise cleared", X "Set to the
-# value of the C-bit for arithmetic operations; otherwise not affected".
-# Exchanging a register's halves is no addition, no subtraction and no
-# arithmetic operation, so V and C are cleared and X is untouched, and N and
-# Z come from the result. That is `setNzClearVc(ctx, result, 4)`, the rule
-# this core already shares between MOVE, MOVEQ, EXT, EXTB and the 32-bit
-# multiply, and the same derivation `logic.nim` runs for AND, OR, EOR and NOT.
+# THE CONDITION CODES COME FROM THE GENERIC RULE AND NOT FROM A PER-INSTRUCTION
+# ONE, because no per-instruction rule exists to read: Table 3-7's operation
+# column for SWAP reads `MSW of Dn <-> LSW of Dn` with no condition-code clause
+# and Table 3-12 gives timing only, and those two rows are the only places the
+# manual names SWAP. The generic rule is section 3.2.1.5, which opens at the
+# foot of page 3-8 with the CCR bit-field figure and does not end there; page
+# 3-9 defines each bit - N "Set if the most significant bit of the result is
+# set; otherwise cleared", Z "Set if the result equals zero; otherwise
+# cleared", V "Set if an arithmetic overflow occurs implying that the result
+# cannot be represented in the operand size; otherwise cleared", C "Set if a
+# carryout of the operand MSB occurs for an addition, or if a borrow occurs in
+# a subtraction; otherwise cleared", X "Set to the value of the C-bit for
+# arithmetic operations; otherwise not affected". Exchanging a register's
+# halves is no addition, no subtraction and no arithmetic operation, so V and C
+# are cleared and X is untouched, and N and Z come from the result. That is
+# `setNzClearVc(ctx, result, 4)`, the rule this core already shares between
+# MOVE, MOVEQ, EXT, EXTB and the 32-bit multiply.
 #
 # SECTION 3.9 IS NOT THE ORACLE. Section 3.9's removed list is itself
-# unreliable - page
-# 3-21 names "integer division" as removed while Table 3-7 on page 3-23
-# carries DIVS and DIVU rows and Table 3-13 on page 3-28 times `divs.w`,
-# `divu.w`, `divs.l` and `divu.l`. And "reduced version" is a claim about set
-# membership, not per-instruction semantics: Table 3-7 gives ADD, SUB, AND,
-# OR, EOR and CMP an operand size of 32 alone where the 68000 has `.b`, `.w`
-# and `.l`, so retained instructions here are not semantically identical to
-# their 68000 originals. Section 3.9 is still good for what it is used for
-# above - SWAP not appearing in a removal list is evidence about membership,
-# which is the one kind of claim that list makes.
+# unreliable - page 3-21 names "integer division" as removed while Table 3-7 on
+# page 3-23 carries DIVS and DIVU rows and Table 3-13 on page 3-28 times
+# `divs.w`, `divu.w`, `divs.l` and `divu.l`. And "reduced version" is a claim
+# about set membership, not per-instruction semantics: Table 3-7 gives ADD,
+# SUB, AND, OR, EOR and CMP an operand size of 32 alone where the 68000 has
+# `.b`, `.w` and `.l`, so retained instructions here are not semantically
+# identical to their 68000 originals. Section 3.9 is still good for what it is
+# used for above - SWAP not appearing in a removal list is evidence about
+# membership, which is the one kind of claim that list makes.
 #
-# What 3.2.1.5 does not give is the width, and the cases below separate it.
-# The section says "the result" and never states how wide that result is,
-# while Table 3-7's operand size column for SWAP says 16. A reader who takes
-# the flags from the operand size sets N from bit 15 and Z from the low half;
-# this core takes the whole 32-bit register, because the register is what the
-# instruction writes. The two readings disagree on any value whose halves
-# differ in their top bit, and the two cases marked N-separator below -
-# `0x0000FFFF` and `0xFFFF0000` - are exactly those values. That residue is
-# open; the CFPRM would close it, and the cases to change would be the `sr`
-# arguments below and `setNzClearVc`'s call in `move.nim`.
+# WHAT SECTION 3.2.1.5 DOES NOT GIVE IS THE WIDTH. It says "the result" and
+# never states how wide that result is, while Table 3-7's operand size column
+# for SWAP says 16. A reader who takes the flags from the operand size sets N
+# from bit 15 and Z from the low half; this core takes the whole 32-bit
+# register, because the register is what the instruction writes. The two
+# readings disagree on any value whose halves differ in their top bit, and that
+# residue is genuinely open; the CFPRM would close it.
+#
+# IF AN AUTHORITY EVER CONTRADICTS THIS, the cases to change are the `sr`
+# arguments below and `setNzClearVc`'s call in `move.nim`; the register results
+# do not move.
 
 block:
   # The reference case. 0x12345678 -> 0x56781234. Bit 31 of the result is
@@ -386,7 +385,8 @@ block:
 # `LEA` and `PEA` at `(xxx).W`, and `MOVEM` still refusing it.
 #
 # THE MANUAL PUTS `(xxx).W` IN THE CONTROL CATEGORY, and each of the three
-# instructions is settled by its OWN row rather than by that category alone:
+# instructions is settled by its OWN row rather than by that category alone -
+# LEA and PEA are legal at `(xxx).W` and MOVEM is not:
 #   - Table 3-5, "Effective Addressing Modes and Categories", page 3-21:
 #     "Absolute Data Addressing / Short", syntax `(xxx).W`, mode field 111,
 #     register field 000, carries an `x` under Data, Memory and Control.
@@ -404,7 +404,7 @@ block:
 #     `xxx.wl`. Table 3-13's dash is this project's legality oracle, and here
 #     it points the other way from LEA's and PEA's times.
 #
-# The pinned `m68k-elf-as -mcpu=5307` agrees with all four rows: it accepts
+# The pinned `m68k-elf-as -mcpu=5307` agrees: it accepts
 # `lea 0x1234.w,%a0` (`41f8 1234`), `lea 0x8000.w,%a0` (`41f8 8000`),
 # `lea 0x1234.w,%a3` (`47f8 1234`), `pea 0x1234.w` (`4878 1234`) and
 # `pea 0x8000.w` (`4878 8000`), and it rejects `movem.l %d0-%d1,0x1234.w`

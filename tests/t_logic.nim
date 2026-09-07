@@ -6,30 +6,27 @@
 ##
 ##   TWO MOTOROLA DOCUMENTS supply the instruction semantics this file
 ##   asserts: the ColdFire Family Programmer's Reference Manual Rev. 3 and the
-##   MCF5307 ColdFire Integrated Microprocessor User's Manual. Neither is in
-##   this repository and neither may be copied into it; each is identified in
-##   full below so that a reader can obtain the same edition from the vendor.
+##   MCF5307 ColdFire Integrated Microprocessor User's Manual.
 ##
-##   THE MCF5307 USER'S MANUAL is the
-##   document every table and page cited below refers to. Its full identity,
-##   so that a reader can be sure of holding the same edition: Motorola,
-##   "MCF5307 ColdFire Integrated Microprocessor User's Manual", order number
-##   MCF5307UM/AD, (c) 1998 - the order number is printed at the top right of
-##   the cover and the title is the title page. IT IS NOT IN THIS REPOSITORY,
-##   it may not be copied into it, and a reader who has only this tree must
-##   obtain it separately from the vendor. That is why every citation here
-##   names table, page and row instead of quoting.
+##   THE MCF5307 USER'S MANUAL is the document every table and page cited
+##   below refers to. Its full identity, so that a reader can be sure of
+##   holding the same edition: Motorola, "MCF5307 ColdFire Integrated
+##   Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998 - the
+##   order number is printed at the top right of the cover and the title is the
+##   title page. It is not in this repository and may not be copied into it,
+##   which is why every citation here names table, page and row instead of
+##   quoting.
 ##
-##   The flag rules come from Freescale, "ColdFire Family Programmer's
-##   Reference Manual", Rev. 3.
+##   THE DOCUMENT IS Freescale, "ColdFire Family Programmer's Reference
+##   Manual", Rev. 3.
 ##
 ##   ITS PER-INSTRUCTION PAGES CARRY THE FLAG RULES THE USER'S MANUAL
 ##   never had: folio 4-12 gives ASL's V a flat "Always cleared" and notes
 ##   that this is "unlike on the 68K family processors".
 ##
-##   READ THE MANUAL AS RENDERED PAGES. Its tables come out of a text
-##   extraction wrong, so a value taken from one is not evidence;
-##   `pdftoppm -png` the page and read the image.
+##   READ THE PDF AS RENDERED PAGES. Tables in an OCR markdown conversion of
+##   the User's Manual are known wrong, so a value taken from text extraction
+##   is not evidence; `pdftoppm -png` and read the image.
 ##
 ## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_logic`. That corpus holds
 ## POSITIVE cases: an encoding this part has,
@@ -68,7 +65,7 @@
 ##
 ## Instruction semantics, the condition-code rules and the encodings are facts
 ## about Motorola silicon; they are taken from the ColdFire Family Programmer's
-## Reference Manual and the MCF5307 User's Manual, and from this project's own
+## Reference Manual and the MCF5307 User's Manual and from this project's own
 ## measurements with the pinned cross assembler.
 
 import mcf5307/cpu
@@ -160,12 +157,19 @@ const
   zero8: array[8, uint32] = [0'u32, 0, 0, 0, 0, 0, 0, 0]
 
 type Outcome = object
-  cycles: uint32
-    ## `mcf5307_exec(ctx, 1)`'s return, which is not a cycle count despite the
-    ## name. `mcf5307_exec` saturates at its budget, and every instruction in
-    ## this group costs 2 for the fetch plus at least one more, so the value is
-    ## 1 for an instruction that ran and 0 for one that trapped. Uncertainty 2
-    ## in the `logic.nim` header says nothing asserts the cycle counts.
+  ran: bool
+    ## DID THE INSTRUCTION RUN? It is `mcf5307_exec(ctx, 1) > 0`, and it is a
+    ## BOOLEAN because that is all the call can tell this suite. The return is
+    ## the whole retired cost of the instruction - `cpu.nim`'s header block is
+    ## the contract - and that cost differs per encoding, so an expectation
+    ## written here would be a per-row cycle LITERAL transcribed beside the
+    ## executor that computes it. This suite has no second way to derive one:
+    ## the rows that take an exception leave the machine inside a handler, so
+    ## a generous-budget reference run does not stop after one instruction.
+    ##
+    ## THE COST ITSELF IS NOT PINNED HERE. What this field carries is the
+    ## ran-or-trapped bit the rows below actually turn on, under a name that
+    ## says so.
   fault: bool
   halted: bool
   d: array[8, uint32]
@@ -202,7 +206,7 @@ proc runIns(words: openArray[uint16];
   # in `t_alu`: the memory after the encoding is zero and `0x0000` is not an
   # instruction this part has. The return is 1 for an instruction that ran and
   # 0 for one that trapped.
-  result.cycles = mcf5307_exec(ctx, 1'u32)
+  result.ran = mcf5307_exec(ctx, 1'u32) > 0'u32
   result.fault = ctx.fault
   result.halted = ctx.halted
   for i in 0 .. 7:
@@ -261,8 +265,8 @@ proc expectTrapD(o: Outcome; n: int; unchanged: uint32; label: string) =
   ## `unchanged` is seeded non-zero by every caller. A trap case whose
   ## register starts at zero asserts 0 == 0 in this half and would pass
   ## against a core that wrote a zero into it.
-  let got = (reg: o.d[n], fault: o.fault, halted: o.halted, cycles: o.cycles)
-  let wanted = (reg: unchanged, fault: true, halted: true, cycles: 0'u32)
+  let got = (reg: o.d[n], fault: o.fault, halted: o.halted, ran: o.ran)
+  let wanted = (reg: unchanged, fault: true, halted: true, ran: false)
   check(got == wanted, label, $got, $wanted)
 
 proc expectTrapA(o: Outcome; n: int; unchanged: uint32; label: string) =
@@ -270,8 +274,8 @@ proc expectTrapA(o: Outcome; n: int; unchanged: uint32; label: string) =
   ## an address register. `eaResolve` answers `erAn` for that operand and
   ## `eaRefWrite` puts the result into the register, so the register a removed
   ## mask would disturb is an A and not a D.
-  let got = (reg: o.a[n], fault: o.fault, halted: o.halted, cycles: o.cycles)
-  let wanted = (reg: unchanged, fault: true, halted: true, cycles: 0'u32)
+  let got = (reg: o.a[n], fault: o.fault, halted: o.halted, ran: o.ran)
+  let wanted = (reg: unchanged, fault: true, halted: true, ran: false)
   check(got == wanted, label, $got, $wanted)
 
 proc freshCtx(): MCF5307Ctx =
@@ -320,9 +324,9 @@ const bitDirty = srBase or ccrN or ccrV or ccrC or ccrX
 # ---------------------------------------------------------------------------
 # BLOCKING 1. `CMP` AND `CMPA.L` ARE NOT THIS GROUP'S.
 #
-# Line 1011 carries EOR in opmodes 100, 101 and 110. THE OTHER FIVE OPMODES
-# BELONG TO THE COMPARISON GROUP: CMP in 000, 001 and 010, CMPA.W in 011
-# and CMPA.L in 111.
+# Line 1011 carries EOR in opmodes 100, 101 and 110. The remaining opmodes are
+# the comparison group's: CMP in 000, 001 and 010, CMPA.W in 011 and CMPA.L
+# in 111.
 #
 # The sentence these rows assert: the encoding belongs to the comparison group
 # and not to the logic decoder.
@@ -355,9 +359,9 @@ block:
                  d = [0x0F0F0F0F'u32, 0x12345678'u32, 0, 0, 0, 0, 0, 0],
                  a = [0'u32, 0x11223344'u32, 0, 0, 0, 0, 0, 0])
   let got = (d0: o.d[0], d1: o.d[1], a1: o.a[1], sr: o.sr,
-             fault: o.fault, halted: o.halted, cycles: o.cycles)
+             fault: o.fault, halted: o.halted, ran: o.ran)
   let want = (d0: 0x0F0F0F0F'u32, d1: 0x12345678'u32, a1: 0x11223344'u32,
-              sr: srBase, fault: false, halted: false, cycles: 1'u32)
+              sr: srBase, fault: false, halted: false, ran: true)
   check(got == want,
     "cmpa.l %d0,%a1 compares and writes no register",
     $got, $want)
@@ -375,7 +379,7 @@ block:
 # `btst %d1,(4,%pc)` is `033a 0004` and `btst %d1,(4,%pc,%d2)` is `033b 2804`,
 # both assembled by `m68k-elf-as -mcpu=5307`.
 #
-# Why the immediate is out, and why the assembler does not settle it. See the
+# WHY THE IMMEDIATE IS OUT, AND WHY THE ASSEMBLER DOES NOT SETTLE IT. See the
 # `eaBitDynamic` doc comment in `decode_types.nim` for the manual rows and the
 # toolchain measurements. The short form: MCF5307 User's Manual Table 3-13
 # (page 3-28) dashes the `#xxx` column of the `btst Dy,<ea>` row, and that
@@ -402,9 +406,9 @@ block:
                     d = [0'u32, 7, 0, 0, 0, 0, 0, 0], sr = bitDirty or ccrZ,
                     mem = pcWindow)
   let gotSet = (d1: oSet.d[1], mem: mem32(0x104'u32), mem2: mem32(0x108'u32),
-                sr: oSet.sr, fault: oSet.fault, cycles: oSet.cycles)
+                sr: oSet.sr, fault: oSet.fault, ran: oSet.ran)
   let wantSet = (d1: 7'u32, mem: 0xAABB80C3'u32, mem2: 0x40558022'u32,
-                 sr: bitDirty, fault: false, cycles: 1'u32)
+                 sr: bitDirty, fault: false, ran: true)
   check(gotSet == wantSet,
     "btst %d1,(4,%pc) reads the byte at 0x106, finds bit 7 set, " &
     "clears Z and writes nothing",
@@ -414,9 +418,9 @@ block:
                       d = [0'u32, 6, 0, 0, 0, 0, 0, 0], sr = bitDirty,
                       mem = pcWindow)
   let gotClear = (d1: oClear.d[1], mem: mem32(0x104'u32), sr: oClear.sr,
-                  fault: oClear.fault, cycles: oClear.cycles)
+                  fault: oClear.fault, ran: oClear.ran)
   let wantClear = (d1: 6'u32, mem: 0xAABB80C3'u32, sr: bitDirty or ccrZ,
-                   fault: false, cycles: 1'u32)
+                   fault: false, ran: true)
   check(gotClear == wantClear,
     "btst %d1,(4,%pc) with a bit number of 6 finds a clear bit at 0x106 " &
     "and sets Z",
@@ -432,9 +436,9 @@ block:
                       d = [0'u32, 7, 4, 0, 0, 0, 0, 0], sr = bitDirty or ccrZ,
                       mem = pcWindow)
   let gotIndex = (d1: oIndex.d[1], d2: oIndex.d[2], mem: mem32(0x108'u32),
-                  sr: oIndex.sr, fault: oIndex.fault, cycles: oIndex.cycles)
+                  sr: oIndex.sr, fault: oIndex.fault, ran: oIndex.ran)
   let wantIndex = (d1: 7'u32, d2: 4'u32, mem: 0x40558022'u32, sr: bitDirty,
-                   fault: false, cycles: 1'u32)
+                   fault: false, ran: true)
   check(gotIndex == wantIndex,
     "btst %d1,(4,%pc,%d2) reads the byte at 0x10a, finds bit 7 set, " &
     "clears Z and writes nothing",
@@ -542,9 +546,9 @@ block:
                  sr = bitDirty or ccrZ,
                  mem = @[(0x200'u32, 0x08AABBCC'u32)])
   let got = (mem: mem32(0x200'u32), a0: o.a[0], sr: o.sr, fault: o.fault,
-             cycles: o.cycles)
+             ran: o.ran)
   let want = (mem: 0x08AABBCC'u32, a0: 0x200'u32, sr: bitDirty, fault: false,
-              cycles: 1'u32)
+              ran: true)
   check(got == want,
     "btst #3,(%a0) reads one byte, clears Z, and disturbs no neighbour",
     $got, $want)
@@ -567,7 +571,7 @@ block:
 # ---------------------------------------------------------------------------
 # `eaDataAddressing` - the manual's DATA class, which does not include `An`.
 # It is the source mask of the `<ea> op Dn -> Dn` direction of AND and OR, and
-# those two only. Both read and neither writes, so the PC-relative pair and
+# THOSE TWO ONLY. Both READ and neither writes, so the PC-relative pair and
 # the immediate are in and the address register is out. MCF5307 User's Manual
 # Table 3-13: the `and.l <ea>,Rx` row on page 3-28 and the `or.l <ea>,Rx` row
 # on the CONTINUATION PAGE 3-29 carry a time in every column including `#xxx`,
@@ -658,9 +662,8 @@ block:
   checkMask(eaIsLegalFor(opAsl, decodeEa(0x3C'u16)), false,
     "the shift mask rejects an immediate")
 
-  # One illegal mode per shift operation. The memory form is the encoding that
-  # carries an effective address at all, and these cases assert that the core
-  # refuses it.
+  # ONE ILLEGAL MODE PER SHIFT OPERATION. The memory form is the encoding that
+  # carries an effective address at all.
   #
   # THEY DO NOT ATTRIBUTE THE REFUSAL TO THE MASK. `decodeShift` gives the
   # memory form `size: 2`, so `execShift`'s guards - the `{eaDn}` mask and the

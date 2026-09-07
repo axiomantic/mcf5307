@@ -1,9 +1,5 @@
 ## `t_ea_masks` - the decoder and effective-address legality masks.
 ##
-## The coverage domain is the legality table itself. `eaLegalityFor` spreads
-## its operations across the arms of one `case`, and every implemented opcode
-## must trap at least one illegal mode.
-##
 ## The skip rule, stated once. An operation is outside the domain when and
 ## only when `eaLegalityFor` returns an empty mask. That is the same test
 ## `eaIsLegalFor` already makes, and that proc's own doc comment in
@@ -132,26 +128,15 @@
 ## machine layer would otherwise execute happily, and by the criterion above no
 ## such mode exists for these masks.
 ##
-## A narrowed mask is invisible to every `coverage` entry. Each entry names
-## exactly one legal mode, so a mask narrowed to that single mode passes all
-## four assertions unchanged: (1) still rejects the cited illegal mode, (2)
-## still accepts the one legal mode the entry names, and (3) and (4) drive
-## those same two operands and nothing else. Most entries name `Dn`, so one
-## narrowing to `{eaDn}` is invisible here for all of those at once; the
-## control-addressing entries name `(An)`, and a narrowing to `{eaAnInd}` is
-## invisible for those. The discriminating flag is about assertion (4)'s
-## attribution and says nothing at all about narrowing.
-##
-## What covers the narrowing direction is block (19), and it is in this file.
-## It holds every operation-and-size mask against its literal value, so a
-## narrowing anywhere in the domain is red there whether or not anything
-## exercises the mode it removed. `t_move`, `t_alu`, `t_logic`, `t_control`
-## and the conformance corpus assert positive behaviour on legal modes and red
-## beside it where they happen to drive one; that mitigation is partial, and
-## which suite catches which narrowing is not obvious - `opMove` and `opMovea`
-## narrowed to `{eaDn}`/`{}` leaves this file green and `t_move` green and
-## turns `mcf5307_conformance_move` red, because `t_move` drives MOVE
-## register-to-register only.
+## A NARROWED MASK IS INVISIBLE TO EVERY `coverage` ENTRY. Each entry names
+## exactly ONE legal mode, so a mask NARROWED to
+## that single mode passes all four assertions unchanged: (1) still rejects the
+## cited illegal mode, (2) still accepts the one legal mode the entry names,
+## and (3) and (4) drive those same two operands and nothing else. Most entries
+## name `Dn`, so ONE narrowing to `{eaDn}` is invisible here for all of those at
+## once; the control-addressing entries name `(An)`, and a narrowing to
+## `{eaAnInd}` is invisible for those. The discriminating flag is about
+## assertion (4)'s ATTRIBUTION and says nothing at all about narrowing.
 ##
 ## The remaining assertions are kept.
 ##
@@ -382,10 +367,10 @@ static:
 ## is the co-edit: move the break constant and the declarations together and
 ## the two go green past each other, which is assertion (9)'s subject.
 ##
-## So the page is derived and the declared one is checked against it. The
-## derivation rests on a property of the table that was read from the rendered
-## p.3-28 and p.3-29 and not from `pdftotext` and not from the markdown
-## conversion, whose Table 3-13 is known wrong:
+## SO THE PAGE IS DERIVED AND THE DECLARED ONE IS CHECKED AGAINST IT. The
+## derivation rests on a property of the table that was read from the RENDERED
+## p.3-28 and p.3-29 and NOT from `pdftotext` and NOT from the markdown
+## conversion of the User's Manual, whose Table 3-13 is known wrong:
 ##
 ##   - The p.3-28 half runs `add.l` to `mulu.l`; the p.3-29 half opens `or.l`
 ##     and ends `subx.l`, after which section 3.12 begins.
@@ -687,10 +672,9 @@ let coverage: seq[Coverage] = @[
   cov(opScc, famControl, mDn, mAnInd, whyDashMemory312),
   cov313(opCmpi, famControl, p313Start, imm313Dashed),
 
-  # SWAP's
-  # mask is `{eaDn}` on Table 3-7 p.3-25's `Dn` operand syntax and Table
-  # 3-12 p.3-27's `swap Dx` row, timed 1(0/0) under Rn with a dash in all
-  # seven other columns, both read from RENDERED pages.
+  # SWAP's mask is `{eaDn}` on Table 3-7 p.3-25's `Dn` operand syntax and
+  # Table 3-12 p.3-27's `swap Dx` row, timed 1(0/0) under Rn with a dash in
+  # every other column, both read from RENDERED pages.
   cov(opSwap, famMove, mDn, mAnInd, whyDashMemory312),
 
   # --- control addressing: a register is not a control address.
@@ -980,7 +964,7 @@ block:
 # because both sides of that equality read whatever single mask the arm
 # returns.
 #
-# The source is the CFPRM and the assembler, and they agree on every cell.
+# THE MANUAL AND THE ASSEMBLER AGREE ON EVERY CELL. The source is the CFPRM.
 # The "Instruction Fields (Word)" addressing-mode table is on folios 4-32
 # (DIVS), 4-34 (DIVU), 4-55 (MULS) and 4-57 (MULU); the "Instruction Fields
 # (Longword)" one is on folios 4-32, 4-34, 4-56 (MULS) and 4-58 (MULU). The
@@ -998,8 +982,8 @@ block:
 # `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726) was offered all twelve
 # modes of all eight forms and answered the same 96 cells.
 #
-# `(d8,Ay,Xi)` IS NARROWER THAN DATA-ALTERABLE-MINUS-ABSOLUTE. The manual and
-# the assembler
+# `(d8,Ay,Xi)` IS THE CELL A DATA-ALTERABLE-MINUS-ABSOLUTE DESCRIPTION DOES
+# NOT EXCLUDE. The manual and the assembler
 # both drop the INDEXED mode as well, so the long mask is narrower again than
 # that. It is asserted here because a mask corrected only as far as the
 # description would still be wrong and nothing else would say so.
@@ -1085,12 +1069,11 @@ block:
 # `opMovem` arm admits all four, while the arm's own comment cites Table 3-14
 # as timing MOVEM under `(An)` and `(d16,An)` alone.
 #
-# That is not latent. On the wide mask `movem.l %d0-%d1,0x400.l` - hand-built
-# as `48f9 0003 0000 0400` - reaches the executor and completes its store,
-# leaving 0xAABBCCDD at 0x400 and 0x11223344 at 0x404 with `fault` false.
-# `tests/t_move.nim` carries that case at the execution level; this block
-# carries the mask level, and block (19)'s `opMovem` row holds the whole mask
-# against a literal.
+# IT WAS NOT LATENT. Measured on the wide mask, before the
+# narrowing: `movem.l %d0-%d1,0x400.l` - hand-built as `48f9 0003 0000 0400` -
+# reached the executor and COMPLETED ITS STORE, leaving 0xAABBCCDD at 0x400
+# and 0x11223344 at 0x404 with `fault` false. `tests/t_move.nim` carries that
+# case at the execution level; this block carries the mask level.
 #
 # The source is the CFPRM and both directions agree, read as rendered images
 # (`pdftoppm -r 200`) and not from any OCR text:
@@ -1106,7 +1089,7 @@ block:
 # `(d8,PC,Xi)`. The two tables are the same shape cell for cell, so the mask
 # does not depend on the direction and one mask can serve both.
 #
-# TWO INDEPENDENT TOOLCHAIN ORACLES AGREE, both run 2026-08-11:
+# TWO INDEPENDENT TOOLCHAIN ORACLES AGREE:
 #
 #   - `m68k-elf-as -mcpu=5307` assembles `movem.l %d0-%d1,(%a0)` (`48d0 0003`)
 #     and `movem.l %d0-%d1,(4,%a0)` (`48e8 0003 0004`) and the two
@@ -1486,7 +1469,7 @@ block:
   # shape of miss the `coverage` enumeration exists to turn LOUD one level up.
   #
   # A COUNT IS NOT A KEY SET, AND A TRANSCRIPTION SLIP IS WHAT SEPARATES THEM.
-  # Measured 2026-08-12 with the count form in place: replacing the `opCmpi` row
+  # Measured with the count form in place: replacing the `opCmpi` row
   # with a DUPLICATE `opMove` row held the count at 51 and the case total at its
   # constant, the whole suite stayed green, and a two-mode widening of `opCmpi`
   # then red NOTHING ANYWHERE - 0 cases, the baseline exactly. The comparison
@@ -1495,7 +1478,7 @@ block:
   # AND THE SIZE AXIS IS WALKED OVER EVERY SIZE THE KEY ADMITS, NOT OVER TWO.
   # The count form asked `eaLegalityFor` at the word and long sizes alone, so a
   # mask that differed at BYTE size alone was pinned by no row and missed by the
-  # count: measured 2026-08-12, `opAnd` split from `opOr` at byte size only red
+  # count: measured, `opAnd` split from `opOr` at byte size only red
   # 0 cases across the suite and left the row count where it was. Nothing
   # branches on byte today, which is what makes that latent rather than live -
   # the bit operations are the obvious future case - and the key is a `uint8`,
@@ -1647,7 +1630,7 @@ block:
 # ran, so one block deleted and another of the same size added in a single
 # change passes.
 
-const caseTotalMustMatchTranscripts = 446
+const caseTotalMustMatchTranscripts = 451
   ## The total the summary line prints. Its value is written down once in this
   ## repository - here - and the sites that need the denominator name the
   ## constant instead of copying it. The case below is what refuses to let it

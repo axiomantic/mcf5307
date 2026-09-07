@@ -235,7 +235,7 @@ EA_DECOY_WINDOW = (0x0B, 0xAD, 0xC0, 0xDE, 0x1F, 0x2E, 0x3D, 0x4C)
 
 # The absolute-long address, and the address its two halves swapped.
 #
-# `(xxx).L` carries its address in two extension words. MCF5307 User's Manual
+# `(xxx).L` carries its address in TWO extension words. MCF5307 User's Manual
 # section 3.7.2, "Organization of Integer Data Formats in Memory", page 3-19:
 # "The address N of a longword data item corresponds to the address of the high
 # order word. The lower order word is located at address N + 2." The first
@@ -331,8 +331,7 @@ def lw(addr, value):
 
 
 # ---------------------------------------------------------------------------
-# The control group's own seeds: the stack, the branch targets and the vector
-# table.
+# The control group's seeds: the stack, the branch targets and the vector table.
 #
 # The stack must be inside the runner's board and the default is not.
 # `conformance/runner.cpp` resets A7 to 0x400000 and its board is 1 MiB, so a
@@ -359,14 +358,13 @@ CTRL_GUARD_AT = CTRL_STACK              # at the incoming A7
 CTRL_TARGET = 0x00054320
 CTRL_TARGET_2 = 0x00098760
 
-# The exception vector table. MCF5307 User's Manual Table 3-1, "Exception
+# THE EXCEPTION VECTOR TABLE. MCF5307 User's Manual Table 3-1, "Exception
 # Vector Assignments", page 3-13: `TRAP #0-15` are vector numbers 32 to 47 at
 # vector offsets $080 to $0BC, and the vector offset is 4 x vector_number. The
 # table is based at the vector base register, whose reset value is zero
 # (Table 3-1's own offsets, and the VBR reset value $00000000 in the memory
-# map), and the core has no VBR register yet. So the
-# vector longword of `trap #n` is at 4 * (32 + n) and these two cases seed
-# exactly that.
+# map), and these cases do not write it. So the vector longword of `trap #n`
+# is at 4 * (32 + n) and these two cases seed exactly that.
 TRAP_VECTOR_0 = 4 * 32                  # $080
 TRAP_VECTOR_15 = 4 * 47                 # $0BC
 
@@ -1008,10 +1006,11 @@ CASES = {
 
         # ---------------------------------- THE WORD MULTIPLY AND DIVIDE
         #
-        # THESE ARE REAL INSTRUCTIONS - `m68k-elf-as -mcpu=5307` assembles all
-        # four, CFPRM folios 4-31, 4-33, 4-55 and 4-57 each print a "(Word)"
-        # instruction format, and MCF5307 User's Manual Table 3-13 p.3-28 times
-        # all four.
+        # The word forms of multiply and divide - opmodes 011 and 111 of
+        # lines 1000 and 1100 - are real instructions: `m68k-elf-as
+        # -mcpu=5307` assembles them, CFPRM folios 4-31, 4-33, 4-55 and 4-57
+        # each print a "(Word)" instruction format, and MCF5307 User's Manual
+        # Table 3-13 p.3-28 times them.
         #
         # EVERY EXPECTED VALUE BELOW IS DERIVED FROM THE FOLIOS AND NOT FROM
         # THIS PROJECT'S CORE. This generator takes only the ENCODING from the
@@ -1108,7 +1107,8 @@ CASES = {
         },
         {
             # N COMES FROM THE QUOTIENT AND NOT FROM THE LONGWORD WRITTEN.
-            # Folios 4-31 and 4-33: "N ... set if the QUOTIENT is negative".
+            # CFPRM folios 4-31 and 4-33: "N ... set if the QUOTIENT is
+            # negative".
             # -17 / -5 is quotient +3 with remainder -2, so the register's bit
             # 31 is SET while the quotient is positive; a core taking N from
             # the register it just wrote reports the remainder's sign and
@@ -1173,9 +1173,10 @@ CASES = {
 
         # -------------------------------------------- DIVS, REMU and REMS
         #
-        # The cases below are chosen to be DISCRIMINATING on the status word,
-        # which is the half of these instructions that a plausible wrong
-        # implementation gets wrong while still writing the right register.
+        # The DIVS, REMU and REMS cases below are each chosen to be
+        # DISCRIMINATING on the status word, which is the half of these
+        # instructions that a plausible wrong implementation gets wrong while
+        # still writing the right register.
         {
             # AN OVERFLOW CLEARS N AND Z. CFPRM folios 4-31 and 4-33: "N
             # Cleared if overflow is detected", "Z Cleared if overflow is
@@ -1344,9 +1345,9 @@ CASES = {
     # ASL'S V IS SETTLED, AND THE CFPRM SETTLES IT. Folio 4-12 gives V a flat
     # "Always cleared" and adds "Note that CCR[V] is always cleared by ASL and
     # ASR, unlike on the 68K family processors"; folio 4-11 says "The overflow
-    # bit is always zero". ColdFire computes no ASL overflow at all, so there
-    # is no dichotomy to hedge and no count that separates anything. The shift
-    # count of a V case is free to be whatever the case needs.
+    # bit is always zero". ColdFire computes no ASL overflow at all, so
+    # there is no dichotomy to hedge and no count that separates anything. The
+    # shift count of a V case is free to be whatever the case needs.
     #
     # The register shift count of zero carries no `sr`, for the same reason:
     # what a zero count does to C is a rule this project cannot cite today. The
@@ -2222,7 +2223,7 @@ CASES = {
         # All three sizes exist here and the manual prints all three. Table
         # 3-12, page 3-27, carries a `tst.b`, a `tst.w` AND a `tst.l` row, each
         # timed under every one of `Rn`, `(An)`, `(An)+`, `-(An)`, `(d16,An)`,
-        # `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx` - no dash anywhere in the three
+        # `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx` - no dash anywhere in those
         # rows. TST is the ONE instruction in this group that keeps the byte and
         # word forms the rest of the core traps, and `m68k-elf-as -mcpu=5307`
         # agrees: it accepts `tst.b %d0`, `tst.w %d0` and `tst.l #5`.
@@ -2534,8 +2535,8 @@ CASES = {
         #
         # BOTH READ `ea.nim`'s `eaControl7`, which holds the full control
         # mode-7 class with `(xxx).W` in it. MOVEM reads neither and carries
-        # `{eaAnInd, eaAnDisp}`, because folios 4-50 and 4-51 dash every row
-        # but `(An)` and `(d16,An)`.
+        # `{eaAnInd, eaAnDisp}`, because CFPRM folios 4-50 and 4-51 dash every
+        # row but `(An)` and `(d16,An)`.
         {
             "name": "jmp_indirect",
             "mnemonic": "jmp",
@@ -2671,7 +2672,7 @@ CASES = {
         # format value to the auto-incremented address after the fetch of the
         # first longword", which is SP + 4 + FORMAT.
         #
-        # THAT IS THE INVERSE OF TABLE 3-2, page 3-14, and the four cases below
+        # THAT IS THE INVERSE OF TABLE 3-2, page 3-14, and the cases below
         # are that table's four rows read backwards: a frame whose format is
         # 4, 5, 6 or 7 restores an A7 of SP + 8, SP + 9, SP + 10 or SP + 11.
         # A core that added a fixed 8 passes the first case and fails the other

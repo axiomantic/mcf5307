@@ -2,8 +2,8 @@
 ##
 ## This file exists beside `mcf5307_conformance_alu` because it carries the
 ## sticky-Z rule of ADDX/SUBX/NEGX, the trap cases for encodings this part
-## does not have, and the direct reads of `eaIsLegalFor`, none of which the
-## corpus expresses. Redundancy between a generated corpus and a hand-written
+## does not have, and the direct reads of `eaIsLegalFor`.
+## Redundancy between a generated corpus and a hand-written
 ## case is not duplication to remove.
 ##
 ## Half of this instruction group is the condition codes: `ADDX`, `SUBX` and
@@ -414,8 +414,8 @@ block:
   # 0x10000 squared is 0x1_0000_0000, whose low 32 bits are zero, so this case
   # really is indistinguishable from a multiply by zero on this part - and
   # CFPRM folio 4-57 says so: V "Always cleared", "Note that CCR[V] is always
-  # cleared by MULU, unlike the 68K family processors". The case enters with V
-  # set so that a core which never writes V fails it too.
+  # cleared by MULU, unlike the 68K family processors". THE CASE ENTERS WITH V
+  # SET.
   expectD(runIns([0x4C00'u16, 0x1000'u16],
                  d = [0x10000'u32, 0x10000'u32, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrV),
@@ -438,10 +438,10 @@ block:
                  d = [0xFFFFFFFF'u32, 3, 0, 0, 0, 0, 0, 0]),
     1, 0xFFFFFFFD'u32, srBase or ccrN, "muls.l -1 * 3 = -3")
 
-  # MULS clears V on the same terms. -0x10000 * 0x10000 is -0x1_0000_0000,
+  # MULS CLEARS V ON THE SAME TERMS. -0x10000 * 0x10000 is -0x1_0000_0000,
   # which no signed 32-bit result holds, and V is STILL clear: CFPRM folio
   # 4-55, V "Always cleared", "Note that CCR[V] is always cleared by MULS,
-  # unlike the 68K family processors". The case enters with V set.
+  # unlike the 68K family processors". THE CASE ENTERS WITH V SET.
   expectD(runIns([0x4C00'u16, 0x1800'u16],
                  d = [0xFFFF0000'u32, 0x10000'u32, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrV),
@@ -499,8 +499,8 @@ block:
   check(gotS == wantS, "rems.l -17 rem 5 = -2, signed by the dividend",
     $gotS, $wantS)
 
-  # N and Z come from the quotient, not from the remainder the instruction
-  # writes. CFPRM folios 4-70 and 4-71: "N ... set if the quotient is negative,
+  # N AND Z COME FROM THE QUOTIENT, NOT FROM THE REMAINDER THE INSTRUCTION
+  # WRITES. CFPRM folios 4-70 and 4-71: "N ... set if the quotient is negative,
   # cleared if positive", "Z ... set if the quotient is zero, cleared if
   # nonzero". The register still takes the REMAINDER - "Destination/Source ->
   # Remainder" - so the two halves of each case below come from different
@@ -604,7 +604,7 @@ block:
   expectD(runIns([0xC2C0'u16], d = [3'u32, 4, 0, 0, 0, 0, 0, 0]),
     1, 12'u32, srBase, "mulu.w 3 * 4 = 12")
 
-  # The upper word of either operand is ignored on input. CFPRM folio 4-57:
+  # THE UPPER WORD OF EITHER OPERAND IS IGNORED ON INPUT. CFPRM folio 4-57:
   # "A register operand is the low-order word; the upper word of the register
   # is ignored." Both registers carry a distinctive upper half here.
   expectD(runIns([0xC2C0'u16],
@@ -635,11 +635,11 @@ block:
     1, 0xFFFFFFFD'u32, srBase or ccrN,
     "muls.w IGNORES the upper word of the source AND of the destination")
 
-  # V is always cleared on this part, and the word form inherits that from the
+  # V IS ALWAYS CLEARED ON THIS PART, and the word form inherits that from the
   # same condition-code table the long form reads: folios 4-55 and 4-57 print
   # one table each, above the word Instruction Format, and neither
-  # continuation page (4-56, 4-58) carries a second. The case enters with V
-  # set so that a core which never writes V fails it too.
+  # continuation page (4-56, 4-58) carries a second. THE CASE ENTERS WITH V
+  # SET.
   expectD(runIns([0xC2C0'u16], d = [0'u32, 5, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrV),
     1, 0'u32, srBase or ccrZ, "mulu.w by zero CLEARS V and sets Z")
@@ -648,8 +648,8 @@ block:
     1, 0'u32, srBase or ccrZ, "muls.w by zero CLEARS V and sets Z")
 
 block:
-  # (d) DIVU.W. `divu.w %d0,%d1` is `82c0`. The result is one longword holding
-  # two halves: folios 4-31 and 4-33 both read "the 16-bit quotient is in the
+  # (d) DIVU.W. `divu.w %d0,%d1` is `82c0`. THE RESULT IS ONE LONGWORD HOLDING
+  # TWO HALVES: folios 4-31 and 4-33 both read "the 16-bit quotient is in the
   # lower word and the 16-bit remainder is in the upper word of the
   # destination".
   expectD(runIns([0x82C0'u16], d = [3'u32, 17, 0, 0, 0, 0, 0, 0]),
@@ -688,13 +688,13 @@ block:
     "divs.w -17 / -5 = +3 remainder -2: N comes from the QUOTIENT, not bit 31")
 
 block:
-  # (f) The word-form overflow. Folios 4-31 and 4-33: "An overflow occurs if
+  # (f) THE WORD-FORM OVERFLOW. Folios 4-31 and 4-33: "An overflow occurs if
   # the quotient is larger than a 16-bit (.W) or 32-bit (.L) signed integer"
   # (unsigned, on DIVU). "If overflow is detected, the destination register is
   # unaffected."
   #
-  # Each case enters with N, Z and C set and X set, so it pins all five bits:
-  # V set, N and Z cleared ("Cleared if overflow is detected"), C cleared
+  # EACH CASE ENTERS WITH N, Z AND C SET AND X SET, so it pins all five bits:
+  # V set, N and Z CLEARED ("Cleared if overflow is detected"), C cleared
   # ("Always cleared") and X carried through ("Not affected").
   expectD(runIns([0x82C0'u16], d = [1'u32, 0x00100000'u32, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrN or ccrZ or ccrC or ccrX),
@@ -731,11 +731,11 @@ block:
     "divs.w whose quotient is -32769 DOES overflow")
 
 block:
-  # (g) Division by zero is a trap. CFPRM folios 4-31 and 4-33: "An attempt to
+  # (g) DIVISION BY ZERO IS A TRAP. CFPRM folios 4-31 and 4-33: "An attempt to
   # divide by zero results in a divide-by-zero exception and no registers are
   # affected." Table 11-1 on folio 11-2 assigns it vector 5 at offset 0x014,
-  # of class Fault - the PC of the faulting instruction. There is no exception
-  # model yet, so the core halts with `fault`, which is the channel the long
+  # of class Fault - the PC of the faulting instruction. THERE IS NO EXCEPTION
+  # MODEL YET, so the core halts with `fault`, which is the channel the long
   # form already uses.
   expectTrapD(runIns([0x82C0'u16], d = [0'u32, 17, 0, 0, 0, 0, 0, 0]),
     1, 17'u32, "divu.w by zero traps")
@@ -754,15 +754,15 @@ block:
     1, 17'u32, "divs.w by a source whose LOW WORD is zero traps")
 
 block:
-  # (h) The word form's operand class is wider than the long form's, and these
+  # (h) THE WORD FORM'S OPERAND CLASS IS WIDER THAN THE LONG FORM'S, and these
   # cases execute the three modes that separate them. The CFPRM prints an
   # "Instruction Fields (Word)" table on folios 4-32 (DIVS), 4-34 (DIVU),
   # 4-55 (MULS) and 4-57 (MULU) and an "Instruction Fields (Longword)" table
   # on folios 4-32, 4-34, 4-56 (MULS) and 4-58 (MULU) - the DIVS and DIVU
   # entries carry both on one continuation folio, the MULS and MULU entries
   # split them across the entry's two folios - and the word table carries
-  # `(xxx).W`, `(xxx).L`, `#<data>`, `(d16,PC)`
-  # and `(d8,PC,Xi)` where the longword table prints a dash for every one.
+  # `(xxx).W`, `(xxx).L`, `#<data>`, `(d16,PC)` and `(d8,PC,Xi)` where the
+  # longword table prints a dash for every one.
   # `m68k-elf-as -mcpu=5307` agrees on all twelve modes of all eight forms.
   #
   # `mulu.w #5,%d1` is `c2fc 0005`.
