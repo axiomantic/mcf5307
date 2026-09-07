@@ -31,7 +31,7 @@
 ##
 ## Register numbering, the condition-code bit positions and addressing-mode
 ## behaviour are taken from the ColdFire Family Programmer's Reference Manual
-## and the MCF5307 User's Manual, and from this project's own measurements.
+## and the MCF5407 User's Manual, and from this project's own measurements.
 
 import mcf5307/bus
 import mcf5307/decode_types
@@ -285,16 +285,23 @@ proc stackingWrite(ctx: MCF5307Ctx; address: uint32; size: uint8;
 # `cpu.nim`'s `step` holds.
 #
 # The write path needs no unwind, which is why it is wired and the read is not.
-# The rule's one named exception is the operand write, and User's Manual
-# section 3.5.1, folio 3-14, is why: "All programming model updates associated
+# The rule's one named exception is the operand write. THE SOURCE IS THE
+# MCF5307 MANUAL AND IS CITED AS SUCH BECAUSE THE MCF5407 MANUAL DROPS THE
+# SENTENCE: MCF5307 User's Manual
+# section 3.5.1, printed page 3-15: "All programming model updates associated
 # with the write instruction are completed." An executor that carries on after
-# a write fault is doing what the reference requires. The only access error
+# a write fault is doing what the reference requires. The MCF5407 keeps the
+# decoupled write path that sentence describes (section 4.9.5.2.1, folio 4-18)
+# and keeps the write-protect-only access error (Table 2-22, folio 2-34:
+# "Access errors are reported only in conjunction with an attempted store to
+# write-protected memory"), so the reading carries over even though the
+# sentence does not. The only access error
 # this part raises is a store to write-protected space, which puts the real
 # case on this side too.
 #
 # It does need the vector to be taken after the instruction rather than inside
 # it, which is the same sentence read to its end. An instruction whose
-# remaining updates are required to complete cannot have section 3.3's
+# remaining updates are required to complete cannot have section 2.8's
 # exception-processing steps run in the middle of it: those steps assign A7 and
 # the program counter, and the updates that must still complete would then be
 # computed from, or would overwrite, the handler's state. `writeMem` therefore
@@ -309,9 +316,14 @@ proc writeMem*(ctx: MCF5307Ctx; address: uint32; size: uint8; value: uint32) =
   boardWrite(ctx, address, size, value, st)
   if st != Mcf5307BusStatus.busOk and not ctx.pendingWriteFault:
     # The first faulted store of an instruction is the one reported, and the
-    # manual settles neither this nor its alternative. Section 3.5.1 says the
+    # manual settles neither this nor its alternative. MCF5307 section 3.5.1
+    # says the
     # reporting is imprecise and names the NOP instruction as the way to
-    # collect a write error; it says nothing about a second faulted store
+    # collect a write error - the MCF5407 keeps only the second half of that,
+    # in section 4.9.5.2.1, folio 4-19: "Supervisor instructions, the NOP
+    # instruction, and exception processing synchronize the processor core and
+    # guarantee the push and store buffers are empty before proceeding."
+    # Neither manual says anything about a second faulted store
     # before that collection. `movem.l` writing a register list into refused
     # space is the one instruction in this core that can raise the question.
     # The first is kept because it is the one whose captured program counter
@@ -364,7 +376,7 @@ proc indexOperand*(ctx: MCF5307Ctx; ext: uint16): uint32 =
   ## so a word/long select read there answers word for every legal encoding.
   ##
   ## The manual does not print the extension word's layout. There is no
-  ## brief-format figure anywhere in the MCF5307 User's Manual, so the pinned
+  ## brief-format figure anywhere in the MCF5407 User's Manual, so the pinned
   ## assembler is the authority for the bit position: `btst %d1,(4,%pc,%d2)`
   ## assembles to `033b 2804`, whose `2804` has bit 11 set and bit 8 clear, and
   ## `m68k-elf-objdump -m m68k:5307` prints `%pc@(0x6,%d2:l)` - `:l`, a long
@@ -372,9 +384,10 @@ proc indexOperand*(ctx: MCF5307Ctx; ext: uint16): uint32 =
   ## `2c04`, which moves bits 10..9 alone.
   ##
   ## The word form does not exist here.
-  ## Section 3.5.2, "Address Error Exception", page 3-15: "Any attempted use of
-  ## a word-sized index register (Xi.w) or a scale factor of 8 on an indexed
-  ## effective addressing mode generates an address error". `m68k-elf-as
+  ## The "Address Error" row of Table 2-22, "MCF5407 Exceptions", section
+  ## 2.8.2, folio 2-34, gives among its causes "an attempted use of
+  ## a word-sized index register (Xi.w) or a scale factor of
+  ## 8 on an indexed effective addressing mode". `m68k-elf-as
   ## -mcpu=5307` agrees and rejects `btst %d1,(4,%pc,%d2.w)`, so bit 11 is set
   ## in every encoding this core can legally be given and the narrowing branch
   ## below is unreachable from assembled code.
@@ -398,9 +411,11 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
   ## What this procedure does not know. Two things; the implementation picks a
   ## behaviour and nothing asserts it.
   ##
-  ##   1. The address error of an illegal index. MCF5307 User's Manual section
-  ##      3.5.2, page 3-15, says a word-sized index register or a scale factor
-  ##      of 8 "generates an address error". `indexOperand` raises no such
+  ##   1. The address error of an illegal index. MCF5407 User's Manual
+  ##      Table 2-22, "Address Error", folio 2-34, names a word-sized index
+  ##      register or a scale factor
+  ##      of 8 among the causes of an address error. `indexOperand` raises no
+  ##      such
   ##      error: it narrows the word index and it applies the scale of 8. No
   ##      case reaches either, because `m68k-elf-as -mcpu=5307` refuses to
   ##      assemble `(4,%pc,%d2.w)` and `(4,%pc,%d2*8)`, so the corpus - which
@@ -429,10 +444,10 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
     of ea7AbsW:
       result = uint32(s16(fetchExt(ctx)))
     of ea7AbsL:
-      # THE FIRST EXTENSION WORD IS THE HIGH HALF OF THE ADDRESS. MCF5307
-      # User's Manual section 3.7.2, "Organization of Integer Data Formats in
-      # Memory", page 3-19: "The address N of a longword data item corresponds
-      # to the address of the high order word. The lower order word is located
+      # THE FIRST EXTENSION WORD IS THE HIGH HALF OF THE ADDRESS. MCF5407
+      # User's Manual section 2.4.2, "Organization of Integer Data Formats in
+      # Memory", folio 2-14: "The address N of a longword data item corresponds
+      # to the address of the high-order word. The lower order word is located
       # at address N + 2." The extension pair is a longword in the instruction
       # stream, so the word at the lower address is the high half.
       # `m68k-elf-as -mcpu=5307` agrees: `btst %d1,0x00030004` assembles to
@@ -445,8 +460,8 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
       # taken before `fetchExt` advances the program counter past it. The
       # indexed PC mode below takes its base the same way.
       #
-      # The manual does not settle this. The MCF5307 User's Manual names
-      # `(d16,PC)` and `(d8,PC,Xi)` in Table 3-5 (page 3-21) and prints no
+      # The manual does not settle this. The MCF5407 User's Manual names
+      # `(d16,PC)` and `(d8,PC,Xi*SF)` in Table 2-5 (folio 2-15) and prints no
       # effective-address equation for any mode, so the authority here is the
       # pinned assembler. Measured: `btst %d1,(target,%pc)` with the opcode at
       # 0 assembles to `033a 0004` and `target` is placed at 6, and
@@ -586,7 +601,8 @@ proc eaRefWrite*(ctx: MCF5307Ctx; r: EaRef; size: uint8; value: uint32) =
 # format-error path all need the same frame, and `exception.nim` is a sibling
 # of `control.nim`.
 
-# User's Manual section 3.2.2.1, folio 3-10, prints the whole 16-bit status
+# User's Manual section 2.2.2.1, "Status Register (SR)", Figure 2-5, folio
+# 2-11, prints the whole 16-bit status
 # register over its bit numbers: T at 15, S at 13, M at 12 and I[2:0] at bits
 # 10 to 8. `srMaster` sits with the bits `takeException` writes because a
 # status-register bit position is a fact about the register and not about the
@@ -599,9 +615,11 @@ const
 proc exceptionFrameBase*(sp: uint32): uint32 =
   ## Where the two-longword frame goes, and it is not simply `sp - 8`.
   ##
-  ## MCF5307 User's Manual section 3.3, page 3-11: "the exception stack frame
+  ## MCF5407 User's Manual section 2.8, folio 2-31, step 3: "the exception
+  ## stack frame
   ## is created at a 0-modulo-4 address on the top of the current system
-  ## stack". Table 3-2, "Format Field Encoding", page 3-14, gives the cases: an
+  ## stack". Table 2-20, "Format Field Encoding", folio 2-33, gives the cases:
+  ## an
   ## A7 whose low two bits are 00, 01, 10 or 11 leaves the handler with A7-8,
   ## A7-9, A7-10 or A7-11, and each of those results is 0-modulo-4. That is
   ## this expression.
@@ -609,7 +627,7 @@ proc exceptionFrameBase*(sp: uint32): uint32 =
 
 proc exceptionFormat*(sp: uint32): uint32 =
   ## The format field of the frame the stack pointer `sp` produces: 4, 5, 6 or
-  ## 7, the four rows of Table 3-2 in order. It records the misalignment the
+  ## 7, the four rows of Table 2-20 in order. It records the misalignment the
   ## frame base removed, so that `RTE` can put it back.
   4'u32 + (sp and 3'u32)
 
@@ -619,31 +637,38 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## the vector table.
   ##
   ## The copy of the status register is a parameter rather than a read of
-  ## `ctx.sr`. Section 3.3's copy is taken as exception processing begins, and
+  ## `ctx.sr`. Section 2.8's copy is taken as exception processing begins, and
   ## for every exception whose processing begins where it is detected the two
   ## are the same word. The deferred access error of a faulted store is the one
   ## exception this core detects at one point and processes at another, and
-  ## section 3.5.1 requires the faulting instruction's remaining
+  ## the MCF5307 section 3.5.1 sentence quoted in `writeMem` above requires the
+  ## faulting instruction's remaining
   ## programming-model updates to run in between; the word it passes is the one
   ## the store saw.
   ##
-  ## The status register is copied before it is changed. Section 3.3, page
-  ## 3-11: "the processor makes an internal copy of the SR and then enters
-  ## supervisor mode by setting the S-bit and disabling trace mode by clearing
-  ## the T-bit". The COPY is what reaches the frame; the modified word is what
-  ## the handler runs under. The M-bit and the interrupt priority mask are
+  ## The status register is copied before it is changed. Section 2.8, folio
+  ## 2-31, step 1: "The processor makes an internal copy of the SR and then
+  ## enters
+  ## supervisor mode by setting SR[S] and disabling trace mode by clearing
+  ## SR[T]." The COPY is what reaches the frame; the modified word is what
+  ## the handler runs under. SR[M] and the interrupt priority mask are
   ## changed only by an INTERRUPT exception, so nothing here touches them.
   ##
-  ## The frame is two longword writes and not six bytewise pushes. Figure 3-7,
-  ## page 3-13, draws it as two longwords - the format/vector word above the
-  ## status register, then the program counter - and Table 3-14, page 3-29,
+  ## The frame is two longword writes and not six bytewise pushes. Figure 2-1,
+  ## "Exception Stack Frame Form",
+  ## folio 2-33, draws it as two longwords - the format/vector word above the
+  ## status register, then the program counter - and Table 2-16, folio 2-29,
   ## gives `trap #imm` a cost of `18(1/2)`: ONE read, the vector, and TWO
-  ## writes. Table 3-7's `TRAP` row on page 3-25 spells the same thing as
+  ## writes. Table 2-8's `TRAP` row on folio 2-22 spells the same thing as
   ## `SP-4;PC`, `SP-2;SR`, `SP-2;Format`, which agrees whenever A7 was already
   ## longword aligned and does not show the self-alignment at all.
   ##
-  ## The vector table is based at VBR. Section 3.3, page 3-12: the handler
-  ## address is "obtained by fetching a value from the table located at the
+  ## Cite that figure by title. The MCF5407 manual reuses the number: Figure
+  ## 2-1 is also "ColdFire Enhanced Pipeline" on folio 2-3.
+  ##
+  ## The vector table is based at VBR. Section 2.8, folio 2-31, step 4: the
+  ## handler
+  ## address is "obtained by fetching a value from the table at the
   ## address defined in the vector base register", indexed by
   ## `4 x vector_number`. `ctx.vbr` holds that base, `movec.nim` is what writes
   ## it, and `exception.nim`'s `vectorAddress` masks the low twenty bits the
@@ -673,8 +698,9 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
     return
   ctx.pc = handler
   # The handler's first instruction has not run, and that is a fact about the
-  # machine that outlives this call. MCF5307 User's Manual Table 3-1, closing
-  # paragraph, folio 3-13: "ColdFire processors inhibit sampling for interrupts
+  # machine that outlives this call. MCF5407 User's Manual, the paragraph
+  # closing Table 2-19 in section 2.8,
+  # folio 2-32: "ColdFire processors inhibit sampling for interrupts
   # during the first instruction of all exception handlers." `mcf5307_exec`
   # reads this field at its sample and clears it.
   #
@@ -689,10 +715,13 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ctx.atHandlerEntry = true
 
 # The `FS` argument is defaulted, and the default is the manual's answer rather
-# than this module's convenience. User's Manual section 3.4, folio 3-14, of the
-# fault status field: "This field is defined for access and address errors only
-# and written as zeros for all other types of exceptions." Its callers outside
-# this module are all "other types", so `0000` is what the manual writes for
+# than this module's convenience. User's Manual section 2.8.1, folio 2-33, of
+# the
+# fault status field: "The 4-bit field, FS[3-0], at the top of the system stack
+# is defined for access and address errors along with interrupted debug service
+# routines", and Table 2-21 on the same folio gives `0000` as "Not an access or
+# address error nor an interrupted debug service routine". Its callers outside
+# this module are none of those three, so `0000` is what the manual writes for
 # each of them, and a required parameter would make each of them state a value
 # the manual already fixes. `frameFirstLongword` keeps its own `fs` parameter
 # undefaulted, so the layout is still closed by the compiler one layer down.
@@ -700,7 +729,7 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
 proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
                     fs: uint32 = fsNotAnAccessError) =
   ## An exception whose processing begins where the fault was detected, so
-  ## section 3.3's copy of the status register is the live word.
+  ## section 2.8's copy of the status register is the live word.
   takeExceptionCopiedSr(ctx, vector, stackedPc, fs, ctx.sr and 0xFFFF'u32)
 
 proc takePendingWriteFault*(ctx: MCF5307Ctx) =
@@ -747,9 +776,10 @@ proc transferControl*(ctx: MCF5307Ctx; target: uint32; faultPc: uint32) =
   ## it is odd. `faultPc` is the address of the instruction doing the
   ## transferring.
   ##
-  ## "Any attempted execution transferring control to an odd instruction
-  ## address (i.e., if bit 0 of the target address is set) results in an
-  ## address error exception" - MCF5307 User's Manual, section 3.5.2. The
+  ## An address error is "Caused by an attempted execution transferring control
+  ## to an odd instruction address (that is, if bit 0 of the target address is
+  ## set)" - MCF5407 User's Manual, Table 2-22, "Address Error", section 2.8.2,
+  ## folio 2-34. The
   ## Programmer's Reference Manual, Rev. 3 assigns the vector and stops there:
   ## its section 11.1.3 names a table of processor exceptions that the revision
   ## does not carry, so nothing in it says what raises this one.
@@ -759,17 +789,23 @@ proc transferControl*(ctx: MCF5307Ctx; target: uint32; faultPc: uint32) =
   ##
   ## The stacked program counter is the transferring instruction's, not the odd
   ## address and not the instruction after it: vector 3 is marked `Fault` in
-  ## the vector assignments, and "fault refers to the PC of the instruction
+  ## Table 2-19, "Exception Vector Assignments", folio 2-32, whose footnote
+  ## reads "The term 'fault' refers to the PC of the instruction
   ## that caused the exception".
   ##
-  ## `fsInstructionFetch` is the fault status. The field is defined for access
-  ## and address errors, and `0100` - "error on instruction fetch" - is the one
+  ## `fsInstructionFetch` is the fault status. Table 2-21, "Fault Status
+  ## Encodings", folio 2-33: the field is defined for access
+  ## and address errors, and `0100` - "Error on instruction fetch" - is the one
   ## defined code naming the access this exception exists to refuse.
   ##
   ## The program counter loaded by `takeException` itself is not checked here,
   ## and a vector table entry with bit 0 set therefore still enters a handler
   ## at an odd address. The manual puts that case in the fault-on-fault halted
-  ## state, which this core has no representation for yet; routing the handler
+  ## state - the paragraph closing section 2.8.2, folio 2-35: "If a ColdFire
+  ## processor encounters any type of fault during the exception processing of
+  ## another fault, the processor immediately halts execution with the
+  ## catastrophic fault-on-fault condition." This core has no representation
+  ## for it yet; routing the handler
   ## address through this procedure would recurse instead.
   if (target and 1'u32) != 0'u32:
     takeException(ctx, vecAddressError, faultPc, fsInstructionFetch)

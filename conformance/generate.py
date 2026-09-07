@@ -235,10 +235,10 @@ EA_DECOY_WINDOW = (0x0B, 0xAD, 0xC0, 0xDE, 0x1F, 0x2E, 0x3D, 0x4C)
 
 # The absolute-long address, and the address its two halves swapped.
 #
-# `(xxx).L` carries its address in TWO extension words. MCF5307 User's Manual
-# section 3.7.2, "Organization of Integer Data Formats in Memory", page 3-19:
-# "The address N of a longword data item corresponds to the address of the high
-# order word. The lower order word is located at address N + 2." The first
+# `(xxx).L` carries its address in TWO extension words. MCF5407 User's Manual
+# section 2.4.2, "Organization of Integer Data Formats in Memory", page 2-14:
+# "The address N of a longword data item corresponds to the address of the
+# high-order word. The lower order word is located at address N + 2." The first
 # extension word is therefore the high half. `m68k-elf-as -mcpu=5307` agrees:
 # `btst %d1,0x00030004` assembles to `0339 0003 0004`.
 #
@@ -272,8 +272,9 @@ EXEC_BASE = 0x10000
 # its displacement word at `EXEC_BASE + 2`, so the operand is at
 # `EXEC_BASE + 2 + PC_DISP`.
 #
-# The manual does not state this - it gives `(d16,PC)` a row in Table 3-5 and
-# no effective-address equation anywhere - so the authority is the pinned
+# The manual does not state this - MCF5407 User's Manual Table 2-5, "ColdFire
+# Effective Addressing Modes", page 2-15, gives `(d16,PC)` a row and prints no
+# effective-address equation beside it - so the authority is the pinned
 # assembler. Measured: `btst %d1,(target,%pc)` with the opcode at 0 assembles
 # to `033a 0004` and the linker places `target` at 6, and
 # `m68k-elf-objdump -m m68k:5307` prints `btst %d1,%pc@(6 <target>)`. Base
@@ -301,11 +302,14 @@ PC_OPERAND = EXEC_BASE + 2 + PC_DISP
 # therefore land 65536 bytes apart, both inside the runner's 1 MiB board, and
 # each case seeds `EA_WINDOW` at one and `EA_DECOY_WINDOW` at the other.
 #
-# The manual does not print the extension word's layout - there is no
-# brief-format figure anywhere in it - so the assembler is the authority for
-# the bit position. What the manual does say is section 3.5.2, "Address Error
-# Exception", page 3-15: "Any attempted use of a word-sized index register
-# (Xi.w) ... generates an address error". `m68k-elf-as -mcpu=5307` agrees and
+# The manual does not print the extension word's layout - MCF5407 User's
+# Manual Table 2-5, page 2-15, names the mode `(d8,An,Xi*SF)` and no figure
+# beside it gives the word's bit fields - so the assembler is the authority for
+# the bit position. What the manual does say is Table 2-22, "MCF5407
+# Exceptions", section 2.8.2, page 2-34, whose Address Error row gives "an
+# attempted use of a word-sized index register (Xi.w) or a scale factor of 8 on
+# an indexed effective addressing mode" as a cause of the exception.
+# `m68k-elf-as -mcpu=5307` agrees and
 # rejects `btst %d1,(4,%pc,%d2.w)`, so on this part the select is always long
 # and a core reading bit 8 is wrong for every legal encoding.
 INDEX_D8 = 4
@@ -341,8 +345,9 @@ def lw(addr, value):
 #
 # `CTRL_STACK` is longword-aligned so that the TRAP cases which vary A7's low
 # two bits can do so by adding to it, and every one of them still writes its
-# frame at the same 0-modulo-4 address. Table 3-2 of the MCF5307 User's Manual
-# (page 3-14) is the rule those cases assert; see the TRAP block below.
+# frame at the same 0-modulo-4 address. Table 2-20, "Format Field Encoding", of
+# the MCF5407 User's Manual (page 2-33) is the rule those cases assert; see the
+# TRAP block below.
 CTRL_STACK = 0x3000
 
 # The guard longword at the incoming A7. A push writes below the pointer, so
@@ -358,29 +363,38 @@ CTRL_GUARD_AT = CTRL_STACK              # at the incoming A7
 CTRL_TARGET = 0x00054320
 CTRL_TARGET_2 = 0x00098760
 
-# THE EXCEPTION VECTOR TABLE. MCF5307 User's Manual Table 3-1, "Exception
-# Vector Assignments", page 3-13: `TRAP #0-15` are vector numbers 32 to 47 at
-# vector offsets $080 to $0BC, and the vector offset is 4 x vector_number. The
-# table is based at the vector base register, whose reset value is zero
-# (Table 3-1's own offsets, and the VBR reset value $00000000 in the memory
-# map), and these cases do not write it. So the vector longword of `trap #n`
-# is at 4 * (32 + n) and these two cases seed exactly that.
-TRAP_VECTOR_0 = 4 * 32                  # $080
-TRAP_VECTOR_15 = 4 * 47                 # $0BC
+# THE EXCEPTION VECTOR TABLE. MCF5407 User's Manual Table 2-19, "Exception
+# Vector Assignments", page 2-32: `TRAP #0-15` are vector numbers 32 to 47 at
+# vector offsets 0x080 to 0x0BC, and section 2.8, page 2-31, gives the index
+# into the table as 4 x vector_number. The table is based at the vector base
+# register, whose reset value is zero (Table 2-19's own offsets, and the Reset
+# Exception row of Table 2-22, page 2-35: "the VBR is initialized to
+# 0x0000_0000"), and these cases do not write it. So the vector longword of
+# `trap #n` is at 4 * (32 + n) and these two cases seed exactly that.
+TRAP_VECTOR_0 = 4 * 32                  # 0x080
+TRAP_VECTOR_15 = 4 * 47                 # 0x0BC
 
 
 def frame_fv(fmt, vector, sr):
     """The first longword of an exception stack frame.
 
-    MCF5307 User's Manual Figure 3-7, "Exception Stack Frame Form", page 3-13:
-    the first longword holds the 16-bit format/vector word and the 16-bit
-    status register, with FORMAT in bits 31..28, FS[3:2] in 27..26,
+    MCF5407 User's Manual Figure 2-1, "Exception Stack Frame Form", folio 2-33
+    (cited by title, because the manual gives the number 2-1 to two different
+    figures): the first longword holds the 16-bit format/vector word and the
+    16-bit status register, with FORMAT in bits 31..28, FS[3:2] in 27..26,
     VECTOR[7:0] in 25..18, FS[1:0] in 17..16 and the status register in 15..0.
 
-    FS IS ZERO HERE AND THE MANUAL SAYS WHY. Table 3-3, "Fault Status
-    Encodings", page 3-14: `0000` is "Not an access or address error", and the
-    field "is defined for access and address errors only and written as zeros
-    for all other types of exceptions". A TRAP is neither.
+    FS IS ZERO HERE AND THE MANUAL SAYS WHY, THOUGH NOT IN THE WORDS THE
+    MCF5307'S DID. Table 2-21, "Fault Status Encodings", folio 2-33, gives
+    `0000` as "Not an access or address error nor an interrupted debug service
+    routine". A TRAP is none of those three, so the row covers it positively.
+
+    The older manual also carried a negative clause - the field "is defined for
+    access and address errors only and written as zeros for all other types of
+    exceptions" - and THIS MANUAL DROPS IT. Folio 2-33 says only that the field
+    "is defined for access and address errors along with interrupted debug
+    service routines", and never states what is written for anything else. The
+    conclusion is unchanged and now rests on the `0000` row alone.
     """
     return (fmt << 28) | (vector << 18) | sr
 
@@ -431,10 +445,14 @@ BCC_CONDITIONS = [
 
 # THE TWO DISPLACEMENT FORMS, AND THE FOUR PROGRAM COUNTERS THEY PRODUCE.
 #
-# `Bcc <label>` has an operand size of "8,16" and no other - MCF5307 User's
-# Manual Table 3-7, "Instruction Set Summary", page 3-23 - so a branch is
-# either two words or one. The four outcomes are four different program
-# counters and each one is asserted:
+# `Bcc <label>` has an operand size of ".B,.W,.L" in MCF5407 User's Manual
+# Table 2-8, "User-Level Instruction Set Summary", page 2-20, but the long form
+# is a Revision B addition: the per-core table under the Bcc description in
+# section 2.9, page 2-37, gives "V2, V3 Core - .b, .w" against "V4 Core - .b,
+# .w, .l". This corpus is assembled with `-mcpu=5307`, which is Revision A, so
+# only the byte and word forms appear and a branch here is either one word or
+# two. The four outcomes are four different program counters and each one is
+# asserted:
 #
 #   taken, byte form     opcode + 2 + d8      the displacement is in the opcode
 #   taken, word form     opcode + 2 + d16     the base is the DISPLACEMENT WORD
@@ -1009,8 +1027,9 @@ CASES = {
         # The word forms of multiply and divide - opmodes 011 and 111 of
         # lines 1000 and 1100 - are real instructions: `m68k-elf-as
         # -mcpu=5307` assembles them, CFPRM folios 4-31, 4-33, 4-55 and 4-57
-        # each print a "(Word)" instruction format, and MCF5307 User's Manual
-        # Table 3-13 p.3-28 times them.
+        # each print a "(Word)" instruction format, and MCF5407 User's Manual
+        # Table 2-15, "Two-Operand Instruction Execution Times", p.2-28 times
+        # them.
         #
         # EVERY EXPECTED VALUE BELOW IS DERIVED FROM THE FOLIOS AND NOT FROM
         # THIS PROJECT'S CORE. This generator takes only the ENCODING from the
@@ -1316,18 +1335,20 @@ CASES = {
     #
     #   AND, ANDI, OR, ORI, EOR, EORI, NOT
     #       N and Z from the 32-bit result, V and C cleared, X untouched. The
-    #       MCF5307 User's Manual section 3.2.1.5 defines V as set "if an
-    #       arithmetic overflow occurs", C as set on "a carryout of the operand
-    #       MSB ... for an addition, or ... a borrow ... in a subtraction", and
-    #       X as "set to the value of the C-bit for arithmetic operations;
-    #       otherwise not affected". A logical operation is neither an addition
+    #       MCF5407 User's Manual section 2.2.1.5, "Condition Code Register
+    #       (CCR)", and its Table 2-1, "CCR Field Descriptions", page 2-10,
+    #       define V as "Set if an arithmetic overflow occurs", C as "Set if a
+    #       carry-out of the data operand msb occurs for an addition or if a
+    #       borrow occurs in a subtraction", and X as "Assigned the value of the
+    #       carry bit for arithmetic operations; otherwise not affected or set
+    #       to a specified result". A logical operation is neither an addition
     #       nor a subtraction, so V and C are cleared and X is left alone. This
     #       is the same rule `setNzClearVc` in `src/mcf5307/machine.nim`
     #       already carries for MOVE.
     #
     #   BTST, BSET, BCLR, BCHG
-    #       Z alone. The manual's Table 3-7 gives the operation as
-    #       `~(<Bit Number> of Destination) -> Z` and names no other bit, so N,
+    #       Z alone. The manual's Table 2-8, page 2-20, gives the operation as
+    #       `~(<bit number> of destination) -> Z` and names no other bit, so N,
     #       V, C and X are untouched. Every bit case below therefore starts
     #       from a status word in which Z has the wrong value and asserts the
     #       whole word back: a case whose bit is set starts with Z set, and a
@@ -1336,10 +1357,11 @@ CASES = {
     #       writes Z at all.
     #
     #   LSL, LSR, ASL, ASR
-    #       X and C both take the last bit shifted out, which Table 3-7 states
-    #       directly for all four: `X/C <- (Dy << Dx) <- 0` for the two left
-    #       shifts and `MSB -> (Dy >> Dx) -> X/C`, `0 -> (Dy >> Dx) -> X/C` for
-    #       the two right ones. N and Z come from the result. V IS CLEARED BY
+    #       X and C both take the last bit shifted out, which Table 2-8 states
+    #       directly for all four: `X/C <- (Dx << Dy) <- 0` for the two left
+    #       shifts (ASL on page 2-20, LSL on page 2-21) and
+    #       `MSB -> (Dx >> Dy) -> X/C`, `0 -> (Dx >> Dy) -> X/C` for the two
+    #       right ones. N and Z come from the result. V IS CLEARED BY
     #       ALL FOUR, ASL INCLUDED.
     #
     # ASL'S V IS SETTLED, AND THE CFPRM SETTLES IT. Folio 4-12 gives V a flat
@@ -1542,9 +1564,10 @@ CASES = {
         # ----------------------------------------------------------- BTST
         #
         # A bit operation on a data register is 32 bits wide and one on memory
-        # is 8. That is the operand size column of MCF5307 User's Manual
-        # Table 3-7, which reads "8,32" for BTST, BSET, BCLR and BCHG and for
-        # no other instruction in this group. The two cases that pin it are
+        # is 8. That is the operand size column of MCF5407 User's Manual
+        # Table 2-8, page 2-20, which reads ".B,.L" for BTST, BSET, BCLR and
+        # BCHG and for no other instruction in this group. The two cases pinning
+        # it are
         # `btst_l_bit_number_above_a_byte` and
         # `btst_b_memory_operand_is_one_byte`. Each one picks a bit number
         # whose answer under the other width is the opposite, so neither can
@@ -1553,8 +1576,11 @@ CASES = {
         # Neither case uses a bit number its operand cannot hold, and that is
         # deliberate. `logic.nim` reduces an out-of-range bit number modulo the
         # operand width, and no passage of the User's Manual states any
-        # modulus - and Figure 3-8's `MODULO (OFFSET)` annotation does not
-        # settle it.
+        # modulus. MCF5407 User's Manual Figure 2-7, "Organization of Integer
+        # Data Formats in Data Registers", page 2-13, annotates the bit row
+        # `Bit (0 <= bit number <= 31)` and nothing further, which does not
+        # settle it. That reading is off a render of the page, not off a text
+        # extraction.
         # That reduction is this core's choice, and the corpus must not pin a
         # choice no document supports. The two cases below get the same
         # discrimination out of in-range numbers:
@@ -2005,27 +2031,28 @@ CASES = {
     # The condition-code rules of this group, and where each comes from.
     #
     #   NOP, BRA, BSR, Bcc, JMP, JSR, Scc
-    #       No condition code at all. MCF5307 User's Manual Table 3-7,
-    #       "Instruction Set Summary", pages 3-23 and 3-25, gives each of these
-    #       an operation column that names the program counter, the stack
-    #       pointer or the destination and no flag. Every one of these cases
-    #       therefore expects its incoming status word back byte for byte.
+    #       No condition code at all. MCF5407 User's Manual Table 2-8,
+    #       "User-Level Instruction Set Summary", pages 2-20 and 2-22, gives
+    #       each of these an operation column that names the program counter,
+    #       the stack pointer or the destination and no flag. Every one of these
+    #       cases therefore expects its incoming status word back byte for byte.
     #
     #   TST
-    #       "Set Integer Condition Codes" (Table 3-7, page 3-25) at the operand
-    #       size. N and Z from the operand, V and C cleared, X untouched -
-    #       section 3.2.1.5, page 3-8, defines V as an arithmetic overflow, C as
-    #       a carry out of an addition or a borrow in a subtraction, and TST
-    #       performs neither. That is `setNzClearVc`, the rule MOVE already has.
+    #       "Set condition codes" (Table 2-8, page 2-22) at the operand size.
+    #       N and Z from the operand, V and C cleared, X untouched - Table 2-1,
+    #       "CCR Field Descriptions", page 2-10, defines V as an arithmetic
+    #       overflow, C as a carry-out of an addition or a borrow in a
+    #       subtraction, and TST performs neither. That is `setNzClearVc`, the
+    #       rule MOVE already has.
     #
     #   CMP, CMPA, CMPI
-    #       "Destination - Source" (Table 3-7, page 3-23) with the result
+    #       "Destination - source" (Table 2-8, page 2-20) with the result
     #       discarded. N, Z, V and C come from that subtraction and X is not
     #       written. The X rule is unsettled: the
-    #       same section 3.2.1.5 says X takes C's value "for arithmetic
-    #       operations", which read literally would have a comparison write it.
-    #       These cases assert X unchanged, so a reader who reverses that
-    #       reading must change them.
+    #       same Table 2-1 says X is "Assigned the value of the carry bit for
+    #       arithmetic operations", which read literally would have a comparison
+    #       write it. These cases assert X unchanged, so a reader who reverses
+    #       that reading must change them.
     #
     #   RTE
     #       The status register is reloaded from the frame, not computed. Every
@@ -2034,10 +2061,10 @@ CASES = {
     #       left it alone".
     #
     #   TRAP
-    #       Section 3.3, "Exception Processing Overview", page 3-11: "the
+    #       Section 2.8, "Exception Processing Overview", page 2-31: "The
     #       processor makes an internal copy of the SR and then enters
-    #       supervisor mode by setting the S-bit and disabling trace mode by
-    #       clearing the T-bit". The copy is what reaches the stack frame and
+    #       supervisor mode by setting SR[S] and disabling trace mode by
+    #       clearing SR[T]". The copy is what reaches the stack frame and
     #       the modified word is what the handler runs under.
     "control": [
         {
@@ -2095,8 +2122,9 @@ CASES = {
 
         # -------------------------------------------------------------- BSR
         # The return address is the address after the whole instruction, and
-        # the two forms are different lengths. Table 3-7, page 3-23, gives BSR
-        # as "SP - 4 -> SP; PC -> (SP); PC + dn -> PC". The byte form pushes
+        # the two forms are different lengths. Table 2-8, page 2-20, gives BSR
+        # as "SP - 4 -> SP; next sequential PC -> (SP); PC + 2 + dn -> PC" -
+        # "next sequential" is the manual's own word for it. The byte form pushes
         # opcode + 2 and the word form pushes opcode + 4; a core that pushed
         # the branch BASE - which is opcode + 2 for both - passes the byte case
         # and fails the word one.
@@ -2138,14 +2166,14 @@ CASES = {
 
         # -------------------------------------------------------------- Scc
         # The destination is one byte of a data register and nothing wider.
-        # Table 3-7, page 3-25, gives `Scc Dx` an operand size of 8 and the
-        # operation "If Condition True, Then 1's -> Destination; Else 0's ->
-        # Destination". `DIRTY_D` is 0x12345678 and every byte of it differs,
+        # Table 2-8, page 2-22, gives `Scc Dx` an operand size of `.B` and the
+        # operation "If condition true, then 1s -> destination; Else 0s ->
+        # destination". `DIRTY_D` is 0x12345678 and every byte of it differs,
         # so a core that wrote the whole register lands on 0xFFFFFFFF or 0 and
         # a core that wrote the wrong byte lane lands somewhere else again.
         #
-        # The operand is a data register and nothing else. Table 3-12, "One
-        # Operand Instruction Execution Times", page 3-27: the `scc Dx` row
+        # The operand is a data register and nothing else. Table 2-14, "One-
+        # Operand Instruction Execution Times", page 2-27: the `scc Dx` row
         # carries `1(0/0)` under `Rn` and A DASH under `(An)`, `(An)+`, `-(An)`,
         # `(d16,An)`, `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`. The `clr.b` rows
         # above it and the `tst.b` rows below it carry times in those columns,
@@ -2215,7 +2243,7 @@ CASES = {
 
         # -------------------------------------------------------------- TST
         # All three sizes exist here and the manual prints all three. Table
-        # 3-12, page 3-27, carries a `tst.b`, a `tst.w` AND a `tst.l` row, each
+        # 2-14, page 2-27, carries a `tst.b`, a `tst.w` AND a `tst.l` row, each
         # timed under every one of `Rn`, `(An)`, `(An)+`, `-(An)`, `(d16,An)`,
         # `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx` - no dash anywhere in those
         # rows. TST is the ONE instruction in this group that keeps the byte and
@@ -2341,7 +2369,7 @@ CASES = {
             },
         },
         {
-            # An immediate operand is timed in Table 3-12 - `tst.l` reads
+            # An immediate operand is timed in Table 2-14 - `tst.l` reads
             # `1(0/0)` under `#xxx` - and `m68k-elf-as -mcpu=5307` emits
             # `4abc 0000 0005` for it. The program counter is what proves the
             # core consumed TWO extension words and not one.
@@ -2357,8 +2385,8 @@ CASES = {
         # `cmp.l %d0,%d1` is `d1 - d0`, and the order is measured. The word is
         # `b280` = `1011 001 010 000 000`: bits 11..9 are the destination data
         # register (d1) and the low six bits are the source effective address
-        # (d0). Table 3-7, page 3-23, gives the operation as "Destination -
-        # Source". A core that subtracted the other way round gets the sign and
+        # (d0). Table 2-8, page 2-20, gives the operation as "Destination -
+        # source". A core that subtracted the other way round gets the sign and
         # the carry of `cmp_l_source_greater_sets_n_and_c` backwards.
         {
             "name": "cmp_l_equal_sets_z",
@@ -2410,8 +2438,8 @@ CASES = {
         },
         {
             # AN ADDRESS REGISTER IS A LEGAL CMP SOURCE. `b288` is what
-            # `m68k-elf-as -mcpu=5307` emits for `cmp.l %a0,%d1`, and Table 3-13
-            # (page 3-28) times the `cmp.l <ea>,Rx` row under `Rn`.
+            # `m68k-elf-as -mcpu=5307` emits for `cmp.l %a0,%d1`, and Table 2-15
+            # (page 2-28) times the `cmp.l <ea>,Rx` row under `Rn`.
             "name": "cmp_l_address_register_source",
             "mnemonic": "cmp.l",
             "instruction": "cmp.l %a0,%d1",
@@ -2442,11 +2470,18 @@ CASES = {
         },
 
         # ------------------------------------------------------------- CMPA
-        # CMPA IS 32-BIT AND THERE IS NO OTHER SIZE. Table 3-7, page 3-23,
-        # gives `CMPA <ea>y,Ax` an OPERAND SIZE column of `32` and nothing else,
-        # and `m68k-elf-as -mcpu=5307` rejects `cmpa.w %d0,%a1`. The word form's
-        # encoding - line 1011 opmode 011 - is a trap case in
-        # `tests/t_control.nim`.
+        # CMPA IS 32-BIT UNDER THE ISA THIS CORPUS IS GENERATED FOR, AND THE
+        # WORD FORM IS A REVISION B ADDITION. MCF5407 User's Manual Table 2-8,
+        # page 2-20, gives `CMPA <ea>y,Ax` an operand size column of `.W,.L`,
+        # and the per-core table under the CMPA description in section 2.9,
+        # page 2-41, splits it: "V2, V3 Core - .l" against "V4 Core - .w, .l".
+        # Table 2-7, "ColdFire ISA_B Extension Summary", page 2-19, lists
+        # `cmpa.w` among the Revision B enhancements. `m68k-elf-as -mcpu=5307`
+        # is Revision A and rejects `cmpa.w %d0,%a1`, so the word form's
+        # encoding - line 1011 opmode 011, which page 2-41's opmode table
+        # confirms - is a trap case in `tests/t_control.nim` and is a case this
+        # corpus cannot assemble. A CORPUS GENERATED FOR THE V4 WOULD HAVE TO
+        # MOVE IT.
         {
             "name": "cmpa_l_equal_sets_z",
             "mnemonic": "cmpa.l",
@@ -2483,8 +2518,8 @@ CASES = {
         },
 
         # ------------------------------------------------------------- CMPI
-        # THE DESTINATION IS A DATA REGISTER AND NOTHING ELSE. Table 3-13, page
-        # 3-28: the `cmpi.l #imm,Dx` row carries `1(0/0)` under `Rn` and A DASH
+        # THE DESTINATION IS A DATA REGISTER AND NOTHING ELSE. Table 2-15, page
+        # 2-28: the `cmpi.l #imm,Dx` row carries `1(0/0)` under `Rn` and A DASH
         # under every memory column and under `#xxx`. `m68k-elf-as -mcpu=5307`
         # agrees and rejects `cmpi.l #5,(%a0)` and `cmpi.l #5,%a0`.
         {
@@ -2507,17 +2542,19 @@ CASES = {
 
         # -------------------------------------------------------------- JMP
         # THE OPERAND CLASS IS CONTROL ADDRESSING, AND THE MANUAL GIVES IT TWICE.
-        # Table 3-15, "General Branch Instruction Execution Times", page 3-30:
-        # the `jmp <ea>` row carries a time under `(An)`, under
-        # `(d16,An)/(d16,PC)`, under `(d8,An,Xi*SF)/(d8,PC,Xi*SF)` and under
-        # `xxx.wl`, and A DASH under `Rn`, `(An)+`, `-(An)` and `#xxx`. Table
-        # 3-5, page 3-21, marks exactly those modes CONTROL. `m68k-elf-as
+        # Table 2-17, "Branch Instruction Execution Times", page 2-30: the
+        # `jmp <ea>` row carries a time under `(An)`, under `(d16,An)`, under
+        # `(d8,An,Xi*SF)` and under `(xxx).wl`, and A DASH under `Rn`, `(An)+`,
+        # `-(An)` and `#<xxx>`; the NOTE on page 2-25 makes the PC-relative
+        # modes equal to the An-relative ones for every table in that section.
+        # Table 2-5, page 2-15, marks exactly those modes CONTROL. `m68k-elf-as
         # -mcpu=5307` agrees on both halves: it rejects `jmp %d0`, `jmp %a0`,
         # `jmp (%a0)+`, `jmp -(%a0)` and `jmp #4`, and it accepts the rest.
         #
-        # `(xxx).W` IS IN THE CLASS. Table 3-5 marks the absolute SHORT row
-        # CONTROL, and page 3-26 states that the tables' `xxx.wl` column "refers
-        # to both forms of absolute addressing, xxx.w and xxx.l".
+        # `(xxx).W` IS IN THE CLASS. Table 2-5 marks the absolute SHORT row
+        # CONTROL, and the NOTE on page 2-25 states that the nomenclature
+        # `(xxx).wl` "refers to both forms of absolute addressing, (xxx).w and
+        # (xxx).l".
         #
         # JMP AND JSR CARRY A MASK OF THEIR OWN, AND THE REASON IS NOT
         # `(xxx).W`. `eaJumpTarget` in `src/mcf5307/decode_types.nim` is the
@@ -2591,7 +2628,8 @@ CASES = {
         },
 
         # -------------------------------------------------------------- JSR
-        # "SP - 4 -> SP; PC -> (SP); <ea> -> PC" - Table 3-7, page 3-24. THE
+        # "SP - 4 -> SP; next sequential PC -> (SP); <ea> -> PC" - Table 2-8,
+        # page 2-20. THE
         # PUSHED PROGRAM COUNTER IS THE ADDRESS AFTER THE WHOLE INSTRUCTION,
         # EXTENSION WORDS INCLUDED, which is why the absolute-long case is here
         # beside the register-indirect one: they are three words and one word
@@ -2634,7 +2672,7 @@ CASES = {
         },
 
         # -------------------------------------------------------------- RTS
-        # "(SP) -> PC; SP + 4 -> SP" - Table 3-7, page 3-25. RTS WRITES NO
+        # "(SP) -> PC; SP + 4 -> SP" - Table 2-8, page 2-22. RTS WRITES NO
         # MEMORY, and the longword it read is asserted still there.
         {
             "name": "rts_pops_the_return_address",
@@ -2657,16 +2695,15 @@ CASES = {
     ] + [
 
         # -------------------------------------------------------------- RTE
-        # "(SP+2) -> SR; (SP+4) -> PC; SP + 8 -> PC" - Table 3-7, page 3-25,
-        # AND THAT LAST ARROW IS A MISPRINT IN THE MANUAL: the program counter
-        # has just been loaded from (SP+4), and the row would otherwise
-        # overwrite it with an address on the stack. The stack-pointer rule is
-        # given properly in section 3.5.7, "RTE and Format Error Exceptions",
-        # page 3-16: the processor "adjusts the stack pointer by adding the
-        # format value to the auto-incremented address after the fetch of the
-        # first longword", which is SP + 4 + FORMAT.
+        # "(SP+2) -> SR; SP+4 -> SP; (SP) -> PC; SP + formatfield -> SP" -
+        # MCF5407 User's Manual Table 2-9, "Supervisor-Level Instruction Set
+        # Summary", page 2-23. The stack-pointer rule is given again in the
+        # "RTE and Format Error Exceptions" row of Table 2-22, page 2-35, as
+        # step 3 of four: the processor "Adjusts the stack pointer by adding the
+        # format value to the auto-incremented address after the first longword
+        # fetch", which is SP + 4 + FORMAT.
         #
-        # THAT IS THE INVERSE OF TABLE 3-2, page 3-14, and the cases below
+        # THAT IS THE INVERSE OF TABLE 2-20, page 2-33, and the cases below
         # are that table's four rows read backwards: a frame whose format is
         # 4, 5, 6 or 7 restores an A7 of SP + 8, SP + 9, SP + 10 or SP + 11.
         # A core that added a fixed 8 passes the first case and fails the other
@@ -2699,25 +2736,29 @@ CASES = {
         # ------------------------------------------------------------- TRAP
         # THE WHOLE EXCEPTION SEQUENCE, AND EVERY PART OF IT IS IN THE MANUAL.
         #
-        #   THE VECTOR. Table 3-1, page 3-13: `TRAP #0-15` are vector numbers
+        #   THE VECTOR. Table 2-19, page 2-32: `TRAP #0-15` are vector numbers
         #   32 to 47, the vector offset is 4 x vector_number, and the stacked
         #   program counter is "Next" - the address of the instruction after the
         #   TRAP, not the address of the TRAP itself.
         #
-        #   THE FRAME. Figure 3-7, page 3-13: the first longword is the 16-bit
+        #   THE FRAME. Figure 2-1, "Exception Stack Frame Form", page 2-33 -
+        #   cite that figure by title and folio, because the MCF5407 manual
+        #   numbers a second figure 2-1: the first longword is the 16-bit
         #   format/vector word above the 16-bit status register, and the second
-        #   is the program counter. Table 3-3, page 3-14, writes the fault
-        #   status field as zeros for everything that is not an access or
-        #   address error.
+        #   is the program counter. Table 2-21, "Fault Status Encodings", page
+        #   2-33, gives `0000` as "Not an access or address error nor an
+        #   interrupted debug service routine", and page 2-33 states that the
+        #   field is "defined for access and address errors along with
+        #   interrupted debug service routines". A TRAP is none of those.
         #
-        #   THE SELF-ALIGNMENT. Table 3-2, page 3-14: the frame is written at a
+        #   THE SELF-ALIGNMENT. Table 2-20, page 2-33: the frame is written at a
         #   0-modulo-4 address and the FORMAT field records how far the stack
         #   pointer had to move to get there - A7-8 and format 0100 when A7's
         #   low two bits were 00, through A7-11 and format 0111 when they were
         #   11. The four cases below are that table's four rows.
         #
-        #   THE STATUS REGISTER. Section 3.3, page 3-11: the processor copies
-        #   SR, sets the S-bit and clears the T-bit. The COPY is what is
+        #   THE STATUS REGISTER. Section 2.8, page 2-31: the processor copies
+        #   SR, sets SR[S] and clears SR[T]. The COPY is what is
         #   stacked. `trap_0_clears_trace_and_sets_supervisor` starts from
         #   0x871f - trace SET, supervisor CLEAR - so the frame holds 0x871f
         #   and the machine continues under 0x271f; under `SR_DIRTY` alone the
@@ -2786,7 +2827,7 @@ CASES = {
         },
     ] + [
         {
-            # THE THREE MISALIGNED ROWS OF TABLE 3-2. The frame lands at the
+            # THE THREE MISALIGNED ROWS OF TABLE 2-20. The frame lands at the
             # SAME 0-modulo-4 address in all three, and the FORMAT field is the
             # only thing that records how far A7 moved.
             "name": "trap_0_a7_low_bits_%d_writes_format_%d" % (bits, 4 + bits),

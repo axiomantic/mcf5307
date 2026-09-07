@@ -507,11 +507,23 @@ block:
   let before = controlFileOf(ctx)
   mcf5307_reset(ctx, stackBase, execBase)
   let after = controlFileOf(ctx)
-  # THE RESET VALUES ARE THE MANUAL'S. The MCF5307 User's Manual gives VBR
-  # `$00000000` at reset, and gives the CACR and the ACRs all zeros. It gives
-  # the RAMBARs and the MBAR only their valid bit cleared and calls the rest
-  # uninitialised, so zero is a value that satisfies what the manual states
-  # rather than one it states; `cpu.nim` carries the same note at the site.
+  # THE RESET VALUES ARE THE MANUAL'S. The MCF5407 User's Manual gives VBR
+  # `0x0000_0000` at reset - section 2.2.2.2, Figure 2-6, "Vector Base Register
+  # (VBR)", folio 2-12 - and clears the CACR outright: section 4.10.1, folio
+  # 4-21, "A hardware reset clears CACR, which disables the cache". It gives
+  # the ACRs, the RAMBARs and the MBAR only their enable or valid bit cleared
+  # and calls the rest uninitialised - Figure 4-9, "Access Control Register
+  # Format (ACRn)", folio 4-24, whose Reset row reads `E` 0 and everything else
+  # "Uninitialized"; section 4.4.1, folio 4-3, "The valid bits, RAMBARn[V], are
+  # cleared at reset, disabling the SRAM modules. All other bits are
+  # unaffected"; section 6.2.2, folio 6-4, "The valid bit, MBAR[V], is cleared
+  # at system reset ...; other MBAR bits are uninitialized at reset". So for
+  # those three, and for the ACRs, zero is a value that satisfies what the
+  # manual states rather than one it states; `cpu.nim` carries the same note at
+  # the site. THE ACRs MOVED INTO THAT GROUP WITH THE PART: the MCF5307
+  # register summary printed a reset value of `$0000000` for ACR0 and ACR1,
+  # while the MCF5407 leaves ACR0-ACR3 uninitialised apart from the enable
+  # bit.
   check((before: before, after: after),
         (before: (cacr: dSeed[1], acr0: dSeed[2], acr1: aSeed[3],
                   acr2: dSeed[3], acr3: aSeed[2], vbr: dSeed[4],

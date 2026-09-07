@@ -16,7 +16,11 @@
 ## Motorola silicon. The control-register map is the MCF5407's, from the
 ## MCF5407 User's Manual Table 2-2, folio 2-11; the encoding and the privilege
 ## rule are the family's, from the ColdFire Family Programmer's Reference
-## Manual, Rev. 3, and read the same in the MCF5307 User's Manual (1998).
+## Manual, Rev. 3. THE MCF5307 CITATION BELOW IS DELIBERATE AND STAYS: the
+## MCF5307 User's Manual (1998) is named as a second, independent witness that
+## the encoding and the privilege rule did not move between the V3 and the V4,
+## which is what makes them the family's rule rather than one part's. The map
+## itself is the MCF5407's alone - see `controlRegisterFor`.
 
 import mcf5307/decode_types
 import mcf5307/machine

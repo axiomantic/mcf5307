@@ -14,8 +14,23 @@
 ## is used. If the 8-bit displacement field in the instruction word is all ones
 ## (0xFF), the 32-bit displacement (longword immediately following the
 ## instruction) is used" - ColdFire Family Programmer's Reference Manual, Rev.
-## 3, printed page 4-20. The longword form first appeared in ISA_B and this part
-## implements ISA_A, so `0xff` is refused.
+## 3, printed page 4-20. The MCF5407 User's Manual prints the same rule in its
+## own words in section 2.9, the BRA page, folio 2-38: "If the 8-bit
+## displacement field in the instruction word is all ones (0xFF), the 32-bit
+## displacement (longword immediately following the instruction) is used."
+##
+## THE `0xff` ROW BELOW IS RETARGETING DEBT AND IS LEFT RED-IN-WAITING ON
+## PURPOSE. The longword form first appeared in ISA_B. The MCF5307 is a V3 core
+## that implements ISA_A, so on that part `0xff` is refused, and that is what
+## this file still asserts. THE MCF5407 IMPLEMENTS ISA_B AND ACCEPTS IT: MCF5407
+## User's Manual Table 2-7, "ColdFire ISA_B Extension Summary", folio 2-19,
+## lists "Branch Always / bra.l"; Table 2-8, folio 2-20, gives BRA the operand
+## sizes ".B,.W,.L"; and the per-core presence table on the BRA page, folio
+## 2-38, states it positively - "BRA / Opcode present: V2, V3 Core Yes, V4 Core
+## Yes / Operand sizes supported: V2, V3 Core .b, .w; V4 Core .b, .w, .l". The
+## expected value for `0xff` is therefore wrong for this part and is left
+## unchanged, so that the case goes red when the core implements `bra.l` rather
+## than being silently re-aimed at the old answer.
 ##
 ## THE SIGN EXTENSION IS WRITTEN OUT HERE AND NOT IMPORTED FROM THE CORE. `s8`
 ## and `s16` live in `mcf5307/machine`, and a sweep that reached for them would
@@ -46,7 +61,8 @@
 ##
 ## The displacement rule, the two markers and the ISA revision that carries the
 ## longword form are facts about Motorola silicon, from the ColdFire Family
-## Programmer's Reference Manual and the MCF5307 User's Manual.
+## Programmer's Reference Manual and Motorola, "MCF5407 ColdFire Integrated
+## Microprocessor User's Manual", order number MCF5407UM/D, Rev. 0.1, 11/2001.
 
 import std/strutils
 
@@ -184,9 +200,12 @@ proc expectedRow(disp: int): Row =
   ## What the manual's rule requires for the displacement byte `disp`.
   const base = execBase + 2'u32
   if disp == 0xFF:
-    # The 32-bit form. It first appeared in ISA_B; this part implements ISA_A,
-    # so the core refuses the encoding. `step` has already advanced the program
-    # counter past the opcode word when the refusal happens.
+    # The 32-bit form. It first appeared in ISA_B, which the MCF5307's V3 core
+    # does not implement, so the core refuses the encoding. `step` has already
+    # advanced the program counter past the opcode word when the refusal
+    # happens. THE MCF5407'S V4 CORE DOES IMPLEMENT IT - see the header block -
+    # so this branch of the expectation is wrong for the retargeted part and is
+    # deliberately left as it stands.
     return (disp: disp, pc: base, sp: stackBase, sr: srDirty,
             fault: true, halted: true)
   let offset =
@@ -194,10 +213,11 @@ proc expectedRow(disp: int): Row =
     else: signExtend8(disp)
   let target = uint32(int64(base) + int64(offset))
   if (target and 1'u32) != 0'u32:
-    # "Any attempted execution transferring control to an odd instruction
-    # address ... results in an address error exception" - MCF5307 User's
-    # Manual, section 3.5.2. The frame is two longwords on a stack pointer that
-    # was already 0-modulo-4.
+    # An address error is "Caused by an attempted execution transferring
+    # control to an odd instruction address (that is, if bit 0 of the target
+    # address is set)" - MCF5407 User's Manual section 2.8.2, Table 2-22,
+    # "MCF5407 Exceptions", the Address Error row, folio 2-34. The frame is two
+    # longwords on a stack pointer that was already 0-modulo-4.
     return (disp: disp, pc: addressErrorHandler, sp: stackBase - 8'u32,
             sr: srDirty, fault: false, halted: false)
   (disp: disp, pc: target, sp: stackBase, sr: srDirty,

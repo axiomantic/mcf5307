@@ -1,17 +1,27 @@
 ## `t_bus_fault` - the bus-fault channel of `mcf5307/bus`.
 ##
-## The document this file cites is outside this repository and is named in
+## The documents this file cites are outside this repository and are named in
 ## full, so that a citation can be checked without knowing this project.
 ##
+##   THE MCF5407 USER'S MANUAL: Motorola, "MCF5407 ColdFire Integrated
+##   Microprocessor User's Manual", order number MCF5407UM/D, Rev. 0.1,
+##   11/2001. This is the part this suite targets and the source of every
+##   citation below unless a citation says otherwise. Each one names its
+##   section, table and folio page.
+##
 ##   THE MCF5307 USER'S MANUAL: Motorola, "MCF5307 ColdFire Integrated
-##   Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998. Every
-##   citation below names its section, table and folio page.
+##   Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998. Cited
+##   ONLY where it is the source, because the MCF5407 manual condenses the
+##   MCF5307's section 3.5 "Processor Exceptions" into one table, Table 2-22,
+##   and does not reproduce the narrative paragraphs on imprecise reporting of
+##   access errors on operand writes. Each such citation says so at the point
+##   of use.
 ##
 ## EVERY EXPECTED VALUE BELOW IS A HAND-DERIVED LITERAL and NOT a second call
 ## of the procedure under test.
 ##
 ## The fault status encodings are facts about Motorola silicon, from the
-## MCF5307 User's Manual named above.
+## MCF5407 User's Manual named above.
 
 import std/strutils
 
@@ -63,12 +73,13 @@ template checkEq(got: uint32; want: uint32; label: string) =
 # ---------------------------------------------------------------------------
 # BLOCK 1. The mapping from a bus status to a fault status code.
 #
-# User's Manual section 3.4, Table 3-3, "Fault Status Encodings", folio 3-14
-# (PDF page 71), gives the defined fault status encodings for this part:
-# `0000` not an access or address error, `0100` error on instruction fetch,
-# `1000` error on operand write, `1001` attempted write to write-protected
-# space, and `1100` error on operand read. Every other value of the four bits
-# is Reserved.
+# User's Manual section 2.8.1, Table 2-21, "Fault Status Encodings", folio 2-33
+# (PDF page 99), gives the defined fault status encodings for this part:
+# `0000` not an access or address error nor an interrupted debug service
+# routine, `0010` interrupt during a debug service routine, `0100` error on
+# instruction fetch, `1000` error on operand write, `1001` attempted write to
+# write-protected space, and `1100` error on operand read. Every other value of
+# the four bits is Reserved.
 #
 # THE MAPPING TABLE assigns codes to the non-OK bus statuses, and each expected
 # value below is the code that table's own row prints.
@@ -95,9 +106,9 @@ checkEq(faultStatusFor(Mcf5307BusStatus.busSizeIllegal, operandWrite),
         "mapping: an illegal width on a write is 1000")
 
 # `busOk` IS NOT A ROW OF THE MAPPING TABLE and it is mapped anyway, so that
-# the procedure is total over the enumeration. Table 3-3's own `0000` is the
-# code for "not an access or address error", which is what a completed access
-# is.
+# the procedure is total over the enumeration. Table 2-21's own `0000` is the
+# code for "not an access or address error nor an interrupted debug service
+# routine", which is what a completed access is.
 checkEq(faultStatusFor(Mcf5307BusStatus.busOk, operandRead),
         0b0000'u32,
         "mapping: a completed read is 0000")
@@ -143,7 +154,7 @@ const
   memSize = 0x1000
   execBase = 0x400'u32      ## above the whole 1024-byte vector table
   trapHandler = 0x500'u32
-  frameBase = 0x7F8'u32     ## Table 3-2: 0x800 - 8, with FORMAT 4
+  frameBase = 0x7F8'u32     ## Table 2-20: 0x800 - 8, with FORMAT 4
   srReset = 0x2700'u32
   opTrap0 = 0x4E40'u16      ## `trap #0`, m68k-elf-as -mcpu=5307
   opRteWord = 0x4E73'u16    ## `rte`, the same assembler
@@ -242,10 +253,11 @@ proc runTrap(rd: Mcf5307ReadFn; wr: Mcf5307WriteFn): Outcome =
   mcf5307_destroy(ctx)
 
 # THE EXPECTED OUTCOME IS HAND-DERIVED. A7 is 0x800 with its low two bits 00,
-# so Table 3-2, folio 3-14, gives FORMAT 4 and a frame at 0x800 - 8. `trap #0`
-# is one word and Table 3-1 gives a trap a stacked program counter of "Next",
-# so the stacked value is `execBase + 2`. `FS` is 0000: Table 3-3 defines the
-# field for access and address errors only.
+# so Table 2-20, folio 2-33, gives FORMAT 4 and a frame at 0x800 - 8. `trap #0`
+# is one word and Table 2-19, folio 2-32, gives a trap a stacked program
+# counter of "Next", so the stacked value is `execBase + 2`. `FS` is 0000:
+# Table 2-21 defines the field for access and address errors and for
+# interrupted debug service routines only.
 #   0100 | 00 | 00100000 | 00 | 0010011100000000 -> 0x40802700
 const wantTrap: Outcome = (sp: frameBase, pc: trapHandler, sr: srReset,
                            halted: false, fault: false,
@@ -265,9 +277,10 @@ check(explicit == wantTrap,
 # BLOCK 4. The core originates no bus status of its own.
 #
 # `MCF5307_BUS_UNMAPPED` and `MCF5307_BUS_SIZE_ILLEGAL` have no producer on
-# this part - User's Manual section 3.5.1, folio 3-14, holds that an access
-# error is reported only for a store to write-protected space - so the only
-# thing that can raise one is a board's own decode.
+# this part - User's Manual section 2.8.2, Table 2-22, "Access Error", folio
+# 2-34, holds that an access error is reported only for a store to
+# write-protected memory - so the only thing that can raise one is a board's
+# own decode.
 #
 # THE SWEEP IS THE ASSERTION: every access below is answered by a pair
 # of callbacks that report nothing at all, across the whole address range and
@@ -307,16 +320,18 @@ mcf5307_destroy(sweepCtx)
 # NON-ZERO `FS` through the core.
 #
 # BLOCK 5 SEPARATES A SPLIT `FS` ENCODER FROM A CONTIGUOUS ONE. Of the
-# codes User's Manual Table 3-3, folio 3-14, defines, `1001` is the only one
+# codes User's Manual Table 2-21, folio 2-33, defines, `1001` is the only one
 # whose low half is not zero, so it is the only value that lands in BOTH
 # halves of the split field. A frame carrying `FS` `0000` cannot separate
 # "encodes the field as zero" from "has no field": both produce the same
 # longword.
 #
-# THE ROW IS THE ONE THAT IS REAL SILICON. User's Manual section 3.5.1, folio
-# 3-14, verbatim: access errors are "only reported in conjunction with an
-# attempted store to a write-protected memory space". The board below refuses
-# exactly one longword and reports `MCF5307_BUS_FAULT` for it.
+# THE ROW IS THE ONE THAT IS REAL SILICON. User's Manual section 2.8.2,
+# Table 2-22, "Access Error", folio 2-34, verbatim: "Access errors are reported
+# only in conjunction with an attempted store to write-protected memory. Thus,
+# access errors associated with instruction fetch or operand read accesses are
+# not possible." The board below refuses exactly one longword and reports
+# `MCF5307_BUS_FAULT` for it.
 #
 # THE THIRD BOARD REPORTS A NON-OK STATUS, which is what separates it from the
 # two above: those two exist to show that silence is success, and this one
@@ -325,10 +340,10 @@ mcf5307_destroy(sweepCtx)
 const
   protectedWord = 0x0C00'u32  ## the one longword this board refuses to store
   accessHandler = 0x600'u32
-  vecAccess = 2'u8            ## Table 3-1, folio 3-13: access error, at $008
+  vecAccess = 2'u8            ## Table 2-19, folio 2-32: access error, at $008
   opMoveProtected = 0x21C0'u16  ## `move.l %d0,0xC00`, m68k-elf-as -mcpu=5307
   extProtected = 0x0C00'u16     ## its `(xxx).W` extension word
-  doubleSp = 0x1008'u32       ## Table 3-2: a frame base of 0x1000, off the board
+  doubleSp = 0x1008'u32       ## Table 2-20: a frame base of 0x1000, off the board
   doubleFrameBase = 0x1000'u32
 
 # AN ACCESS PAST THE ARRAY IS COUNTED AND NOT ONLY REFUSED. The count is what
@@ -385,7 +400,7 @@ proc runProtectedStore(startSp: uint32; readFrameAt: uint32): FaultOutcome =
 
 # The expected frame is hand-derived from the bit positions and not from a
 # second call of the encoder. A7 is 0x800 with its low two bits 00, so Table
-# 3-2, folio 3-14, gives FORMAT 4 and a frame at 0x800 - 8. The vector is 2.
+# 2-20, folio 2-33, gives FORMAT 4 and a frame at 0x800 - 8. The vector is 2.
 # `FS` is `1001`, the code for a write to write-protected space, and its two
 # halves land in two non-adjacent fields:
 #   0100 | 10 | 00000010 | 01 | 0010011100000000 -> 0x48092700
@@ -393,9 +408,16 @@ proc runProtectedStore(startSp: uint32; readFrameAt: uint32): FaultOutcome =
 # `(xxx).W` extension word have advanced to execBase + 4.
 #
 # THE LIVE STATUS REGISTER IS 0x2704 AND THE FRAME'S COPY IS 0x2700, AND THE
-# DIFFERENCE IS REQUIRED RATHER THAN TOLERATED. User's Manual section 3.5.1,
-# folio 3-14, verbatim, of an access error on an operand write: "All programming
-# model updates associated with the write instruction are completed." `MOVE`
+# DIFFERENCE IS REQUIRED RATHER THAN TOLERATED. THE MCF5307 USER'S MANUAL IS
+# THE SOURCE OF THE SENTENCE, because the MCF5407 manual replaces the MCF5307's
+# section 3.5.1 narrative with Table 2-22 and drops this paragraph: MCF5307
+# User's Manual section 3.5.1, folio 3-15, verbatim, of an access error on an
+# operand write: "All programming model updates associated with the write
+# instruction are completed." The rule still holds on this part - MCF5407
+# User's Manual Table 2-22, "Access Error", folio 2-34, records only that the
+# Version 4 core additionally updates the condition code register when the
+# write-protect error happens on a CLR or MOV3Q, which is a widening and not a
+# contradiction. `MOVE`
 # sets Z from its source AFTER the store, and the source here is zero, so Z is
 # set once the faulting instruction finishes. The frame carries the copy
 # `takeException` took BEFORE that, which is why the two differ by exactly Z.
@@ -430,8 +452,9 @@ check(protectedStore == wantProtected,
 # commits A7 only after both longwords are written.
 #
 # THE STATUS REGISTER IS 0x2704 HERE FOR THE REASON BLOCK 5 GIVES, AND THE TWO
-# BLOCKS NOW AGREE RATHER THAN DIFFER. Section 3.5.1, folio 3-15: "All
-# programming model updates associated with the write instruction are
+# BLOCKS NOW AGREE RATHER THAN DIFFER. MCF5307 User's Manual section 3.5.1,
+# folio 3-15, cited because the MCF5407 manual does not reproduce the sentence:
+# "All programming model updates associated with the write instruction are
 # completed." The access error of a faulted store is taken at the instruction
 # boundary, so `MOVE` has already set Z from its zero source by the time the
 # stacking is attempted - and the stacking failing does not un-complete an
@@ -517,7 +540,10 @@ check(faultingRead == wantFaultingRead,
 # ITS PROGRAMMING-MODEL UPDATES ARE COMPLETED FIRST.
 #
 # THE TWO HALVES ARE ONE SENTENCE OF THE MANUAL AND NOT A COMPROMISE BETWEEN
-# TWO. User's Manual section 3.5.1, "Access Error Exception", printed page
+# TWO. THE MCF5307 USER'S MANUAL IS THE SOURCE AND IS CITED DELIBERATELY: the
+# MCF5407 manual condenses the MCF5307's section 3.5 into Table 2-22 and
+# reproduces none of this paragraph, so there is no MCF5407 folio to point at.
+# MCF5307 User's Manual section 3.5.1, "Access Error Exception", printed page
 # 3-15, verbatim: "The ColdFire processor uses an imprecise reporting mechanism
 # for access errors on operand writes. Because the actual write cycle may be
 # decoupled from the processor's issuing of the operation, the signaling of an
@@ -526,10 +552,11 @@ check(faultingRead == wantFaultingRead,
 # instruction are completed."
 #
 # So the faulting instruction FINISHES - which is what BLOCK 5 asserts of
-# `MOVE`'s condition codes - and only then does section 3.3's exception
-# processing run. An exception taken AT the store instead performs section
-# 3.3's third and fourth steps, which assign A7 and the program counter, in the
-# middle of an instruction that then completes against what those steps left.
+# `MOVE`'s condition codes - and only then does the exception processing of
+# MCF5407 User's Manual section 2.8, folio 2-31, run. An exception taken AT the
+# store instead performs that section's third and fourth steps, which assign A7
+# and the program counter, in the middle of an instruction that then completes
+# against what those steps left.
 #
 # MEASURED ON THIS TREE BEFORE THE DEFERRAL EXISTED, with A7 at 0x0C04 so that
 # each push lands on `protectedWord`: `jsr` ended at 0x0700, its own target,
@@ -540,7 +567,7 @@ check(faultingRead == wantFaultingRead,
 # with the exception frame base written into A0.
 #
 # WHAT THE MANUAL DOES NOT SETTLE, STATED SO THAT NO LITERAL BELOW IS READ AS
-# ITS AUTHORITY. The same passage calls the reporting imprecise and says the
+# ITS AUTHORITY. The same MCF5307 passage calls the reporting imprecise and says the
 # stacked program counter "merely represents the location in the program when
 # the access error was signaled", so it fixes NO particular value for that
 # longword. This core reports the program counter and the status register AS
@@ -596,11 +623,17 @@ proc runFaultingPush(words: openArray[uint16]; frameAt: uint32): PushOutcome =
             framePc: boardReadValue(board, frameAt + 4'u32, 4))
   mcf5307_destroy(ctx)
 
-# JSR. Table 3-7, page 3-24, gives it "SP - 4 -> SP; PC -> (SP); Address of
-# <ea> -> PC". A7 goes 0x0C04 to 0x0C00, the push is refused, and "Address of
-# <ea> -> PC" is a programming-model update that section 3.5.1 completes. THEN
-# the exception: Table 3-2, folio 3-14, puts the frame of an A7 of 0x0C00 at
-# 0x0BF8 with FORMAT 4, and the handler address replaces the JSR target.
+# JSR. Table 2-8, "User-Level Instruction Set Summary", folio 2-20, gives it
+# "SP - 4 -> SP; next sequential PC -> (SP); <ea> -> PC". A7 goes 0x0C04 to
+# 0x0C00, the push is refused, and "<ea> -> PC" is a programming-model update
+# that the MCF5307 passage above completes. THE PUSH-BEFORE-TARGET ORDER IS
+# THIS PART'S OWN AND NOT THE MCF5307'S: Table 2-22, "Address Error", folio
+# 2-34, "If an address error occurs on a JSR instruction, the Version 4
+# processor first pushes the return address onto the stack and then calculates
+# the target address. On Version 2 and 3 processors, these functions are
+# reversed." THEN the exception: Table 2-20, folio 2-33, puts the frame of an
+# A7 of 0x0C00 at 0x0BF8 with FORMAT 4, and the handler address replaces the
+# JSR target.
 # The frame is 0100 | 10 | 00000010 | 01 | 0010011100000000, and the stacked
 # program counter is the one the store found - past the opword and the one
 # `(xxx).W` extension word.
@@ -613,8 +646,9 @@ check(faultingJsr == wantJsr,
       "a JSR whose push faults enters the handler, not its own target",
       $faultingJsr, $wantJsr)
 
-# BSR. Table 3-7, page 3-23, gives it "SP - 4 -> SP; PC -> (SP); PC + dn -> PC"
-# - the same shape as JSR and the same two updates, so the same outcome. The
+# BSR. Table 2-8, folio 2-20, gives it "SP - 4 -> SP; next sequential PC ->
+# (SP); PC + 2 + dn -> PC" - the same shape as JSR and the same two updates, so
+# the same outcome. The
 # displacement is consumed before the push, so the stacked program counter is
 # again past both words of the instruction.
 const wantBsr: PushOutcome =
@@ -626,11 +660,11 @@ check(faultingBsr == wantBsr,
       "a BSR whose push faults enters the handler, not its own target",
       $faultingBsr, $wantBsr)
 
-# LINK. "SP - 4 -> SP; An -> (SP); SP -> An; SP + d -> SP" - Table 3-7, page
-# 3-24. THREE programming-model updates follow the push and section 3.5.1
-# completes all three: A7 is 0x0C00 when the push is refused, so A0 takes
-# 0x0C00 - THE STACK SLOT AND NOT THE FRAME BASE - and A7 then takes
-# 0x0C00 - 8, which is 0x0BF8. Table 3-2 puts the frame of that A7 at 0x0BF0.
+# LINK. "SP - 4 -> SP; Ax -> (SP); SP -> Ax; SP + d16 -> SP" - Table 2-8, folio
+# 2-21. THREE programming-model updates follow the push and the MCF5307
+# passage above completes all three: A7 is 0x0C00 when the push is refused, so
+# A0 takes 0x0C00 - THE STACK SLOT AND NOT THE FRAME BASE - and A7 then takes
+# 0x0C00 - 8, which is 0x0BF8. Table 2-20 puts the frame of that A7 at 0x0BF0.
 #
 # THE DISPLACEMENT IS FETCHED AFTER THE PUSH, WHICH IS WHY THE STACKED PROGRAM
 # COUNTER IS execBase + 2 AND NOT execBase + 4. `execLink` writes before it
@@ -640,7 +674,7 @@ check(faultingBsr == wantBsr,
 # handler.
 #
 # -8 AND NOT +4, AND THE REASON IS THE BOARD RATHER THAN THE INSTRUCTION. A
-# non-negative displacement leaves A7 at or above 0x0C00, and Table 3-2 then
+# non-negative displacement leaves A7 at or above 0x0C00, and Table 2-20 then
 # puts the frame across `protectedWord` itself - a double fault, which BLOCK 6
 # already owns and which would hide this case's subject.
 const wantLink: PushOutcome =
@@ -652,7 +686,7 @@ check(faultingLink == wantLink,
       "a LINK whose push faults completes An and A7 against the stack slot",
       $faultingLink, $wantLink)
 
-# PEA. "SP - 4 -> SP; Address of <ea> -> (SP)" - Table 3-7, page 3-24. The push
+# PEA. "SP - 4 -> SP; Address of <ea> -> (SP)" - Table 2-8, folio 2-21. The push
 # is the last thing it does, so there is no update after it to complete and
 # nothing for the deferral to move.
 const wantPea: PushOutcome =

@@ -24,7 +24,7 @@
 ## lives in `decode_types` with the other shared types.
 ##
 ## The exception layout and the reset values are taken from the ColdFire
-## Family Programmer's Reference Manual and the MCF5307 User's Manual, and
+## Family Programmer's Reference Manual and the MCF5407 User's Manual, and
 ## from this project's own measurements.
 
 import mcf5307/decode_types
@@ -67,10 +67,30 @@ import mcf5307/latch
 # cycle-accurate count either - the numbers below and in the executors are this
 # core's own - but it is the sum of them.
 #
-# How to read any number here or in an executor. None was derived from the
-# manual, and the split into a fetch cost plus an executor return is this
-# core's own: the manual's timing tables - Tables 3-9 to 3-16, folios 3-26 to
-# 3-30 - time whole instructions and decompose nothing.
+# How to read any number here or in an executor. The SPLIT into a fetch cost
+# plus an executor return is this core's own and no table backs it: the
+# manual's timing tables - MCF5407 User's Manual Tables 2-11 to 2-18, folios
+# 2-25 to 2-30 - time whole instructions and decompose nothing. What the tables
+# do back is the executor returns themselves, and most of them now equal a cell.
+#
+# THE TIMINGS MOVED WITH THE PART, AND NOT BY A RENUMBERING. The MCF5307 is a
+# V3 core and this part is a V4. The table numbers moved AND the cells moved,
+# and the cells moved a long way: the V4 retires most one- and two-operand
+# instructions in a single cycle where the V3 took three, four or six. Every
+# executor return that used to sit near a V3 cell was re-read against the V4
+# cell and changed where the cell changed, and each carries the MCF5407 table
+# and folio it came from. A citation moved between these manuals by changing
+# the part number in the title alone would be pointing at a cell that says
+# something else.
+#
+# WHICH NUMBERS ARE THE MANUAL'S AND WHICH ARE THIS CORE'S. Sourced: the ALU
+# and logic returns, the word and long multiply and divide, TST, Scc, the
+# compares, JMP/JSR, RTE, RTS, TRAP, and the NOP sum below. Unsourced, because
+# the table carries no row for them: ADDA/SUBA and CMPA, which `alu.nim` and
+# `control.nim` say so at, and the BRA/BSR/Bcc returns, which `control.nim`
+# says lost even the documented RANGE they used to sit inside when the part
+# changed. An unsourced number is called out where it is returned; assume a
+# number is the manual's only where the comment names a cell.
 #
 # Cycle accuracy, if it is ever wanted, needs better constants and not a new
 # return type. The return now carries the sum the executors produced, so the
@@ -78,8 +98,14 @@ import mcf5307/latch
 
 const
   fetchCycles = 2'u32   ## one 16-bit instruction fetch
-  nopCycles = 2'u32     ## NOP on the execution pipe. The pair sums to 4 where
-                        ## Table 3-14, folio 3-29, times `nop` at 3(0/0) whole.
+  nopCycles = 4'u32     ## NOP on the execution pipe. The pair sums to 6, which
+                        ## is what MCF5407 User's Manual Table 2-16,
+                        ## "Miscellaneous Instruction Execution Times", folio
+                        ## 2-29, times `nop` at: 6(0/0) whole. The MCF5307's
+                        ## Table 3-14 gave `nop` 3(0/0) and the pair summed to
+                        ## 4, matching neither. The split across the two
+                        ## constants is still this core's own; only the sum is
+                        ## the manual's.
 
 # ---------------------------------------------------------------------------
 # Core lifecycle.
@@ -140,14 +166,25 @@ proc mcf5307_reset*(ctx: MCF5307Ctx; initialSp: uint32; initialPc: uint32)
   ctx.fault = false
   # The control registers, to the values the manual gives them at reset.
   #
-  # The MCF5307 User's Manual gives the vector base
-  # register `$00000000` at reset (section 3.7's reset exception) and says a
-  # hardware reset clears the CACR (section 5.5). The ACRs, the RAMBARs and the
-  # MBAR are weaker: the manual guarantees only that the enable or valid bit is
-  # forced to zero and calls the remaining bits unaffected or uninitialised, so
-  # no full reset value is documented for them. Section 5.6 states the stronger
-  # reading for the ACRs - reset "places 0's in all CACR and ACR bits" - and
-  # the manual therefore disagrees with itself about those two.
+  # The MCF5407 User's Manual gives the vector base register `0x0000_0000` at
+  # reset in Table 2-22, "MCF5407 Exceptions", folio 2-35, whose reset row
+  # reads "Next, the VBR is initialized to 0x0000_0000", and says a hardware
+  # reset clears the CACR in two places: folio 4-13, "Reset disables the cache
+  # and clears all CACR bits", and folio 4-24, "A hardware reset clears CACR,
+  # disabling the cache and removing all configuration".
+  #
+  # The ACRs, the RAMBARs and the MBAR are weaker. Table 2-22's reset row says
+  # only that "Configuration registers controlling the operation of all
+  # processor-local memories are invalidated, disabling the memories", which
+  # forces the enable or valid bit to zero and settles no other bit, so no full
+  # reset value is documented for them.
+  #
+  # THIS PART DOES NOT REPRODUCE THE MCF5307 MANUAL'S SELF-CONTRADICTION. That
+  # manual's section 5.6 made the stronger claim that reset "places 0's in all
+  # CACR and ACR bits", disagreeing with its own weaker statement elsewhere.
+  # The MCF5407 manual's three statements above are all about the CACR alone
+  # and none of them extends to the ACRs, so on this part the ACRs are simply
+  # undocumented at reset rather than documented twice and inconsistently.
   #
   # Zero is chosen for all of them. Zero satisfies every documented
   # constraint, including the weak ones: the enable
@@ -271,10 +308,19 @@ proc step(ctx: MCF5307Ctx): uint32 =
     # `eaLegalityFor` and a `case` over `Operation` must be exhaustive.
     #
     # EXG AND NBCD ARE NOT ON THIS PART. `m68k-elf-as` rejects `exg %d0,%d1`
-    # and `nbcd %d0` under both `-mcpu=5307` and `-mcpu=5407`, neither
-    # mnemonic appears anywhere in the MCF5407 User's Manual, and section 3.9
-    # of the MCF5307 User's Manual, page 3-21, names BCD among the removed
-    # groups, which is NBCD.
+    # and `nbcd %d0` under both `-mcpu=5307` and `-mcpu=5407`. MCF5407 User's
+    # Manual section 2.6, folio 2-15, names BCD among the removed groups -
+    # "The removed instructions include BCD, bit field, logical rotate,
+    # decrement and branch, and integer multiply with a 64-bit result" - which
+    # is NBCD.
+    #
+    # EXG is not in that sentence, so its absence rests on the instruction set
+    # summary instead: Table 2-8, "User-Level Instruction Set Summary", runs
+    # EOR, EORI, EXT, EXTB, HALT, JMP on folio 2-20 and carries no EXG row
+    # between EXTB and HALT. That was read off the RENDERED page and not off a
+    # text extraction - `pdftotext` is lossy inside these instruction tables,
+    # so a grep that finds no EXG is not evidence that the row is missing,
+    # whereas the printed table with its neighbours either side is.
     #
     # TAS IS ON THIS PART AND IS SIMPLY NOT IMPLEMENTED, which is why it is
     # described apart from the other two. MCF5407 User's Manual folio 2-51
@@ -331,15 +377,15 @@ proc mcf5307_exec*(ctx: MCF5307Ctx; maxCycles: uint32): uint32
     # after any higher-priority exception, so it executes at least
     # one instruction of an interrupt handler before recognizing another
     # request; and sampling is inhibited during the first instruction of every
-    # exception handler. User's Manual section 7.6, folio 7-23: "The MCF5307
-    # device takes an interrupt exception for a pending interrupt within one
-    # instruction boundary after processing any other pending exception with a
-    # higher priority. Thus, the MCF5307 device executes at least one
-    # instruction in an interrupt exception handler before recognizing another
-    # interrupt request." Table 3-1's closing paragraph, folio 3-13, states the
-    # same rule for every exception handler: "ColdFire processors inhibit
-    # sampling for interrupts during the first instruction of all exception
-    # handlers."
+    # exception handler. MCF5407 User's Manual section 18.7, "Interrupt
+    # Exceptions", folio 18-18: "The MCF5407 takes an interrupt exception for a
+    # pending interrupt within one instruction boundary after processing any
+    # higher-priority pending exception. Thus, the MCF5407 executes at least
+    # one instruction in an interrupt exception handler before recognizing
+    # another interrupt request." Table 2-19's closing paragraph, folio 2-32,
+    # states the same rule for every exception handler: "ColdFire processors
+    # inhibit sampling for interrupts during the first instruction of all
+    # exception handlers."
     #
     # `atHandlerEntry` is what implements both sentences, and the shape of this
     # loop is not. `takeException` sets that field on every exception it

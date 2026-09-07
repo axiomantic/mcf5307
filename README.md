@@ -1,6 +1,6 @@
 # mcf5307
 
-An emulator for the Freescale MCF5307 ColdFire processor, and a model of the
+An emulator for the Motorola MCF5407 ColdFire processor, and a model of the
 Philips ISP1181 USB device controller.
 
 The core is written in Nim. CMake drives the Nim compiler and gives a static
@@ -65,7 +65,7 @@ better than a check that lets the library give a wrong result.
 ## Relation to other projects
 
 This library is a component of a Nord Modular G2 emulator, but it holds no
-knowledge of that instrument. It is a general MCF5307 core, and a program that
+knowledge of that instrument. It is a general MCF5407 core, and a program that
 needs a ColdFire processor can use it alone.
 
 ## Licence
@@ -82,5 +82,6 @@ Facts stay usable. Register addresses, bit layouts, access widths and opcode
 encodings are facts about Motorola silicon, not the expression of any author,
 so a GPL document or source file is a legitimate place to *check* a fact. The
 authority to *implement* from is the Motorola manual set: the ColdFire Family
-Programmer's Reference Manual, the MCF5307 User's Manual, and this project's
-own measurements of the hardware.
+Programmer's Reference Manual, the MCF5407 User's Manual, the MCF5307 User's
+Manual where a fact is common to both parts and only the older manual prints
+it, and this project's own measurements of the hardware.

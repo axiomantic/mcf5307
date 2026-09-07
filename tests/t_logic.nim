@@ -6,23 +6,23 @@
 ##
 ##   Two Motorola documents supply the instruction semantics this file
 ##   asserts: the ColdFire Family Programmer's Reference Manual Rev. 3 and the
-##   MCF5307 ColdFire Integrated Microprocessor User's Manual.
+##   MCF5407 ColdFire Integrated Microprocessor User's Manual.
 ##
-##   The MCF5307 User's Manual is the document every table and page cited
+##   The MCF5407 User's Manual is the document every table and folio cited
 ##   below refers to. Its full identity, so that a reader can be sure of
-##   holding the same edition: Motorola, "MCF5307 ColdFire Integrated
-##   Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998 - the
-##   order number is printed at the top right of the cover and the title is the
-##   title page. It is not in this repository and may not be copied into it,
-##   which is why every citation here names table, page and row instead of
+##   holding the same edition: Motorola, "MCF5407 ColdFire Integrated
+##   Microprocessor User's Manual", order number MCF5407UM/D, Rev. 0.1,
+##   11/2001 - the order number and revision are printed under the title on the
+##   cover. It is not in this repository and may not be copied into it, which
+##   is why every citation here names table, folio and row instead of
 ##   quoting.
 ##
 ##   The other document is Freescale, "ColdFire Family Programmer's Reference
 ##   Manual", Rev. 3.
 ##
-##   Its per-instruction pages carry the flag rules the User's Manual never
-##   had: folio 4-12 gives ASL's V a flat "Always cleared" and notes that this
-##   is "unlike on the 68K family processors".
+##   Its per-instruction pages carry the flag rules the User's Manual's
+##   instruction tables do not: folio 4-12 gives ASL's V a flat "Always
+##   cleared" and notes that this is "unlike on the 68K family processors".
 ##
 ##   Read the PDF as rendered pages. Tables in an OCR markdown conversion of
 ##   the User's Manual are known wrong, so a value taken from text extraction
@@ -309,7 +309,8 @@ template checkMask(got: bool; want: bool; label: string) =
   static: declaredSites.add(site)
   checkMaskImpl(site, got, want, label)
 # The dirty condition codes a bit operation must carry through untouched. A bit
-# operation writes Z alone (manual Table 3-7 names no other bit), so N, V, C
+# operation writes Z alone (manual Table 2-8, folio 2-20, names no other bit
+# in the BCHG, BCLR, BSET and BTST rows), so N, V, C
 # and X are set on entry and asserted unchanged on exit.
 const bitDirty = srBase or ccrN or ccrV or ccrC or ccrX
 
@@ -373,8 +374,9 @@ block:
 #
 # Why the immediate is out, and why the assembler does not settle it. See the
 # `eaBitDynamic` doc comment in `decode_types.nim` for the manual rows and the
-# toolchain measurements. The short form: MCF5307 User's Manual Table 3-13
-# (page 3-28) dashes the `#xxx` column of the `btst Dy,<ea>` row, and that
+# toolchain measurements. The short form: MCF5407 User's Manual Table 2-15,
+# "Two-Operand Instruction Execution Times" (folio 2-28), dashes the `#<xxx>`
+# column of the `btst Dy,<ea>` row, and that
 # dash is the same mark the table uses for every form this part does not have.
 # `m68k-elf-as -mcpu=5307` does assemble `btst %d1,#5` as `033c 0005`, and
 # that acceptance is byte-for-byte the plain-68000 one - the assembler
@@ -564,10 +566,10 @@ block:
 # `eaDataAddressing` - the manual's data class, which does not include `An`.
 # It is the source mask of the `<ea> op Dn -> Dn` direction of AND and OR.
 # Both read and neither writes, so the PC-relative pair and
-# the immediate are in and the address register is out. MCF5307 User's Manual
-# Table 3-13: the `and.l <ea>,Rx` row on page 3-28 and the `or.l <ea>,Rx` row
-# on the continuation page 3-29 carry a time in every column including `#xxx`,
-# where both read `1(0/0)`. The table spans two pages.
+# the immediate are in and the address register is out. MCF5407 User's Manual
+# Table 2-15: the `and.l <ea>,Rx` row on folio 2-27 and the `or.l <ea>,Rx` row
+# on the continuation folio 2-28 carry a time in every column including
+# `#<xxx>`, where both read `1(0/0)`. The table spans folios 2-27 to 2-29.
 #
 # Measured: `m68k-elf-as -mcpu=5307` accepts `and.l (4,%pc),%d1` (`c2ba 0004`)
 # and rejects `and.l %a0,%d1`; `c0bc 0000 0005` disassembles as `andl #5,%d0`

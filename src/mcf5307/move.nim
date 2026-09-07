@@ -14,18 +14,22 @@
 ## before the EA's own words.
 ##
 ## CYCLES. See the block above the constants in `cpu.nim`. Every instruction in
-## this group HAS a timing row - MOVE and MOVEA in Tables 3-9 and 3-10 (folios
-## 3-26 and 3-27), MOVEQ and LEA in Table 3-13 (3-28), SWAP in Table 3-12
-## (3-27), and PEA, LINK, UNLK and MOVEM in Table 3-14 (3-29) - and NONE OF THE
+## this group HAS a timing row - MOVE and MOVEA in Table 2-11 "Move Byte and
+## Word" (folio 2-25) and Table 2-12 "Move Long" (2-25 and 2-26), MOVEQ in
+## Table 2-13 "Miscellaneous Move" (2-26), LEA in Table 2-15 (2-28), SWAP in
+## Table 2-14
+## (2-27), and PEA, LINK, UNLK and MOVEM in Table 2-16 (2-29 and 2-30) - and
+## NONE OF THE
 ## RETURNS HERE WAS DERIVED FROM ONE. Some of those rows carry a SINGLE cell
 ## that the return contradicts outright, so no effective-address flattening
 ## explains them: `moveq #imm,Dx` is 1(0/0) against the 4 returned, `swap Dx`
 ## is 1(0/0) against 4, `link.w Ay,#imm` is 2(0/1) against 8, and `unlk Ax` is
-## 3(1/0) against 6. `movem.l` is `2+n` against the `8+2n` here.
+## 1(1/0) against 6. `movem.l` is `n(n/0)` loading and `n(0/n)` storing against
+## the `8+2n` here.
 ##
 ## Instruction semantics, register numbering and addressing-mode behaviour are
 ## taken from the ColdFire Family Programmer's Reference Manual and the
-## MCF5307 User's Manual, and from this project's own measurements.
+## MCF5407 User's Manual, and from this project's own measurements.
 
 import std/bitops
 import mcf5307/decode_types
@@ -87,47 +91,61 @@ proc execPea(ctx: MCF5307Ctx; d: Decoded): uint32 =
 
 proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## SWAP Dn: the upper and lower 16-bit halves of a data register exchange.
-  ## Table 3-7, page 3-25: `MSW of Dn <-> LSW of Dn`.
+  ## Table 2-8, "User-Level Instruction Set Summary", folio 2-22:
+  ## `MSW of Dx <-> LSW of Dx`.
   ##
-  ## THE CONDITION CODES COME FROM THE GENERIC CCR RULE, section 3.2.1.5, page
-  ## 3-9. There is no PER-INSTRUCTION rule to find: Table 3-7's OPERATION
-  ## column carries no condition-code clause for SWAP and Table 3-12 gives
+  ## THE CONDITION CODES COME FROM THE GENERIC CCR RULE, section 2.2.1.5,
+  ## folio 2-9. There is no PER-INSTRUCTION rule to find: Table 2-8's Operation
+  ## column carries no condition-code clause for SWAP and Table 2-14 gives
   ## timing alone, and those two rows are the only places the manual names SWAP
-  ## at all. But the GENERIC rule settles it. Section 3.2.1.5 opens at the foot
-  ## of page 3-8 with the CCR bit-field figure and does not end there; page 3-9
-  ## carries the per-bit definitions and fixes every one - N "Set if the most
-  ## significant bit of the result is set; otherwise cleared", Z "Set if the
+  ## at all. But the GENERIC rule settles it. Section 2.2.1.5 opens on folio
+  ## 2-9 with the CCR bit-field figure and does not end there; Table 2-1,
+  ## "CCR Field Descriptions", overleaf on folio 2-10,
+  ## carries the per-bit definitions and fixes every one - N "Set if the msb
+  ## of the result is set; otherwise cleared", Z "Set if the
   ## result equals zero; otherwise cleared", V "Set if an arithmetic overflow
-  ## occurs implying that the result cannot be represented in the operand
-  ## size; otherwise cleared", C "Set if a carryout of the operand MSB occurs
-  ## for an addition, or if a borrow occurs in a subtraction; otherwise
-  ## cleared", and X "Set to the value of the C-bit for arithmetic
-  ## operations; otherwise not affected". An exchange of a register's halves
+  ## occurs, implying that the result cannot be represented in the operand
+  ## size; otherwise cleared", C "Set if a carry-out of the data operand msb
+  ## occurs
+  ## for an addition or if a borrow occurs in a subtraction; otherwise
+  ## cleared", and X "Assigned the value of the carry bit for arithmetic
+  ## operations; otherwise not affected or set to a specified result". An
+  ## exchange of a register's halves
   ## is not an addition, not a subtraction and not an arithmetic operation,
   ## so V and C are cleared and X is untouched, and N and Z come from the
   ## result. That is `setNzClearVc` at size 4, which MOVE, MOVEQ, EXT, EXTB
   ## and the 32-bit multiply share. `logic.nim` derives AND, OR, EOR and NOT
   ## from the same clauses.
   ##
-  ## Section 3.9 is not an oracle. Two independent reasons it cannot be:
+  ## Section 2.6 is not an oracle, and the reason has changed with the part.
   ##
-  ##   Its removed list is not reliable. Page 3-21 names "integer division"
-  ##   among the removed instructions, while Table 3-7 on page 3-23 carries
-  ##   both a DIVS row and a DIVU row and Table 3-13 on page 3-28 times
-  ##   `divs.w`, `divu.w`, `divs.l` and `divu.l`. A list that contradicts the
-  ##   tables cannot settle a question on its own.
+  ##   THE REMOVED-LIST OBJECTION IS GONE ON THE MCF5407, AND ITS DISAPPEARANCE
+  ##   IS ITSELF A CHANGE OF SUBSTANCE. The MCF5307's section 3.9, page 3-21,
+  ##   named "integer division" among the removed instructions while its own
+  ##   Table 3-7 carried DIVS and DIVU rows - a list contradicting its tables.
+  ##   The MCF5407's section 2.6, folio 2-15, names "BCD, bit field, logical
+  ##   rotate, decrement and branch, and integer multiply with a 64-bit result"
+  ##   and does NOT name integer division, because the V4 core has a hardware
+  ##   divide unit (section 2.1.2.2.3, folio 2-6). Table 2-8 carries DIVS,
+  ##   DIVU, REMS and REMU and Table 2-15 times `divs.w`, `divu.w`, `divs.l`,
+  ##   `divu.l`, `rems.l` and `remu.l`. List and tables now agree.
   ##
-  ##   "A reduced version of the 68000 instruction set" is a claim about set
-  ##   membership, not about per-instruction semantics. Table 3-7 gives ADD,
-  ##   SUB, AND, OR, EOR and CMP an operand size of 32 alone where the 68000
-  ##   has `.b`, `.w` and `.l`. Retained instructions on this part are not
+  ##   What still stands is the second reason, which never depended on the
+  ##   first. "A simplified version of the M68000 instruction set" is a claim
+  ##   about set
+  ##   membership, not about per-instruction semantics. Table 2-8 gives ADD,
+  ##   SUB, AND, OR and EOR an operand size of `.L` alone where the 68000
+  ##   has `.b`, `.w` and `.l`. (CMP and CMPI are no longer among them: the
+  ##   V4's ISA_B additions restore their byte and word forms, section 2.6.1,
+  ##   folio 2-18.) Retained instructions on this part are not
   ##   semantically identical to their 68000 originals, so "retained,
   ##   therefore 68000 semantics" does not follow in general - and it is not
-  ##   what pins these flags. Section 3.2.1.5 is.
+  ##   what pins these flags. Section 2.2.1.5 is.
   ##
   ## The width is settled, and the User's Manual alone did not settle it:
-  ## section 3.2.1.5 says only "the result" and Table 3-7's operand-size column
-  ## for SWAP says 16, which reads as the low half. CFPRM folio 4-81 gives the
+  ## section 2.2.1.5 says only "the result" and Table 2-8's Operand Size column
+  ## for SWAP says `.W`, which reads as the low half. CFPRM folio 4-81 gives
+  ## the
   ## operation as `Register[31:16] <-> Register[15:0]` and N as "Set if the msb
   ## of the result is set", Z as "Set if the result is zero". The result of
   ## that operation is the whole register, so N is bit 31 and Z spans all 32

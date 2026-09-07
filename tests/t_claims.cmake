@@ -308,8 +308,13 @@ set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_REPLACE "  ctx.irqAutovector = au
 # ---------------------------------------------------------------------------
 # The deferred write fault. `src/mcf5307/writeMem` records an access error on a
 # store and `cpu.nim`'s `step` takes the vector at the instruction boundary,
-# because User's Manual section 3.5.1, printed page 3-15, requires the faulting
-# instruction's programming-model updates to complete first. The mutation puts
+# because MCF5307 User's Manual section 3.5.1, printed page 3-15, requires the
+# faulting instruction's programming-model updates to complete first. THAT
+# MANUAL IS CITED DELIBERATELY: the MCF5407 User's Manual condenses the
+# MCF5307's section 3.5 into one table, Table 2-22, and does not reproduce the
+# paragraph on imprecise reporting of access errors on operand writes, so there
+# is no MCF5407 folio for the sentence. Nothing in MCF5407 Table 2-22, "Access
+# Error", folio 2-34, contradicts it. The mutation puts
 # the take back at the store, and it is two edits because the procedure it
 # calls is defined further down the file and needs its forward declaration
 # back.
@@ -415,8 +420,10 @@ set(CLAIM_one_iteration_suite_t_irq_EDIT_1_REPLACE "    if not ctx.atHandlerEntr
 
 # --- the odd control-transfer target ----------------------------------------
 # `src/mcf5307/machine.nim`'s `transferControl` refuses an odd target and takes
-# the address error, which the MCF5307 User's Manual requires of any attempted
-# execution transferring control to an odd instruction address.
+# the address error, which the MCF5407 User's Manual section 2.8.2, Table 2-22,
+# the Address Error row, folio 2-34, requires of "an attempted execution
+# transferring control to an odd instruction address (that is, if bit 0 of the
+# target address is set)".
 #
 # The mutation deletes the refusal and keeps the assignment. That core faults on
 # every one of these cases too, one instruction later, from the illegal-encoding
