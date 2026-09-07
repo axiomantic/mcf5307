@@ -404,8 +404,12 @@ proc runProtectedStore(startSp: uint32; readFrameAt: uint32): FaultOutcome =
 # `FS` is `1001`, the code for a write to write-protected space, and its two
 # halves land in two non-adjacent fields:
 #   0100 | 10 | 00000010 | 01 | 0010011100000000 -> 0x48092700
-# The stacked program counter is `ctx.pc`, which the opcode word and the one
-# `(xxx).W` extension word have advanced to execBase + 4.
+# The stacked program counter is the FAULTING INSTRUCTION'S OWN ADDRESS and not
+# where the write pipeline had reached. MCF5407 User's Manual section 4.9.5.1,
+# "Cache Filling", folio 4-17: "Note that unlike Version 2 and Version 3 access
+# errors, the program counter stored on the exception stack frame points to the
+# faulting instruction." A Version 3 stacks execBase + 4 here, past the opcode
+# word and the one `(xxx).W` extension word; this part stacks execBase.
 #
 # THE LIVE STATUS REGISTER IS 0x2704 AND THE FRAME'S COPY IS 0x2700, AND THE
 # DIFFERENCE IS REQUIRED RATHER THAN TOLERATED. THE MCF5307 USER'S MANUAL IS
@@ -423,7 +427,7 @@ proc runProtectedStore(startSp: uint32; readFrameAt: uint32): FaultOutcome =
 # `takeException` took BEFORE that, which is why the two differ by exactly Z.
 const wantProtected: FaultOutcome =
   (sp: frameBase, pc: accessHandler, sr: 0x2704'u32, halted: false,
-   fault: false, frame: 0x48092700'u32, framePc: execBase + 4'u32,
+   fault: false, frame: 0x48092700'u32, framePc: execBase,
    offBoard: 0)
 
 let protectedStore = runProtectedStore(0x800'u32, frameBase)
@@ -566,23 +570,33 @@ check(faultingRead == wantFaultingRead,
 # opword, `rte` as 0x4E73, sign-extended and added to A7 to give 0x5A6B, and
 # with the exception frame base written into A0.
 #
-# WHAT THE MANUAL DOES NOT SETTLE, STATED SO THAT NO LITERAL BELOW IS READ AS
-# ITS AUTHORITY. The same MCF5307 passage calls the reporting imprecise and says the
-# stacked program counter "merely represents the location in the program when
-# the access error was signaled", so it fixes NO particular value for that
-# longword. This core reports the program counter and the status register AS
-# THE STORE FOUND THEM, which is what it reported before the deferral; the
-# `framePc` literals below pin that choice and cite nothing for it.
+# THE STACKED PROGRAM COUNTER IS SETTLED AND THE STATUS REGISTER IS NOT, AND
+# THE TWO CARRY DIFFERENT AUTHORITY BELOW BECAUSE OF IT. The MCF5307 passage
+# calls the reporting imprecise and says the stacked program counter "merely
+# represents the location in the program when the access error was signaled",
+# which fixes no value; the MCF5407 manual then fixes one. Section 4.9.5.1,
+# "Cache Filling", folio 4-17: "Note that unlike Version 2 and Version 3 access
+# errors, the program counter stored on the exception stack frame points to the
+# faulting instruction." So every `framePc` literal below is `execBase`,
+# whatever the instruction's length and whatever its store left in `ctx.pc` -
+# and a Version 3's would differ per instruction, which is what makes these
+# literals one measurement rather than several. The status register has no such
+# sentence and is still reported AS THE STORE FOUND IT.
 #
 # `PEA` IS HERE AND IS NOT A REPAIR. It pushes and then writes nothing, so it
 # reached the handler correctly before the deferral and reaches it after. The
 # case separates "the fix moved the instructions that clobber control state"
 # from "the fix moved every instruction that pushes".
 #
-# TAKING THE VECTOR AT THE STORE AGAIN LEAVES EXACTLY FOUR RED. Four and not
-# six: the three pushes above and BLOCK 6's status register go red, while
-# BLOCK 5 and the PEA case stay green - BLOCK 5 because the deferral was built
-# to leave the frame's contents alone, and PEA because it was never wrong.
+# TAKING THE VECTOR AT THE STORE LEAVES EXACTLY SIX RED. Six and not four: the
+# three pushes here, the PEA, BLOCK 5's frame and BLOCK 6's status register.
+# EVERY FRAME-ASSERTING CASE OF THIS FILE IS AMONG THEM, and folio 4-17 is why
+# a mutation that only moves WHEN the vector is taken reaches WHAT the frame
+# says. The address of the faulting instruction is not a value the store site
+# holds - `ctx.pc` has left it - so a take at the store cannot produce the
+# stacked program counter this part requires, whatever else it gets right.
+# BLOCK 7's read fault and the trap cases above are what stay green, and they
+# are the half that says the mutation reached the write path and no other.
 # `tests/t_claims.cmake` registers that mutation as
 # `write_fault_deferral_suite_t_bus_fault` and refutes this sentence when the
 # count moves.
@@ -631,15 +645,16 @@ proc runFaultingPush(words: openArray[uint16]; frameAt: uint32): PushOutcome =
 # 2-34, "If an address error occurs on a JSR instruction, the Version 4
 # processor first pushes the return address onto the stack and then calculates
 # the target address. On Version 2 and 3 processors, these functions are
-# reversed." THEN the exception: Table 2-20, folio 2-33, puts the frame of an
+# reversed." An absolute target is computed from no register, so this case
+# cannot see that order and is not where it is measured; `t_control.nim` drives
+# it with an A7-based operand. THEN the exception: Table 2-20, folio 2-33, puts the frame of an
 # A7 of 0x0C00 at 0x0BF8 with FORMAT 4, and the handler address replaces the
 # JSR target.
 # The frame is 0100 | 10 | 00000010 | 01 | 0010011100000000, and the stacked
-# program counter is the one the store found - past the opword and the one
-# `(xxx).W` extension word.
+# program counter is the JSR's own address.
 const wantJsr: PushOutcome =
   (pc: accessHandler, sp: 0x0BF8'u32, a0: a0Sentinel, halted: false,
-   fault: false, frame: 0x48092700'u32, framePc: execBase + 4'u32)
+   fault: false, frame: 0x48092700'u32, framePc: execBase)
 
 let faultingJsr = runFaultingPush([opJsrAbsW, extJsrTarget], 0x0BF8'u32)
 check(faultingJsr == wantJsr,
@@ -648,12 +663,10 @@ check(faultingJsr == wantJsr,
 
 # BSR. Table 2-8, folio 2-20, gives it "SP - 4 -> SP; next sequential PC ->
 # (SP); PC + 2 + dn -> PC" - the same shape as JSR and the same two updates, so
-# the same outcome. The
-# displacement is consumed before the push, so the stacked program counter is
-# again past both words of the instruction.
+# the same outcome.
 const wantBsr: PushOutcome =
   (pc: accessHandler, sp: 0x0BF8'u32, a0: a0Sentinel, halted: false,
-   fault: false, frame: 0x48092700'u32, framePc: execBase + 4'u32)
+   fault: false, frame: 0x48092700'u32, framePc: execBase)
 
 let faultingBsr = runFaultingPush([opBsrW, extBsrDisp], 0x0BF8'u32)
 check(faultingBsr == wantBsr,
@@ -666,12 +679,13 @@ check(faultingBsr == wantBsr,
 # A0 takes 0x0C00 - THE STACK SLOT AND NOT THE FRAME BASE - and A7 then takes
 # 0x0C00 - 8, which is 0x0BF8. Table 2-20 puts the frame of that A7 at 0x0BF0.
 #
-# THE DISPLACEMENT IS FETCHED AFTER THE PUSH, WHICH IS WHY THE STACKED PROGRAM
-# COUNTER IS execBase + 2 AND NOT execBase + 4. `execLink` writes before it
-# calls `fetchExt`, so the store found the program counter one word in. The
-# fetch itself now reads the instruction stream, which is the whole of what
-# 0x0602 was: with the exception taken at the store, that fetch read the
-# handler.
+# THE DISPLACEMENT IS FETCHED AFTER THE PUSH, AND THE STACKED PROGRAM COUNTER
+# NO LONGER SHOWS IT. `execLink` writes before it calls `fetchExt`, so the store
+# found `ctx.pc` one word in: a Version 3 would stack execBase + 2 here while
+# stacking execBase + 4 for the JSR above, and folio 4-17 collapses both onto
+# the instruction's own address. The fetch itself now reads the instruction
+# stream, which is the whole of what 0x0602 was: with the exception taken at the
+# store, that fetch read the handler.
 #
 # -8 AND NOT +4, AND THE REASON IS THE BOARD RATHER THAN THE INSTRUCTION. A
 # non-negative displacement leaves A7 at or above 0x0C00, and Table 2-20 then
@@ -679,7 +693,7 @@ check(faultingBsr == wantBsr,
 # already owns and which would hide this case's subject.
 const wantLink: PushOutcome =
   (pc: accessHandler, sp: 0x0BF0'u32, a0: 0x0C00'u32, halted: false,
-   fault: false, frame: 0x48092700'u32, framePc: execBase + 2'u32)
+   fault: false, frame: 0x48092700'u32, framePc: execBase)
 
 let faultingLink = runFaultingPush([opLinkA0, extLinkDisp], 0x0BF0'u32)
 check(faultingLink == wantLink,
@@ -691,7 +705,7 @@ check(faultingLink == wantLink,
 # nothing for the deferral to move.
 const wantPea: PushOutcome =
   (pc: accessHandler, sp: 0x0BF8'u32, a0: a0Sentinel, halted: false,
-   fault: false, frame: 0x48092700'u32, framePc: execBase + 4'u32)
+   fault: false, frame: 0x48092700'u32, framePc: execBase)
 
 let faultingPea = runFaultingPush([opPeaAbsW, extPeaTarget], 0x0BF8'u32)
 check(faultingPea == wantPea,

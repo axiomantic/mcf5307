@@ -211,10 +211,18 @@ type
     # what makes the two differ: the instruction's remaining programming-model
     # updates run between the store and the boundary, so an SR read at the
     # boundary would carry condition codes the store did not see.
+    #
+    # THE STACKED PROGRAM COUNTER IS NOT AMONG THEM, and on this part it could
+    # not be. MCF5407 User's Manual section 4.9.5.1, "Cache Filling", folio
+    # 4-17: "Note that unlike Version 2 and Version 3 access errors, the
+    # program counter stored on the exception stack frame points to the
+    # faulting instruction." That address is the one the instruction started
+    # at, which no store can read off the context - `ctx.pc` has already moved
+    # past the opcode word and past whatever extension words the operand
+    # consumed. `cpu.nim`'s `step` holds it and passes it to the take.
     pendingWriteFault*: bool    ## a store faulted; the vector is not yet taken
     pendingFaultStatus*: uint32 ## `FS` for that store, Table 2-21 (folio 2-33)
     pendingStackedSr*: uint32   ## the status register as the store found it
-    pendingStackedPc*: uint32   ## the program counter as the store found it
 
 # ---------------------------------------------------------------------------
 # The width of one word of the instruction stream.

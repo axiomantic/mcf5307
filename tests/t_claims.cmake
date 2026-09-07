@@ -329,22 +329,23 @@ set(CLAIM_edge_vector_scope_suite_t_irq_EDIT_2_REPLACE "  ctx.irqAutovector = au
 # the mutation to a copy of `src/` and running the suite, with a no-op control
 # on the same harness reporting no reds.
 
-# Which cases stay green is half of the claim. A mutation that also reddened
-# the frame-content block would mean the deferral had changed what the frame
-# contains and not only when it is written, and a mutation that reddened PEA
-# would mean the repair had reached an instruction that was already correct.
+# Which cases stay green is half of the claim. This mutation reds every case of
+# that file which asserts a frame, because the stacked program counter this part
+# requires is the faulting instruction's address and a take at the store cannot
+# name it; what must stay green is the read-fault case and the trap cases, and a
+# mutation that reddened those would have reached beyond the write path.
 
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_KIND "suite-red")
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_SUITE "t_bus_fault")
-set(CLAIM_write_fault_deferral_suite_t_bus_fault_EXPECT_RED 4)
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_EXPECT_RED 6)
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_CLAIM_FILE "tests/t_bus_fault.nim")
-set(CLAIM_write_fault_deferral_suite_t_bus_fault_CLAIM_TEXT "EXACTLY FOUR RED. Four and not")
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_CLAIM_TEXT "EXACTLY SIX RED. Six and not four:")
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDITS 2)
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_1_FILE "mcf5407/machine.nim")
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_1_FIND "proc boardRead(ctx: MCF5407Ctx; address: uint32; size: uint8;\n")
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_1_REPLACE "proc takeExceptionCopiedSr*(ctx: MCF5407Ctx; vector: uint8; stackedPc: uint32;\n                            fs: uint32; stackedSr: uint32)\n\nproc boardRead(ctx: MCF5407Ctx; address: uint32; size: uint8;\n")
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_2_FILE "mcf5407/machine.nim")
-set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_2_FIND "    ctx.pendingWriteFault = true\n    ctx.pendingFaultStatus = faultStatusFor(st, operandWrite)\n    ctx.pendingStackedSr = ctx.sr and 0xFFFF'u32\n    ctx.pendingStackedPc = ctx.pc\n")
+set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_2_FIND "    ctx.pendingWriteFault = true\n    ctx.pendingFaultStatus = faultStatusFor(st, operandWrite)\n    ctx.pendingStackedSr = ctx.sr and 0xFFFF'u32\n")
 set(CLAIM_write_fault_deferral_suite_t_bus_fault_EDIT_2_REPLACE "    takeExceptionCopiedSr(ctx, vecAccessError, ctx.pc,\n                          faultStatusFor(st, operandWrite), ctx.sr and 0xFFFF'u32)\n")
 
 set(CLAIM_reset_inhibit_suite_t_irq_KIND "suite-red")

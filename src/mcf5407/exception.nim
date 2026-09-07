@@ -13,49 +13,45 @@
 ## 5, 12 or 13.
 
 # ---------------------------------------------------------------------------
-# FOUR PLACES WHERE THIS CORE STILL BEHAVES LIKE A V3 AND THE PART IS A V4.
+# FOUR PLACES WHERE THIS CORE PARTS COMPANY WITH A V3 BECAUSE THE PART IS A V4.
 #
-# These are DIVERGENCES FROM THE SILICON, not statements about it, and none of
-# them is a Revision B opcode - they are exception semantics, so the decision
-# not to implement Revision B does not cover them. They are recorded here
-# rather than fixed because fixing any of them changes observable stack layout
-# or condition codes and moves test expectations; that is a decision for the
-# operator and not a side effect of re-pointing citations.
+# None of them is a Revision B opcode - they are exception semantics, so the
+# decision not to implement Revision B does not cover them. All four come from
+# the MCF5407 User's Manual and all four say "Version 4 differs from Version 2
+# and 3" in so many words. Each is implemented where the behaviour lives, and
+# this list is the map from the sentence to the module.
 #
-# All four come from the MCF5407 User's Manual and all four say "Version 4
-# differs from Version 2 and 3" in so many words.
-#
-#   1. THE STACKED PC OF AN ACCESS ERROR. Section 4.9.5.1, folio 4-17: "Note
-#      that unlike Version 2 and Version 3 access errors, the program counter
-#      stored on the exception stack frame points to the faulting instruction."
-#      This core captures the program counter at the store, mid-instruction,
-#      which is the V2/V3 imprecise rule. `machine.nim` holds that capture.
+#   1. THE STACKED PC OF AN ACCESS ERROR. Section 4.9.5.1, "Cache Filling",
+#      folio 4-17: "Note that unlike Version 2 and Version 3 access errors, the
+#      program counter stored on the exception stack frame points to the
+#      faulting instruction." `cpu.nim`'s `step` holds that address and passes
+#      it to `machine.nim`'s `takePendingWriteFault`; a V2 or V3 stacks the
+#      program counter as the store found it, mid-instruction.
 #
 #   2. AN ADDRESS ERROR ON JSR. Table 2-22, folio 2-34: "If an address error
 #      occurs on a JSR instruction, the Version 4 processor first pushes the
 #      return address onto the stack and then calculates the target address. On
-#      Version 2 and 3 processors, these functions are reversed." This core
-#      calculates first, so a faulting JSR leaves the stack pointer where a V3
-#      leaves it and not where a V4 does.
+#      Version 2 and 3 processors, these functions are reversed."
+#      `control.nim`'s `execJump` moves A7 before it evaluates the operand.
 #
 #   3. AN ADDRESS ERROR ON RTS. Table 2-22, folio 2-34: "If an address error
 #      occurs on an RTS instruction, the Version 4 processor preserves the
 #      original return PC and writes the exception stack frame above this
 #      value. On Version 2 and 3 processors, the faulting return PC is
-#      overwritten by the address error stack frame." This core overwrites.
-#      `tests/t_control.nim` pins the overwriting layout by its frame base.
+#      overwritten by the address error stack frame." `control.nim`'s `execRts`
+#      leaves A7 at its entry value when the popped address is odd.
 #
 #   4. THE CONDITION CODES AFTER A WRITE-PROTECT FAULT. Table 2-22, folio 2-34:
 #      "The Version 4 processor, unlike the Version 2 and 3 processors, updates
 #      the condition code register if a write-protect error occurs during a CLR
-#      or MOV3Q operation to memory." This core leaves the condition codes
-#      alone. `bus.nim` carries the same note beside the fault it produces. The
-#      manual does not say what value the register takes, so this one cannot be
-#      implemented from the manual alone.
+#      or MOV3Q operation to memory." MOV3Q is Revision B and is not decoded
+#      here, so `alu.nim`'s `execClr` is the whole of the reachable half.
 #
-# WHAT WOULD SETTLE ITEM 4, and what would make items 1 to 3 worth doing: a run
-# on silicon or on a hardware model, or a consumer that depends on the layout.
-# Nothing in this repository reads any of the four today.
+#      ITEM 4 IS NOT LIKE THE OTHER THREE. The manual states that the register
+#      is updated and states nowhere what it is updated TO, so the value this
+#      core writes is a CHOICE and not a reading. The block above `execClr` in
+#      `alu.nim` names the value, argues for it as reasoning rather than
+#      evidence, and says what run would settle it.
 
 # MCF5407 User's Manual Table 2-21, "Fault Status Encodings", folio 2-33: the
 # defined set for this part. CFPRM Table 11-2, folio 11-5, adds codes tagged

@@ -479,20 +479,32 @@ proc execJump(ctx: MCF5407Ctx; d: Decoded; insnPc: uint32): uint32 =
   ## instruction jumps to the ADDRESS ITSELF and never to what is at it -
   ## Table 2-8, folio 2-20, gives JMP as "Address of <ea> -> PC".
   ##
-  ## The effective address is evaluated before the return address is pushed,
-  ## and that ordering is the whole of what makes `jsr 0x00054320` different
-  ## from `jsr (%a0)`. `eaAddr` consumes the operand's extension words, so
-  ## `ctx.pc` afterwards is the address after the whole instruction, which is
-  ## what "SP - 4 -> SP; PC -> (SP)" (Table 2-8, folio 2-20) means by PC. A
-  ## core that pushed before evaluating would push the address of its own
-  ## extension words and return into them.
+  ## JSR PUSHES BEFORE IT CALCULATES, AND THAT ORDER IS THIS PART'S. MCF5407
+  ## User's Manual Table 2-22, "MCF5407 Exceptions", the Address Error row,
+  ## folio 2-34: "If an address error occurs on a JSR instruction, the Version
+  ## 4 processor first pushes the return address onto the stack and then
+  ## calculates the target address. On Version 2 and 3 processors, these
+  ## functions are reversed." So A7 has already moved when the operand is
+  ## evaluated, and `jsr (%a7)` reaches a target four bytes below the one a
+  ## Version 3 computes.
+  ##
+  ## THE DECREMENT AND THE STORE ARE SPLIT AROUND THE CALCULATION, AND ONLY THE
+  ## DECREMENT CAN GO IN FRONT OF IT. `eaAddr` consumes the operand's extension
+  ## words, so `ctx.pc` afterwards is the address after the whole instruction,
+  ## which is what "SP - 4 -> SP; PC -> (SP)" (Table 2-8, folio 2-20) means by
+  ## PC; a store written in front of the calculation would push the address of
+  ## the instruction's own extension words and return into them. The decrement
+  ## is the half the calculation has to see, and a control operand reads no
+  ## memory, so nothing the calculation does can observe the slot before it is
+  ## written.
   if not eaIsLegalFor(d.op, d.ea):
     return trap(ctx)
+  if d.op == opJsr:
+    ctx.sp = ctx.sp - 4'u32
   let target = eaAddr(ctx, d.ea, 4)
   if ctx.halted:
     return 0'u32
   if d.op == opJsr:
-    ctx.sp = ctx.sp - 4'u32
     writeMem(ctx, ctx.sp, 4, ctx.pc)
     if ctx.halted:
       return 0'u32
@@ -508,10 +520,22 @@ proc execRts(ctx: MCF5407Ctx; insnPc: uint32): uint32 =
   ## "(SP) -> PC; SP + 4 -> SP" - Table 2-8, folio 2-22. The pop is read BEFORE
   ## the stack pointer moves, and the pointer moves only when the read
   ## succeeded.
+  ##
+  ## AN ODD RETURN ADDRESS LEAVES THE POINTER WHERE IT WAS, AND THAT IS THIS
+  ## PART'S RULE. MCF5407 User's Manual Table 2-22, "MCF5407 Exceptions", the
+  ## Address Error row, folio 2-34: "If an address error occurs on an RTS
+  ## instruction, the Version 4 processor preserves the original return PC and
+  ## writes the exception stack frame above this value. On Version 2 and 3
+  ## processors, the faulting return PC is overwritten by the address error
+  ## stack frame." An A7 advanced past the return PC puts the frame's two
+  ## longwords back over the slot the return PC came from, which is exactly the
+  ## overwriting the sentence gives to a Version 3; holding A7 at its entry
+  ## value puts the frame the four bytes lower that preserve it.
   let target = readMem(ctx, ctx.sp, 4)
   if ctx.halted:
     return 0'u32
-  ctx.sp = ctx.sp + 4'u32
+  if (target and 1'u32) == 0'u32:
+    ctx.sp = ctx.sp + 4'u32
   transferControl(ctx, target, insnPc)
   if ctx.halted:
     return 0'u32

@@ -27,15 +27,15 @@ type
 # "SRAM Initialization Code", folio 4-4: "else Signal a write-protect access
 # error".
 #
-# THE SAME ROW ADDS A SENTENCE THE MCF5307'S DID NOT, and it is a divergence
-# this module does not implement: "The Version 4 processor, unlike the Version
-# 2 and 3 processors, updates the condition code register if a write-protect
-# error occurs during a CLR or MOV3Q operation to memory." This is a V4. A
-# faulting `CLR` to write-protected memory should therefore leave the CCR
-# written, and this core leaves it alone. MOV3Q is a Revision B opcode this
-# core does not decode at all, so only the `CLR` half is reachable. The manual
-# does not say WHAT value the condition code register takes, so implementing
-# it would require a guess; it is recorded here rather than guessed at.
+# THE SAME ROW ADDS A SENTENCE THE MCF5307'S DID NOT: "The Version 4 processor,
+# unlike the Version 2 and 3 processors, updates the condition code register if
+# a write-protect error occurs during a CLR or MOV3Q operation to memory." This
+# is a V4, so a faulting `CLR` to write-protected memory leaves the condition
+# codes written. MOV3Q is a Revision B opcode this core does not decode at all,
+# so only the `CLR` half is reachable. The manual does not say WHAT value the
+# register takes; the block above `execClr` in `alu.nim` names the value this
+# core chose and argues for it, and `machine.nim`'s `pendingWriteFaultTakesCc`
+# is what puts it in the frame.
 #
 # The extension rows borrow the hardware codes rather than inventing one.
 # Table 3-3 reserves every value outside its five, so a code of this module's
