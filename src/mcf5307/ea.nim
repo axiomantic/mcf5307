@@ -50,9 +50,9 @@ proc isMode7*(ea: EA): bool =
 # ---------------------------------------------------------------------------
 # The addressing-mode classes.
 #
-# These are the canonical ColdFire addressing-mode classes. Each opcode selects
-# the class its operand must belong to, and the decoder turns the class into a
-# `EaLegality` mask.
+# These are the canonical ColdFire addressing-mode classes (CFPRM, "Addressing
+# Modes"). Each opcode selects the class its operand must belong to, and the
+# decoder turns the class into a `EaLegality` mask.
 #
 #   Data addressing      Dn, An, (An), (An)+, -(An), (d16,An), (d8,An,Xn),
 #                        (xxx).W, (xxx).L, (d16,PC), (d8,PC,Xn), #imm
@@ -86,6 +86,14 @@ const
 
   # THE CONTROL CLASS'S MODE-7 SUB-VARIANTS, `(xxx).W` INCLUDED.
   #
+  # CFPRM Rev. 3, Table 2-3, "Effective Addressing Modes and Categories", folio
+  # 2-10 - PDF PAGE 50, rendered with `pdftoppm -r 200` and read as an IMAGE.
+  # Chapter 2's folio-to-page offset is +40 and is NOT the +76 that the
+  # chapter 4 instruction folios take. The `Control` column carries an `X` on
+  # `(An)`, `(d16,An)`, `(d8,An,Xi*SF)`, `(d16,PC)`, `(d8,PC,Xi*SF)`, `(xxx).W`
+  # and `(xxx).L`, and a dash on `Dn`, `An`, `(An)+`, `-(An)` and `#<xxx>`. The
+  # mode-7 rows among them are this set.
+  #
   # `m68k-elf-as -mcpu=5307` ANSWERS THE SAME CELLS FOR EVERY READER: `jmp`,
   # `jsr`, `lea` and `pea` each accept the control rows and reject the rest with
   # "operands mismatch". The absolute-short encodings are `4ef8 1234`,
@@ -113,10 +121,13 @@ const
   # Every mode appears among the accepted cells.
   #
   # WHERE THE REFERENCE TABLE AND THE ASSEMBLER DISAGREE ABOUT THESE MEMBERS,
-  # THE ASSEMBLER IS TAKEN AS THE AUTHORITY. The table dashes both under
-  # `Alterable`, and an ADDQ to an absolute destination writes memory and the
-  # pinned assembler emits it, so the column is read here as a coarse-table
-  # artefact. THAT DISAGREEMENT IS RECORDED AND NOT SETTLED.
+  # THE ASSEMBLER IS TAKEN AS THE AUTHORITY. The CFPRM's `Alterable` column
+  # dashes both members of this set - Table 2-3, folio 2-10, PDF page 50, read
+  # as a rendered image: `(xxx).W` and `(xxx).L` carry an `X` under `Data`,
+  # `Memory` and `Control` and a dash under `Alterable`. An ADDQ to an absolute
+  # destination writes memory and the pinned assembler emits it, so the column
+  # is read here as a coarse-table artefact. THAT DISAGREEMENT IS RECORDED AND
+  # NOT SETTLED.
   eaAlterable7* = {ea7AbsW, ea7AbsL}
 
   # Data alterable: alterable without An. CLR takes this class -
@@ -135,12 +146,14 @@ const
   # alterable by the indexed mode and by the whole of mode 7, so its `ea7` set
   # is empty and no mode-7 sub-variant can be legal.
   #
-  # `m68k-elf-as -mcpu=5307` accepts `Dy`, `(Ay)`, `(Ay)+`, `-(Ay)` and
-  # `(d16,Ay)` and rejects `Ay`, `(d8,Ay,Xi)`, `(xxx).W`, `(xxx).L`, `#<data>`,
-  # `(d16,PC)` and `(d8,PC,Xi)`.
+  # CFPRM folios 4-32, 4-34, 4-56 and 4-58, "Instruction Fields (Longword)":
+  # each prints a mode and register value for `Dy`, `(Ay)`, `(Ay)+`, `-(Ay)`
+  # and `(d16,Ay)` and a DASH for `Ay`, `(d8,Ay,Xi)`, `(xxx).W`, `(xxx).L`,
+  # `#<data>`, `(d16,PC)` and `(d8,PC,Xi)`. `m68k-elf-as -mcpu=5307` accepts
+  # and rejects the same cells.
   #
-  # `eaMulDivLong7` IS DEAD FOR THESE OPERATIONS AT RUN TIME AND IT CONSTRAINS
-  # NOTHING THE CORE EVALUATES. `isEaLegal` below
+  # `eaMulDivLong7` IS DEAD FOR THESE OPERATIONS AT RUN TIME. IT RECORDS THE
+  # FOLIOS AND IT CONSTRAINS NOTHING THE CORE EVALUATES. `isEaLegal` below
   # returns at `ea.mode notin leg.modes` before it reaches `ea7`, and the mode
   # set on the line above has no `eaMode7`, so the ONLY read of the field
   # anywhere in the core - `EA7(ea.reg) in leg.ea7` - is unreachable through

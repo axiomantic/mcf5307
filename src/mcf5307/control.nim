@@ -15,8 +15,9 @@
 ##
 ## The sizes.
 ##
-##   CMP, CMPA, CMPI are 32-BIT AND THERE IS NO OTHER SIZE. The instruction set
-##   summary gives all three an OPERAND SIZE of `32` alone.
+##   CMP, CMPA, CMPI are 32-BIT AND THERE IS NO OTHER SIZE. MCF5307 User's
+##   Manual Table 3-7, "Instruction Set Summary", page 3-23, gives all three an
+##   OPERAND SIZE of `32` alone.
 ##   `m68k-elf-as -mcpu=5307` rejects `cmp.b`, `cmp.w`, `cmpa.w`, `cmpi.b` and
 ##   `cmpi.w`, and `m68k-elf-objdump -m m68k:5307` decodes `b2c0` - which is
 ##   `cmpaw %d0,%a1` under `-m m68k:68020` - as `.short 0xb2c0`. Every byte and
@@ -84,16 +85,18 @@
 ##       nothing.
 ##
 ##   TRAP
-##       The processor copies SR, then sets the S-bit and clears the T-bit.
-##       `machine.nim`'s `takeException` carries it.
+##       Section 3.3, page 3-11: the processor copies SR, then sets the S-bit
+##       and clears the T-bit. `machine.nim`'s `takeException` carries it.
 ##
 ## Cycles. The numbers are not a transcription of the tables. See the block
 ## above the constants in `cpu.nim`.
 ##
 ##   Exact - a row carrying a SINGLE cell that the one return equals, so no
-##   effective address can pull them apart. `execScc` returns 1 and `scc Dx` is
-##   1(0/0); `execRts` returns 8 and `rts` is 8(1/0); `execRte` returns 14 and
-##   `rte` is 14(2/0); `execTrap` returns 18 and `trap #imm` is 18(1/2).
+##   effective address can pull them apart. `execScc` returns 1 and Table 3-12,
+##   folio 3-27, gives `scc Dx` 1(0/0); `execRts` returns 8 and Table 3-15,
+##   folio 3-30, gives `rts` 8(1/0); `execRte` returns 14 and the same table
+##   gives `rte` 14(2/0); `execTrap` returns 18 and Table 3-14, folio 3-29,
+##   gives `trap #imm` 18(1/2).
 ##
 ##   The rest are flattened across the effective address. `execJump` returns 5
 ##   for every operand; Table 3-15 gives `jmp`/`jsr` 5 for `(An)` and `(d16,An)`
@@ -136,7 +139,9 @@
 ##   table on the same subject can follow the notes.
 ##
 ## What this module does not know. The implementation picks a behaviour and
-## this list says so.
+## this list says so. The document that would settle numbers 1, 2 and 4 is the
+## ColdFire Family Programmer's Reference Manual, whose per-instruction pages
+## give the flag rules and the condition tests directly.
 ##
 ##   1. The boolean test of each condition. The four-bit ENCODING is measured
 ##      and is not in doubt: `m68k-elf-as -mcpu=5307` put `bhi` at 0x62, `bls`
@@ -144,10 +149,11 @@
 ##      `bvc` at 0x68, `bvs` at 0x69, `bpl` at 0x6a, `bmi` at 0x6b, `bge` at
 ##      0x6c, `blt` at 0x6d, `bgt` at 0x6e and `ble` at 0x6f, and `st` at
 ##      0x50c0 and `sf` at 0x51c0. The tests themselves are the M68000 family
-##      definition and no document on this machine states them. The available
-##      sources give the condition-code BITS and name the wildcard `cc` as
-##      "Logical Condition (example: NE for not equal)", and print no table of
-##      the tests anywhere.
+##      definition and no document on this machine states them. The User's
+##      Manual gives the condition-code BITS in section 3.2.1.5 (pages 3-8 and
+##      3-9) and names the wildcard `cc` as "Logical Condition (example: NE for
+##      not equal)" in Table 3-6 (page 3-21), and it prints no table of the
+##      tests anywhere.
 ##
 ##   2. WHETHER A COMPARISON WRITES X. This module leaves X alone, which is
 ##      the M68000 Family rule for CMP, CMPA and CMPI. CUTTING THE OTHER WAY,
@@ -164,13 +170,14 @@
 ##   3. The exact cycle count of every instruction in this group. `cpu.nim`
 ##      states the mechanism once, above its cycle constants.
 ##
-##   4. What an `RTE` with a bad format field should do. The reference is
-##      unambiguous that it "generates a format error", placed at vector 14
-##      with a stacked program counter of "Fault" - the address of the RTE
-##      itself. This module traps instead, because a trap is this core's one
-##      observable for "the core refused", the same channel every illegal size
-##      and illegal operand in every group uses; `alu.nim`'s header makes the
-##      identical statement about a divide by zero.
+##   4. What an `RTE` with a bad format field should do. Section 3.5.7, "RTE
+##      and Format Error Exceptions", page 3-16, is unambiguous that it
+##      "generates a format error", which Table 3-1 on page 3-13 places at
+##      vector 14 with a stacked program counter of "Fault" - the address of
+##      the RTE itself. This module traps instead, because a trap is this
+##      core's one observable for "the core refused", the same channel every
+##      illegal size and illegal operand in every group uses; `alu.nim`'s
+##      header makes the identical statement about a divide by zero.
 
 import mcf5307/decode_types
 import mcf5307/ea
@@ -282,11 +289,11 @@ proc execBranch(ctx: MCF5307Ctx; word: uint16; d: Decoded;
     transferControl(ctx, target, insnPc)
     if ctx.halted:
       return 0'u32
-  # No timing CELL carries 2 or 3, but the NOTES beneath those tables do, and
-  # the notes run past the end of the table. They put BRA's 2 and BSR's 3
-  # inside a documented 1-to-3 range; Bcc's note continues onto the following
-  # page, where a second table and the sentence beneath it put Bcc's 2 inside
-  # one as well. This module's header carries the readings.
+  # No CELL of Table 3-15 or Table 3-16 carries 2 or 3, but the NOTES beneath
+  # those tables do, and the notes run past folio 3-30. Note 1 puts BRA's 2
+  # inside a documented 1-to-3 range and note 2 puts BSR's 3 inside one; note 3
+  # continues onto folio 3-31, where Table 3-17 and the sentence beneath it put
+  # Bcc's 2 inside one as well. This module's header carries the readings.
   if d.op == opBsr: 3'u32 else: 2'u32
 
 # ---------------------------------------------------------------------------
@@ -384,8 +391,8 @@ proc execCompare(ctx: MCF5307Ctx; d: Decoded): uint32 =
 
 proc execJump(ctx: MCF5307Ctx; d: Decoded; insnPc: uint32): uint32 =
   ## `JMP <ea>` and `JSR <ea>`. The operand is a CONTROL address and the
-  ## instruction jumps to the ADDRESS ITSELF and never to what is at it: JMP is
-  ## "Address of <ea> -> PC".
+  ## instruction jumps to the ADDRESS ITSELF and never to what is at it -
+  ## Table 3-7, page 3-23, gives JMP as "Address of <ea> -> PC".
   ##
   ## The effective address is evaluated before the return address is pushed,
   ## and that ordering is the whole of what makes `jsr 0x00054320` different
@@ -413,7 +420,7 @@ proc execJump(ctx: MCF5307Ctx; d: Decoded; insnPc: uint32): uint32 =
 # RTS and RTE.
 
 proc execRts(ctx: MCF5307Ctx; insnPc: uint32): uint32 =
-  ## "(SP) -> PC; SP + 4 -> SP". The pop is read BEFORE
+  ## "(SP) -> PC; SP + 4 -> SP" - Table 3-7, page 3-25. The pop is read BEFORE
   ## the stack pointer moves, and the pointer moves only when the read
   ## succeeded.
   let target = readMem(ctx, ctx.sp, 4)
@@ -468,12 +475,15 @@ proc execRte(ctx: MCF5307Ctx; insnPc: uint32): uint32 =
 proc execTrap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## `TRAP #<vector>`, the four-bit field in the low bits of the opcode.
   ##
-  ## THE VECTOR NUMBER IS 32 PLUS THE FIELD. Vector numbers 32 to 47, at vector
-  ## offsets $080 to $0BC, are the "Trap # 0-15 instructions".
+  ## THE VECTOR NUMBER IS 32 PLUS THE FIELD. MCF5307 User's Manual Table 3-1,
+  ## "Exception Vector Assignments", page 3-13: vector numbers 32 to 47, at
+  ## vector offsets $080 to $0BC, are the "Trap # 0-15 instructions".
   ##
   ## THE STACKED PROGRAM COUNTER IS THE *NEXT* INSTRUCTION AND NOT THIS ONE.
-  ## Those vectors stack "the PC of the next instruction that follows the
-  ## instruction that caused the fault". `ctx.pc` is already that address:
+  ## The same table's stacked-program-counter column reads "Next" for those
+  ## vectors, and its footnote defines Next as "the PC of the next instruction
+  ## that follows the instruction that caused the fault". `ctx.pc` is already
+  ## that address:
   ## `step` advanced it past the opcode word and TRAP has no extension words.
   ## The address error stacks the FAULT address instead, which is why the
   ## branch and jump executors carry `insnPc` and this one does not: `ctx.pc`

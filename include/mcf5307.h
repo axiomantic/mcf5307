@@ -93,9 +93,9 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * it runs, so the registers it reads are the machine as the handler will find
  * it: a7 holding the address OF the 8-byte frame and not an address below it -
  * the frame's first longword is AT a7 and the stacked program counter at
- * `a7+4` - the program counter register at the handler's first instruction,
- * and the status register already carrying the interrupt priority mask raised
- * to the level being acknowledged.
+ * `a7+4`, which is what Figure 3-7 draws - the program counter register at the
+ * handler's first instruction, and the status register already carrying the
+ * interrupt priority mask raised to the level being acknowledged.
  *
  * The level-7 arm is decided against the presentation the call has not yet
  * overwritten. `mcf5307_set_irq` arms an edge only on a transition to level 7
@@ -118,7 +118,10 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  *
  * `mcf5307_reset` inhibits interrupt sampling for the first instruction at
  * `initial_pc`. Reset is an exception, and sampling is inhibited during the
- * first instruction of every exception handler.
+ * first instruction of every exception handler. That is a deduction rather
+ * than a quotation: User's Manual Table 3-1, closing paragraph, folio 3-13,
+ * carries no reset row, and the reset exception's own entry at section 3.5.11,
+ * folio 3-17, never calls the reset program counter a handler.
  *
  * `mcf5307_reset` also raises the interrupt priority mask to 7 - section
  * 3.5.11, folio 3-17, "sets the processor's interrupt priority mask in the SR
@@ -130,8 +133,10 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * is the only one a mask of 7 leaves takeable at all.
  *
  * `mcf5307_reset` ALSO CLEARS THE LATCHED LEVEL-7 EDGE AND THEN RE-OBSERVES
- * THE BOARD'S LAST PRESENTATION. A level 7 request must be held until the
- * second interrupt-acknowledge bus cycle has begun, so an edge whose pin has
+ * THE BOARD'S LAST PRESENTATION. That is an inference and not a citation: the
+ * manual set is silent on reset against a latched edge. The argument for it is
+ * that a level 7 request must be held until the second interrupt-acknowledge
+ * bus cycle has begun (section 7.6.1, folio 7-24), so an edge whose pin has
  * since been released has nothing left to acknowledge. The
  * presentation itself survives the call: it is the board's state and reset has
  * no newer answer for it. A level 7 STILL PRESENTED across `mcf5307_reset` is

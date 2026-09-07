@@ -1152,10 +1152,14 @@ add_test(NAME t_logic
 # Those 1024 words are not "the Scc and DBcc space". The split is measured:
 #
 #     `Scc Dn`, the EA field `000 rrr`. Scc takes a data register operand and
-#         nothing else on this part, so `st (%a0)` is not an instruction.
+#         nothing else on this part - Table 3-7, page 3-25, gives Scc an
+#         operand syntax of `Dx`, and Table 3-12, page 3-27, one `scc Dx` row
+#         and no memory column - so `st (%a0)` is not an instruction.
 #
-#     DBcc, WHICH IS NOT ON THIS PART AT ALL. The words `0101 cccc 11 001 rrr`
-#         are a 68000 DBcc slot and nothing here.
+#     DBcc, WHICH IS NOT ON THIS PART AT ALL. Section 3.9, page 3-21, lists
+#         "decrement and branch" among the removed instructions and no table
+#         carries a row. The words `0101 cccc 11 001 rrr` are a 68000 DBcc slot
+#         and nothing here.
 #
 #       3 are TRAPF - `51fa`, `51fb` and `51fc`, measured from `trapf.w #1`,
 #         `trapf.l #1` and `trapf`. `trapt`, `trapeq`, `trapne` and `traphi`
