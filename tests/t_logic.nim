@@ -20,18 +20,16 @@
 ##   obtain it separately from the vendor. That is why every citation here
 ##   names table, page and row instead of quoting.
 ##
-##   THE COLDFIRE FAMILY PROGRAMMER'S REFERENCE MANUAL IS ON DISK at
-##   `~/Development/datasheets/CFPRM.pdf` - Freescale, "ColdFire Family
-##   Programmer's Reference Manual", Rev. 3.
+##   The flag rules come from Freescale, "ColdFire Family Programmer's
+##   Reference Manual", Rev. 3.
 ##
 ##   ITS PER-INSTRUCTION PAGES CARRY THE FLAG RULES THE USER'S MANUAL
 ##   never had: folio 4-12 gives ASL's V a flat "Always cleared" and notes
 ##   that this is "unlike on the 68K family processors".
 ##
-##   READ THE PDF AS RENDERED PAGES. Tables in the OCR markdown at
-##   `~/Development/datasheets/MCF5307UM-md/` are known wrong, so a value
-##   taken from text extraction is not evidence; `pdftoppm -png` and read the
-##   image.
+##   READ THE MANUAL AS RENDERED PAGES. Its tables survive a text extraction
+##   wrong, so a value taken from one is not evidence; render the page and read
+##   the image.
 ##
 ## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_logic`. That corpus holds
 ## POSITIVE cases: an encoding this part has,

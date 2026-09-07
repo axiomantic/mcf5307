@@ -90,10 +90,10 @@
 ## WHAT THIS MODULE DOES NOT KNOW. Five things, and the rule for every one of
 ## them is the same: the implementation picks a behaviour.
 ##
-## The ColdFire Family Programmer's Reference Manual is on disk at
-## `~/Development/datasheets/CFPRM.pdf` (Rev. 3), and its per-instruction pages
-## give the flag rules directly. Entries 3, 4 and 5 below are per-instruction
-## questions of exactly the kind the CFPRM answers.
+## Freescale, "ColdFire Family Programmer's Reference Manual", Rev. 3 gives the
+## flag rules on its per-instruction pages. The open questions below that ask
+## what a flag does for one instruction are answerable from there; the ones that
+## ask whether the manual states a rule at all are not.
 ##
 ##   3. Whether a dynamic BTST may read an immediate operand. User's Manual
 ##      Table 3-13, page 3-28, dashes the `#xxx` column of the `btst Dy,<ea>`
