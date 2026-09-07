@@ -112,3 +112,11 @@ add_subdirectory(tests)
 if(PROJECT_IS_TOP_LEVEL)
     add_subdirectory(conformance)
 endif()
+
+# The root directory's own scope. `tests/` and `conformance/` each end with
+# this call; without one here a test added directly to this file would be the
+# one test in the tree outside the gate, and nothing would say so. It is also
+# what makes the `REMOVE_ITEM` inside the function reachable: this is the only
+# scope that holds `t0_build_is_current`, and a gate required to wait for
+# itself never runs.
+mcf5307_require_current_build()
