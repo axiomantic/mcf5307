@@ -973,7 +973,7 @@ mcf5307_check_case_sites("t_move" "@MCF5307_MOVE_SOURCE@" "${move_run_out}"
 # states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
 # what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
 # CASE COUNT.
-mcf5307_check_case_total("t_move" "${move_run_out}" 34)
+mcf5307_check_case_total("t_move" "${move_run_out}" 35)
 
 ]==])
 

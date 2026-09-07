@@ -16,7 +16,10 @@
 ## The cases run through the shipped C entry points - `mcf5307_create`,
 ## `mcf5307_reset`, `mcf5307_set_reg`, `mcf5307_exec`, `mcf5307_get_reg` - and
 ## not through an internal helper reached around the back, so a pass here is a
-## pass of the path the corpus runner drives.
+## pass of the path the corpus runner drives. The last case is the one
+## exception, and it has to be: it asserts what `moveFamily` does with an
+## operation outside its own family, and `step` routes exact opcodes, so no
+## instruction word reaches that arm.
 ##
 ## The encodings below were produced by the pinned `m68k-elf-as -mcpu=5307`:
 ##
@@ -26,7 +29,9 @@
 
 import mcf5307/cpu
 import mcf5307/decode_types
+import mcf5307/ea
 import mcf5307/machine
+import mcf5307/move
 
 var failures: seq[string]
 import ./case_sites
@@ -467,6 +472,23 @@ block:
                fault: o.fault)
     let wanted = (at400: 0xAABBCCDD'u32, at404: 0x11223344'u32, fault: false)
     check(got == wanted, "movem.l to (An) stores d0 then d1 in ascending order",
+      $got, $wanted)
+
+  # An operation `moveFamily` does not carry refuses, and the refusal is the
+  # `fault`-and-`halted` pair every other arm of this executor raises.
+  # Returning zero cycles alone would let `step` advance the program counter
+  # past an instruction that never ran and carry on into whatever followed.
+  block:
+    zeroMem(addr board, sizeof(TestBoard))
+    let ctx = mcf5307_create(addr board, bRead, bWrite, bIack)
+    mcf5307_reset(ctx, stackBase, execBase)
+    let d = Decoded(op: opAdd, ea: EA(mode: eaDn, reg: 0'u8), size: 4'u8)
+    let cycles = moveFamily(ctx, 0'u16, d)
+    let got = (cycles: cycles, fault: ctx.fault, halted: ctx.halted)
+    mcf5307_destroy(ctx)
+    let wanted = (cycles: 0'u32, fault: true, halted: true)
+    check(got == wanted,
+      "moveFamily refuses an operation outside the move family",
       $got, $wanted)
 
 # The registry lines. They are data and not a verdict: this
