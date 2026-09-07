@@ -68,13 +68,14 @@ const
     ## WHERE `newCtxSr` LEAVES THE PROGRAM COUNTER, and the offset is block 22's
     ## rule and not an arbitrary choice. `mcf5307_reset` inhibits the interrupt
     ## sample for the first instruction at the reset program counter, because the
-    ## reset exception is an exception. `newCtxSr` spends that inhibition on the NOP at
+    ## reset exception is an exception (Table 3-1's closing paragraph, folio
+    ## 3-13, PDF page 70). `newCtxSr` spends that inhibition on the NOP at
     ## `execBase` so that every block which is about something ELSE reaches its
     ## own first `mcf5307_exec` with the machine able to sample. This is the
     ## address such a block runs its first instruction at, and therefore the
     ## address its first exception frame stacks.
   startSp = 0x800'u32
-  frameBase = 0x7F8'u32     ## 0x800 - 8, longword aligned already
+  frameBase = 0x7F8'u32     ## Table 3-2: 0x800 - 8, longword aligned already
   opNopWord = 0x4E71'u16    ## `nop`, m68k-elf-as -mcpu=5307
   opTrapZeroWord = 0x4E40'u16
     ## `trap #0`. `src/mcf5307/decode.nim` records that `m68k-elf-as
@@ -83,13 +84,13 @@ const
     ## the core's exception path and `execTrap` is its one caller from
     ## inside `step`.
   trapZeroVector = 32'u8
-    ## Vector numbers 32 to 47, at vector offsets $080 to $0BC, are the
-    ## trap instructions.
+    ## Table 3-1, folio 3-13: vector numbers 32 to 47, at vector offsets
+    ## $080 to $0BC, are the "Trap # 0-15 instructions".
 
   # The handler address in each slot this file uses. THEY ARE ALL DIFFERENT so
   # that a core which fetched the wrong vector lands where an assertion sees
-  # it. Vectors 25 to 31 are the level 1 to 7 autovectors; 66 and 67 are in the
-  # user-defined range 64-255.
+  # it. Vectors 25 to 31 are the level 1 to 7 autovectors (Table 3-1, folio
+  # 3-13); 66 and 67 are in the user-defined range that table gives to 64-255.
   handlerAuto2 = 0x510'u32  ## vector 26, the level 2 autovector, at $068
   handlerAuto3 = 0x520'u32  ## vector 27, the level 3 autovector, at $06C
   handlerAuto4 = 0x530'u32  ## vector 28, the level 4 autovector, at $070
@@ -121,7 +122,7 @@ type
   #   `reads`  how many vector-table reads had happened. One, for the fetch
   #            this take made.
   #   `sr`     the status register at the acknowledge. The interrupt's own
-  #            mask write and M-clear have already happened, so
+  #            mask write (section 3.3) and M-clear have already happened, so
   #            this is the level's mask and not the entry mask.
   Ack = tuple[level: int, vector: uint8, sp: uint32, pc: uint32,
               reads: int, sr: uint32]
@@ -220,9 +221,10 @@ proc freshBoard() =
   writeArmsLevelSeven = false
   # A RUN OF NOPs AT THE RESET PROGRAM COUNTER AND AT THE HEAD OF EVERY
   # HANDLER, AND THE LENGTH IS NOT DECORATION. The core executes the handler's
-  # first instruction in the same pass that takes the interrupt: the device
-  # executes at least one instruction in an interrupt exception handler before
-  # recognizing another interrupt request. A block that ran past its single NOP
+  # first instruction in the same pass that takes the interrupt: section 7.6,
+  # folio 7-23, "the MCF5307 device executes at least one instruction in an
+  # interrupt exception handler before recognizing another interrupt request".
+  # A block that ran past its single NOP
   # would decode the ZERO word beyond it, and a zero word is not a NOP -
   # measured with one NOP per handler, the core halted on it and later cases
   # then asserted a take that could not happen for a reason that had nothing to
@@ -275,9 +277,10 @@ proc observe(ctx: MCF5307Ctx): Outcome =
    reads: vectorReads)
 
 # The status register with an interrupt priority mask of `ipm` and nothing
-# else set but S. I[2:0] is at bits 10-8, S at bit 13 and M at bit 12;
-# `mcf5307_reset` writes 0x2700, which is S set and a mask of 7, the value the
-# status register holds after a reset exception.
+# else set but S. Section 3.2.2.1, folio 3-10, puts I[2:0] at bits 10-8, S at
+# bit 13 and M at bit 12; `mcf5307_reset` writes 0x2700, which is S set and a
+# mask of 7 (Special Note, folio 3-10: "After a reset exception, the contents
+# of the status register are $27xx").
 proc srWithIpm(ipm: uint32): uint32 =
   0x2000'u32 or (ipm shl 8)
 
@@ -321,9 +324,9 @@ proc newCtx(ipm: uint32): MCF5307Ctx =
 
 # The first longword of the frame an interrupt at `vector` writes, entered
 # with `stackedSr`. The A7 of every case here is 0x800, whose low two bits are
-# 00, so the FORMAT is 4 and the frame base is 0x7F8. `FS` is 0000: the field
-# is defined for access and address errors and zero for every other
-# exception.
+# 00, so Table 3-2's FORMAT is 4 and the frame base is 0x7F8. `FS` is 0000:
+# Table 3-3, folio 3-14, defines the field for access and address errors and
+# writes zeros for every other exception.
 proc frameOf(vector: uint8; stackedSr: uint32): uint32 =
   (4'u32 shl 28) or (uint32(vector) shl 18) or stackedSr
 
@@ -338,9 +341,9 @@ proc ackOf(level: int; vector: uint8; sp: uint32; pc: uint32; reads: int;
 # ---------------------------------------------------------------------------
 # BLOCK 1. THE MASK INHIBITS AT LESS-THAN-OR-EQUAL.
 #
-# Interrupt requests are inhibited for all priority levels less than or equal
-# to the current priority, except the edge-sensitive level 7 request, which
-# cannot be masked. Level 3 at a mask
+# Section 3.2.2.1, folio 3-10: "Interrupt requests are inhibited for all
+# priority levels less than or equal to the current priority, except the
+# edge-sensitive level 7 request, which cannot be masked." Level 3 at a mask
 # of 3 is therefore inhibited. Nothing is stacked, no vector is read, no
 # acknowledge happens, and the one instruction the budget pays for is the NOP
 # at the reset program counter.
@@ -364,9 +367,9 @@ block:
 # interrupt at all, and that core is exactly what a missing mechanism looks
 # like. Only the mask differs between the two blocks.
 #
-# An interrupt exception also forces the M-bit to be cleared and the interrupt
-# priority mask to be set to the level of the current interrupt request. So the
-# handler runs at a mask
+# Section 3.3, folio 3-11: "The occurrence of an interrupt exception also
+# forces the M-bit to be cleared and the interrupt priority mask to be set to
+# the level of the current interrupt request." So the handler runs at a mask
 # of 3, and the STACKED status register is the copy taken before that change.
 
 block:
@@ -539,7 +542,7 @@ block:
 # BLOCK 5. THE AUTOVECTOR FLAG IGNORES `vector`.
 #
 # BOTH CASES PASS THE SAME `vector` AND DIFFER ONLY IN THE FLAG. 0x42 is 66,
-# which is in the user-defined range 64-255, and its
+# which Table 3-1, folio 3-13, puts in the user-defined range 64-255, and its
 # table slot at $108 holds a handler address that no autovector slot holds. A
 # core that honoured `vector` under the flag reads $108 and lands on
 # `handlerVec66`, and both of those are in the asserted tuple.
@@ -574,8 +577,9 @@ block:
 # ---------------------------------------------------------------------------
 # BLOCK 6. LEVEL 7 CANNOT BE MASKED, AND LEVEL 6 AT THE SAME MASK CAN.
 #
-# A level 7 interrupt is nonmaskable, so a 7 in the interrupt mask does not
-# disable it.
+# Section 7.6.1, folio 7-24: a level 7 interrupt "is a nonmaskable interrupt;
+# therefore, a 7 in the interrupt mask does not disable a level 7 interrupt."
+# Section 3.2.2.1, folio 3-10, states the same exception to the mask rule.
 #
 # THE LEVEL 6 CASE IS THE CONTROL. Without it, "level 7 is taken at mask 7"
 # passes on a core that ignores the mask entirely.
@@ -605,9 +609,9 @@ block:
 # ---------------------------------------------------------------------------
 # BLOCK 7. A RISING EDGE TO LEVEL 7 ARMS EXACTLY ONE INTERRUPT.
 #
-# If IRQ7 remains asserted only one level 7 interrupt is recognized, because
-# only one transition from a lower level request to a level 7 request
-# occurred.
+# Section 7.6.1, folio 7-24: "if IRQ7 remains asserted, the MCF5307 device
+# will only recognize one level 7 interrupt because only one transition from a
+# lower level request to a level 7 request occurred."
 #
 # THE SECOND `mcf5307_exec` IS THE ASSERTION. The level is still 7 at that
 # boundary and the acknowledge log must still hold ONE entry. A core that
@@ -634,9 +638,10 @@ block:
 # ---------------------------------------------------------------------------
 # BLOCK 8. LEVEL 7 PRESENTED TWICE ARMS ONLY ONE.
 #
-# The same rule read from the other side: the second call presents the level
-# that is already presented, so no transition occurred and no second interrupt
-# is armed. This is also the level-7 half of the idempotence rule.
+# The same sentence of section 7.6.1 read from the other side: the second call
+# presents the level that is already presented, so no transition occurred and
+# no second interrupt is armed. This is also the level-7 half of the
+# idempotence rule.
 
 block:
   let ctx = newCtx(0)
@@ -708,10 +713,12 @@ block:
 # ---------------------------------------------------------------------------
 # BLOCK 10. THE INTERRUPT EXCEPTION CLEARS THE M-BIT, AND THE FRAME KEEPS IT.
 #
-# An interrupt exception forces the M-bit to be cleared and the interrupt
-# priority mask to be set to the level of the current interrupt request. M is
-# bit 12, cleared by an interrupt exception and set by software during an RTE
-# or a move to SR.
+# Section 3.3, folio 3-11: "The occurrence of an interrupt exception also
+# forces the M-bit to be cleared and the interrupt priority mask to be set to
+# the level of the current interrupt request." M is bit 12 (section 3.2.2.1,
+# folio 3-10, and its own entry: "This bit is cleared by an interrupt
+# exception, and can be set by software during execution of the RTE or move to
+# SR instructions").
 #
 # THIS IS THE ONE CASE IN THIS FILE ENTERED WITH M SET, AND WITHOUT IT THE
 # M-CLEAR IS UNREACHABLE. Every other block enters with M already clear, where
@@ -748,9 +755,10 @@ block:
 # may call it unconditionally after every recomputation. A board that does
 # exactly that, with IRQ7 still asserted, calls `mcf5307_set_irq(7, ...)` again
 # after the core has already taken the level 7 interrupt - which is the
-# sequence below, and the sequence a second recognition is forbidden for
-# because only one transition from a lower level request to a level 7 request
-# occurred.
+# sequence below and the one section 7.6.1, folio 7-24, forbids a second
+# recognition for: "if IRQ7 remains asserted, the MCF5307 device will only
+# recognize one level 7 interrupt because only one transition from a lower
+# level request to a level 7 request occurred."
 #
 # Block 8 does not reach this and cannot. Its two calls both happen before the
 # take, so the two arms land on a latch that is still armed from the first, and
@@ -789,7 +797,7 @@ block:
 # LOWERS THE MASK. THIS PINS A DIVERGENCE FROM THE MANUAL AND NOT AN AGREEMENT
 # WITH IT.
 #
-# The manual describes TWO sequences. The first is the edge
+# Section 7.6.1, folio 7-24, describes TWO sequences. The first is the edge
 # rule this file's blocks 7, 8 and 11 pin. The SECOND is a handler that lowers
 # the interrupt mask below 7 while IRQ7 is still asserted, and it says the core
 # recognizes a further level 7 interrupt there "even though no transition has
@@ -955,11 +963,13 @@ block:
 # BLOCK 15. THE HANDLER'S FIRST INSTRUCTION RUNS BEFORE THE NEXT INTERRUPT IS
 # RECOGNIZED.
 #
-# The device executes at least one instruction in an interrupt exception
-# handler before recognizing another interrupt request, and the same rule holds
-# for every handler. `src/mcf5307/cpu.nim` says its sample and its `step` are
-# ONE iteration for exactly this reason, and that making the take `continue`
-# instead would sample again before the handler had executed anything. THAT
+# Section 7.6, folio 7-23: "the MCF5307 device executes at least one
+# instruction in an interrupt exception handler before recognizing another
+# interrupt request." Table 3-1's closing paragraph, folio 3-13, states the
+# same rule for every handler. `src/mcf5307/cpu.nim` says its sample and its
+# `step` are ONE iteration for exactly this reason, and that making the take
+# `continue` instead would sample again before the handler had executed
+# anything. THAT
 # SENTENCE HAD NO TEST: adding the `continue` once reddened nothing.
 #
 # IT WENT UNTESTED BECAUSE THE INTERFACE MAKES A SECOND PENDING INTERRUPT HARD
@@ -1124,8 +1134,8 @@ block:
 # path would lose the rule the moment that path moved, and would report nothing
 # while it did.
 #
-# 0x42 IS THE SAME VECTOR BLOCK 5 USES AND FOR THE SAME REASON. 64-255 is the
-# user-defined range; the slot at $108 holds
+# 0x42 IS THE SAME VECTOR BLOCK 5 USES AND FOR THE SAME REASON. Table 3-1,
+# folio 3-13, puts 64-255 in the user-defined range; its slot at $108 holds
 # `handlerVec66`, which no autovector slot holds. A core that dropped the
 # stored vector reads slot 0 instead, whose longword `freshBoard` leaves zero.
 
@@ -1219,9 +1229,9 @@ block:
 # IS SAMPLED. THIS IS THE HALF OF THE RULE THAT IS NOT ABOUT INTERRUPT
 # HANDLERS.
 #
-# ColdFire processors inhibit sampling for interrupts during the first
-# instruction of all exception handlers. ALL exception handlers, not only
-# interrupt handlers - and an
+# Table 3-1's closing paragraph, folio 3-13: "ColdFire processors inhibit
+# sampling for interrupts during the first instruction of all exception
+# handlers." ALL exception handlers, not only interrupt handlers - and an
 # interrupt handler is the only kind block 15 can reach, because the only
 # exception `mcf5307_exec` itself takes is the interrupt.
 #
@@ -1242,7 +1252,8 @@ block:
 # THE FIRST, and the position is the whole construction. Raised before the
 # first call it would be sampled at `execPc` and taken instead of the TRAP,
 # and no trap handler would be entered at all. The board raising it while the
-# machine sits at the handler's entry is the sequence both rules govern.
+# machine sits at the handler's entry is the sequence section 7.6's sentence
+# and Table 3-1's sentence both govern.
 #
 # THE BUDGET IS ONE CYCLE PER CALL, so each call runs exactly one instruction:
 # the loop tests the budget only BEFORE a step (the cycle block at the head of
@@ -1258,7 +1269,7 @@ block:
   discard mcf5307_exec(ctx, 1'u32)
 
   # The board presents a level 3 while the machine is at the trap handler's
-  # entry, which is where sampling is inhibited.
+  # entry, which is where Table 3-1 says sampling is inhibited.
   mcf5307_set_irq(ctx, 3, userVector, 1)
   discard mcf5307_exec(ctx, 1'u32)
   let firstInstruction = observe(ctx)
@@ -1400,11 +1411,12 @@ block:
 # BLOCK 22. `mcf5307_reset` INHIBITS THE FIRST INTERRUPT SAMPLE, BECAUSE THE
 # RESET EXCEPTION IS AN EXCEPTION.
 #
-# THIS IS A CITATION AND NOT AN INFERENCE. ColdFire processors inhibit sampling
-# for interrupts during the first instruction of ALL exception handlers, and
-# reset has an exception entry of its own, so the code at the reset program
-# counter is the first instruction of an exception handler and that rule
-# governs it.
+# THIS IS A CITATION AND NOT AN INFERENCE. Table 3-1's closing paragraph, folio
+# 3-13 (PDF page 70): "ColdFire processors inhibit sampling for interrupts
+# during the first instruction of all exception handlers." ALL exception
+# handlers. Section 3.5.11, folio 3-17 (PDF page 74), is the RESET EXCEPTION's
+# own entry, so the code at the reset program counter is the first instruction
+# of an exception handler and that rule governs it.
 #
 # `mcf5307_reset` DOES NOT ROUTE THROUGH `takeException`, which is where every
 # other exception in this core acquires the inhibition (`machine.nim` states
@@ -1470,20 +1482,21 @@ block:
 # RE-OBSERVES THE PIN.
 #
 # THIS IS AN INFERENCE AND NOT A CITATION, AND THE MANUALS ARE SILENT RATHER
-# THAN BRIEF. The reset exception's entry names no pending-interrupt state at
-# all, and the sections that describe the level-7 trigger type never mention
-# reset. So nothing below is quoted, and what
+# THAN BRIEF. Section 3.5.11, folio 3-17 (PDF page 74), enumerates the reset
+# exception's effects and names no pending-interrupt state at all; sections 7.6
+# and 7.6.1, folios 7-23 and 7-24 (PDF pages 138 and 139), describe the level-7
+# trigger type and never mention reset. So nothing below is quoted, and what
 # stands in for a quotation is stated rather than assumed:
 #
-#   THE CLEAR. RSTI resets every register in the SIM, every peripheral, and the
-#   entire device including the PLL. There is no silicon that does all of that
-#   and preserves
+#   THE CLEAR. RSTI resets every register in the SIM and every peripheral
+#   (folio 8-10, PDF page 167) and the entire device including the PLL (folio
+#   7-40, PDF page 155). There is no silicon that does all of that and preserves
 #   a one-bit edge-history flop inside the core's recognition logic.
 #
 #   THE RE-OBSERVATION, WITHOUT WHICH THE CLEAR ALONE DROPS AN INTERRUPT REAL
-#   HARDWARE TAKES. The level 7 request on IRQ7 must be held until the second
-#   interrupt-acknowledge bus cycle has begun to ensure that the interrupt is
-#   recognized. A latched edge
+#   HARDWARE TAKES. Section 7.6.1, folio 7-24 (PDF page 139): "The level 7
+#   request on IRQ7 must be held until the second interrupt-acknowledge bus
+#   cycle has begun to ensure that the interrupt is recognized." A latched edge
 #   whose pin has since been released therefore models a state the hardware
 #   cannot acknowledge, and preserving it is wrong. But a pin that is STILL
 #   ASSERTED across the reset meets a detector whose history the reset has just

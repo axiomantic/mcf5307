@@ -294,6 +294,66 @@ check(accepted.outcome == wantAccepted,
       "the same store to an accepted address takes no fault at all",
       $accepted.outcome, $wantAccepted)
 
+# ---------------------------------------------------------------------------
+# One instruction, two faults, and the second one is not stacked.
+#
+# `bsr` to an odd target whose return-address push lands on the refused
+# longword. The push records the access error and lets the instruction finish,
+# which is section 3.5.1's rule; `transferControl` then takes the address
+# error, because MCF5307 User's Manual section 3.5.2 makes a transfer to an
+# odd address one. Stacking the recorded access error afterwards would put two
+# frames on the stack for one instruction, and the access handler's `RTE`
+# would return into the address handler's first instruction rather than into
+# the program.
+#
+# The manual set carries no rule for a write error still outstanding when the
+# same instruction has already entered a handler. This core stops instead of
+# choosing one: `fault` and `halted` are what its stacking layer already
+# raises for a fault it cannot represent, and `transferControl`'s own comment
+# names the fault-on-fault halted state for the neighbouring case.
+#
+# `below` is the discriminating field. It reads the longword where a second
+# frame's first word would land, and a run that stacked one leaves it
+# non-zero.
+#
+# The frame's first longword is hand-derived from Figure 3-7's bit positions.
+# A7 is 0x0C00 with its low two bits 00, so Table 3-2 gives format 4 and a
+# frame at 0x0C00 - 8. The vector is 3. `FS` is `0100`, Table 3-3's "error on
+# instruction fetch":
+#   0100 | 01 | 00000011 | 00 | 0010011100000000 -> 0x440C2700
+
+const
+  doubleSp = 0x0C04'u32        ## so the BSR push lands on `protectedWord`
+  doubleFrame = 0x0BF8'u32     ## (0x0C00 - 8) and not 3, with FORMAT 4
+  addressHandler = 0x0680'u32
+  vecAddress = 3'u8            ## the address error, at $00C
+  opBsrOdd = 0x6101'u16        ## `bsr.b .+3`, m68k-elf-as -mcpu=5307
+
+block:
+  freshBoard()
+  offBoardWrites = 0
+  boardWrite(board, execBase, 2, uint32(opBsrOdd))
+  boardWrite(board, addressHandler, 2, uint32(opRteWord))
+  boardWrite(board, accessHandler, 2, uint32(opRteWord))
+  boardWrite(board, 4'u32 * uint32(vecAddress), 4, addressHandler)
+  boardWrite(board, 4'u32 * uint32(vecAccess), 4, accessHandler)
+
+  let ctx = mcf5307_create(addr board, protectedRead, protectedWrite, bIack)
+  mcf5307_reset(ctx, doubleSp, execBase)
+  discard mcf5307_exec(ctx, 1'u32)
+  let got = (sp: mcf5307_get_reg(ctx, 15),
+             pc: mcf5307_get_reg(ctx, 17),
+             halted: ctx.halted,
+             fault: ctx.fault,
+             frame: boardReadValue(board, doubleFrame, 4),
+             below: boardReadValue(board, doubleFrame - 8'u32, 4))
+  mcf5307_destroy(ctx)
+  let wanted = (sp: doubleFrame, pc: addressHandler, halted: true,
+                fault: true, frame: 0x440C2700'u32, below: 0'u32)
+  check(got == wanted,
+        "a faulted push and an odd branch target stack one frame, not two",
+        $got, $wanted)
+
 # The registry lines. They are data and not a verdict: this program reports
 # what its text declares and what its run adjudicated, and the registered
 # test's driver is what compares them. A verdict printed here would be a

@@ -63,6 +63,12 @@ run the suite again.
         "t0_build_is_current: FAIL: the build failed; nothing below is graded.")
 endif()
 
+# The claim stops at the build. `cmake --build` reconsiders a target only when
+# a dependency's timestamp is NEWER than the output, so a source restored to an
+# older blob -- a `git checkout` of an earlier revision, a restore from a
+# `sed -i.bak` backup -- leaves the stale executable in place and this build
+# exits 0. Saying the verdicts below are about source that compiles would be
+# false in exactly that case, and a build gate that overstates its own reach is
+# the shape it exists to refuse.
 message("t0_build_is_current: PASS: "
-    "${MCF5307_BUILD_DIR} built clean; "
-    "the verdicts below are about source that compiles.")
+    "${MCF5307_BUILD_DIR} built clean.")

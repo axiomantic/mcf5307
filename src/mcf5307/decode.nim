@@ -89,6 +89,12 @@ proc decodeLogicLine(word: uint16; opBase: Operation): Decoded =
   ##                        Line 1100 gives MULU.W (011) and MULS.W (111);
   ##                        line 1000 gives DIVU.W (011) and DIVS.W (111).
   ##
+  ## CFPRM folios 4-31 (DIVS), 4-33 (DIVU), 4-55 (MULS) and 4-57 (MULU) each
+  ## carry `Attributes: Size = word, longword` and print an
+  ## `Instruction Format: (Word)` diagram that IS the encoding above. MCF5307
+  ## User's Manual Table 3-13 p.3-28 times `mulu.w`, `muls.w`, `divu.w` and
+  ## `divs.w` across the effective-address columns.
+  ##
   ## THE SIZE IS 2 AND THAT IS WHAT THE EXECUTOR BRANCHES ON. The word form is
   ## ONE word: Dx is bits 11..9 of this word and signedness is bits 8..6,
   ## where the long form takes both from a second word it fetches. An executor
@@ -126,7 +132,8 @@ proc decodeLogicLine(word: uint16; opBase: Operation): Decoded =
 proc decodeShift(word: uint16): Decoded =
   ## Line 1110: ASL, ASR, LSL and LSR. Bit 8 is the direction (1 left, 0
   ## right) and bits 4..3 the type: 00 arithmetic, 01 logical, 10 and 11 the
-  ## two ROTATES, which this part does not have.
+  ## two ROTATES, which this part does not have. The manual says so in
+  ## section 3.9 - "the removed instructions include ... logical rotate".
   ##
   ## The register form and the memory form put different things in the same
   ## bits, which is why they are decoded apart. In the register form bits 7..6
@@ -177,7 +184,8 @@ proc decodeBitOp(word: uint16): Decoded =
   ## operation.
   ##
   ## The operand size is decided by the operand. A data register is 32 bits
-  ## wide and every memory operand is 8. The bit number is taken
+  ## wide and every memory operand is 8, which is what the manual's Table 3-7
+  ## means by an operand size of "8,32". The bit number is taken
   ## modulo that width by the executor.
   let operand = decodeEa(word)
   let op = case (word shr 6) and 0x3'u16
@@ -255,7 +263,10 @@ proc decodeWord*(word: uint16): Decoded =
     # words `4840`-`4847` are the sub-range whose mode field is 000 - a data
     # register, which is not control addressing and so is no PEA operand at
     # all. PEA's mask `word and 0xFFC0 == 0x4840` spans `4840`-`487f` and
-    # covers all eight, and `eaLegalityFor(opPea)` excludes `Dn`.
+    # covers all eight, and `eaLegalityFor(opPea)` excludes `Dn`. Table 3-7,
+    # page 3-25, carries `SWAP | Dn | 16 | MSW of Dn <-> LSW of Dn`; Table
+    # 3-12, page 3-27, times `swap Dx` at 1(0/0) under `Rn`; and section 3.9,
+    # page 3-21, does not list SWAP among the removed instructions.
     #
     # The SWAP arm must not move below the PEA arm, and its mask must not
     # widen to `0xFFC0`.
@@ -433,10 +444,19 @@ proc decodeWord*(word: uint16): Decoded =
   elif (word and 0xF0C0'u16) == 0x50C0'u16 and
        word != 0x51FA'u16 and word != 0x51FB'u16 and word != 0x51FC'u16:
     # `0101 cccc 11 <ea>`: Scc, and the TRAPF words this arm must not take.
-    # The condition is bits 11..8 and the operand is the low six bits.
+    # The condition is bits 11..8 and the operand is the low six bits. The
+    # operand size is 8 (Table 3-7, page 3-25).
     #
     # What the 1024 words of this space are. Sixteen conditions times
     # sixty-four effective-address values.
+    #
+    # Scc reaches `Dn` only: Table 3-7 gives Scc an operand syntax of `Dx`,
+    # and Table 3-12, page 3-27, carries a `scc Dx` row and no memory column.
+    # DBcc is not a slot inside this space but an instruction absent from the
+    # part - section 3.9, page 3-21, lists "decrement and branch" among the
+    # instructions removed from the 68000 set, and Table 3-7 and Table 3-12
+    # carry no row. Table 3-7 gives TRAPF the row
+    # `TRAPF | none/#<data> | none,16,32`.
     #
     # TRAPF IS NOT IMPLEMENTED HERE, and the excluded words are left unclaimed
     # rather than decoded: deciding they were Scc would execute a TRAPF as a
@@ -444,12 +464,14 @@ proc decodeWord*(word: uint16): Decoded =
     return Decoded(op: opScc, ea: decodeEa(word), size: 1'u8,
                    destReg: uint8((word shr 8) and 0xF'u16))
   elif (word and 0xFF00'u16) == 0x4A00'u16 and sizeField(word) != 0'u8:
-    # TST.B/.W/.L <ea>. All three sizes exist here, which makes TST the one
+    # TST.B/.W/.L <ea>. All three sizes exist here - Table 3-7, page 3-25,
+    # gives TST an operand size of "8,16,32", and Table 3-12, page 3-27,
+    # carries a `tst.b`, a `tst.w` and a `tst.l` row - which makes TST the one
     # instruction in this group that keeps the byte and word forms the rest of
     # the core traps.
     #
-    # SIZE 11 IS NOT DECODED HERE: `0x4AC0 | <ea>` is TAS, which is not on
-    # this part.
+    # SIZE 11 IS NOT DECODED HERE: `0x4AC0 | <ea>` is TAS, which section 3.9
+    # on page 3-21 does not leave on this part and Table 3-12 gives no row.
     return Decoded(op: opTst, ea: decodeEa(word), size: sizeField(word))
   elif (word and 0xFFC0'u16) == 0x4EC0'u16:
     return Decoded(op: opJmp, ea: decodeEa(word))

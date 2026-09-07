@@ -67,10 +67,14 @@ jobs:
         with:
           submodules: recursive
 
-      # CTest 3.20 is the floor because `--no-tests=error` is a CTest flag and
-      # the earlier releases do not carry it. Without that flag every `-R` check
-      # in this project passes against no code at all.
-      - name: Require CMake and CTest 3.20 or newer
+      # 3.26 is the floor. `--no-tests=error` is a CTest flag the releases
+      # before 3.20 do not carry, and without it every `-R` check in this
+      # project passes against no code at all; `PROJECT_IS_TOP_LEVEL`, which
+      # guards the test tree, was added in 3.21 and is undefined before it, so
+      # on 3.20 the guarded tests are never registered at all; the presets
+      # declare `"version": 6`, which needs 3.25; and `CTEST_NO_TESTS_ACTION`,
+      # which is how a test preset carries `--no-tests=error`, needs 3.26.
+      - name: Require CMake and CTest 3.26 or newer
         shell: bash
         run: |
           set -euo pipefail
@@ -79,8 +83,8 @@ jobs:
           have=$(cmake --version | head -1 | grep -Eo '[0-9]+\.[0-9]+' | head -1)
           major=${have%%.*}
           minor=${have##*.}
-          if [ "${major}" -lt 3 ] || { [ "${major}" -eq 3 ] && [ "${minor}" -lt 20 ]; }; then
-            echo "FAILURE: CMake ${have} is older than the 3.20 floor."
+          if [ "${major}" -lt 3 ] || { [ "${major}" -eq 3 ] && [ "${minor}" -lt 26 ]; }; then
+            echo "FAILURE: CMake ${have} is older than the 3.26 floor."
             exit 1
           fi
 
@@ -234,6 +238,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      # The configure step compiles the Nim sources, so this job needs the
+      # pinned compiler exactly as `build-and-t0` does. Without it the job
+      # stops at configure and never reaches the sanitizers. The pin is read
+      # from `.nim-version` here too; no version string is written in this
+      # file. This runner is Linux only, so it takes the choosenim path alone.
+      - name: Install the pinned Nim
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < .nim-version)
+          echo "The pin recorded in .nim-version is ${version}"
+          curl -fsSL https://nim-lang.org/choosenim/init.sh -o init.sh
+          sh init.sh -y
+          export PATH="${HOME}/.nimble/bin:${PATH}"
+          choosenim "${version}"
+          echo "${HOME}/.nimble/bin" >> "$GITHUB_PATH"
 
       - name: Configure and build with the address and undefined sanitizers
         run: |

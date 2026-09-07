@@ -10,8 +10,8 @@
 # What it repairs. `ctest` grades the executables it finds. When a build fails,
 # the executables from the last successful build are still on disk, and ctest
 # runs those and reports Passed. Measured in this tree: a `full` run reported
-# `100% tests passed, 0 tests failed out of 37` while `cmake --build --preset
-# full` had exited 2, and a `t0` run reported `t0_abi_smoke ... Passed` while
+# `100% tests passed, 0 tests failed` while `cmake --build --preset full` had
+# exited 2, and a `t0` run reported `t0_abi_smoke ... Passed` while
 # `cmake --build --preset t0` had exited 2. Nothing in either run named the
 # build. Correctness rested entirely on the caller remembering to read
 # `BUILD_EXIT` before believing the summary -- a discipline, not a mechanism.
@@ -58,8 +58,8 @@
 #
 # The cost. The gate runs an incremental build. On an already-built tree that
 # is a no-op walk of the dependency graph; on a t0 tree it additionally builds
-# the conformance targets that the t0 BUILD preset skips, once. Measured on
-# an already-built t0 tree: 40.3s before the gate, 41.5s after.
+# the conformance targets that the t0 BUILD preset skips, once. Measured on an
+# already-built t0 tree, the gate adds about a second to the run.
 
 set(MCF5307_BUILD_GATE_FIXTURE "MCF5307_BUILD_IS_CURRENT")
 
