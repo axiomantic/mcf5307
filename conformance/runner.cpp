@@ -345,6 +345,18 @@ void collectMem(const Value& state, const std::string& where,
     requireKind(addr, Value::Kind::Int, what + ".addr");
     requireKind(size, Value::Kind::Int, what + ".size");
     requireKind(value, Value::Kind::Int, what + ".value");
+    // The three casts below are narrowing, and a corpus is data this program
+    // does not author, so each field is checked against the range it is about
+    // to be cast into rather than wrapped into one.
+    if (addr->i < 0 || addr->i > 0xFFFFFFFF) {
+      failCheck(what + ".addr is outside the 32-bit address space");
+    }
+    if (size->i != 1 && size->i != 2 && size->i != 4) {
+      failCheck(what + ".size is not 1, 2 or 4");
+    }
+    if (value->i < 0 || value->i > 0xFFFFFFFF) {
+      failCheck(what + ".value does not fit in 32 bits");
+    }
     out.push_back(
         MemWrite{static_cast<uint32_t>(addr->i), static_cast<int>(size->i),
                  static_cast<uint32_t>(value->i)});
@@ -433,15 +445,26 @@ struct MemBoard {
 
   explicit MemBoard(std::size_t n) : bytes(n, 0) {}
 
+  // The sum is taken in `std::uint64_t`. In `uint32_t` it wraps, and an
+  // address near the top of the space then compares below the array length:
+  // `0xFFFFFFFF + 4` is 3, and the access is admitted against a board that
+  // does not hold it.
+  bool inBounds(uint32_t addr, int size) const {
+    if (size <= 0) return false;
+    const std::uint64_t end =
+        static_cast<std::uint64_t>(addr) + static_cast<std::uint64_t>(size);
+    return end <= bytes.size();
+  }
+
   void write(uint32_t addr, int size, uint32_t value) {
-    if (addr + static_cast<uint32_t>(size) > bytes.size()) return;
+    if (!inBounds(addr, size)) return;
     for (int i = 0; i < size; ++i) {
       const int shift = (size - 1 - i) * 8;
       bytes[addr + i] = static_cast<uint8_t>((value >> shift) & 0xffu);
     }
   }
   uint32_t read(uint32_t addr, int size) {
-    if (addr + static_cast<uint32_t>(size) > bytes.size()) return 0;
+    if (!inBounds(addr, size)) return 0;
     uint32_t v = 0;
     for (int i = 0; i < size; ++i) {
       v = (v << 8) | bytes[addr + i];

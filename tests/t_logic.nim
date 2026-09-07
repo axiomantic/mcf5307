@@ -1,5 +1,33 @@
 ## `t_logic` - the logic, bit-operation and shift instruction group.
 ##
+## THE DOCUMENTS THIS FILE CITES ARE OUTSIDE THIS REPOSITORY, so each is
+## named in full here. A bare "section 6.1" is unreadable to a reader who holds
+## only the repository, and none of them may be copied into it.
+##
+##   TWO MOTOROLA DOCUMENTS supply the instruction semantics this file
+##   asserts: the ColdFire Family Programmer's Reference Manual Rev. 3 and the
+##   MCF5307 ColdFire Integrated Microprocessor User's Manual.
+##
+##   THE MCF5307 USER'S MANUAL is the document every table and page cited
+##   below refers to. Its full identity, so that a reader can be sure of
+##   holding the same edition: Motorola, "MCF5307 ColdFire Integrated
+##   Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998 - the
+##   order number is printed at the top right of the cover and the title is the
+##   title page. It is not in this repository and may not be copied into it,
+##   which is why every citation here names table, page and row instead of
+##   quoting.
+##
+##   THE DOCUMENT IS Freescale, "ColdFire Family Programmer's Reference
+##   Manual", Rev. 3.
+##
+##   ITS PER-INSTRUCTION PAGES CARRY THE FLAG RULES THE USER'S MANUAL
+##   never had: folio 4-12 gives ASL's V a flat "Always cleared" and notes
+##   that this is "unlike on the 68K family processors".
+##
+##   READ THE PDF AS RENDERED PAGES. Tables in an OCR markdown conversion of
+##   the User's Manual are known wrong, so a value taken from text extraction
+##   is not evidence; `pdftoppm -png` and read the image.
+##
 ## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_logic`. That corpus holds
 ## POSITIVE cases: an encoding this part has,
 ## run against an expected register state. A positive corpus CANNOT SEE a
@@ -352,9 +380,10 @@ block:
 # both assembled by `m68k-elf-as -mcpu=5307`.
 #
 # WHY THE IMMEDIATE IS OUT, AND WHY THE ASSEMBLER DOES NOT SETTLE IT. See the
-# `eaBitDynamic` doc comment in `decode_types.nim`. The short form: the timing
-# table dashes the `#xxx` column of the `btst Dy,<ea>` row, and that dash is
-# the same mark the table uses for every form this part does not have.
+# `eaBitDynamic` doc comment in `decode_types.nim` for the manual rows and the
+# toolchain measurements. The short form: MCF5307 User's Manual Table 3-13
+# (page 3-28) dashes the `#xxx` column of the `btst Dy,<ea>` row, and that
+# dash is the same mark the table uses for every form this part does not have.
 # `m68k-elf-as -mcpu=5307` does assemble `btst %d1,#5` as `033c 0005`, and
 # that acceptance is byte-for-byte the plain-68000 one - the assembler
 # narrows the static bit-operation modes for ColdFire and leaves this form
@@ -543,9 +572,10 @@ block:
 # `eaDataAddressing` - the manual's DATA class, which does not include `An`.
 # It is the source mask of the `<ea> op Dn -> Dn` direction of AND and OR, and
 # THOSE TWO ONLY. Both READ and neither writes, so the PC-relative pair and
-# the immediate are in and the address register is out. The `and.l <ea>,Rx` and
-# `or.l <ea>,Rx` rows of the timing table carry a time in every column
-# including `#xxx`.
+# the immediate are in and the address register is out. MCF5307 User's Manual
+# Table 3-13: the `and.l <ea>,Rx` row on page 3-28 and the `or.l <ea>,Rx` row
+# on the CONTINUATION PAGE 3-29 carry a time in every column including `#xxx`,
+# where both read `1(0/0)`. The table spans two pages.
 #
 # Measured: `m68k-elf-as -mcpu=5307` accepts `and.l (4,%pc),%d1` (`c2ba 0004`)
 # and rejects `and.l %a0,%d1`; `c0bc 0000 0005` disassembles as `andl #5,%d0`
@@ -659,8 +689,10 @@ block:
   # dirty X and asserts the value the shift put there rather than the value it
   # inherited.
   # ASL LEAVES V CLEAR EVEN HERE, where the sign leaves the word and the 68K
-  # rule would set it: on this family V is always cleared by ASL and ASR. The
-  # case enters with V SET.
+  # rule would set it. CFPRM folio 4-12: V "Always cleared", and "Note that
+  # CCR[V] is always cleared by ASL and ASR, unlike on the 68K family
+  # processors"; folio 4-11: "The overflow bit is always zero". The case enters
+  # with V SET.
   expectD(runIns([0xE380'u16], d = [0x80000000'u32, 0, 0, 0, 0, 0, 0, 0],
                  sr = srBase or ccrV),
     0, 0'u32, srBase or ccrC or ccrX or ccrZ,

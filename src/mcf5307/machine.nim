@@ -261,11 +261,21 @@ proc stackingWrite(ctx: MCF5307Ctx; address: uint32; size: uint8;
 # `cpu.nim`'s `step` holds.
 #
 # THE WRITE PATH NEEDS NO UNWIND, WHICH IS WHY IT IS WIRED AND THE READ IS NOT.
-# The rule's one named exception is the operand write, and the reason is that
-# "all programming model updates associated with the write instruction are
-# completed". An executor that carries on after a write fault is doing what the
-# reference requires. That the only access error this part
-# raises is a store to write-protected space puts the real case on this side too.
+# The rule's one named exception is the operand write, and User's Manual
+# section 3.5.1, folio 3-14, is why: "All programming model updates associated
+# with the write instruction are completed." An executor that carries on after
+# a write fault is doing what the manual requires. That the only access error
+# this part raises is a store to write-protected space puts the real case on
+# this side too.
+#
+# It does need the vector to be taken after the instruction rather than inside
+# it, which is the same sentence read to its end. An instruction whose
+# remaining updates are required to complete cannot have section 3.3's
+# exception-processing steps run in the middle of it: those steps assign A7 and
+# the program counter, and the updates that must still complete would then be
+# computed from, or would overwrite, the handler's state. `writeMem` therefore
+# records the fault on the context and `cpu.nim`'s `step` takes it at the
+# instruction boundary.
 
 proc readMem*(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
   stackingRead(ctx, address, size)
@@ -395,10 +405,11 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
     of ea7AbsW:
       result = uint32(s16(fetchExt(ctx)))
     of ea7AbsL:
-      # THE FIRST EXTENSION WORD IS THE HIGH HALF OF THE ADDRESS. "The address
-      # N of a longword data item corresponds to the address of the high order
-      # word. The lower order word is located at address N + 2." The extension
-      # pair is a longword in the instruction
+      # THE FIRST EXTENSION WORD IS THE HIGH HALF OF THE ADDRESS. MCF5307
+      # User's Manual section 3.7.2, "Organization of Integer Data Formats in
+      # Memory", page 3-19: "The address N of a longword data item corresponds
+      # to the address of the high order word. The lower order word is located
+      # at address N + 2." The extension pair is a longword in the instruction
       # stream, so the word at the lower address is the high half.
       # `m68k-elf-as -mcpu=5307` agrees: `btst %d1,0x00030004` assembles to
       # `0339 0003 0004`.
@@ -551,9 +562,11 @@ proc eaRefWrite*(ctx: MCF5307Ctx; r: EaRef; size: uint8; value: uint32) =
 # format-error path all need the same frame, and `exception.nim` is a sibling
 # of `control.nim`.
 
-# `srMaster` sits with the bits `takeException` writes because a status-register
-# bit position is a fact about the register and not about the exception that
-# happens to clear it.
+# User's Manual section 3.2.2.1, folio 3-10, prints the whole 16-bit status
+# register over its bit numbers: T at 15, S at 13, M at 12 and I[2:0] at bits
+# 10 to 8. `srMaster` sits with the bits `takeException` writes because a
+# status-register bit position is a fact about the register and not about the
+# exception that happens to clear it.
 const
   srSupervisor* = 0x2000'u32   ## S, status register bit 13
   srTrace* = 0x8000'u32        ## T, status register bit 15
@@ -562,8 +575,9 @@ const
 proc exceptionFrameBase*(sp: uint32): uint32 =
   ## Where the two-longword frame goes, and it is not simply `sp - 8`.
   ##
-  ## "The exception stack frame is created at a 0-modulo-4 address on the top
-  ## of the current system stack". The format field encoding gives the cases: an
+  ## MCF5307 User's Manual section 3.3, page 3-11: "the exception stack frame
+  ## is created at a 0-modulo-4 address on the top of the current system
+  ## stack". Table 3-2, "Format Field Encoding", page 3-14, gives the cases: an
   ## A7 whose low two bits are 00, 01, 10 or 11 leaves the handler with A7-8,
   ## A7-9, A7-10 or A7-11, and each of those results is 0-modulo-4. That is
   ## this expression.
@@ -580,17 +594,27 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   ## Stack a two-longword exception frame, then load the program counter from
   ## the vector table.
   ##
-  ## The status register is copied before it is changed: "the processor makes
-  ## an internal copy of the SR and then enters supervisor mode by setting the
-  ## S-bit and disabling trace mode by clearing the T-bit". The COPY is what
-  ## reaches the frame; the modified word is what the handler runs under. The
-  ## M-bit and the interrupt priority mask are changed only by an INTERRUPT
-  ## exception, so nothing here touches them.
+  ## The copy of the status register is a parameter rather than a read of
+  ## `ctx.sr`. Section 3.3's copy is taken as exception processing begins, and
+  ## for every exception whose processing begins where it is detected the two
+  ## are the same word. The deferred access error of a faulted store is the one
+  ## exception this core detects at one point and processes at another, and
+  ## section 3.5.1 requires the faulting instruction's remaining
+  ## programming-model updates to run in between; the word it passes is the one
+  ## the store saw.
   ##
-  ## The frame is two longword writes and not six bytewise pushes. It is drawn
-  ## as two longwords - the format/vector word above the status register, then
-  ## the program counter - and `trap #imm` costs `18(1/2)`: ONE read, the
-  ## vector, and TWO writes. The instruction summary spells the same thing as
+  ## The status register is copied before it is changed. Section 3.3, page
+  ## 3-11: "the processor makes an internal copy of the SR and then enters
+  ## supervisor mode by setting the S-bit and disabling trace mode by clearing
+  ## the T-bit". The COPY is what reaches the frame; the modified word is what
+  ## the handler runs under. The M-bit and the interrupt priority mask are
+  ## changed only by an INTERRUPT exception, so nothing here touches them.
+  ##
+  ## The frame is two longword writes and not six bytewise pushes. Figure 3-7,
+  ## page 3-13, draws it as two longwords - the format/vector word above the
+  ## status register, then the program counter - and Table 3-14, page 3-29,
+  ## gives `trap #imm` a cost of `18(1/2)`: ONE read, the vector, and TWO
+  ## writes. Table 3-7's `TRAP` row on page 3-25 spells the same thing as
   ## `SP-4;PC`, `SP-2;SR`, `SP-2;Format`, which agrees whenever A7 was already
   ## longword aligned and does not show the self-alignment at all.
   ##
@@ -680,6 +704,18 @@ proc takePendingWriteFault*(ctx: MCF5307Ctx) =
   ctx.pendingFaultStatus = 0'u32
   if ctx.halted:
     return
+  if ctx.atHandlerEntry:
+    # The instruction has already entered a handler - `transferControl` takes
+    # the address error of an odd branch target after the push that recorded
+    # this capture. Stacking here would put a second frame on the stack for
+    # one instruction and leave this handler's `RTE` returning into the first
+    # handler's entry rather than into the program. The manual set carries no
+    # rule for a write error still outstanding at that point, so the core
+    # stops at the state it can describe: `fault` and `halted` are what the
+    # stacking layer above already raises for a fault it cannot represent.
+    ctx.fault = true
+    ctx.halted = true
+    return
   takeExceptionCopiedSr(ctx, vecAccessError, stackedPc, fs, stackedSr)
 
 proc transferControl*(ctx: MCF5307Ctx; target: uint32; faultPc: uint32) =
@@ -718,9 +754,10 @@ proc transferControl*(ctx: MCF5307Ctx; target: uint32; faultPc: uint32) =
 
 # ---------------------------------------------------------------------------
 # The register access the conformance harness needs. The C ABI in
-# `include/mcf5307.h` declares these. `index` 0..7 is d0..d7, 8..14 is a0..a6,
-# 15 is a7 (the single stack pointer), 16 is the status register, and 17 is
-# the program counter (read-only through this call).
+# `include/mcf5307.h` declares these. The index space is the register file's,
+# stated once at the head of this module; these two calls take the whole of
+# it, 0 through 24, and 17 is read-only through `mcf5307_set_reg` for the
+# reason given there.
 
 proc mcf5307_set_reg*(ctx: MCF5307Ctx; index: cint; value: uint32): cint
     {.exportc: "mcf5307_set_reg", cdecl, dynlib.} =

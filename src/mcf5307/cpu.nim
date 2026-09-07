@@ -73,8 +73,8 @@ import mcf5307/latch
 #
 # How to read any number here or in an executor. None was derived from the
 # manual, and the split into a fetch cost plus an executor return is this
-# core's own: the manual's timing tables time WHOLE instructions and decompose
-# nothing.
+# core's own: Tables 3-9 to 3-16, folios 3-26 to 3-30, time WHOLE instructions
+# and decompose nothing.
 #
 # Cycle accuracy, if it is ever wanted, needs better constants and not a new
 # return type. The return now carries the sum the executors produced, so the
@@ -82,7 +82,8 @@ import mcf5307/latch
 
 const
   fetchCycles = 2'u32   ## one 16-bit instruction fetch
-  nopCycles = 2'u32     ## NOP on the execution pipe
+  nopCycles = 2'u32     ## NOP on the execution pipe. The pair sums to 4 where
+                        ## Table 3-14, folio 3-29, times `nop` at 3(0/0) whole.
 
 # ---------------------------------------------------------------------------
 # Core lifecycle.
@@ -174,11 +175,16 @@ proc mcf5307_reset*(ctx: MCF5307Ctx; initialSp: uint32; initialPc: uint32)
   ctx.pendingFaultStatus = 0'u32
   ctx.pendingStackedSr = 0'u32
   ctx.pendingStackedPc = 0'u32
-  # The instruction at `initialPc` is the first instruction of an exception
-  # handler, and interrupt sampling is inhibited during the first instruction of
-  # every exception handler. The write has to be here because this call does not
-  # route through `takeException`, which is where every other exception in this
-  # core acquires the field.
+  # The reset exception is an exception, so its first instruction is inhibited
+  # like every other handler's. Table 3-1's closing paragraph, folio 3-13:
+  # "ColdFire processors inhibit sampling for interrupts during the first
+  # instruction of all exception handlers." Section 3.5.11, folio 3-17, is the
+  # reset exception's own entry, so the instruction at `initialPc` is the first
+  # instruction of an exception handler and that sentence governs it.
+  #
+  # The write has to be here because this call does not route through
+  # `takeException`, which is where every other exception in this core acquires
+  # the field.
   #
   # `true` and not `false`: the reset acquires its own inhibition, and the
   # instruction that spends it is the one this call has just installed. With
@@ -269,7 +275,20 @@ proc step(ctx: MCF5307Ctx): uint32 =
     # arrives here is not an illegal one.
     #
     # A sweep confirming that no arm produces an opcode is not evidence that
-    # the part lacks it.
+    # the part lacks it. The evidence is the manual and the assembler: Table
+    # 3-7, pages 3-23 to 3-25, carries no EXG, TAS or NBCD row, Table 3-12,
+    # page 3-27, none either, and `m68k-elf-as -mcpu=5307` rejects
+    # `exg %d0,%d1`, `tas %d0` and `nbcd %d0`. Section 3.9, page 3-21, names
+    # BCD among the removed groups, which is NBCD; it does not name EXG or
+    # TAS, whose absence is the tables' and the assembler's.
+    #
+    # SWAP is not in this arm, though it looks like it belongs: Table 3-7,
+    # page 3-25, carries `SWAP | Dn | 16 | MSW of Dn <-> LSW of Dn`, Table
+    # 3-12, page 3-27, times `swap Dx` at 1(0/0), and section 3.9's removed
+    # list does not name it. It is dispatched with the data-movement group
+    # above. `decode.nim` must test `0xFFF8`/`0x4840` ahead of its PEA arm,
+    # whose `0xFFC0` mask spans `4840`-`487f` and would otherwise swallow the
+    # SWAP encodings.
     ctx.halted = true
     result = 0
   of opIllegal:
@@ -296,11 +315,14 @@ proc mcf5307_exec*(ctx: MCF5307Ctx; maxCycles: uint32): uint32
   var spent = 0'u32
   while spent < maxCycles and not ctx.halted:
     # The interrupt is sampled at an instruction boundary and at no other
-    # point. The part takes a pending interrupt within one instruction
-    # boundary after any higher-priority exception, so it executes at least
-    # one instruction of an interrupt handler before recognizing another
-    # request; and sampling is inhibited during the first instruction of every
-    # exception handler.
+    # point. User's Manual section 7.6, folio 7-23: "The MCF5307 device takes
+    # an interrupt exception for a pending interrupt within one instruction
+    # boundary after processing any other pending exception with a higher
+    # priority. Thus, the MCF5307 device executes at least one instruction in
+    # an interrupt exception handler before recognizing another interrupt
+    # request." Table 3-1's closing paragraph, folio 3-13, states the same
+    # rule for every exception handler: "ColdFire processors inhibit sampling
+    # for interrupts during the first instruction of all exception handlers."
     #
     # `atHandlerEntry` is what implements both sentences, and the shape of this
     # loop is not. `takeException` sets that field on every exception it

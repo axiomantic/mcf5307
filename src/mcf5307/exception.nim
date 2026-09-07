@@ -8,7 +8,9 @@
 ## part. The same tables differ at vectors 12 and 13, where CFPRM footnote 3
 ## does reconcile them. No constant below names vector 5, 12 or 13.
 
-# The defined set for this part. Every other value of the field is reserved.
+# User's Manual Table 3-3, section 3.5.1, folio 3-14: the defined set for this
+# part. CFPRM Table 11-2, folio 11-5, adds codes tagged "V4 and beyond, if MMU"
+# that do not apply, and every other value of the field is reserved.
 # CONSTANTS AND NOT AN ENUM BECAUSE THE RESERVED VALUES ARE REAL: a frame read
 # back from memory can hold any value the field can carry, and converting one to
 # an enum with holes under `--panics:on` ends the process instead of reporting
@@ -27,8 +29,10 @@ const
 #          status register 15:0
 #   +0x04  program counter
 #
-# `FS` IS SPLIT AND ITS HALVES ARE NOT ADJACENT; `1001` is the one defined code
-# that separates this layout from a contiguous one.
+# CFPRM section 11.1.2, Figure 11-1, folio 11-4, prints those bit numbers over
+# the fields, and User's Manual section 3.4, Figure 3-7, folio 3-13, prints the
+# same figure. `FS` IS SPLIT AND ITS HALVES ARE NOT ADJACENT; `1001` is the one
+# defined code that separates this layout from a contiguous one.
 
 proc frameFirstLongword*(format: uint32; fs: uint32; vector: uint8;
                          sr: uint32): uint32 =
@@ -51,23 +55,26 @@ proc frameVector*(longword: uint32): uint8 =
 proc frameStatusRegister*(longword: uint32): uint32 =
   longword and 0xFFFF'u32
 
-# The vector table is aligned on a 1 MByte boundary and indexed by
-# `4 x vector_number` from the vector base register.
+# User's Manual section 3.3, folio 3-12: a "1024-byte vector table aligned on
+# any 1 MByte address boundary", indexed by `4 x vector_number` from the vector
+# base register.
 #
-# VBR[19-0] ARE NOT IMPLEMENTED AND ARE ASSUMED TO BE ZERO, which is what the
-# mask below carries. A model that added VBR whole would still be wrong.
+# Only the CFPRM says why it is aligned, section 11.1, folio 11-2: "VBR[19-0]
+# are not implemented and are assumed to be zero", which is what the mask below
+# carries. A model that added VBR whole would satisfy the User's Manual
+# sentence and still be wrong.
 
 const
   vectorTableBytes* = 1024'u32
   vbrImplementedMask* = 0xFFF0_0000'u32  ## VBR[19-0] are not implemented
-  vecAccessError* = 2'u8                 ## $008
+  vecAccessError* = 2'u8                 ## $008, Table 3-1
   vecAddressError* = 3'u8                ## $00C. NOT the same exception.
   vecUserFirst* = 64'u8                  ## $100
   vecUserLast* = 255'u8                  ## $3FC
 
 proc autovectorFor*(level: range[1 .. 7]): uint8 =
-  ## Vectors 25 to 31, at `$064`-`$07C`, are the level 1 to 7 autovectored
-  ## interrupts.
+  ## Table 3-1 gives vectors 25 to 31, at `$064`-`$07C`, to the level 1 to 7
+  ## autovectored interrupts.
   uint8(24 + level)
 
 proc vectorAddress*(vbr: uint32; vector: uint8): uint32 =
