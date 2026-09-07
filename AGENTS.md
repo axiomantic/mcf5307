@@ -135,7 +135,7 @@ alters the published C ABI needs it too: the consumer that links this library is
   `<build>/conformance/t0_corpus_parses` absent; after, it is built by that
   command. The check reads the registration lists as text — CMake has no
   readable `COMMAND` test property, and directory-scoped test properties need
-  3.28, above the 3.20 floor. It refuses any COMMAND shape other than
+  3.28, above this project's 3.26 floor. It refuses any COMMAND shape other than
   `"${CMAKE_COMMAND}"` or a bare target name rather than guessing at a third.
   `ctest --preset t0` is still WIDER than the t0 build preset in one direction
   that is deliberate: the gate builds the default target, so a break in
