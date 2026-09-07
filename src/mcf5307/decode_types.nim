@@ -2,17 +2,13 @@
 ##
 ## This module is the bottom of the core, above `ea` alone. It holds the
 ## types that the decoder (`decode.nim`) and every instruction-group executor
-## both need. Those modules are siblings and neither imports the other; each
-## one reads its types from here. `cpu.nim` sits above them and owns `step`.
+## both need. Those modules are siblings; each one reads its types from here.
+## `cpu.nim` sits above them and owns `step`.
 ##
 ## The effective-address legality table lives here for the same reason. The
 ## executor modules ask whether an operand is legal before they run an
 ## instruction. The table reads an `Operation` and an `EA` and it reads no
 ## decoder state, so it belongs beside the types and not beside the decoder.
-##
-## No module re-exports this one. A caller that needs `Operation`, `Decoded`,
-## `MCF5307Ctx`, the board callback types or `eaIsLegalFor` imports
-## `mcf5307/decode_types` by name.
 
 import mcf5307/ea
 
@@ -158,8 +154,8 @@ type
     irq7Vector*: uint8          ## the vector that edge presented
     irq7Autovector*: bool       ## the autovector flag that edge presented
 
-    # THE PROGRAM COUNTER IS AT THE ENTRY OF AN EXCEPTION HANDLER WHOSE FIRST
-    # INSTRUCTION HAS NOT RUN. MCF5307 User's Manual Table 3-1, closing
+    # The program counter is at the entry of an exception handler whose first
+    # instruction has not run. MCF5307 User's Manual Table 3-1, closing
     # paragraph, folio 3-13: "ColdFire processors inhibit sampling for
     # interrupts during the first instruction of all exception handlers."
     #
@@ -241,13 +237,13 @@ const eaDataAddressing* = EaLegality(modes: eaDataAlterableModes,
   ## class is not.
   ##
   ## The mode list is the same list `eaDataAlterableModes` holds, because on
-  ## this part DATA and DATA ALTERABLE differ only in the mode-7 sub-variants
+  ## this part data and data alterable differ only in the mode-7 sub-variants
   ## - the PC-relative pair and the immediate, which are readable and not
   ## writable. The `ea7` set is what separates them.
 
 const eaBitDynamic* = EaLegality(modes: eaDataAlterableModes,
                                  ea7: eaValid7 - {ea7Imm})
-  ## THE OPERAND OF A DYNAMIC BIT TEST: the manual's DATA class WITHOUT the
+  ## The operand of a dynamic bit test: the manual's data class without the
   ## immediate. It is `eaDataAddressing` minus one sub-variant.
   ##
   ## The manual puts the immediate out. MCF5307 User's Manual Table 3-13,
@@ -270,16 +266,16 @@ const eaBitDynamic* = EaLegality(modes: eaDataAlterableModes,
   ## What would overturn this is the ColdFire Family Programmer's Reference
   ## Manual, whose per-instruction operand table names the modes directly.
   ##
-  ## IT IS A CONSTANT OF ITS OWN AND NOT A NARROWED `eaDataAddressing`,
-  ## because AND and OR keep the immediate: Table 3-13's `and.l <ea>,Rx` row
-  ## on page 3-28 and its `or.l <ea>,Rx` row on the continuation page 3-29
-  ## both give `#xxx` a time of `1(0/0)`.
+  ## It is a constant of its own and not a narrowed `eaDataAddressing`, because
+  ## AND and OR keep the immediate: Table 3-13's `and.l <ea>,Rx` row on
+  ## page 3-28 and its `or.l <ea>,Rx` row on the continuation page 3-29 both
+  ## give `#xxx` a time of `1(0/0)`.
 
 const eaBitStatic* = EaLegality(
   modes: {eaDn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp}, ea7: {})
   ## The operand of a static bit operation, which is narrower than the
-  ## dynamic one. `0000 1000 tt <ea>` takes a data register or one of four
-  ## address-register indirect modes and nothing else on this part.
+  ## dynamic one. `0000 1000 tt <ea>` takes a data register or one of the
+  ## address-register indirect modes above and nothing else on this part.
   ##
   ## The manual prints this mask, mode for mode. MCF5307 User's Manual
   ## Table 3-13, "Two Operand Instruction Execution Times", page 3-28: the
@@ -290,7 +286,7 @@ const eaBitStatic* = EaLegality(
   ## dashes separate the static form from the dynamic one and are not a
   ## property of the bit operations as a family.
   ##
-  ## The DYNAMIC form is wider: it also reaches the indexed and absolute
+  ## The dynamic form is wider: it also reaches the indexed and absolute
   ## modes and the PC-relative pair. It reads
   ## `eaBitDynamic` (for BTST) or the data-alterable mask (for BCHG, BCLR and
   ## BSET) through `eaLegalityFor` instead. It is not wider in the `#xxx`
@@ -438,7 +434,7 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
       EaLegality(modes: eaMulDivLongModes, ea7: eaMulDivLong7)
   of opAnd, opOr:
     # The source of the `<ea> op Dn -> Dn` direction of AND and OR. It reads
-    # and does not write, so the class is DATA addressing: no An, and the
+    # and does not write, so the class is data addressing: no An, and the
     # PC-relative pair and the immediate are in. MCF5307 User's Manual
     # Table 3-13: the `and.l <ea>,Rx` row on page 3-28 and the `or.l <ea>,Rx`
     # row on the continuation page 3-29 both give `#xxx` a time of `1(0/0)`,
@@ -446,7 +442,7 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # `m68k-elf-objdump -m m68k:5307`. The table spans two pages;
     # `table313LastRowOnPage328` above records where the break falls.
     #
-    # The OTHER direction of AND and OR writes memory and carries
+    # The other direction of AND and OR writes memory and carries
     # `eaMemoryAlterable`, which this table cannot hold because the direction
     # is a property of the instruction word. `logic.nim` names it directly,
     # exactly as `alu.nim` does for ADD and SUB.
@@ -463,7 +459,7 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # PC-relative operand or an immediate.
     EaLegality(modes: eaDataAlterableModes, ea7: eaDataAlterable7)
   of opNot, opAndi, opOri, opEori, opAsl, opAsr, opLsl, opLsr:
-    # A DATA REGISTER AND NOTHING ELSE, and the manual's timing tables say so
+    # A data register and nothing else, and the manual's timing tables say so
     # row by row. Every row carries `Dx` or `#imm,Dx` in the `<EA>` column,
     # a time under `Rn`, and a dash under every memory column:
     #
@@ -479,11 +475,11 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     #     `<ea>,Dx` with `1(0/0)` under `Rn` and under `#xxx` - the immediate
     #     count - and a dash under the memory columns.
     #
-    # An immediate COUNT is still legal for the shifts, because the count is
+    # An immediate count is still legal for the shifts, because the count is
     # not the operand this mask governs.
     EaLegality(modes: {eaDn}, ea7: {})
   of opAddi, opSubi, opNeg, opNegx, opExt, opExtb, opAddx, opSubx:
-    # A DATA REGISTER AND NOTHING ELSE on this part. The 68000 forms that
+    # A data register and nothing else on this part: the 68000 forms that
     # reach memory, and the memory form of ADDX, are not on it.
     EaLegality(modes: {eaDn}, ea7: {})
   of opJmp, opJsr:
@@ -491,26 +487,24 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # carries the class.
     eaJumpTarget
   of opTst, opCmp, opCmpa:
-    # THESE READ AND WRITE NOTHING, AND THEIR CLASS IS THE WIDEST ONE.
-    # Every column of Table 3-12's `tst` rows on page 3-27 - `Rn`, `(An)`,
-    # `(An)+`, `-(An)`, `(d16,An)`, `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx` -
-    # carries a time, and so does every column of Table 3-13's
-    # `cmp.l <ea>,Rx` row on page 3-28. There is no dash in any of those
-    # rows, which is the same mark that puts `and.l Dy,<ea>`'s `Rn` and
-    # `btst #imm,<ea>`'s `xxx.wl` out.
+    # These write nothing, and their class is the widest one: `eaAllModes` and
+    # not `eaDataAddressing`, because they admit an address register.
+    # `eaDataAddressing` is the manual's data class, which excludes `An`, and
+    # it is the mask AND and OR read. Every column of Table 3-12's `tst` rows
+    # on page 3-27 - `Rn`, `(An)`, `(An)+`, `-(An)`, `(d16,An)`,
+    # `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx` - carries a time, and so does every
+    # column of Table 3-13's `cmp.l <ea>,Rx` row on page 3-28. There is no
+    # dash in any of those rows, which is the same mark that puts
+    # `and.l Dy,<ea>`'s `Rn` and `btst #imm,<ea>`'s `xxx.wl` out.
     #
-    # THAT IS THE `eaAllModes` SET AND NOT `eaDataAddressing`, because they
-    # admit an ADDRESS REGISTER. `eaDataAddressing` is the manual's DATA
-    # class, which excludes `An`, and it is the mask AND and OR read.
-    #
-    # A BYTE OPERAND MAY STILL NOT BE AN ADDRESS REGISTER, and that rule is
-    # about the SIZE rather than the mode. `control.nim`'s `execTst`
+    # A byte operand may still not be an address register, and that rule is
+    # about the size rather than the mode. `control.nim`'s `execTst`
     # carries it, because this table is keyed on the operation alone and the
     # size is not part of the key - the same reason `eaMemoryAlterable` is not
     # in it.
     EaLegality(modes: eaAllModes, ea7: eaValid7)
   of opScc, opCmpi:
-    # A DATA REGISTER AND NOTHING ELSE, and the manual's timing tables say so
+    # A data register and nothing else, and the manual's timing tables say so
     # row by row.
     #
     #   - Table 3-12, "One Operand Instruction Execution Times", page 3-27:
@@ -524,7 +518,7 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     #
     # This mask is also what refuses the 68000 `DBcc` word.
     # `0101 cccc 11 001 rrr` is `DBcc Dn,<label>` on a 68000; here it is an Scc
-    # word whose operand is an ADDRESS REGISTER, and no DBcc at all, because
+    # word whose operand is an address register, and no DBcc at all, because
     # manual section 3.9, which begins on page 3-21, lists "decrement and
     # branch" among the removed instructions.
     EaLegality(modes: {eaDn}, ea7: {})
@@ -563,7 +557,7 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # set is unreachable through this mask and constrains nothing.
     EaLegality(modes: {eaAnInd, eaAnDisp}, ea7: {})
   of opSwap:
-    # A DATA REGISTER AND NOTHING ELSE. Table 3-7, page 3-25, gives the
+    # A data register and nothing else. Table 3-7, page 3-25, gives the
     # operand syntax as `Dn`, and Table 3-12, page 3-27, times `swap Dx`
     # at 1(0/0) under `Rn` with a dash in the other columns - the same shape
     # as `ext`, `extb`, `neg`, `negx` and `not` in that table.

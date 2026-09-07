@@ -13,16 +13,16 @@
 ## is 32-bit on this part, which the MCF5307 User's Manual Table 3-7 states for
 ## each of them, and `m68k-elf-as -mcpu=5307` confirms by rejecting
 ## `and.b %d0,%d1`, `not.w %d0`, `andi.b #5,%d1` and `lsl.w #1,%d0`. The one
-## exception is the bit operations, whose operand is 32 bits WHEN IT IS A DATA
-## REGISTER and 8 bits otherwise - the "8,32" of that same table. Every byte
-## and word form of everything else TRAPS here.
+## exception is the bit operations, whose operand is 32 bits when it is a data
+## register and 8 bits otherwise - the "8,32" of that same table. Every byte
+## and word form of everything else traps here.
 ##
 ## Every shift is register-only and a memory shift traps. MCF5307 User's
 ## Manual Table 3-13, page 3-28: the `asl.l`, `asr.l`,
 ## `lsl.l` and `lsr.l` timing rows all read `<ea>,Dx` and carry a time under
-## `Rn` and under `#xxx` ALONE - `1(0/0)` in each - with A DASH under `(An)`,
+## `Rn` and under `#xxx` alone - `1(0/0)` in each - with a dash under `(An)`,
 ## `(An)+`, `-(An)`, `(d16,An)`, `(d8,An,Xi*SF)` and `xxx.wl`. A shift on this
-## part reaches a data register and an immediate COUNT and no memory operand at
+## part reaches a data register and an immediate count and no memory operand at
 ## all, and the `{Dn}` mask in `decode_types` refuses that operand.
 ##
 ## The witness is `e2d0`: `1110 001 0 11 010 000`, a memory shift whose
@@ -58,25 +58,23 @@
 ##       included. CFPRM folio 4-12 gives V a flat "Always cleared" in the
 ##       condition-code table and adds "Note that CCR[V] is always cleared by
 ##       ASL and ASR, unlike on the 68K family processors"; folio 4-11 says
-##       "The overflow bit is always zero". THIS PART COMPUTES NO SHIFT
-##       OVERFLOW AT ALL.
+##       "The overflow bit is always zero". This part computes no shift
+##       overflow at all.
 ##
 ## The shift is performed one bit at a time. A count is at most 63
 ## and the loop costs nothing, and it makes the carry rule that is easy to get
-## wrong in closed form come out by construction: the carry is THE LAST BIT
-## THAT LEFT THE WORD rather than a bit of the result.
+## wrong in closed form come out by construction: the carry is the last bit
+## that left the word rather than a bit of the result.
 ##
 ## A shift count of zero is reachable through the register form alone, because
 ## the immediate form spends its zero slot on the value eight. It shifts
-## nothing. One flag has a reason and the rest are a choice:
+## nothing.
 ##
-##   2. The status word of a shift by zero.
+## The status word of a shift by zero: N, Z, V and C are written anyway - N and
+## Z from the unmoved operand, V and C cleared - and that is this module's
+## choice and not a rule any document on this machine states.
 ##
-##   N, Z, V and C are written anyway - N and Z from the unmoved operand, V and
-##   C cleared - and that is this module's choice and not a rule any document
-##   on this machine states.
-##
-## CYCLES. See the block above the constants in `cpu.nim`. Every instruction
+## Cycles. See the block above the constants in `cpu.nim`. Every instruction
 ## here has a timing row - all of them in Table 3-13 (folios 3-28 and 3-29)
 ## except NOT, which is in Table 3-12 (3-27) - and none of the returns here was
 ## derived from one. Many of those rows carry `1(0/0)` in every cell they carry
@@ -87,10 +85,10 @@
 ## What this module does not know. The implementation picks a behaviour.
 ##
 ## The ColdFire Family Programmer's Reference Manual, Rev. 3, carries the flag
-## rules directly on its per-instruction pages. Entries 3, 4 and 5 below are per-instruction
-## questions of exactly the kind the CFPRM answers.
+## rules directly on its per-instruction pages. The entries below are
+## per-instruction questions of exactly the kind the CFPRM answers.
 ##
-##   3. Whether a dynamic BTST may read an immediate operand. User's Manual
+##      Whether a dynamic BTST may read an immediate operand. User's Manual
 ##      Table 3-13, page 3-28, dashes the `#xxx` column of the `btst Dy,<ea>`
 ##      row, and `m68k-elf-as -mcpu=5307` assembles `btst %d1,#5` anyway. The
 ##      mask follows the manual and traps it; the full evidence, including why
@@ -99,20 +97,20 @@
 ##
 ##      Two tables of the one manual disagree. Table 3-5 on page 3-21,
 ##      "Effective Addressing Modes and Categories", marks Immediate `#<xxx>`
-##      with an `x` in the DATA column. A dynamic BTST READS its operand, so
-##      the DATA class is its class, and that column RESTORES the immediate the
+##      with an `x` in the DATA column. A dynamic BTST reads its operand, so
+##      the DATA class is its class, and that column restores the immediate the
 ##      timing table dashes. Cutting the other way, Table 3-7 on page 3-23
 ##      gives BTST's operand syntax as `Dy,<ea>x`, and the `x` suffix is the
-##      manual's DESTINATION mark - `CLR <ea>x` is "0 -> Destination" and
+##      manual's destination mark - `CLR <ea>x` is "0 -> Destination" and
 ##      `CMP <ea>y,Dx` is "Destination - Source" - which an immediate cannot
 ##      be.
 ##
 ##      This is the one entry on this list that a future reader may have to
-##      REVERSE rather than merely fill in.
+##      reverse rather than merely fill in.
 ##
-##   4. The bit number's modulus. `execBitOp` reduces the number modulo the
+##      The bit number's modulus. `execBitOp` reduces the number modulo the
 ##      operand width - 32 for a data register, 8 for memory. Table 3-7 gives
-##      the WIDTHS ("8,32") and states no modulus anywhere, and no other
+##      the widths ("8,32") and states no modulus anywhere, and no other
 ##      passage does either. Figure 3-8 on page 3-18 is the closest thing and
 ##      it does not carry the weight: its `BIT` row reads "BIT (0 <= MODULO
 ##      (OFFSET) < 31, OFFSET OF 0 = MSB)", which numbers from the MSB where
@@ -120,11 +118,10 @@
 ##      including it, and uses the word OFFSET, which belongs to the bit-field
 ##      instructions section 3.9 lists among the removed ones.
 ##
-##   5. THE REGISTER SHIFT COUNT'S MODULUS. `execShift` takes it modulo 64.
+##      The register shift count's modulus. `execShift` takes it modulo 64.
 ##      Table 3-7 gives the shift operations as `X/C <- (Dy << Dx) <- 0` and
-##      states no modulus, and no other passage does. The modulus is therefore
-##      unpinned: nothing distinguishes modulo 64 from modulo 256 or from no
-##      reduction at all.
+##      states no modulus, and no other passage does. Nothing here distinguishes
+##      modulo 64 from modulo 256 or from no reduction at all.
 
 import mcf5307/decode_types
 import mcf5307/ea
@@ -142,12 +139,12 @@ proc trap(ctx: MCF5307Ctx): uint32 =
   0'u32
 
 # ---------------------------------------------------------------------------
-# The three bitwise combinations, named once.
+# The bitwise combinations, named once.
 
 proc combine(op: Operation; src, dst: uint32): uint32 =
   ## `src op dst`. The order of the two operands does not matter for any of
-  ## the three, which is why one procedure serves both directions of AND and
-  ## OR and the single direction of EOR.
+  ## them, which is why one procedure serves both directions of AND and OR and
+  ## the single direction of EOR.
   case op
   of opAnd, opAndi: src and dst
   of opOr, opOri: src or dst
@@ -237,7 +234,7 @@ proc execNot(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## NOT.L Dn. The memory forms of the 68000 are gone, and the manual is what
   ## says so. MCF5307 User's Manual Table 3-12, "One Operand Instruction
   ## Execution Times", page 3-27: the `not.l` row carries `Dx` in the `<EA>`
-  ## column, `1(0/0)` under `Rn`, and A DASH under every one of `(An)`, `(An)+`,
+  ## column, `1(0/0)` under `Rn`, and a dash under every one of `(An)`, `(An)+`,
   ## `-(An)`, `(d16,An)`, `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`. The `clr.l` and
   ## `tst.l` rows of the same table carry times in those same columns, so the
   ## dashes are this row's and not the table's. `m68k-elf-as -mcpu=5307`
@@ -265,11 +262,10 @@ proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ##
   ## The operand width decides the width of the access. A data register operand
   ## is 32 bits and every memory operand is 8 bits, and the access is one byte -
-  ## the "8,32" of Table 3-7's OPERAND SIZE column,
-  ## which is carried by the bit operations and by no other instruction in this
-  ## group. A core that read or wrote a
-  ## longword in memory here would answer a different question and would also
-  ## disturb the three bytes beside the operand.
+  ## the "8,32" of Table 3-7's operand size column, which is carried by the bit
+  ## operations and by no other instruction in this group. A core that read or
+  ## wrote a longword in memory here would answer a different question and
+  ## would also disturb the three bytes beside the operand.
   ##
   ## The modulus below is a choice and not a citation. Taking the bit number
   ## modulo the operand width - 32 for a register, 8 for memory - is what this
@@ -288,20 +284,20 @@ proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
     bitNumber = regD(ctx, d.destReg)
   else:
     # The static form's bit number is the extension word, and it is fetched
-    # BEFORE the effective address's own extension words - the order the
+    # before the effective address's own extension words - the order the
     # assembler emits them in, measured: `btst #3,4(%a0)` is `0828 0003 0004`.
     bitNumber = uint32(fetchExt(ctx))
     if ctx.halted: return 0'u32
   let bit = bitNumber and (8'u32 * uint32(d.size) - 1'u32)
   let selector = 1'u32 shl bit
-  # BTST reads and the other three read and write, and that decides which
-  # operand evaluator each one uses.
+  # BTST reads and the others read and write, and that decides which operand
+  # evaluator each one uses.
   #
   # `eaResolve` returns a reference a later write can reach, so it refuses
   # every operand that cannot be written: the PC-relative pair, the immediate
-  # and the reserved mode-7 encodings. That is CORRECT FOR BSET, BCLR AND BCHG
-  # and WRONG FOR BTST, whose mask is `eaBitDynamic` and which admits the two
-  # PC-RELATIVE sub-variants. Measured: `btst %d1,(4,%pc)` (`033a 0004`) and
+  # and the reserved mode-7 encodings. That is correct for BSET, BCLR and BCHG
+  # and wrong for BTST, whose mask is `eaBitDynamic` and which admits the two
+  # PC-relative sub-variants. Measured: `btst %d1,(4,%pc)` (`033a 0004`) and
   # `btst %d1,(4,%pc,%d2)` (`033b 2804`) both assemble on `-mcpu=5307`.
   #
   # The immediate is not one of them. `eaBitDynamic` excludes it, so the mask
@@ -309,7 +305,7 @@ proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # that constant in `decode_types.nim` for the manual rows behind it.
   #
   # The fix belongs here and not in `eaResolve`. Widening that procedure would
-  # let a write reach a PC-relative or an immediate operand, and the three bit
+  # let a write reach a PC-relative or an immediate operand, and the bit
   # operations that write are not the only callers it has. BTST never writes,
   # so it reads through `eaRead`, which serves every mode its mask admits.
   var value: uint32

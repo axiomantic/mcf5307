@@ -5,10 +5,16 @@
 ## implements and then asserted that it implements them would pass against any
 ## table at all.
 ##
-## There are four classes and each names a different finding. `ccImplemented`
-## and `ccNotImplemented` are decisions this project took. `ccIllegal` is a
-## byte the authority numbers and forbids. `ccUnspecified` is a byte no source
-## on this machine describes at all.
+## Each class names a different finding. `ccImplemented` and
+## `ccNotImplemented` are decisions this project took. `ccIllegal` is a byte
+## the authority numbers and forbids. `ccUnspecified` is a byte no source on
+## this machine describes at all.
+##
+## The size of that class is not written here. A figure in a comment is checked
+## by nothing, so it drifts silently and then misleads with the authority of a
+## measurement. The figure lives in `wantPartition` below, where the run
+## compares it against a live sweep of all 256 bytes and goes red the moment it
+## is wrong.
 ##
 ## The data-flow opcodes are inherited. They are typed here from Table 109 of
 ## the ISP1362 data sheet, Rev. 06, which states that it integrates the
@@ -40,8 +46,8 @@ proc checkImpl(site: int; ok: bool; label: string; got: string; want: string) =
 
 
 template check(ok: bool; label: string; got: string; want: string) =
-  ## The call site is recorded at COMPILE TIME into `declaredSites` and at RUN
-  ## TIME into `executedSites`. `tests/case_sites.nim` states what the pair is
+  ## The call site is recorded at compile time into `declaredSites` and at run
+  ## time into `executedSites`. `tests/case_sites.nim` states what the pair is
   ## for.
   const site = instantiationInfo(-1).line
   static: declaredSites.add(site)
@@ -55,21 +61,42 @@ const
   commandPort = 0x13000010'u32
   benign = 0x00'u8
 
-# THE IMPLEMENTED LIST, HAND-WRITTEN. Every entry is an opcode the authority
-# spells out. Commands the authority names WITHOUT an opcode are not here and
-# cannot be: an opcode chosen by this suite would be asserting its own guess.
-const implementedOpcodes: array[42, uint8] = [
+# The implemented list, hand-written. The commands that are named without an
+# opcode are not here and cannot be: an opcode chosen by this suite would be
+# asserting its own guess.
+const implementedOpcodes: array[59, uint8] = [
   0xF6'u8,                                    # reset
   0xBA'u8, 0xBB'u8,                           # hardware configuration
   0xB8'u8, 0xB9'u8,                           # mode
   0xB6'u8, 0xB7'u8,                           # device address
   0x20'u8, 0x21'u8,                           # control configuration, OUT then IN
   0x22'u8, 0x23'u8, 0x24'u8,                  # endpoint 1 to 3 configuration
+  # Endpoints 4 to 14 configure a register and not a buffer. ISP1362
+  # Rev. 06 section 15.1.1 p.107 requires all sixteen slots to be written
+  # in sequence before the part allocates buffer memory, so the register
+  # exists for every slot and the model records every slot. The buffers
+  # behind slots 5 to 15 are still absent, and the data-flow families
+  # below still refuse them by name.
+  0x25'u8, 0x26'u8, 0x27'u8, 0x28'u8, 0x29'u8, 0x2A'u8, 0x2B'u8,
+  0x2C'u8, 0x2D'u8, 0x2E'u8, 0x2F'u8,        # endpoint 4 to 14 configuration
   0xD2'u8,                                    # peek
   0xC0'u8,                                    # interrupt register
   0xC2'u8, 0xC3'u8,                           # interrupt enable
   0xF4'u8,                                    # acknowledge setup
   0x01'u8,                            # control IN buffer write
+  # The IN half of endpoints 1 to 3. ISP1362 Rev. 06 Table 109 p.105-106
+  # numbers Write endpoint n buffer `02` to `0F` and Validate endpoint n buffer
+  # `62` to `6F` for n = 1 to 14, and annotates both destinations "(IN
+  # endpoints only)". That annotation is not part of the code map: section
+  # 15.2.1 p.114 states the wrong-direction access as behaviour - "There is no
+  # protection against ... writing into an OUT buffer" - and note [4] p.106
+  # gives validating an OUT endpoint buffer as unpredictable. So the opcode is
+  # implemented for every endpoint this model buffers, and the direction is a
+  # run-time precondition the model refuses by name. These are in
+  # `speaksOnFreshHandle` below, because a fresh handle has EPDIR = 0 for all
+  # sixteen slots and every one of them then addresses the wrong direction.
+  0x02'u8, 0x03'u8, 0x04'u8,          # endpoint 1 to 3 buffer write
+  0x62'u8, 0x63'u8, 0x64'u8,          # endpoint 1 to 3 buffer validate
   0x10'u8,                            # control OUT buffer read
   0x12'u8,                            # endpoint 1 buffer read
   0x13'u8,                            # endpoint 2 buffer read
@@ -96,29 +123,15 @@ const implementedOpcodes: array[42, uint8] = [
   0x84'u8]                            # endpoint 3 unstall
 
 # The not-implemented list, hand-written, with the name each document gives it.
-# `scratch`, `unlock` and `isochronous` are named by the documents without an
-# opcode and so cannot appear here either - and they cost nothing, because an
-# opcode the authority does not number falls to the unspecified class below,
-# which answers benignly and logs. The gap is only expensive on the
-# IMPLEMENTED side.
-const notImplemented: array[100, tuple[opcode: uint8, name: string]] = [
+# `scratch`, `unlock` and `isochronous` are named without an opcode and so
+# cannot appear here either - and they cost nothing, because an opcode the
+# authority does not number falls to the unspecified class below, which
+# answers benignly and logs. The gap is only expensive on the implemented
+# side.
+const notImplemented: array[83, tuple[opcode: uint8, name: string]] = [
   (0xF0'u8, "DMA"), (0xF1'u8, "DMA"), (0xF2'u8, "DMA"), (0xF3'u8, "DMA"),
   (0xB5'u8, "chip identifier"),
   (0xB4'u8, "frame number"),
-  (0x25'u8, "endpoint 4 configuration"),
-  (0x26'u8, "endpoint 5 configuration"),
-  (0x27'u8, "endpoint 6 configuration"),
-  (0x28'u8, "endpoint 7 configuration"),
-  (0x29'u8, "endpoint 8 configuration"),
-  (0x2A'u8, "endpoint 9 configuration"),
-  (0x2B'u8, "endpoint 10 configuration"),
-  (0x2C'u8, "endpoint 11 configuration"),
-  (0x2D'u8, "endpoint 12 configuration"),
-  (0x2E'u8, "endpoint 13 configuration"),
-  (0x2F'u8, "endpoint 14 configuration"),
-  (0x02'u8, "endpoint 1 buffer write"),
-  (0x03'u8, "endpoint 2 buffer write"),
-  (0x04'u8, "endpoint 3 buffer write"),
   (0x05'u8, "endpoint 4 buffer write"),
   (0x06'u8, "endpoint 5 buffer write"),
   (0x07'u8, "endpoint 6 buffer write"),
@@ -163,9 +176,6 @@ const notImplemented: array[100, tuple[opcode: uint8, name: string]] = [
   (0x5D'u8, "endpoint 12 status"),
   (0x5E'u8, "endpoint 13 status"),
   (0x5F'u8, "endpoint 14 status"),
-  (0x62'u8, "endpoint 1 buffer validate"),
-  (0x63'u8, "endpoint 2 buffer validate"),
-  (0x64'u8, "endpoint 3 buffer validate"),
   (0x65'u8, "endpoint 4 buffer validate"),
   (0x66'u8, "endpoint 5 buffer validate"),
   (0x67'u8, "endpoint 6 buffer validate"),
@@ -219,9 +229,52 @@ const illegalCommands: array[4, tuple[opcode: uint8, name: string,
 # a validate with no buffer write staged for it is a firmware fault the model
 # reports. It is listed here with its line rather than exempted, so the
 # exception is asserted and not merely skipped.
-const speaksOnFreshHandle: array[1, tuple[opcode: uint8, want: string]] = [
+const speaksOnFreshHandle: array[7, tuple[opcode: uint8, want: string]] = [
   (0x61'u8, "isp1181: a validate for endpoint 0 IN found no buffer write " &
-            "staged for it; nothing is validated")]
+            "staged for it; nothing is validated"),
+  # The IN-family codes for endpoints 1 to 3 speak on a fresh handle, and the
+  # reason is the handle and not the code. Table 110 p.107 gives every bit
+  # of DcEndpointConfiguration a reset value of 0, so EPDIR reads OUT for all
+  # sixteen slots until the firmware writes one, and an IN command then
+  # addresses a direction the endpoint is not configured for. The same codes on
+  # a handle whose endpoint is configured IN write nothing, which
+  # `tests/t_isp1181.nim` drives.
+  (0x02'u8, "isp1181: command 0x02 (endpoint 1 buffer write) addresses the " &
+            "IN buffer of endpoint 1, and EPDIR is 0 in its " &
+            "DcEndpointConfiguration - the endpoint is configured " &
+            "OUT; the authority documents this access as " &
+            "unprotected and its result as unpredictable, so " &
+            "nothing is done"),
+  (0x03'u8, "isp1181: command 0x03 (endpoint 2 buffer write) addresses the " &
+            "IN buffer of endpoint 2, and EPDIR is 0 in its " &
+            "DcEndpointConfiguration - the endpoint is configured " &
+            "OUT; the authority documents this access as " &
+            "unprotected and its result as unpredictable, so " &
+            "nothing is done"),
+  (0x04'u8, "isp1181: command 0x04 (endpoint 3 buffer write) addresses the " &
+            "IN buffer of endpoint 3, and EPDIR is 0 in its " &
+            "DcEndpointConfiguration - the endpoint is configured " &
+            "OUT; the authority documents this access as " &
+            "unprotected and its result as unpredictable, so " &
+            "nothing is done"),
+  (0x62'u8, "isp1181: command 0x62 (endpoint 1 buffer validate) addresses the " &
+            "IN buffer of endpoint 1, and EPDIR is 0 in its " &
+            "DcEndpointConfiguration - the endpoint is configured " &
+            "OUT; the authority documents this access as " &
+            "unprotected and its result as unpredictable, so " &
+            "nothing is done"),
+  (0x63'u8, "isp1181: command 0x63 (endpoint 2 buffer validate) addresses the " &
+            "IN buffer of endpoint 2, and EPDIR is 0 in its " &
+            "DcEndpointConfiguration - the endpoint is configured " &
+            "OUT; the authority documents this access as " &
+            "unprotected and its result as unpredictable, so " &
+            "nothing is done"),
+  (0x64'u8, "isp1181: command 0x64 (endpoint 3 buffer validate) addresses the " &
+            "IN buffer of endpoint 3, and EPDIR is 0 in its " &
+            "DcEndpointConfiguration - the endpoint is configured " &
+            "OUT; the authority documents this access as " &
+            "unprotected and its result as unpredictable, so " &
+            "nothing is done")]
 
 var hostToken = 0xC0FFEE
 
@@ -263,7 +316,7 @@ proc driveImplemented(): Accepted =
     elif m.logLines.len != 0:
       result.firstBad = "0x" & toHex(opcode) & " logged: " & m.logLines[0]
 
-const wantAccepted: Accepted = (firstBad: "", driven: 41)
+const wantAccepted: Accepted = (firstBad: "", driven: 52)
 
 let accepted = driveImplemented()
 check(accepted == wantAccepted,
@@ -302,8 +355,16 @@ proc driveRefused(rows: openArray[tuple[opcode: uint8, want: string]]): Refused 
     elif m.portRead(commandPort) != benign:
       result.firstBad = "0x" & toHex(row.opcode) & " command port answered 0x" &
         toHex(m.portRead(commandPort))
-    elif m.lastCommand != -1:
-      result.firstBad = "0x" & toHex(row.opcode) & " became the pending command"
+    elif m.lastCommand != int(row.opcode):
+      # The command phase latches whether or not the decode accepts. ISP1362
+      # Rev. 06 p.14 calls the command "the index of a register" and section 15
+      # p.104 gives the command phase as an unconditional interpretation of the
+      # bus, so a byte that reached the command port is the pending command and
+      # a model that left the previous one there would charge the next operand
+      # byte to it.
+      result.firstBad = "0x" & toHex(row.opcode) &
+        " did not become the pending command; the pending command is " &
+        $m.lastCommand
 
 # The command's name is part of the asserted line. A log that named only the
 # opcode would leave a reader with a number and no way to tell a refused DMA
@@ -315,7 +376,7 @@ for row in notImplemented:
             ") is not implemented; the read answers 0x00"))
 
 let refused = driveRefused(notImplementedRows)
-const wantRefused: Refused = (firstBad: "", driven: 100)
+const wantRefused: Refused = (firstBad: "", driven: 83)
 check(refused == wantRefused,
       "not implemented: every command answers benignly and logs one line",
       $refused, $wantRefused)
@@ -371,11 +432,11 @@ check(illegalDriven == wantIllegal,
 # The one accepted command that speaks. It is driven here with its line
 # asserted, so block 1's exemption costs no coverage.
 let speaking = driveRefused(@speaksOnFreshHandle)
-const wantSpeaking: Refused = (firstBad: "0x61 became the pending command",
-                               driven: 1)
+const wantSpeaking: Refused = (firstBad: "", driven: 7)
 check(speaking == wantSpeaking,
-      "accepted-and-speaking: a validate with nothing staged is accepted, " &
-        "recorded as pending and reports the fault",
+      "accepted-and-speaking: a validate with nothing staged and the six " &
+        "IN-family codes on an unconfigured endpoint are accepted, recorded " &
+        "as pending and report their own fault",
       $speaking, $wantSpeaking)
 
 # The classes partition the byte. Without this the sweeps above could each be
@@ -390,7 +451,18 @@ let partition: Partition = (implemented: accepted.driven +
                             total: accepted.driven + speaking.driven +
                                    refused.driven + illegalDriven.driven +
                                    unspecified.driven)
-const wantPartition: Partition = (implemented: 42, refused: 100, illegal: 4,
+# `0x02` to `0x04` and `0x62` to `0x64` are Write and Validate endpoint n
+# buffer for the three endpoints beyond endpoint 0 that this model carries
+# buffers for. They are implemented, and the direction those buffers face is
+# checked when the command runs rather than when it is classified.
+#
+# The codes `0x25` to `0x2F` write the DcEndpointConfiguration register of a
+# slot this model carries no buffer for, and are implemented for a different
+# reason: ISP1362 Rev. 06 section 15.1.1 p.107 states that the part allocates
+# buffer memory only "after all 16 endpoints have been configured in sequence",
+# so a slot the model refused would make a step the authority requires look
+# like a step the part cannot take.
+const wantPartition: Partition = (implemented: 59, refused: 83, illegal: 4,
                                   unspecified: 110, total: 256)
 check(partition == wantPartition,
       "partition: the four classes cover all 256 opcodes and none twice",
@@ -606,11 +678,10 @@ check(strayRead == wantStrayRead,
 # ---------------------------------------------------------------------------
 # Block 6. The five FIFOs.
 #
-# THE GEOMETRY TABLE IS THE CASE THAT PINS THE EP3 CORRECTION. The authority
-# marks double-buffering where it exists and leaves EP3 unmarked, so the design
-# document's "double" for endpoint 3 is wrong. A model with one buffer too many accepts a
-# second packet the hardware would have NAKed, so the row below is a behaviour
-# and not a size.
+# The geometry table is the case that pins the EP3 buffer count. The authority
+# marks double-buffering where it exists and leaves EP3 unmarked. A model with
+# one buffer too many accepts a second packet the hardware would have NAKed,
+# so the row below is a behaviour and not a size.
 
 type Geometry = tuple[name: string, capacity: int, buffers: int]
 
@@ -671,7 +742,7 @@ check(big == wantBig,
       "fifos: a packet larger than the buffer is refused and not truncated",
       $big, $wantBig)
 
-# PEEK READS AND DOES NOT CONSUME, which is the whole difference between it and
+# Peek reads and does not consume, which is the whole difference between it and
 # a buffer read. The buffer it reads is the one the last accepted
 # `0x20+k` selected, because that is the only selector the authority gives this
 # model - and `k` is a slot and not an endpoint number, so `0x22` selects
@@ -813,7 +884,7 @@ check(irqRun == wantIrqRun,
       $irqRun, $wantIrqRun)
 
 # ---------------------------------------------------------------------------
-# BLOCK 3a. The endpoint-configuration family is numbered as the authority
+# Block 3a. The endpoint-configuration family is numbered as the authority
 # numbers it, and the sixteen names are written out here by hand.
 #
 # ISP1362 Rev. 06 section 15.1.1 states the write codes as "20 to 2F - write
@@ -913,8 +984,16 @@ proc configurationLoudness(): Loudness =
       result.unaccounted.add(slot)
 
 let loudness = configurationLoudness()
-const wantLoudness: Loudness = (accepted: @[0, 1, 2, 3, 4],
-                                loud: @[5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+# Every slot is accepted and `loud` is empty. ISP1362 Rev. 06 section 15.1.1
+# p.107 states that buffer-memory
+# allocation "takes place only after all 16 endpoints have been configured in
+# sequence", so a slot the part refused would break a sequence the same section
+# requires. The `loud` branch is kept rather than deleted: it is what the check
+# reports if a slot ever stops being accepted, and an empty expectation is the
+# assertion that none does.
+const wantLoudness: Loudness = (accepted: @[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                                            11, 12, 13, 14, 15],
+                                loud: @[],
                                 unaccounted: @[])
 check(loudness == wantLoudness,
       "configuration: every slot is accepted or names itself in one line, " &
