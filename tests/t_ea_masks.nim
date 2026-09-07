@@ -385,8 +385,7 @@ static:
 ## So the page is derived and the declared one is checked against it. The
 ## derivation rests on a property of the table that was read from the rendered
 ## p.3-28 and p.3-29 and not from `pdftotext` and not from the markdown
-## conversion under `datasheets/MCF5307UM-md/`, whose Table 3-13 is known
-## wrong:
+## conversion, whose Table 3-13 is known wrong:
 ##
 ##   - The p.3-28 half runs `add.l` to `mulu.l`; the p.3-29 half opens `or.l`
 ##     and ends `subx.l`, after which section 3.12 begins.

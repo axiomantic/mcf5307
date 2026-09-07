@@ -327,6 +327,12 @@ void collectRegs(const Value& state, const std::string& where,
     }
     const Value* v = kv.second.get();
     requireKind(v, Value::Kind::Int, where + ".regs['" + kv.first + "']");
+    // A register value is written signed or unsigned - the corpus carries
+    // `-1` for a sign-extended result - so the accepted range is the union of
+    // the two 32-bit ranges and not `collectMem`'s unsigned one.
+    if (v->i < -2147483648LL || v->i > 0xFFFFFFFF) {
+      failCheck(where + ".regs['" + kv.first + "'] does not fit in 32 bits");
+    }
     out.emplace_back(kv.first, static_cast<uint32_t>(v->i));
   }
 }

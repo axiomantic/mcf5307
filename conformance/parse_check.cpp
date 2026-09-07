@@ -303,7 +303,12 @@ void validateRegs(const Value& regs, const std::string& where) {
       failCheck(what + " names '" + kv.first + "', which is not a register this "
                 "corpus addresses (d0..d7, a0..a7, sr, pc)");
     }
-    requireInt(kv.second.get(), what + "['" + kv.first + "']");
+    const Value& v = requireInt(kv.second.get(), what + "['" + kv.first + "']");
+    // A register value is written signed or unsigned, so the accepted range
+    // is the union of the two 32-bit ranges.
+    if (v.i < -2147483648LL || v.i > 0xFFFFFFFF) {
+      failCheck(what + "['" + kv.first + "'] does not fit in 32 bits");
+    }
   }
 }
 

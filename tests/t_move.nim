@@ -272,13 +272,13 @@ proc expectFault(o: Outcome; label: string) =
 #     integer multiply with a 64-bit result. SWAP is not among them.
 #   - The pinned `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726) emits
 #     `4840` for `swap %d0`, `4843` for `swap %d3` and `4847` for `swap %d7`.
-#   - The shipped G2 operating system uses it: `CODE_30000400.bin` holds
+#   - The shipped G2 operating system uses it: its firmware image holds
 #     words in `4840`-`4847` on a two-byte-aligned scan, the first at
 #     `0x3000066c`.
 #     `m68k-elf-objdump -m m68k:5307` decodes the first hit's context as
 #     `mulsl %d0,%d2 / addil #32768,%d2 / swap %d2 / extl %d2` - a 16.16
 #     fixed-point multiply that rounds by adding a half and then takes the
-#     high word. A core that faults on `swap` cannot run that firmware.
+#     high word.
 #
 # The condition codes are manual-derived, from section 3.2.1.5, page 3-9.
 # No per-instruction rule exists to read: Table 3-7's operation column for
