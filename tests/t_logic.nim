@@ -27,9 +27,9 @@
 ##   never had: folio 4-12 gives ASL's V a flat "Always cleared" and notes
 ##   that this is "unlike on the 68K family processors".
 ##
-##   READ THE MANUAL AS RENDERED PAGES. Its tables survive a text extraction
-##   wrong, so a value taken from one is not evidence; render the page and read
-##   the image.
+##   READ THE MANUAL AS RENDERED PAGES. Its tables come out of a text
+##   extraction wrong, so a value taken from one is not evidence;
+##   `pdftoppm -png` the page and read the image.
 ##
 ## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_logic`. That corpus holds
 ## POSITIVE cases: an encoding this part has,
