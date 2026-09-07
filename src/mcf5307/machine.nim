@@ -704,6 +704,18 @@ proc takePendingWriteFault*(ctx: MCF5307Ctx) =
   ctx.pendingFaultStatus = 0'u32
   if ctx.halted:
     return
+  if ctx.atHandlerEntry:
+    # The instruction has already entered a handler - `transferControl` takes
+    # the address error of an odd branch target after the push that recorded
+    # this capture. Stacking here would put a second frame on the stack for
+    # one instruction and leave this handler's `RTE` returning into the first
+    # handler's entry rather than into the program. The manual set carries no
+    # rule for a write error still outstanding at that point, so the core
+    # stops at the state it can describe: `fault` and `halted` are what the
+    # stacking layer above already raises for a fault it cannot represent.
+    ctx.fault = true
+    ctx.halted = true
+    return
   takeExceptionCopiedSr(ctx, vecAccessError, stackedPc, fs, stackedSr)
 
 proc transferControl*(ctx: MCF5307Ctx; target: uint32; faultPc: uint32) =
