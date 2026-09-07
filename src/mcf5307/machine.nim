@@ -742,9 +742,10 @@ proc transferControl*(ctx: MCF5307Ctx; target: uint32; faultPc: uint32) =
 
 # ---------------------------------------------------------------------------
 # The register access the conformance harness needs. The C ABI in
-# `include/mcf5307.h` declares these. `index` 0..7 is d0..d7, 8..14 is a0..a6,
-# 15 is a7 (the single stack pointer), 16 is the status register, and 17 is
-# the program counter (read-only through this call).
+# `include/mcf5307.h` declares these. The index space is the register file's,
+# stated once at the head of this module; these two calls take the whole of
+# it, 0 through 24, and 17 is read-only through `mcf5307_set_reg` for the
+# reason given there.
 
 proc mcf5307_set_reg*(ctx: MCF5307Ctx; index: cint; value: uint32): cint
     {.exportc: "mcf5307_set_reg", cdecl, dynlib.} =
