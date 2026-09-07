@@ -1107,7 +1107,8 @@ CASES = {
         },
         {
             # N COMES FROM THE QUOTIENT AND NOT FROM THE LONGWORD WRITTEN.
-            # Folios 4-31 and 4-33: "N ... set if the QUOTIENT is negative".
+            # CFPRM folios 4-31 and 4-33: "N ... set if the QUOTIENT is
+            # negative".
             # -17 / -5 is quotient +3 with remainder -2, so the register's bit
             # 31 is SET while the quotient is positive; a core taking N from
             # the register it just wrote reports the remainder's sign and
@@ -2534,8 +2535,8 @@ CASES = {
         #
         # BOTH READ `ea.nim`'s `eaControl7`, which holds the full control
         # mode-7 class with `(xxx).W` in it. MOVEM reads neither and carries
-        # `{eaAnInd, eaAnDisp}`, because folios 4-50 and 4-51 dash every row
-        # but `(An)` and `(d16,An)`.
+        # `{eaAnInd, eaAnDisp}`, because CFPRM folios 4-50 and 4-51 dash every
+        # row but `(An)` and `(d16,An)`.
         {
             "name": "jmp_indirect",
             "mnemonic": "jmp",
