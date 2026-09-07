@@ -44,9 +44,9 @@ trusting this line **or the preset** — the preset is a second copy of the
 pattern, not its source.
 
 `--no-tests=error` has no test-preset field. The preset carries it as the
-environment variable `CTEST_NO_TESTS_ACTION`, which needs CMake 3.26 or later —
-above this project's declared 3.20 floor. On an older CTest the preset runs
-without that guard while the raw form still has it.
+environment variable `CTEST_NO_TESTS_ACTION`, which needs CMake 3.26 or later.
+That is the highest of the four requirements this project has on CMake, and it
+is what sets the declared floor.
 
 ### Full
 
@@ -118,7 +118,7 @@ alters the published C ABI needs it too: the consumer that links this library is
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` only if a step
   fails to find one. `tests/reach.sh` sets it defensively for the same reason.
 
-Requirements: CMake 3.21 or later, and the exact Nim version named in
+Requirements: CMake 3.26 or later, and the exact Nim version named in
 `.nim-version`. The configure step reads `.nim-version`, runs `nim --version`,
 and stops with an error that prints both versions when they disagree.
 
