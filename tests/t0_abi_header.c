@@ -23,8 +23,6 @@
 
 #include "mcf5307.h"
 
-/* ------------------------------- one _Static_assert for each declared type */
-
 /* The opaque context types. Neither is complete here and neither may be,
  * so the assertion is over a pointer to it: the type NAME must exist. */
 _Static_assert(sizeof(mcf5307_ctx*) == sizeof(void*),
@@ -42,8 +40,6 @@ _Static_assert(MCF5307_BUS_UNMAPPED == 1, "MCF5307_BUS_UNMAPPED must be 1");
 _Static_assert(MCF5307_BUS_SIZE_ILLEGAL == 2,
                "MCF5307_BUS_SIZE_ILLEGAL must be 2");
 _Static_assert(MCF5307_BUS_FAULT == 3, "MCF5307_BUS_FAULT must be 3");
-
-/* The named zero of the interrupt level. */
 _Static_assert(MCF5307_IRQ_NONE == 0, "MCF5307_IRQ_NONE must be 0");
 
 /* The function-pointer types. Each must exist as a type name and each
@@ -70,8 +66,7 @@ _Static_assert(sizeof(isp1181_tx_fn) == sizeof(void (*)(void)),
 
 int main(void)
 {
-    /* The mcf5307_* functions. */
-    void (*const p01)(void) = &mcf5307_runtime_init;
+    int (*const p01)(void) = &mcf5307_runtime_init;
     mcf5307_ctx* (*const p02)(void*, mcf5307_read_fn, mcf5307_write_fn,
                               mcf5307_iack_fn) = &mcf5307_create;
     void (*const p03)(mcf5307_ctx*) = &mcf5307_destroy;
@@ -82,14 +77,13 @@ int main(void)
     void (*const p08)(const mcf5307_ctx*, void*) = &mcf5307_state_save;
     void (*const p09)(mcf5307_ctx*, const void*) = &mcf5307_state_load;
 
-    /* The isp1181_* functions. */
     isp1181_ctx* (*const p10)(void*, isp1181_irq_fn,
                               isp1181_tx_fn) = &isp1181_create;
     void (*const p11)(isp1181_ctx*) = &isp1181_destroy;
     uint8_t (*const p12)(isp1181_ctx*, uint32_t) = &isp1181_read;
     void (*const p13)(isp1181_ctx*, uint32_t, uint8_t) = &isp1181_write;
-    void (*const p14)(isp1181_ctx*, int, const uint8_t*,
-                      size_t) = &isp1181_rx;
+    int (*const p14)(isp1181_ctx*, int, const uint8_t*,
+                     size_t) = &isp1181_rx;
     void (*const p15)(isp1181_ctx*, uint32_t) = &isp1181_tick;
     size_t (*const p16)(void) = &isp1181_state_size;
     void (*const p17)(const isp1181_ctx*, void*) = &isp1181_state_save;

@@ -10,8 +10,8 @@ import mcf5307/exception
 type
   BusAccess* = enum
     ## The direction of the access that faulted. User's Manual Table 3-3,
-    ## section 3.4, folio 3-14, distinguishes an operand read from an operand
-    ## write and gives each its own code.
+    ## section 3.4, folio 3-14: an operand read and an operand write each carry
+    ## their own code.
     operandRead
     operandWrite
 

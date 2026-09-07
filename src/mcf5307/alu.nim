@@ -1,17 +1,13 @@
-## `alu` - the integer-arithmetic instruction group of the ColdFire ISA_A
-## core.
+## `alu` - the integer-arithmetic instruction group of the ColdFire ISA_A core.
 ##
 ## This module executes ADD, ADDA, ADDI, ADDQ, ADDX, SUB, SUBA, SUBI, SUBQ,
 ## SUBX, NEG, NEGX, CLR, EXT, EXTB, MULU, MULS, DIVU and DIVS in BOTH their
-## word and their long forms - eight instructions, not four - and the two
-## REMx.L forms, AND NOTHING ELSE. The register file, the board accesses and
-## the effective-address evaluation are `mcf5307/machine`'s. The word forms are
-## `execMulWord` and `execDivWord`, and they are what makes the MUL and DIV
-## rows of Table 3-13 eight rather than four.
+## word and their long forms, and the REMx.L forms, AND NOTHING ELSE. The
+## register file, the board accesses and the effective-address evaluation are
+## `mcf5307/machine`'s. The word forms are `execMulWord` and `execDivWord`.
 ##
-## This module is a sibling of `move.nim` and of `decode.nim`. It imports
-## neither, and neither imports it. An executor that reaches into another
-## executor for a helper inverts the layering one level down.
+## This module does not reach into another executor for a helper; that would
+## invert the layering one level down.
 ##
 ## Arithmetic on this part is 32-bit. `ADD.B`, `ADD.W`, `ADDA.W`, `ADDI.B`,
 ## `ADDQ.W`, `NEG.W`, `ADDX.W` and the rest of the byte and word forms are
@@ -28,16 +24,13 @@
 ## A divide by zero is a trap vector on silicon; this core halts the context
 ## with `fault` instead, the same channel every other illegal operand uses.
 ##
-## Cycles. The block above the constants in `cpu.nim` says why nothing checks
-## any of them. Every instruction in this group has a timing row - ADD and SUB
-## with their I, Q and X forms and the eight MUL and DIV rows in Table 3-13
-## (folios 3-28 and 3-29), NEG, NEGX, CLR, EXT and EXTB in Table 3-12 (3-27) -
-## with four exceptions. The opcode column is not alphabetical, so a gap
-## between neighbours proves nothing: `msac.w` and `msac.l` print before
-## `moveq` on folio 3-28, and `divs.w`/`divu.w` before `divs.l`/`divu.l`. On a
-## full enumeration of both pages, no row names `adda.l`, `suba.l`, `rems.l` or
-## `remu.l`. Those four numbers have no source at all rather than a flattened
-## one. `control.nim` records the same absence for CMPA.
+## CYCLES. See the block above the constants in `cpu.nim`. `adda.l`, `suba.l`,
+## `rems.l` and `remu.l` have no timing row in Table 3-13 (folios 3-28 and
+## 3-29) or Table 3-12 (folio 3-27) at all, established by full enumeration of
+## those pages rather than by looking at neighbours: the opcode column is not
+## alphabetical, so a gap between neighbours proves nothing - `msac.w` and
+## `msac.l` print before `moveq` on folio 3-28, and `divs.w`/`divu.w` before
+## `divs.l`/`divu.l`. `control.nim` records the same absence for CMPA.
 ##
 ## The REMx forms do not inherit the divide row. This module models them as
 ## behaviour of their own inside `execDiv` - an unequal register pair writes
@@ -331,7 +324,7 @@ proc execMulWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   setRegD(ctx, d.destReg, res)
   # V and C are cleared and N and Z come from all 32 bits, which is the same
   # rule the long form uses and for the same reason: folios 4-55 and 4-57
-  # print one condition-code table each, above the word instruction format,
+  # print ONE condition-code table each, above the WORD instruction format,
   # and neither continuation page (4-56, 4-58) carries a second. The word
   # table therefore governs both sizes.
   setNzClearVc(ctx, res, 4)
@@ -385,8 +378,8 @@ proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
 const divWordCycles = 20'u32
   ## MCF5307 User's Manual Table 3-13, folio 3-28, `divs.w`/`divu.w <ea>,Dx`:
   ## `20(0/0)` under `Rn` and under `#xxx`. The equality is not a model - the
-  ## rest of the row is `23(1/0)` for the four memory modes, `24(1/0)` for
-  ## `(d8,An,Xi*SF)` and `23(1/0)` for `xxx.wl` - and nothing checks it.
+  ## rest of the row is `23(1/0)` for the memory modes, `24(1/0)` for
+  ## `(d8,An,Xi*SF)` and `23(1/0)` for `xxx.wl`.
 
 proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## DIVU.W and DIVS.W: a 32-bit dividend in Dx over a 16-bit source, with
@@ -520,7 +513,7 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
   else:
     quotient = dividend div src
     written = if dr == dq: quotient else: dividend mod src
-  # COLDFIRE'S REMx.L PRODUCES THE REMAINDER ONLY. An unequal register pair
+  # ColdFire's REMx.L produces the remainder only. An unequal register pair
   # is `REMU.L`/`REMS.L` here and `DIVUL`/`DIVSL` on the 68020, and the
   # 68020 instruction also writes the quotient into Dq. Writing Dq here
   # would corrupt the dividend a following instruction still reads.

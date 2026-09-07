@@ -20,8 +20,6 @@
 
 #include "mcf5307.h"
 
-/* ------------------------------- one static_assert for each declared type */
-
 static_assert(sizeof(mcf5307_ctx*) == sizeof(void*),
               "mcf5307_ctx must be declared as an opaque context type");
 static_assert(sizeof(isp1181_ctx*) == sizeof(void*),
@@ -57,8 +55,7 @@ static_assert(sizeof(isp1181_tx_fn) == sizeof(void (*)()),
 
 int main()
 {
-    /* The mcf5307_* functions. */
-    void (*const p01)() = &mcf5307_runtime_init;
+    int (*const p01)() = &mcf5307_runtime_init;
     mcf5307_ctx* (*const p02)(void*, mcf5307_read_fn, mcf5307_write_fn,
                               mcf5307_iack_fn) = &mcf5307_create;
     void (*const p03)(mcf5307_ctx*) = &mcf5307_destroy;
@@ -69,14 +66,13 @@ int main()
     void (*const p08)(const mcf5307_ctx*, void*) = &mcf5307_state_save;
     void (*const p09)(mcf5307_ctx*, const void*) = &mcf5307_state_load;
 
-    /* The isp1181_* functions. */
     isp1181_ctx* (*const p10)(void*, isp1181_irq_fn,
                               isp1181_tx_fn) = &isp1181_create;
     void (*const p11)(isp1181_ctx*) = &isp1181_destroy;
     uint8_t (*const p12)(isp1181_ctx*, uint32_t) = &isp1181_read;
     void (*const p13)(isp1181_ctx*, uint32_t, uint8_t) = &isp1181_write;
-    void (*const p14)(isp1181_ctx*, int, const uint8_t*,
-                      size_t) = &isp1181_rx;
+    int (*const p14)(isp1181_ctx*, int, const uint8_t*,
+                     size_t) = &isp1181_rx;
     void (*const p15)(isp1181_ctx*, uint32_t) = &isp1181_tick;
     size_t (*const p16)() = &isp1181_state_size;
     void (*const p17)(const isp1181_ctx*, void*) = &isp1181_state_save;

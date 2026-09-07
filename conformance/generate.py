@@ -192,8 +192,8 @@ DIRTY_A = 0x0BADC0DE   # the address-register destination seed
 # `MEM_BASE` is clear of the encoding (the runner places that at 0x10000) and
 # inside the runner's 1 MiB board.
 #
-# The four seed bytes all differ, and neither pair is symmetric. A byte case
-# names `MEM_BASE` and asserts the other three bytes are unchanged, so a write
+# The seed bytes all differ, and neither pair is symmetric. A byte case
+# names `MEM_BASE` and asserts the remaining bytes are unchanged, so a write
 # that was one byte too wide, or that landed on the wrong end of the longword,
 # changes a byte the case names. A repeating seed would survive both.
 #
@@ -202,9 +202,9 @@ DIRTY_A = 0x0BADC0DE   # the address-register destination seed
 # clear: `btst #1,(%a0)` therefore answers differently under the byte rule and
 # under a longword rule, and the case separates them. 0xC1 at the far end has
 # bit 1 clear too, so a core that read the wrong end of the longword also
-# answers differently. THE BIT NUMBER IS INSIDE A BYTE, so the separation is
-# of the ACCESS WIDTH alone and does not depend on how an out-of-range bit
-# number is reduced - see uncertainty 4 in `logic.nim`'s header.
+# answers differently. The bit number is inside a byte, so the separation is of
+# the access width alone and does not depend on how an out-of-range bit number
+# is reduced.
 MEM_BASE = 0x2000
 MEM_SEED_BYTES = (0x02, 0x5A, 0x3C, 0xC1)
 MEM_GUARD = 0x0BADC0DE   # the longword after a longword memory destination
@@ -235,7 +235,7 @@ EA_DECOY_WINDOW = (0x0B, 0xAD, 0xC0, 0xDE, 0x1F, 0x2E, 0x3D, 0x4C)
 
 # The absolute-long address, and the address its two halves swapped.
 #
-# `(xxx).L` carries its address in two extension words. MCF5307 User's Manual
+# `(xxx).L` carries its address in TWO extension words. MCF5307 User's Manual
 # section 3.7.2, "Organization of Integer Data Formats in Memory", page 3-19:
 # "The address N of a longword data item corresponds to the address of the high
 # order word. The lower order word is located at address N + 2." The first
@@ -331,8 +331,7 @@ def lw(addr, value):
 
 
 # ---------------------------------------------------------------------------
-# The control group's own seeds: the stack, the branch targets and the vector
-# table.
+# The control group's seeds: the stack, the branch targets and the vector table.
 #
 # The stack must be inside the runner's board and the default is not.
 # `conformance/runner.cpp` resets A7 to 0x400000 and its board is 1 MiB, so a
@@ -359,14 +358,13 @@ CTRL_GUARD_AT = CTRL_STACK              # at the incoming A7
 CTRL_TARGET = 0x00054320
 CTRL_TARGET_2 = 0x00098760
 
-# The exception vector table. MCF5307 User's Manual Table 3-1, "Exception
+# THE EXCEPTION VECTOR TABLE. MCF5307 User's Manual Table 3-1, "Exception
 # Vector Assignments", page 3-13: `TRAP #0-15` are vector numbers 32 to 47 at
 # vector offsets $080 to $0BC, and the vector offset is 4 x vector_number. The
 # table is based at the vector base register, whose reset value is zero
 # (Table 3-1's own offsets, and the VBR reset value $00000000 in the memory
-# map), and the core has no VBR register yet. So the
-# vector longword of `trap #n` is at 4 * (32 + n) and these two cases seed
-# exactly that.
+# map), and these cases do not write it. So the vector longword of `trap #n`
+# is at 4 * (32 + n) and these two cases seed exactly that.
 TRAP_VECTOR_0 = 4 * 32                  # $080
 TRAP_VECTOR_15 = 4 * 47                 # $0BC
 
@@ -1008,10 +1006,11 @@ CASES = {
 
         # ---------------------------------- THE WORD MULTIPLY AND DIVIDE
         #
-        # THESE ARE REAL INSTRUCTIONS - `m68k-elf-as -mcpu=5307` assembles all
-        # four, CFPRM folios 4-31, 4-33, 4-55 and 4-57 each print a "(Word)"
-        # instruction format, and MCF5307 User's Manual Table 3-13 p.3-28 times
-        # all four.
+        # The word forms of multiply and divide - opmodes 011 and 111 of
+        # lines 1000 and 1100 - are real instructions: `m68k-elf-as
+        # -mcpu=5307` assembles them, CFPRM folios 4-31, 4-33, 4-55 and 4-57
+        # each print a "(Word)" instruction format, and MCF5307 User's Manual
+        # Table 3-13 p.3-28 times them.
         #
         # EVERY EXPECTED VALUE BELOW IS DERIVED FROM THE FOLIOS AND NOT FROM
         # THIS PROJECT'S CORE. This generator takes only the ENCODING from the
@@ -1108,7 +1107,8 @@ CASES = {
         },
         {
             # N COMES FROM THE QUOTIENT AND NOT FROM THE LONGWORD WRITTEN.
-            # Folios 4-31 and 4-33: "N ... set if the QUOTIENT is negative".
+            # CFPRM folios 4-31 and 4-33: "N ... set if the QUOTIENT is
+            # negative".
             # -17 / -5 is quotient +3 with remainder -2, so the register's bit
             # 31 is SET while the quotient is positive; a core taking N from
             # the register it just wrote reports the remainder's sign and
@@ -1173,9 +1173,10 @@ CASES = {
 
         # -------------------------------------------- DIVS, REMU and REMS
         #
-        # The cases below are chosen to be DISCRIMINATING on the status word,
-        # which is the half of these instructions that a plausible wrong
-        # implementation gets wrong while still writing the right register.
+        # The DIVS, REMU and REMS cases below are each chosen to be
+        # DISCRIMINATING on the status word, which is the half of these
+        # instructions that a plausible wrong implementation gets wrong while
+        # still writing the right register.
         {
             # AN OVERFLOW CLEARS N AND Z. CFPRM folios 4-31 and 4-33: "N
             # Cleared if overflow is detected", "Z Cleared if overflow is
@@ -1344,9 +1345,9 @@ CASES = {
     # ASL'S V IS SETTLED, AND THE CFPRM SETTLES IT. Folio 4-12 gives V a flat
     # "Always cleared" and adds "Note that CCR[V] is always cleared by ASL and
     # ASR, unlike on the 68K family processors"; folio 4-11 says "The overflow
-    # bit is always zero". ColdFire computes no ASL overflow at all, so there
-    # is no dichotomy to hedge and no count that separates anything. The shift
-    # count of a V case is free to be whatever the case needs.
+    # bit is always zero". ColdFire computes no ASL overflow at all, so
+    # there is no dichotomy to hedge and no count that separates anything. The
+    # shift count of a V case is free to be whatever the case needs.
     #
     # The register shift count of zero carries no `sr`, for the same reason:
     # what a zero count does to C is a rule this project cannot cite today. The
@@ -1541,7 +1542,7 @@ CASES = {
         # ----------------------------------------------------------- BTST
         #
         # A bit operation on a data register is 32 bits wide and one on memory
-        # is 8. That is the OPERAND SIZE column of MCF5307 User's Manual
+        # is 8. That is the operand size column of MCF5307 User's Manual
         # Table 3-7, which reads "8,32" for BTST, BSET, BCLR and BCHG and for
         # no other instruction in this group. The two cases that pin it are
         # `btst_l_bit_number_above_a_byte` and
@@ -1549,11 +1550,11 @@ CASES = {
         # whose answer under the other width is the opposite, so neither can
         # pass against a core that applies the wrong one.
         #
-        # NEITHER CASE USES A BIT NUMBER ITS OPERAND CANNOT HOLD, AND THAT IS
-        # DELIBERATE. `logic.nim` reduces an out-of-range bit number modulo
-        # the operand width, and NO PASSAGE OF THE USER'S MANUAL STATES ANY
-        # MODULUS - see uncertainty 4 in that module's header, which also says
-        # why Figure 3-8's `MODULO (OFFSET)` annotation does not settle it.
+        # Neither case uses a bit number its operand cannot hold, and that is
+        # deliberate. `logic.nim` reduces an out-of-range bit number modulo the
+        # operand width, and no passage of the User's Manual states any
+        # modulus - and Figure 3-8's `MODULO (OFFSET)` annotation does not
+        # settle it.
         # That reduction is this core's choice, and the corpus must not pin a
         # choice no document supports. The two cases below get the same
         # discrimination out of in-range numbers:
@@ -2020,7 +2021,7 @@ CASES = {
     #   CMP, CMPA, CMPI
     #       "Destination - Source" (Table 3-7, page 3-23) with the result
     #       discarded. N, Z, V and C come from that subtraction and X is not
-    #       written. The X rule is uncertainty 2 in `control.nim`'s header: the
+    #       written. The X rule is unsettled: the
     #       same section 3.2.1.5 says X takes C's value "for arithmetic
     #       operations", which read literally would have a comparison write it.
     #       These cases assert X unchanged, so a reader who reverses that
@@ -2028,7 +2029,7 @@ CASES = {
     #
     #   RTE
     #       The status register is reloaded from the frame, not computed. Every
-    #       RTE case below therefore starts from a DIFFERENT word than the one
+    #       RTE case below therefore starts from a different word than the one
     #       it expects, so "the core reloaded it" is separable from "the core
     #       left it alone".
     #
@@ -2036,25 +2037,19 @@ CASES = {
     #       Section 3.3, "Exception Processing Overview", page 3-11: "the
     #       processor makes an internal copy of the SR and then enters
     #       supervisor mode by setting the S-bit and disabling trace mode by
-    #       clearing the T-bit". The COPY is what reaches the stack frame and
-    #       the MODIFIED word is what the handler runs under.
+    #       clearing the T-bit". The copy is what reaches the stack frame and
+    #       the modified word is what the handler runs under.
     "control": [
         {
-            # `nop` NAMES `sr` AND `pc`.
+            # An `sr` expectation of "unchanged" is satisfied by a NOP that
+            # never executed, so it carries no assertion of its own.
+            # `conformance/runner.cpp` supplies the missing one: it asserts
+            # `mcf5307_faulted`, then `mcf5307_halted`, then a non-zero cycle
+            # return, before it compares one register.
             #
-            # `conformance/runner.cpp` asserts `mcf5307_faulted`, then
-            # `mcf5307_halted`, then a non-zero cycle return, for EVERY case
-            # and before it compares one register. Without those assertions
-            # naming `sr` would REMOVE the case's only assertion instead of
-            # adding one: an `sr` expectation of "unchanged" is satisfied by
-            # a NOP that never executed, since an instruction that never ran
-            # changes nothing. Measured on the mutation "the encoding word is
-            # 0000 instead of 4e71" - a NOP that is not there - this runner
-            # reports the trap.
-            #
-            # NAMING `pc` is the assertion that separates a NOP from every
-            # other one-word instruction in this group: the program counter
-            # advances by exactly one word and by nothing else.
+            # `pc` separates a NOP from every other one-word instruction in this
+            # group: the program counter advances by exactly one word and by
+            # nothing else.
             "name": "nop",
             "mnemonic": "nop",
             "instruction": "nop",
@@ -2222,7 +2217,7 @@ CASES = {
         # All three sizes exist here and the manual prints all three. Table
         # 3-12, page 3-27, carries a `tst.b`, a `tst.w` AND a `tst.l` row, each
         # timed under every one of `Rn`, `(An)`, `(An)+`, `-(An)`, `(d16,An)`,
-        # `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx` - no dash anywhere in the three
+        # `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx` - no dash anywhere in those
         # rows. TST is the ONE instruction in this group that keeps the byte and
         # word forms the rest of the core traps, and `m68k-elf-as -mcpu=5307`
         # agrees: it accepts `tst.b %d0`, `tst.w %d0` and `tst.l #5`.
@@ -2534,8 +2529,8 @@ CASES = {
         #
         # BOTH READ `ea.nim`'s `eaControl7`, which holds the full control
         # mode-7 class with `(xxx).W` in it. MOVEM reads neither and carries
-        # `{eaAnInd, eaAnDisp}`, because folios 4-50 and 4-51 dash every row
-        # but `(An)` and `(d16,An)`.
+        # `{eaAnInd, eaAnDisp}`, because CFPRM folios 4-50 and 4-51 dash every
+        # row but `(An)` and `(d16,An)`.
         {
             "name": "jmp_indirect",
             "mnemonic": "jmp",
@@ -2671,7 +2666,7 @@ CASES = {
         # format value to the auto-incremented address after the fetch of the
         # first longword", which is SP + 4 + FORMAT.
         #
-        # THAT IS THE INVERSE OF TABLE 3-2, page 3-14, and the four cases below
+        # THAT IS THE INVERSE OF TABLE 3-2, page 3-14, and the cases below
         # are that table's four rows read backwards: a frame whose format is
         # 4, 5, 6 or 7 restores an A7 of SP + 8, SP + 9, SP + 10 or SP + 11.
         # A core that added a fixed 8 passes the first case and fails the other

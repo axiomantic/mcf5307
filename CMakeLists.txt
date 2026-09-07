@@ -3,16 +3,20 @@
 # Each test is registered in the list that governs its own directory:
 # `tests/tests_cpu.cmake` or `conformance/conformance_cpu.cmake`.
 #
-# 3.21 is the floor, and two separate requirements set it. `--no-tests=error`
-# is a CTest flag that releases before 3.20 do not carry, and without that flag
-# every `-R` check in this project passes against no code at all.
-# `PROJECT_IS_TOP_LEVEL`, which guards the test tree below and the build gate,
-# was added in 3.21: on 3.20 it is simply undefined, so every guard reading it
-# takes the consumer branch and the suite disappears while `ctest` still
-# reports a pass. The requirement is on the installed CTest and CMake, which
+# 3.26 is the floor, and each requirement below raises it in turn.
+# `--no-tests=error` is a CTest flag that releases before 3.20 do not carry,
+# and without that flag every `-R` check in this project passes against no code
+# at all. `PROJECT_IS_TOP_LEVEL`, which guards the test tree below and the
+# build gate, was added in 3.21: on 3.20 it is simply undefined, so every guard
+# reading it takes the consumer branch and the suite disappears while `ctest`
+# still reports a pass. `CMakePresets.json` declares `"version": 6`, which
+# needs 3.25. The test presets carry `--no-tests=error` as the environment
+# variable `CTEST_NO_TESTS_ACTION`, which needs 3.26 -- and a preset that runs
+# without it is the same silent pass again, this time with no version error to
+# say so. The requirement is on the installed CTest and CMake, which
 # `.github/workflows/ci.yml` checks before it configures.
 
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.26)
 
 project(mcf5307
     VERSION 0.1.0
@@ -92,6 +96,13 @@ add_custom_target(mcf5307_tests
 # needs the target to exist when its own list is read.
 include(cmake/Nim.cmake)
 
+# The build gate. It registers `t0_build_is_current` -- at top level only --
+# and defines `mcf5307_require_current_build()`, which each registration list
+# calls at its own end to put its own tests behind that gate. It is included
+# before the test directories because the function must exist when their lists
+# are read, and after `enable_testing()` because it registers a test.
+include(cmake/BuildGate.cmake)
+
 # `tests/` is entered in every tree and `conformance/` only at top level.
 # `tests/tests_cpu.cmake` registers the ABI-gate assertion and then returns
 # unless this project is top-level, so a consumer inherits that one test, no
@@ -101,3 +112,11 @@ add_subdirectory(tests)
 if(PROJECT_IS_TOP_LEVEL)
     add_subdirectory(conformance)
 endif()
+
+# The root directory's own scope. `tests/` and `conformance/` each end with
+# this call; without one here a test added directly to this file would be the
+# one test in the tree outside the gate, and nothing would say so. It is also
+# what makes the `REMOVE_ITEM` inside the function reachable: this is the only
+# scope that holds `t0_build_is_current`, and a gate required to wait for
+# itself never runs.
+mcf5307_require_current_build()

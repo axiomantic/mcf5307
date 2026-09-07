@@ -6,21 +6,10 @@
 ## and may not be copied into it, which is why every citation below names its
 ## table, page and row instead of quoting.
 ##
-## Why this file exists beside `mcf5307_conformance_control`. That corpus is
-## positive cases: encodings this part has, run against an expected state. A
-## positive corpus cannot see a wrongly-claimed encoding, because a stolen
-## encoding produces a passing execution of a different instruction. The
-## shapes that escape it - a decoder arm claiming another opcode's encoding,
-## and an operand the mask admitted and the executor refused - do not reach a
-## corpus case.
-##
-## An example this group carries: an ADDQ or SUBQ arm matching on `word and
-## 0xF100` alone claims every `0101 cccc 11 <ea>` word - 1024 words, of which
-## 128 are `Scc Dn`, three are TRAPF and none are DBcc - as an ADDQ or a SUBQ
-## whose size field is the illegal `11`. Every one of them traps, because
-## `alu.nim` traps a size of zero, and a trap is what an unimplemented opcode
-## looks like. What excludes them is the `sizeField(word) != 0` guard those two
-## arms carry, and `scc_is_not_an_addq` below is what holds it.
+## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_control`. That corpus is
+## POSITIVE cases: encodings this part has, run against an expected state. A
+## positive corpus CANNOT SEE a wrongly-claimed encoding, because a stolen
+## encoding produces a PASSING EXECUTION OF A DIFFERENT INSTRUCTION.
 ##
 ## EVERY CASE ASSERTS A COMPLETE TUPLE, never one field, exactly as `t_alu`,
 ## `t_move` and `t_logic` do.
@@ -131,12 +120,11 @@ const
 
 type Outcome = object
   cycles: uint32
-    ## `mcf5307_exec(ctx, 1)`'s return, which is not a cycle count despite the
-    ## name. `mcf5307_exec` saturates at its budget and every instruction in
-    ## this group costs 2 for the fetch plus at least one more, so the value is
-    ## 1 for an instruction that ran and 0 for one that trapped. The
-    ## `cycles: 0` half of every trap tuple below asserts "it did not run" and
-    ## asserts no count; uncertainty 3 in `control.nim`'s header says so.
+    ## `mcf5307_exec(ctx, 1)`'s RETURN. It is the WHOLE RETIRED COST of the one
+    ## instruction the call ran - `cpu.nim`'s header block is the contract -
+    ## and this suite reads only whether it is zero. The `cycles: 0` half of
+    ## every trap tuple below asserts "it did not run" and asserts no count;
+    ## uncertainty 3 in `control.nim`'s header says why no count is asserted.
   fault: bool
   halted: bool
   d: array[8, uint32]
@@ -245,12 +233,12 @@ const trapA: array[8, uint32] = [dirtyA, 0, 0, 0, 0, 0, 0, 0]
 # - exactly those with C clear and Z clear - and a reader can check that by
 # hand.
 #
-# What the manual settles and what it does not. It gives the
+# WHAT THE MANUAL ON THIS MACHINE DOES AND DOES NOT SETTLE. It gives the
 # condition-code bits (section 3.2.1.5, page 3-8) and it names the wildcard
 # `cc` as "Logical Condition (example: NE for not equal)" in Table 3-6, whose
-# `cc` row is on page 3-21 where the table begins - and it prints no table of
-# the sixteen conditions and their tests anywhere. The four-bit encoding of
-# each is measured:
+# `cc` row is on page 3-21 where the table begins, and it prints NO table of
+# the sixteen conditions and their tests anywhere. The four-bit ENCODING of
+# each is measured rather than assumed:
 # every mnemonic below was assembled by `m68k-elf-as -mcpu=5307`, which put
 # `bhi` at 0x62, `bls` at 0x63, `bcc` at 0x64, `bcs` at 0x65, `bne` at 0x66,
 # `beq` at 0x67, `bvc` at 0x68, `bvs` at 0x69, `bpl` at 0x6a, `bmi` at 0x6b,
@@ -642,13 +630,13 @@ block:
 #
 # MCF5307 User's Manual section 3.5.7, "RTE and Format Error Exceptions", page
 # 3-16: "any attempted execution of an RTE where the format is not equal to
-# {4,5,6,7} generates a format error". The four legal values are exactly the
-# four rows of Table 3-2 on page 3-14.
+# {4,5,6,7} generates a format error". Those four values are exactly the rows
+# of Table 3-2 on page 3-14.
 #
 # THIS CORE TRAPS RATHER THAN TAKING THE FORMAT-ERROR VECTOR, AND THAT IS
 # UNCERTAINTY 4 IN `control.nim`'s HEADER. Vector 14 is a real exception on
-# silicon; a trap is this core's one observable for "refused", the same
-# channel every illegal size and operand uses.
+# silicon; a trap is this core's one observable for "refused", the same channel
+# every illegal size and operand uses.
 
 block:
   let frame = @[(stackBase, 0x30802703'u32), (stackBase + 4'u32, 0x00000400'u32)]
@@ -756,7 +744,7 @@ block:
 
 block:
   # TST and CMP read, so both admit the PC-relative pair and the immediate,
-  # and both admit an address register. Table 3-12's three `tst` rows and
+  # and both admit an address register: Table 3-12's three `tst` rows and
   # Table 3-13's `cmp.l <ea>,Rx` row carry a time in every column.
   for (field, name) in [(0x00'u16, "%d0"), (0x08'u16, "%a0"),
                         (0x10'u16, "(%a0)"), (0x18'u16, "(%a0)+"),
@@ -831,6 +819,126 @@ block:
   check(got == want,
     "trap #0 stacks the format/vector word, the sr and the next pc", $got,
     $want)
+
+# ---------------------------------------------------------------------------
+# BLOCK 11. THE ODD CONTROL-TRANSFER TARGET.
+#
+# "Any attempted execution transferring control to an odd instruction address
+# (i.e., if bit 0 of the target address is set) results in an address error
+# exception" - MCF5307 User's Manual, section 3.5.2, printed page 3-15. The
+# ColdFire Family Programmer's Reference Manual, Rev. 3 does NOT answer this:
+# its section 11.1.3 names a table of processor exceptions that the revision
+# does not contain, so the vector assignment is all it carries.
+#
+# A CORE WITHOUT THE CHECK STILL FAULTS, AND THAT IS WHY EVERY CASE HERE
+# ASSERTS THE HANDLER AND THE FRAME RATHER THAN A FLAG. An odd program counter
+# makes the next fetch read one half of each of two neighbouring words, and
+# almost every such word is an encoding this part refuses - so `fault` and
+# `halted` come back set, from the WRONG exception, one instruction late, with
+# no frame written. A `fault == true` assertion passes on both cores.
+#
+# THE TARGET IS ODD IN EACH CASE AND THE SAME INSTRUCTION WITH AN EVEN TARGET
+# IS ALREADY GREEN ELSEWHERE IN THIS FILE - block 10's two BSR rows and block
+# 6's branch rows - so the pair is a known positive beside each negative.
+#
+# THE STACKED PROGRAM COUNTER IS THE TRANSFERRING INSTRUCTION'S OWN ADDRESS.
+# Table 3-1 marks vector 3 `Fault`, and "fault refers to the PC of the
+# instruction that caused the exception".
+#
+# THE FAULT STATUS IS `0100`, "error on instruction fetch", the one code of
+# Table 3-3 that names the access this exception refuses to make. FS[3-2] and
+# FS[1-0] are not adjacent in the frame word, so `0100` reaches it as
+# `1 shl 26` alone.
+#
+# THE CHECK IS PINNED BY MUTATION AND NOT BY THIS PARAGRAPH.
+# `tests/t_claims.cmake` registers
+# `address_error_odd_target_suite_t_control`, which takes the odd-target test
+# out of `transferControl` and leaves the bare assignment behind. That mutation
+# reds exactly six cases of this file, and the seventh - the BSR push read-back
+# - stays green, because a core with no check pushes correctly and then
+# transfers to the odd address anyway. A row weakened to a flag moves that
+# count and the entry refutes; a date beside this paragraph would not.
+
+const
+  addressErrorHandler = 0x600'u32
+  addressErrorVector = 0x00C'u32   ## 4 * 3
+  addressErrorFv =
+    (4'u32 shl 28) or (1'u32 shl 26) or (3'u32 shl 18) or allDirty
+
+proc expectAddressError(o: Outcome; frameBase: uint32; label: string) =
+  ## The whole machine state after a transfer to an odd address: the handler
+  ## entered, the frame written where the stack pointer put it, and the
+  ## transferring instruction's address stacked.
+  let got = (pc: o.pc, a7: o.a[7], sr: o.sr,
+             fv: mem32(frameBase), stackedPc: mem32(frameBase + 4'u32),
+             fault: o.fault, halted: o.halted)
+  let want = (pc: addressErrorHandler, a7: frameBase, sr: allDirty,
+              fv: addressErrorFv, stackedPc: execBase,
+              fault: false, halted: false)
+  check(got == want, label, $got, $want)
+
+block:
+  # `bra.b` with displacement 1: base is the opcode's address plus two, so the
+  # target is `execBase + 2 + 1` and odd.
+  let o = runIns([0x6001'u16], a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase],
+                 sr = allDirty,
+                 mem = @[(addressErrorVector, addressErrorHandler)])
+  expectAddressError(o, stackBase - 8'u32,
+    "bra.b to an odd target takes the address error")
+
+block:
+  # The word form reaches the same place through a different displacement
+  # path: a core that checked the byte form alone would leave this one silent.
+  let o = runIns([0x6000'u16, 0x0101'u16],
+                 a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase], sr = allDirty,
+                 mem = @[(addressErrorVector, addressErrorHandler)])
+  expectAddressError(o, stackBase - 8'u32,
+    "bra.w to an odd target takes the address error")
+
+block:
+  # `beq.b`, and `allDirty` sets Z, so the branch is TAKEN. A not-taken branch
+  # transfers control nowhere and must not fault; block 6 carries those.
+  let o = runIns([0x6701'u16], a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase],
+                 sr = allDirty,
+                 mem = @[(addressErrorVector, addressErrorHandler)])
+  expectAddressError(o, stackBase - 8'u32,
+    "beq.b taken to an odd target takes the address error")
+
+block:
+  # `jmp (%a0)`. The odd address is in the register rather than in the opcode.
+  let o = runIns([0x4ED0'u16], a = [0x201'u32, 0, 0, 0, 0, 0, 0, stackBase],
+                 sr = allDirty,
+                 mem = @[(addressErrorVector, addressErrorHandler)])
+  expectAddressError(o, stackBase - 8'u32,
+    "jmp to an odd target takes the address error")
+
+block:
+  # `rts`. The odd address comes off the stack, and the pop has already moved
+  # A7 when the transfer is refused - so the frame lands eight bytes below the
+  # POPPED pointer and not below the one the instruction started with.
+  let o = runIns([0x4E75'u16],
+                 a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase - 4'u32],
+                 sr = allDirty,
+                 mem = @[(addressErrorVector, addressErrorHandler),
+                         (stackBase - 4'u32, 0x301'u32)])
+  expectAddressError(o, stackBase - 8'u32,
+    "rts to an odd target takes the address error")
+
+block:
+  # `bsr.b`. The return address is pushed BEFORE the transfer, so the push
+  # stands and the frame goes below it. The pushed value is read back here
+  # rather than left to the frame assertion: a BSR that skipped its push and
+  # then faulted would put the frame at the same place.
+  let o = runIns([0x6101'u16], a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase],
+                 sr = allDirty,
+                 mem = @[(addressErrorVector, addressErrorHandler)])
+  expectAddressError(o, stackBase - 12'u32,
+    "bsr.b to an odd target takes the address error below its own push")
+  let got = mem32(stackBase - 4'u32)
+  let want = execBase + 2'u32
+  check(got == want,
+    "bsr.b to an odd target has already pushed the return address",
+    $got, $want)
 
 # ---------------------------------------------------------------------------
 

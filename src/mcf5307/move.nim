@@ -3,31 +3,25 @@
 ## This module executes MOVE, MOVEA, MOVEQ, MOVEM, LEA, PEA, LINK and UNLK,
 ## and nothing else. The register file, the condition-code bits, the board
 ## accesses and the effective-address evaluation live in `mcf5307/machine`,
-## which sits at the `decode_types` level and which both this module and
-## `alu.nim` import.
+## which sits at the `decode_types` level.
 ##
-## The decoder (`mcf5307/decode`) recognizes the instruction words and
-## supplies the effective address in bits 5..0 of the word; this module
-## executes them. This module and the decoder are siblings. Both read the
-## shared types from `mcf5307/decode_types`, and neither imports the other.
-## `mcf5307/cpu` sits above both: it owns `step`, and `step` is the one
-## procedure that calls the decoder and then calls `moveFamily` below.
-## The extension words of an instruction (displacements,
-## index words, immediate values, and the MOVEM register mask) live in the
-## instruction stream after the opcode word, and are consumed here as the
-## operand evaluation walks them. The MOVEM mask precedes the EA extension
-## words, so the mask is fetched before the EA's own words.
+## The decoder (`mcf5307/decode`) recognizes the instruction words and supplies
+## the effective address in bits 5..0 of the word; this module executes them.
+## The extension words of an instruction (displacements, index words, immediate
+## values, and the MOVEM register mask) live in the instruction stream after
+## the opcode word, and are consumed here as the operand evaluation walks them.
+## The MOVEM mask precedes the EA extension words, so the mask is fetched
+## before the EA's own words.
 ##
-## Cycles. The block above the constants in `cpu.nim` says why nothing checks
-## any of them. Every instruction in this group has a timing row - MOVE and
-## MOVEA in Tables 3-9 and 3-10 (folios 3-26 and 3-27), MOVEQ and LEA in Table
-## 3-13 (3-28), SWAP in Table 3-12 (3-27), and PEA, LINK, UNLK and MOVEM in
-## Table 3-14 (3-29) - and none of the returns here was derived from one. Four
-## of those rows carry a single cell that the return contradicts outright, so
-## no effective-address flattening explains them: `moveq #imm,Dx` is 1(0/0)
-## against the 4 returned, `swap Dx` is 1(0/0) against 4, `link.w Ay,#imm` is
-## 2(0/1) against 8, and `unlk Ax` is 3(1/0) against 6. `movem.l` is `2+n`
-## against the `8+2n` here.
+## CYCLES. See the block above the constants in `cpu.nim`. Every instruction in
+## this group HAS a timing row - MOVE and MOVEA in Tables 3-9 and 3-10 (folios
+## 3-26 and 3-27), MOVEQ and LEA in Table 3-13 (3-28), SWAP in Table 3-12
+## (3-27), and PEA, LINK, UNLK and MOVEM in Table 3-14 (3-29) - and NONE OF THE
+## RETURNS HERE WAS DERIVED FROM ONE. Some of those rows carry a SINGLE cell
+## that the return contradicts outright, so no effective-address flattening
+## explains them: `moveq #imm,Dx` is 1(0/0) against the 4 returned, `swap Dx`
+## is 1(0/0) against 4, `link.w Ay,#imm` is 2(0/1) against 8, and `unlk Ax` is
+## 3(1/0) against 6. `movem.l` is `2+n` against the `8+2n` here.
 ##
 ## Instruction semantics, register numbering and addressing-mode behaviour are
 ## taken from the ColdFire Family Programmer's Reference Manual and the
@@ -95,13 +89,13 @@ proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## SWAP Dn: the upper and lower 16-bit halves of a data register exchange.
   ## Table 3-7, page 3-25: `MSW of Dn <-> LSW of Dn`.
   ##
-  ## The condition codes come from section 3.2.1.5, page 3-9. There is no
-  ## per-instruction rule to find: Table 3-7's operation column carries no
-  ## condition-code clause for SWAP and Table 3-12 gives timing alone, and
-  ## those two rows are the only places the manual names SWAP at all. The
-  ## generic rule settles it. Section 3.2.1.5 opens at the foot of page 3-8
-  ## with the CCR bit-field figure and does not end there; page 3-9 carries
-  ## the per-bit definitions and fixes all five - N "Set if the most
+  ## THE CONDITION CODES COME FROM THE GENERIC CCR RULE, section 3.2.1.5, page
+  ## 3-9. There is no PER-INSTRUCTION rule to find: Table 3-7's OPERATION
+  ## column carries no condition-code clause for SWAP and Table 3-12 gives
+  ## timing alone, and those two rows are the only places the manual names SWAP
+  ## at all. But the GENERIC rule settles it. Section 3.2.1.5 opens at the foot
+  ## of page 3-8 with the CCR bit-field figure and does not end there; page 3-9
+  ## carries the per-bit definitions and fixes every one - N "Set if the most
   ## significant bit of the result is set; otherwise cleared", Z "Set if the
   ## result equals zero; otherwise cleared", V "Set if an arithmetic overflow
   ## occurs implying that the result cannot be represented in the operand
@@ -120,7 +114,7 @@ proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ##   Its removed list is not reliable. Page 3-21 names "integer division"
   ##   among the removed instructions, while Table 3-7 on page 3-23 carries
   ##   both a DIVS row and a DIVU row and Table 3-13 on page 3-28 times
-  ##   `divs.w`, `divu.w`, `divs.l` and `divu.l`. A list that contradicts two
+  ##   `divs.w`, `divu.w`, `divs.l` and `divu.l`. A list that contradicts the
   ##   tables cannot settle a question on its own.
   ##
   ##   "A reduced version of the 68000 instruction set" is a claim about set
@@ -131,15 +125,13 @@ proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ##   therefore 68000 semantics" does not follow in general - and it is not
   ##   what pins these flags. Section 3.2.1.5 is.
   ##
-  ## What remains unpinned is the width. Section 3.2.1.5 says
-  ## "the result" and never says how wide that result is, and Table 3-7's
-  ## operand size column for SWAP says 16. A reader who reads "the result" as
-  ## the 16-bit half takes N from bit 15 and Z from the low half. This core
-  ## reads it as the whole 32-bit register, because the register is what the
-  ## instruction writes - the size argument is 4 and not 2 for exactly that
-  ## reason. The ambiguity shows on `0x0000FFFF` and `0xFFFF0000`, the two
-  ## shapes whose halves disagree in their top bit. The CFPRM would close the
-  ## width question outright.
+  ## The width is settled, and the User's Manual alone did not settle it:
+  ## section 3.2.1.5 says only "the result" and Table 3-7's operand-size column
+  ## for SWAP says 16, which reads as the low half. CFPRM folio 4-81 gives the
+  ## operation as `Register[31:16] <-> Register[15:0]` and N as "Set if the msb
+  ## of the result is set", Z as "Set if the result is zero". The result of
+  ## that operation is the whole register, so N is bit 31 and Z spans all 32
+  ## bits - which is the size argument of 4 below, not 2.
   let v = regD(ctx, d.destReg)
   let swapped = (v shr 16'u32) or (v shl 16'u32)
   setRegD(ctx, d.destReg, swapped)
@@ -256,7 +248,7 @@ proc moveFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
     # - the legality table, not this call site, is where SWAP's operand rule
     # lives.
     #
-    # None should be written to: reaching it needs a
+    # No test should be written to reach it: reaching it needs a
     # decoder change, so a test that covered it would have to introduce the
     # very defect the mask ordering prevents.
     if not eaIsLegalFor(opSwap, d.ea):
@@ -269,4 +261,11 @@ proc moveFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   of opUnlk:
     result = execUnlk(ctx, d)
   else:
-    discard
+    # Unreachable from `cpu.nim`, which routes exact opcodes. It refuses rather
+    # than returning 0 because returning 0 costs nothing and halts nothing: the
+    # program counter would advance past an instruction that never executed and
+    # the core would run on into whatever followed. Refusing is the same
+    # observable `aluFamily` gives an opcode it does not carry.
+    ctx.fault = true
+    ctx.halted = true
+    result = 0'u32

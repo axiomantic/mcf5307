@@ -114,11 +114,6 @@ foreach(key PUBLISHED VISIBLE UNIMPLEMENTED STUB_EXTERNAL_OWN SITES)
             "which is not a count. Step 4a records what it measured.")
     endif()
 endforeach()
-
-# The site counter. Step 4a's three parts and nine controls each add one where
-# they finish, and control A runs on both reads, so a branch with every site in
-# it records thirteen. A part or a control deleted from cmake/Nim.cmake takes
-# its increment with it and lands here as a shortfall.
 if(NOT stamp_SITES EQUAL 13)
     message(FATAL_ERROR
         "t0_abi_gate_on: ${GATE_STAMP} records SITES=${stamp_SITES} and 13 are "

@@ -36,6 +36,17 @@ endif()
 add_test(NAME t0_corpus_parses
     COMMAND t0_corpus_parses "${PROJECT_SOURCE_DIR}/conformance/corpus")
 
+# A test the T0 pattern selects reaches `ctest --preset t0` only if its
+# executable is attached here: the t0 build preset builds `mcf5307_tests` and
+# nothing else. The root `CMakeLists.txt` states that convention where it
+# creates the aggregate, and `t0_test_set_builds_what_it_runs` is what makes an
+# omission of this line a named failure rather than a masked one.
+#
+# `mcf5307_conformance` deliberately gets no such line. Its registered names are
+# `mcf5307_conformance_*`, which the T0 pattern does not select, and attaching it
+# would put the corpus runner into every narrow build.
+add_dependencies(mcf5307_tests t0_corpus_parses)
+
 # The conformance runner and its registered tests.
 #
 # One executable, `conformance/runner.cpp`, with one test per group plus the
@@ -83,3 +94,16 @@ add_test(NAME mcf5307_conformance_control
     COMMAND mcf5307_conformance --group control "${MCF5307_CONFORMANCE_CORPUS}")
 add_test(NAME mcf5307_conformance_all
     COMMAND mcf5307_conformance "${MCF5307_CONFORMANCE_CORPUS}")
+
+# ---------------------------------------------------------------------------
+# Put every test this list registered behind the build gate.
+#
+# The gate is registered in the root list, not here, because it is a property
+# of the whole build tree; this call is the `conformance/` side of it and it
+# owns nothing but this directory's own tests. Without it the conformance
+# tests are exactly the ones the reproduction showed reporting Passed over a
+# `conformance/runner.cpp` that no longer compiles.
+#
+# Last line for the same reason as in `tests/tests_cpu.cmake`: it reads the
+# directory's `TESTS` property and so covers what is registered above it.
+mcf5307_require_current_build()

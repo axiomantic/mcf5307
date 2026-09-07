@@ -1,0 +1,385 @@
+## The CS3 stub standing in for the Philips ISP1181 USB device controller.
+##
+## The benign value is `0x00`. On this device the byte the firmware reads most
+## often is the interrupt register, whose zero means no interrupt is pending,
+## and that is the answer a model which never raises IRQ3 owes.
+##
+## The address is not decoded here. The board owns the CS3 decode and answers
+## for the whole window, so this model has no address it may refuse and no bus
+## status of its own.
+
+import std/envvars
+import std/syncio
+
+import ./isp1181
+import ./report
+# The one-time runtime latch. `isp1181_create` reads it for the reason
+# `mcf5307/cpu.nim` gives at its own `create`.
+import mcf5307/latch
+export Isp1181IrqFn, Isp1181TxFn
+
+type
+  ISP1181Backend* = enum
+    Stub, FullModel
+
+  ISP1181Ctx* = ref object
+    ## Opaque to every caller: C sees `isp1181_ctx` and never its layout, so a
+    ## field here is not a growth of the published contract.
+    backend: ISP1181Backend
+    frameNumber: uint16
+    model: ISP1181
+
+const usbFrameCount = 2048
+
+proc backend*(ctx: ISP1181Ctx): ISP1181Backend =
+  if ctx.isNil: Stub else: ctx.backend
+
+proc setBackend*(ctx: ISP1181Ctx; value: ISP1181Backend) =
+  if ctx.isNil:
+    return
+  ctx.backend = value
+
+proc frameNumber*(ctx: ISP1181Ctx): uint16 =
+  if ctx.isNil: 0'u16 else: ctx.frameNumber
+
+proc advanceFrames*(ctx: ISP1181Ctx; frames: int) =
+  ## Advance the USB frame number by `frames` Start-of-Frame frames of 1 ms
+  ## each, wrapping at `usbFrameCount`. One call of N frames leaves the counter
+  ## exactly where N calls of one would, which is what a state restore and a
+  ## fast-forward both need.
+  ##
+  ## No wall clock is read here. The frames are the caller's.
+  if ctx.isNil or frames <= 0:
+    return
+  ctx.frameNumber = uint16((int(ctx.frameNumber) + frames) mod usbFrameCount)
+
+proc isp1181_create*(user: pointer; irq: Isp1181IrqFn;
+                     tx: Isp1181TxFn): ISP1181Ctx
+    {.exportc: "isp1181_create", cdecl, dynlib.} =
+  ## It refuses when the runtime was abandoned. See `mcf5307_create` in
+  ## `mcf5307/cpu.nim`: the two allocate, the allocator needs the runtime, and
+  ## a nil handle is a value every `isp1181_*` call already answers for.
+  if runtimeAbandoned(runtimeLatch):
+    return nil
+  new(result)
+  result.backend = Stub
+  result.frameNumber = 0'u16
+  result.model = newISP1181(user, irq, tx)
+
+const reportEnvVar* = "MCF5307_ISP1181_REPORT"
+  ## The variable that names a file to append the teardown report to. A
+  ## variable rather than a call so an existing binary emits the account with
+  ## no edit of its own.
+  ##
+  ## Unset or empty means nothing happens: not an empty file, not a default
+  ## path, not a line on stderr.
+  ##
+  ## It appends. One process may create and destroy several handles, and a
+  ## truncating open would leave only the last account.
+
+proc writeTeardownReport(m: ISP1181) =
+  ## Append the model's account to the file `reportEnvVar` names, or say on
+  ## stderr why it could not.
+  ##
+  ## The failure is loud: a dump that silently did nothing when the path was
+  ## unwritable would be indistinguishable from a run that had nothing to say.
+  ##
+  ## Nothing here may escape into C. `isp1181_destroy` is `cdecl` and its
+  ## caller has no handler, so every raise is caught and reported here.
+  let destination = getEnv(reportEnvVar)
+  if destination.len == 0:
+    return
+  var handle: File
+  if not open(handle, destination, fmAppend):
+    stderr.write("isp1181: " & reportEnvVar & " names \"" & destination &
+                 "\" and it could not be opened for append; no report was " &
+                 "written\n")
+    return
+  try:
+    handle.write(reportText(m))
+  except CatchableError as err:
+    stderr.write("isp1181: the report could not be written to \"" &
+                 destination & "\": " & err.msg & "\n")
+  finally:
+    handle.close()
+
+proc isp1181_destroy*(ctx: ISP1181Ctx)
+    {.exportc: "isp1181_destroy", cdecl, dynlib.} =
+  ## Release the selected backend. Under `--mm:arc` the handle itself is
+  ## reclaimed when the owning reference is dropped, so the stub has nothing to
+  ## release and the full model has its object.
+  ##
+  ## The teardown report is written first and is not gated on the backend: the
+  ## account is what the model said, and a handle moved back to the stub still
+  ## holds it.
+  if ctx.isNil:
+    return
+  if not ctx.model.isNil:
+    writeTeardownReport(ctx.model)
+  case ctx.backend
+  of Stub:
+    discard
+  of FullModel:
+    ctx.model = nil
+
+proc isp1181_read*(ctx: ISP1181Ctx; address: uint32): uint8
+    {.exportc: "isp1181_read", cdecl, dynlib.} =
+  if ctx.isNil:
+    return 0x00'u8
+  case ctx.backend
+  of Stub: 0x00'u8
+  of FullModel: portRead(ctx.model, address)
+
+proc isp1181_write*(ctx: ISP1181Ctx; address: uint32; value: uint8)
+    {.exportc: "isp1181_write", cdecl, dynlib.} =
+  ## The stub accepts the write and keeps nothing - a stub that stored the byte
+  ## would read it back, and a register file that answers is not a benign
+  ## value. The full model routes it to the command or the data port.
+  if ctx.isNil:
+    return
+  case ctx.backend
+  of Stub:
+    discard
+  of FullModel:
+    portWrite(ctx.model, address, value)
+
+proc isp1181_rx*(ctx: ISP1181Ctx; endpoint: cint; data: ptr uint8;
+                 length: csize_t): cint
+    {.exportc: "isp1181_rx", cdecl, dynlib.} =
+  ## A nil pointer or a zero length delivers nothing at all and is not an empty
+  ## packet. The buffers accept a zero-byte packet and it occupies a slot, so
+  ## reading a caller with no buffer as a caller offering an empty packet would
+  ## fill a single-buffered endpoint and NAK the next real packet.
+  ##
+  ## `deliver` says in the log which reason it refused a packet for.
+  ## `include/mcf5307.h` states the contract; 1 means an OUT buffer holds the
+  ## packet.
+  if ctx.isNil:
+    return 0
+  case ctx.backend
+  of Stub: 0
+  of FullModel:
+    if data.isNil or length == 0:
+      0
+    elif deliver(ctx.model, int(endpoint),
+        toOpenArray(cast[ptr UncheckedArray[uint8]](data), 0,
+                    int(length) - 1)):
+      1
+    else:
+      0
+
+proc isp1181_setup*(ctx: ISP1181Ctx; data: ptr uint8;
+                    length: csize_t): cint
+    {.exportc: "isp1181_setup", cdecl, dynlib.} =
+  ## A SET-UP packet from the host. `include/mcf5307.h` states the contract;
+  ## 1 means the control OUT buffer took it.
+  ##
+  ## A nil pointer or a zero length delivers nothing at all, for the reason
+  ## `isp1181_rx` gives: a caller with no buffer is not a caller offering an
+  ## empty packet, and a zero-byte packet occupies a slot.
+  ##
+  ## The stub answers zero and changes nothing: it is a device present in the
+  ## CS3 window with nothing to say.
+  if ctx.isNil:
+    return 0
+  case ctx.backend
+  of Stub: 0
+  of FullModel:
+    if data.isNil or length == 0:
+      0
+    elif deliverSetup(ctx.model,
+        toOpenArray(cast[ptr UncheckedArray[uint8]](data), 0,
+                    int(length) - 1)):
+      1
+    else:
+      0
+
+proc isp1181_in_token*(ctx: ISP1181Ctx; endpoint: cint): cint
+    {.exportc: "isp1181_in_token", cdecl, dynlib.} =
+  ## The host asking the device for a packet. `include/mcf5307.h` states the
+  ## contract; 1 means the transmit callback was called before this returned.
+  ##
+  ## The stub answers zero and calls nothing: it is a device present in the CS3
+  ## window with nothing to say. A stub that reached the model here would call a
+  ## host callback on a handle the caller never moved.
+  if ctx.isNil:
+    return 0
+  case ctx.backend
+  of Stub: 0
+  of FullModel: (if transmit(ctx.model, int(endpoint)): 1 else: 0)
+
+# ---------------------------------------------------------------------------
+# The model's own account of what it did, and the door a C caller reads it
+# through.
+#
+# The account is not gated on the backend, and every other entry point in this
+# file is. The log is what the model said, not a register the device answers
+# from: a handle that spent a run on the full model and was moved back to the
+# stub still holds that account, and casing on the current backend would hide
+# exactly the record this door exists to carry. The stub writes no line of its
+# own, so a handle that never left the stub reads zero here without help.
+#
+# `written` and `retained` are two calls and not one. Their difference is the
+# number of lines the reader cannot see, which a single count could not say.
+
+proc isp1181_log_written*(ctx: ISP1181Ctx): csize_t
+    {.exportc: "isp1181_log_written", cdecl, dynlib.} =
+  if ctx.isNil or ctx.model.isNil:
+    return 0
+  csize_t(logWritten(ctx.model))
+
+proc isp1181_log_retained*(ctx: ISP1181Ctx): csize_t
+    {.exportc: "isp1181_log_retained", cdecl, dynlib.} =
+  if ctx.isNil or ctx.model.isNil:
+    return 0
+  csize_t(logRetained(ctx.model))
+
+proc isp1181_log_line*(ctx: ISP1181Ctx; index: csize_t; dst: ptr cchar;
+                       capacity: csize_t): csize_t
+    {.exportc: "isp1181_log_line", cdecl, dynlib.} =
+  ## The return is the size the line needs and not the size that was copied. A
+  ## return greater than `capacity` is a line the caller's buffer could not
+  ## hold, and 0 is no such retained line.
+  if ctx.isNil or ctx.model.isNil:
+    return 0
+  let line = logLine(ctx.model, int(index))
+  if line.len == 0:
+    return 0
+  if not dst.isNil and capacity > 0:
+    let room = min(line.len, int(capacity) - 1)
+    if room > 0:
+      copyMem(dst, unsafeAddr line[0], room)
+    cast[ptr UncheckedArray[cchar]](dst)[room] = cchar(0)
+  csize_t(line.len + 1)
+
+proc isp1181_config_slots*(): csize_t
+    {.exportc: "isp1181_config_slots", cdecl, dynlib.} =
+  ## How many DcEndpointConfiguration slots `isp1181_config_slot` accepts.
+  ##
+  ## A function and not a macro in the header: a macro is a second copy of the
+  ## number that no build step compares against this one.
+  csize_t(configSlotCount)
+
+proc isp1181_config_slot*(ctx: ISP1181Ctx; slot: csize_t;
+                          value: ptr uint8): cint
+    {.exportc: "isp1181_config_slot", cdecl, dynlib.} =
+  ## 1 is a slot the firmware wrote, 0 is a slot it never wrote, and -1 is no
+  ## such slot or no handle. A slot never written and
+  ## a slot written with `0x00` hold the same byte, so a call that returned
+  ## only the byte could not tell them apart.
+  ##
+  ## `value` is written if and only if this returns 1. On the other answers
+  ## storing the reset value there would hand a caller who skipped the return a
+  ## plausible byte the firmware never wrote.
+  if ctx.isNil or ctx.model.isNil:
+    return -1
+  if slot >= csize_t(configSlotCount):
+    return -1
+  if not configSlotWritten(ctx.model, int(slot)):
+    return 0
+  if not value.isNil:
+    value[] = configSlotValue(ctx.model, int(slot))
+  1
+
+proc isp1181_slot_buffer*(ctx: ISP1181Ctx; slot: csize_t;
+                          max_packet_bytes: ptr csize_t;
+                          buffer_count: ptr csize_t): cint
+    {.exportc: "isp1181_slot_buffer", cdecl, dynlib.} =
+  ## The endpoint's buffer geometry, so that a producer can ask instead of
+  ## assuming.
+  ##
+  ## The answers are `isp1181_config_slot`'s convention and not a second one:
+  ## 1 is a slot with a buffer whose size this model can name, 0 is a slot with
+  ## no buffer behind it, and -1 is a question with no answer.
+  ##
+  ## -1 carries a second cause and not an extra return value. A configuration
+  ## that names no size this model can report - a reserved `FFOSZ` code, or an
+  ## isochronous endpoint - is a buffer whose geometry cannot be stated. The
+  ## caller separates the two causes by the pair: a slot inside
+  ## `isp1181_config_slots` on a live handle can only be the configuration one.
+  ## `include/mcf5307.h` prints the table.
+  ##
+  ## It does not answer "was the slot written" - `isp1181_config_slot` answers
+  ## that, and that state is reached by asking both calls.
+  ##
+  ## Both out-parameters are written if and only if this returns 1: a stored
+  ## figure on an answer of 0 is a size a caller who skipped the return would
+  ## split packets to, with no buffer behind it to make that size true. Either
+  ## pointer may be nil and the return is still the answer.
+  if ctx.isNil or ctx.model.isNil:
+    return -1
+  if slot >= csize_t(configSlotCount):
+    return -1
+  let shape = slotBufferGeometry(ctx.model, int(slot))
+  case shape.kind
+  of sgNoSlot, sgUnnameable:
+    return -1
+  of sgNoBuffer:
+    return 0
+  of sgBuffer:
+    if not max_packet_bytes.isNil:
+      max_packet_bytes[] = csize_t(shape.maxPacketBytes)
+    if not buffer_count.isNil:
+      buffer_count[] = csize_t(shape.buffers)
+    1
+
+proc isp1181_report*(ctx: ISP1181Ctx; dst: ptr cchar;
+                     capacity: csize_t): csize_t
+    {.exportc: "isp1181_report", cdecl, dynlib.} =
+  ## The whole account as one NUL-terminated block of text: the counters, the
+  ## truncation verdict in words, every configuration slot, and every retained
+  ## line with its place in the sequence.
+  ##
+  ## The return is the size the text NEEDS and not the size that was copied,
+  ## which is `isp1181_log_line`'s convention: a return greater than `capacity`
+  ## is a report the caller's buffer could not hold.
+  ##
+  ## A nil handle answers 0 and writes nothing.
+  if ctx.isNil or ctx.model.isNil:
+    return 0
+  let text = reportText(ctx.model)
+  if not dst.isNil and capacity > 0:
+    let room = min(text.len, int(capacity) - 1)
+    if room > 0:
+      copyMem(dst, unsafeAddr text[0], room)
+    cast[ptr UncheckedArray[cchar]](dst)[room] = cchar(0)
+  csize_t(text.len + 1)
+
+const
+  backendStubValue = 0'i32
+    ## `MCF5307_ISP1181_BACKEND_STUB` in `include/mcf5307.h`.
+  backendFullModelValue = 1'i32
+    ## `MCF5307_ISP1181_BACKEND_FULL_MODEL` in `include/mcf5307.h`.
+
+# The numbers above are the contract's and not the enum's. The `case` below
+# names each backend explicitly rather than converting the argument to
+# `ISP1181Backend`, so reordering the enum moves the state block's encoding and
+# leaves every existing C caller pointing where it pointed.
+
+proc isp1181_set_backend*(ctx: ISP1181Ctx; backend: cint): cint
+    {.exportc: "isp1181_set_backend", cdecl, dynlib.} =
+  ## Selects the implementation standing behind `isp1181_read`,
+  ## `isp1181_write` and `isp1181_rx`. Returns 1 when the handle moved and 0
+  ## when the call was refused.
+  ##
+  ## A fresh handle still selects the stub: it answers every read with the
+  ## benign value, keeps nothing a write leaves, raises no interrupt and calls
+  ## no host callback. A caller that wants the core without a USB device
+  ## depends on all of those, and changing the default would give it a device
+  ## that answers from a register file and can call back - silently, on a
+  ## rebuild, with no edit of its own.
+  ##
+  ## A value the contract does not name is refused and moves nothing. Falling
+  ## through to either backend would repoint the handle on a caller's typo and
+  ## report a success it did not get.
+  if ctx.isNil:
+    return 0
+  case backend
+  of backendStubValue:
+    ctx.setBackend(Stub)
+    1
+  of backendFullModelValue:
+    ctx.setBackend(FullModel)
+    1
+  else:
+    0

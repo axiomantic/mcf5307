@@ -413,9 +413,23 @@ Group loadGroup(const std::string& path, const std::string& expectedGroup) {
 
     const Value& enc = requireArray(c.find("encoding"), where + ".encoding");
     for (std::size_t w = 0; w < enc.array.size(); ++w) {
-      const Value& word = requireString(enc.array[w].get(),
-                                        where + ".encoding[" +
-                                        std::to_string(w) + "]");
+      const std::string at = where + ".encoding[" + std::to_string(w) + "]";
+      const Value& word = requireString(enc.array[w].get(), at);
+      /* The shape check belongs here and not at the point of use. `runCase`
+       * converts these words with `std::stoul`, which throws on a string that
+       * is not a number, and `runCase` runs outside the try that guards this
+       * loader — so an unchecked word leaves by way of an unhandled exception
+       * rather than a named corpus diagnostic. The rule is the one
+       * `parse_check.cpp` applies: exactly four lower-case hex digits. */
+      if (word.s.size() != 4) {
+        failCheck(at + " is '" + word.s + "', not four hex digits");
+      }
+      for (char ch : word.s) {
+        const bool hex = (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f');
+        if (!hex) {
+          failCheck(at + " is '" + word.s + "', not lower-case hex");
+        }
+      }
       cs.encoding.push_back(word.s);
     }
 
@@ -764,7 +778,16 @@ void printUsage(std::ostream& os) {
 int main(int argc, char** argv) {
   // The Nim runtime initialiser runs once, before the first case creates a
   // context. It is idempotent and called here rather than per case.
-  mcf5307_runtime_init();
+  //
+  // The status is read and the run stops on a 0. Every case below calls
+  // `mcf5307_create`, which returns null behind a runtime that did not come
+  // up, and a corpus that reported thousands of cases as "no context" would
+  // bury the one fact that matters.
+  if (mcf5307_runtime_init() != 1) {
+    std::cerr << "runner: mcf5307_runtime_init reported that the runtime is "
+                 "not initialised\n";
+    return 2;
+  }
 
   std::string group;
   std::string corpusDir;
