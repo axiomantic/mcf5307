@@ -28,7 +28,7 @@
 #
 # WHY TEXT AND NOT THE BUILD SYSTEM. CMake has no readable `COMMAND` property on
 # a test -- `get_property(TEST <name> PROPERTY COMMAND)` answers `NOTFOUND` --
-# and directory-scoped test properties need CMake 3.28, above this project's 3.20
+# and directory-scoped test properties need CMake 3.28, above this project's 3.26
 # floor. The list files are the source of truth for what is registered, and
 # `ci.yml` already derives its own roster from them by grepping for `add_test(NAME`.
 #
@@ -40,7 +40,7 @@
 # `t0_build_is_current` indented inside an `if()`, and an anchored sweep would
 # pass straight over it. A leading `#` is what separates a registration from the
 # several comments in this tree that spell `add_test(NAME <name> ...)` in prose.
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.26)
 
 foreach(required IN ITEMS T0_PATTERN T0_SOURCE_DIR T0_AGGREGATE)
     if(NOT DEFINED ${required})
