@@ -9,20 +9,33 @@ import mcf5307/exception
 
 type
   BusAccess* = enum
-    ## The direction of the access that faulted. User's Manual Table 3-3,
-    ## section 3.4, folio 3-14: an operand read and an operand write each carry
-    ## their own code.
+    ## The direction of the access that faulted. MCF5407 User's Manual Table
+    ## 2-21, "Fault Status Encodings", folio 2-33: an operand read and an
+    ## operand write each carry their own code.
     operandRead
     operandWrite
 
 # Only `busFault` has a hardware producer on this part, and the other two rows
 # are this emulator's own extension rather than an encoding of silicon
-# behaviour. User's Manual section 3.5.1, folio 3-14, verbatim: for the MCF5307
-# "access errors are only reported in conjunction with an attempted store to a
-# write-protected memory space. Thus, access errors associated with instruction
-# fetch or operand read accesses are not possible." The one documented producer
-# is the RAMBAR write-protect bit, section 6.3.1, folio 6-3: "else Signal a
-# write-protect access error".
+# behaviour. MCF5407 User's Manual Table 2-22, "MCF5407 Exceptions", folio
+# 2-34, Access Error row, verbatim: "Access errors are reported only in
+# conjunction with an attempted store to write-protected memory. Thus, access
+# errors associated with instruction fetch or operand read accesses are not
+# possible." The MCF5307 manual said the same thing in its section 3.5.1, so
+# this rule did not change with the part - only where the manual prints it. The
+# one documented producer is the RAMBAR write-protect bit, section 4.5.1,
+# "SRAM Initialization Code", folio 4-4: "else Signal a write-protect access
+# error".
+#
+# THE SAME ROW ADDS A SENTENCE THE MCF5307'S DID NOT, and it is a divergence
+# this module does not implement: "The Version 4 processor, unlike the Version
+# 2 and 3 processors, updates the condition code register if a write-protect
+# error occurs during a CLR or MOV3Q operation to memory." This is a V4. A
+# faulting `CLR` to write-protected memory should therefore leave the CCR
+# written, and this core leaves it alone. MOV3Q is a Revision B opcode this
+# core does not decode at all, so only the `CLR` half is reachable. The manual
+# does not say WHAT value the condition code register takes, so implementing
+# it would require a guess; it is recorded here rather than guessed at.
 #
 # The extension rows borrow the hardware codes rather than inventing one.
 # Table 3-3 reserves every value outside its five, so a code of this module's

@@ -1,5 +1,55 @@
 ## `t_ea_masks` - the decoder and effective-address legality masks.
 ##
+## THE MANUAL. Motorola, "MCF5407 ColdFire Integrated Microprocessor User's
+## Manual", order number MCF5407UM/D, Rev. 0.1, 11/2001.
+##
+## THIS FILE'S CITATIONS ARE NOT COMMENTS AND WERE RE-POINTED AS CODE. The
+## folio strings live in the `Table215Folio` enum's member values, in
+## `table215LastRowOn227` and `table215LastRowOn228`, in the shared `why...`
+## constants, and in a runtime prefix test on `"Table 2-15 folio "`; the two
+## boundary constants are additionally compared at compile time against
+## `table215LastRowOnFolio227` and `table215LastRowOnFolio228` in
+## `src/mcf5307/decode_types.nim`, so moving a break needs an edit in both
+## files and cannot be done silently in one.
+##
+## The correspondence this file was moved across, verified folio by folio
+## against the MCF5407 manual:
+##
+##   MCF5307 Table 3-5, p.3-21   -> MCF5407 Table 2-5, "ColdFire Effective
+##                                  Addressing Modes", folio 2-15. It prints
+##                                  the same five REG. FIELD values under MODE
+##                                  FIELD 111 and no 101, so every citation of
+##                                  it below still holds.
+##   MCF5307 Table 3-7, p.3-25   -> MCF5407 Table 2-8, "User-Level Instruction
+##                                  Set Summary", folio 2-22 for the SWAP row.
+##   MCF5307 Table 3-12, p.3-27  -> MCF5407 Table 2-14, "One-Operand
+##                                  Instruction Execution Times", folio 2-27.
+##                                  It still does NOT span, so the asymmetry
+##                                  this file rests on survives.
+##   MCF5307 Table 3-13,         -> MCF5407 Table 2-15, "Two-Operand
+##     p.3-28 and p.3-29            Instruction Execution Times".
+##
+## THE TWO-OPERAND TABLE GAINED A FOLIO, AND THAT IS WHY `Table215Folio` HAS
+## THREE MEMBERS. The MCF5307's Table 3-13 spanned two pages and broke once,
+## after `mulu` on p.3-28. The MCF5407's Table 2-15 spans THREE folios and
+## breaks twice: folio 2-27 ends at `bchg Dy,<ea>`, folio 2-28 ends at
+## `or.l <ea>,Rx`, and folio 2-29 runs `or.l Dy,<ea>` to `subx.l`. Carrying
+## the two-valued type across unchanged would have put nine of the twelve
+## `cov215` rows on a folio that does not carry them.
+##
+## The twelve rows' folios, read off the rendered pages rather than off a text
+## extraction: folio 2-27 carries `addi.l`, `addx.l`, `andi.l`, `asl.l` and
+## `asr.l`; folio 2-28 carries `cmpi.l`, `eori.l`, `lsl.l` and `lsr.l`; folio
+## 2-29 carries `or.l | #imm,Dx` - which is this core's ORI - `subi.l` and
+## `subx.l`. Those twelve sort in that order, which is what lets
+## `table215FolioOf` derive the folio from the mnemonic against two boundaries.
+##
+##   MCF5307 Table 3-14, p.3-29  -> MCF5407 Table 2-16, "Miscellaneous
+##                                  Instruction Execution Times", folios 2-29
+##                                  and 2-30.
+##   MCF5307 sections 3.10,      -> MCF5407 sections 2.7.2, 2.7.3 and 2.7.4.
+##     3.11, 3.12
+##
 ## The skip rule, stated once. An operation is outside the domain when and
 ## only when `eaLegalityFor` returns an empty mask. That is the same test
 ## `eaIsLegalFor` already makes, and that proc's own doc comment in
@@ -60,14 +110,14 @@
 ##       `ramBase`, an operation that copied one address register into another
 ##       before refusing passed.
 ##
-## Two more run for the Table 3-13 entries alone, one per axis of the citation,
+## Two more run for the Table 2-15 entries alone, one per axis of the citation,
 ## and each holds a declared value against an independent recording of the same
 ## fact rather than against the value itself. The numbering skips (5) and (6),
 ## which are described further down.
 ##
 ##   (7) The page. Derived from the operation's mnemonic through the table's
 ##       own row ordering and compared against the page the entry declared.
-##       The block defining `Table313Page` below carries the argument. What it
+##       The block defining `Table215Folio` below carries the argument. What it
 ##       catches is a mis-declared page held against a fixed break: a lone
 ##       mis-declaration is red, while a co-edit that moves the break constant
 ##       and the declarations together goes green past (7), and (9) is what
@@ -75,13 +125,13 @@
 ##
 ##   (8) The `#xxx` column. Derived by running the entry twice with different
 ##       immediates and comparing the two outcomes, which is the operational
-##       content of that column. `table313ImmOf` carries the argument, the two
+##       content of that column. `table215ImmOf` carries the argument, the two
 ##       measured directions, and the limit.
 ##
 ## And three cover the table and the enumeration rather than any one operation.
 ##
-##   (9) `table313LastRowOn328` held against `decode_types.nim`, which records
-##       the same page break in its own `table313LastRowOnPage328`. A
+##   (9) `table215LastRowOn227`/`table215LastRowOn228` held against `decode_types.nim`, which records
+##       the same page break in its own `table215LastRowOnFolio227`/`table215LastRowOnFolio228`. A
 ##       `static: doAssert`, so a co-edit of the constant and the declarations
 ##       fails the build. It is not held against the declarations it validates
 ##       - that would be the tautology - but against that third record.
@@ -108,8 +158,8 @@
 ## reasons.
 ##
 ##   - MOVE, MOVEA, ADD, SUB, ADDA, SUBA, TST, CMP and CMPA carry
-##     `eaAllModes`/`eaValid7`, which admits every addressing mode Table 3-5
-##     p.3-21 prints. The only encodings outside it are the reserved mode-7
+##     `eaAllModes`/`eaValid7`, which admits every addressing mode Table 2-5
+##     folio 2-15 prints. The only encodings outside it are the reserved mode-7
 ##     ones, and `machine.nim`'s `eaAddr` and `eaRead` fault on those
 ##     independently of any mask.
 ##
@@ -337,43 +387,56 @@ static:
   for i in 0 .. 7: doAssert dRegSeedMustBeNonZero + uint32(i) != 0'u32
   for i in 1 .. 6: doAssert aRegSeed(i) > aRegSeed(i - 1)
 
-## Table 3-13 spans two pages, so the page is a parameter and not a default.
-## The table begins on p.3-28 and continues on p.3-29, and three of the rows
-## cited below - `ori.l`, `subi.l` and `subx.l` - are on the continuation
-## page. Both pages were read rendered.
+## Table 2-15 spans THREE folios, so the folio is a parameter and not a
+## default. The table begins on folio 2-27, continues on 2-28 and ends on 2-29,
+## and the twelve rows cited below fall on all three. Every folio was read
+## rendered.
 ##
-## One shared constant cannot hold two pages. Two constants would not close it
-## either: a further entry would pick one of them, and picking the wrong one is
-## exactly as silent as before.
+## THE MCF5307'S TABLE SPANNED TWO PAGES AND THIS ONE SPANS THREE, so the type
+## gained a member and the derivation gained a boundary when the part changed.
+## Nine of the twelve rows below would have been attributed to a folio that
+## does not carry them had the two-valued type been carried across.
 ##
-## A required parameter is what cannot flatten. The page is not defaultable,
-## so an entry cannot inherit a page it never stated; and `Table313Page` is an
-## enum, so the only two spellings are the two pages the table actually spans
-## and a typo is a compile error rather than a wrong citation.
+## One shared constant cannot hold three folios. A required parameter is what
+## cannot flatten: the folio is not defaultable, so an entry cannot inherit one
+## it never stated; and `Table215Folio` is an enum, so the only three spellings
+## are the three folios the table actually spans and a typo is a compile error
+## rather than a wrong citation.
 ##
 ## But a required parameter makes the choice unavoidable and not correct, which
-## is why assertion (7) exists: an entry can write `p313Start` for a row that
-## prints on 3-29 and nothing in the parameter says so. What (7) does not close
-## is the co-edit: move the break constant and the declarations together and
-## the two go green past each other, which is assertion (9)'s subject.
+## is why assertion (7) exists: an entry can write `f215First` for a row that
+## prints on 2-29 and nothing in the parameter says so. What (7) does not close
+## is the co-edit: move a break constant and the declarations together and the
+## two go green past each other, which is assertion (9)'s subject - and (9) now
+## has two constants to hold, one per break.
 ##
-## SO THE PAGE IS DERIVED AND THE DECLARED ONE IS CHECKED AGAINST IT. The
+## SO THE FOLIO IS DERIVED AND THE DECLARED ONE IS CHECKED AGAINST IT. The
 ## derivation rests on a property of the table that was read from the RENDERED
-## p.3-28 and p.3-29 and NOT from `pdftotext` and NOT from the markdown
-## conversion of the User's Manual, whose Table 3-13 is known wrong:
+## folios 2-27, 2-28 and 2-29 and NOT from `pdftotext` and NOT from any
+## markdown conversion of the User's Manual:
 ##
-##   - The p.3-28 half runs `add.l` to `mulu.l`; the p.3-29 half opens `or.l`
-##     and ends `subx.l`, after which section 3.12 begins.
+##   - Folio 2-27's Table 2-15 rows run `add.l` to `bchg`; folio 2-28 runs
+##     `bchg` to `or.l`; folio 2-29 runs `or.l` to `subx.l`, after which
+##     Table 2-16 begins on the same folio.
 ##   - The table is NOT strictly alphabetical, and the derivation does not
-##     claim it is: p.3-28 prints `moveq` AFTER `msac`. THE DISORDER IS NOT
-##     LOCAL TO THE `m` CLUSTER: the same rendered p.3-28 also prints `divu.w`
-##     before `divs.l`, `mulu.w` before `muls.l`, and `msac.l` before the
-##     second `mac.w`. What the derivation needs is not local order anywhere
-##     on the page; it is the BREAK, and none of these straddle it.
-##   - What IS true, and all the derivation needs, is that the page break falls
-##     on a LEXICOGRAPHIC boundary: every opcode row on p.3-28 sorts at or
-##     before `mulu`, and every opcode row on p.3-29 sorts after it. Checked
-##     row by row against both rendered pages.
+##     claim it is. Folio 2-28 prints `divu.w` before `divs.l`, `mulu.w` before
+##     `muls.l`, and `msac.l` before a second `mac.w`. What the derivation
+##     needs is not local order anywhere on a folio; it is the two BREAKS, and
+##     none of these straddle either one.
+##   - TWO OPCODES DO STRADDLE A BREAK, and neither is cited below. `bchg`
+##     prints on 2-27 in its `Dy,<ea>` form and on 2-28 in its `#imm,<ea>`
+##     form; `or.l` prints on 2-28 as `<ea>,Rx` and on 2-29 as `Dy,<ea>` and
+##     `#imm,Dx`. No cited row is a `bchg`. The one cited `or` row is this
+##     core's ORI, which is the `or.l | #imm,Dx` row on folio 2-29, and it
+##     sorts strictly after the boundary string `"or"`, so a `<=` comparison
+##     puts it on the third folio correctly. The boundaries are therefore
+##     `"asr"` and `"or"` rather than `"bchg"` and `"or.l"`.
+##   - What IS true, and all the derivation needs, is that both breaks fall on
+##     a LEXICOGRAPHIC boundary for the twelve rows cited: `addi`, `addx`,
+##     `andi`, `asl` and `asr` sort at or before `"asr"` and print on 2-27;
+##     `cmpi`, `eori`, `lsl` and `lsr` sort after `"asr"` and at or before
+##     `"or"` and print on 2-28; `ori`, `subi` and `subx` sort after `"or"` and
+##     print on 2-29. Checked row by row against all three rendered folios.
 ##
 ## WHY THIS IS SAFE TO DERIVE FROM THE ENTRY'S OWN MNEMONIC: for every one of
 ## these entries the `Operation` member name minus its `op` prefix IS the table
@@ -383,27 +446,38 @@ static:
 ##
 ## WHERE THAT STOPS HOLDING, THE ENTRY GOES RED ONLY IF THE MISMATCH CROSSES
 ## THE BREAK. A member renamed so that its mnemonic still sorts on the SAME
-## side of `table313LastRowOn328` derives the page the entry already declares,
+## side of `table215LastRowOn227`/`table215LastRowOn228` derives the page the entry already declares,
 ## and (7) passes with the name and the row now naming different things. THAT
-## RENAME WAS NOT RUN: this limit is REASONED from `table313PageOf`, whose
+## RENAME WAS NOT RUN: this limit is REASONED from `table215FolioOf`, whose
 ## three lines are directly below and whose comparison is a single `<=`, and it
 ## is not a transcript. It is also the conservative direction - it describes
 ## something the assertion does NOT catch - so an unmeasured version of it
 ## understates the check rather than overstating it.
 ##
 ## A MEMBER WHOSE NAME DOES NOT BEGIN WITH `op` fails through the `doAssert` in
-## `table313PageOf`, which is a crash rather than a case. Assertion (10) makes
+## `table215FolioOf`, which is a crash rather than a case. Assertion (10) makes
 ## the absence of such a member a property this run asserts over the WHOLE
-## enumeration, not just the members `table313PageOf` is called with.
+## enumeration, not just the members `table215FolioOf` is called with.
 type
-  Table313Page = enum
-    p313Start = "3-28"   ## where Table 3-13 begins
-    p313Cont = "3-29"    ## the continuation page
+  Table215Folio = enum
+    f215First = "2-27"    ## where Table 2-15 begins
+    f215Second = "2-28"   ## the first continuation folio
+    f215Third = "2-29"    ## the second continuation folio
 
-const table313LastRowOn328 = "mulu"
-  ## The last opcode Table 3-13 prints on p.3-28, read from the rendered page.
-  ## The derivation below is a comparison against THIS and nothing else, so a
-  ## reprint that moves the break is one edit here.
+const
+  table215LastRowOn227 = "asr"
+    ## The last opcode Table 2-15 prints on folio 2-27, read from the rendered
+    ## folio.
+  table215LastRowOn228 = "or"
+    ## And on folio 2-28. The derivation below is a comparison against THESE
+    ## TWO and nothing else, so a reprint that moves either break is one edit
+    ## here.
+    ##
+    ## THIS TYPE GREW A THIRD MEMBER WITH THE PART. The MCF5307's Table 3-13
+    ## spanned two pages and broke once, after `mulu`; the MCF5407's Table 2-15
+    ## spans three folios and breaks twice. A two-valued type carried over
+    ## unchanged would have put nine of the twelve rows below on a folio that
+    ## does not carry them.
 
 ## (9) THE BREAK CONSTANT, HELD AGAINST `decode_types.nim`'s RECORD OF IT.
 ## Assertion (7) compares each declaration against a derivation that reads this
@@ -411,25 +485,31 @@ const table313LastRowOn328 = "mulu"
 ## comparison with nothing behind it: moving it and the declarations in
 ## ONE edit moved them past each other and printed a false page as PASSED. The
 ## co-edit now has to move a second file. The comparison lives HERE and
-## `table313LastRowOnPage328` is EXPORTED for it because this file imports the
+## `table215LastRowOnFolio227`/`table215LastRowOnFolio228` is EXPORTED for it because this file imports the
 ## source and the source cannot import this file without shipping test code.
 ## ITS LIMIT: both records were declared in the same change, so (9) detects
 ## drift and does not corroborate against an independent authority.
 static:
-  doAssert table313LastRowOn328 == table313LastRowOnPage328,
-    "`table313LastRowOn328` is the last p.3-28 row `decode_types.nim` " &
-    "records: this file declares \"" & table313LastRowOn328 &
-    "\" and that file records \"" & table313LastRowOnPage328 & "\""
+  doAssert table215LastRowOn227 == table215LastRowOnFolio227,
+    "`table215LastRowOn227` is the last folio-2-27 row `decode_types.nim` " &
+    "records: this file declares \"" & table215LastRowOn227 &
+    "\" and that file records \"" & table215LastRowOnFolio227 & "\""
+  doAssert table215LastRowOn228 == table215LastRowOnFolio228,
+    "`table215LastRowOn228` is the last folio-2-28 row `decode_types.nim` " &
+    "records: this file declares \"" & table215LastRowOn228 &
+    "\" and that file records \"" & table215LastRowOnFolio228 & "\""
 
-func table313PageOf(op: Operation): Table313Page =
-  ## The page Table 3-13 prints this operation's row on, DERIVED. See the block
+func table215FolioOf(op: Operation): Table215Folio =
+  ## The folio Table 2-15 prints this operation's row on, DERIVED. See the block
   ## above for the property of the table this rests on.
   let name = $op
   doAssert name.startsWith("op"),
     "an `Operation` member whose name does not begin with `op` breaks the " &
     "mnemonic derivation: " & name
   let mnemonic = toLowerAscii(name[2 .. ^1])
-  if mnemonic <= table313LastRowOn328: p313Start else: p313Cont
+  if mnemonic <= table215LastRowOn227: f215First
+  elif mnemonic <= table215LastRowOn228: f215Second
+  else: f215Third
 
 ## THE PAGE AXIS AND THE `#xxx` AXIS ARE TWO DIFFERENT MANUAL FACTS. The
 ## four shift rows - `asl.l`, `asr.l`, `lsl.l`, `lsr.l` - carry `1(0/0)`
@@ -439,24 +519,24 @@ func table313PageOf(op: Operation): Table313Page =
 ##
 ## Spelling it is not checking it, and assertion (8) is the check. It is
 ## two-sided, which one mutation would not have shown: a check that answered
-## `imm313Timed` for everything would catch a timed row declared dashed and
+## `imm215Timed` for everything would catch a timed row declared dashed and
 ## nothing else. Both directions are red - a genuinely timed row declared
 ## dashed, and a genuinely dashed row declared timed.
 ##
 ## What (8) does not do is read the manual, and neither does (7). Each holds a
 ## declaration against one independent recording of the same fact;
-## `table313ImmOf` states that limit and the shape of the executor error that
+## `table215ImmOf` states that limit and the shape of the executor error that
 ## would defeat it. `decode_types.nim` and `logic.nim` record the
 ## same twelve-row split in prose, and they corroborate the four shift rows and
 ## five of the eight dashed ones. They are NOT what (8) reads, and they do not
 ## cover `addi`, `addx` or `subx` at all.
 type
-  Table313Imm = enum
-    imm313Dashed = "a DASH under #xxx as well"
-    imm313Timed = "1(0/0) under #xxx, which is not a memory column"
+  Table215Imm = enum
+    imm215Dashed = "a DASH under #xxx as well"
+    imm215Timed = "1(0/0) under #xxx, which is not a memory column"
 
-func whyDashMemory313(page: Table313Page; imm: Table313Imm): string =
-  "Table 3-13 p." & $page & ": the row carries Rn 1(0/0), a DASH under (An), " &
+func whyDashMemory215(page: Table215Folio; imm: Table215Imm): string =
+  "Table 2-15 folio " & $page & ": the row carries Rn 1(0/0), a DASH under (An), " &
   "(An)+, -(An), (d16,An), (d8,An,Xi*SF) and xxx.wl, and " & $imm
 
 # ---------------------------------------------------------------------------
@@ -467,8 +547,8 @@ func whyDashMemory313(page: Table313Page; imm: Table313Imm): string =
 # `eaLegalityFor`; `why` carries the row it is read from. See the header for
 # why deriving it from `eaLegalityFor` would make the whole file tautological.
 #
-# `page313` IS DECLARED TOO, AND THE DERIVATION THAT CHECKS IT IS NOT AN
-# EXCEPTION TO THAT RULE. `table313PageOf` reads the MANUAL's own row ordering,
+# `folio215` IS DECLARED TOO, AND THE DERIVATION THAT CHECKS IT IS NOT AN
+# EXCEPTION TO THAT RULE. `table215FolioOf` reads the MANUAL's own row ordering,
 # not `eaLegalityFor` and not any other production symbol, so the comparison
 # holds a declaration against an independent second source rather than against
 # the thing being asserted. A field derived from the code under test would
@@ -488,26 +568,26 @@ type
     why: string        ## the manual row the `illegal` field is read from
     discriminating: bool  ## see the header: can assertion (4) attribute the
                           ## refusal to this operation's own guard?
-    page313: Option[Table313Page]
+    folio215: Option[Table215Folio]
       ## SET FOR THE TABLE 3-13 ENTRIES AND FOR NOTHING ELSE, so that the page
-      ## the entry declared can be held against the page `table313PageOf`
+      ## the entry declared can be held against the page `table215FolioOf`
       ## derives. `none` means the entry cites some other table and the
       ## comparison does not apply - it is not a way to opt out, because
-      ## `cov313` is the only constructor that reaches a 3-13 citation and it
+      ## `cov215` is the only constructor that reaches a Table 2-15 citation and it
       ## always sets this.
-    imm313: Option[Table313Imm]
+    imm215: Option[Table215Imm]
       ## THE `#xxx` COLUMN THE ENTRY DECLARES, KEPT AS A FIELD AND NOT ONLY
       ## FOLDED INTO `why`. Assertion (8) holds it against the column
-      ## `table313ImmOf` derives from the executor, and a string built for a
-      ## human reader is not a value an assertion can compare. Set by `cov313`
-      ## and by nothing else, on the same terms as `page313`.
+      ## `table215ImmOf` derives from the executor, and a string built for a
+      ## human reader is not a value an assertion can compare. Set by `cov215`
+      ## and by nothing else, on the same terms as `folio215`.
     dirToEa: bool
     regOperand: bool
     destMode: uint8
     destReg: uint8
 
 # The addressing modes the entries below name. `ea7Unused5` is the reserved
-# mode-7 encoding: Table 3-5 p.3-21 prints REG. FIELD values 000, 001, 010,
+# mode-7 encoding: Table 2-5 folio 2-15 prints REG. FIELD values 000, 001, 010,
 # 011 and 100 under MODE FIELD 111 and no others, so 101 is not an addressing
 # mode at all.
 const
@@ -523,37 +603,42 @@ const
 # page of the MCF5307 User's Manual.
 const
   whyReserved =
-    "Table 3-5 p.3-21 prints no REG. FIELD 101 under MODE FIELD 111, so the " &
+    "Table 2-5 folio 2-15 prints no REG. FIELD 101 under MODE FIELD 111, so the " &
     "reserved mode-7 encoding is not an addressing mode"
   whyAnNotData =
-    "Table 3-5 p.3-21, DATA column, An row: a dash. An address register is " &
+    "Table 2-5 folio 2-15, Data column, An row: a dash. An address register is " &
     "not a DATA operand"
   whyPcNotAlterable =
-    "Table 3-5 p.3-21, ALTERABLE column, (d16,PC) row: a dash. A written " &
+    "Table 2-5 folio 2-15, Alterable column, (d16,PC) row: a dash. A written " &
     "destination cannot be PC-relative"
   whyDnNotControl =
-    "Table 3-5 p.3-21, CONTROL column, Dn row: a dash. A control address is " &
+    "Table 2-5 folio 2-15, Control column, Dn row: a dash. A control address is " &
     "not a register"
   whyPredecNotControl =
-    "Table 3-5 p.3-21, CONTROL column, -(An) row: a dash; Table 3-14 p.3-29 " &
+    "Table 2-5 folio 2-15, Control column, -(An) row: a dash; Table 2-16 folio 2-29 " &
     "times both movem.l rows under (An) and (d16,An) alone"
-  # TABLE 3-12 DOES NOT SPAN, WHICH IS THE WHOLE REASON THIS ONE IS A SHARED
-  # CONSTANT WHILE `whyDashMemory313` IS A FUNCTION OF THE PAGE. Verified on
-  # the RENDERED page: section 3.10 opens Table 3-12 on p.3-27, its last row
-  # `tst.l` is on that same page, and p.3-28 opens section 3.11 with Table
-  # 3-13. There is therefore NO page for a further 3-12 entry to pick wrongly,
-  # and the asymmetry between the two is a property of the MANUAL and not a
-  # lapse in this file.
+  # TABLE 2-14 DOES NOT SPAN, WHICH IS THE WHOLE REASON THIS ONE IS A SHARED
+  # CONSTANT WHILE `whyDashMemory215` IS A FUNCTION OF THE FOLIO. Verified on
+  # the RENDERED folio: section 2.7.2 opens Table 2-14 on folio 2-27, its last
+  # row `tst.l` is on that same folio, and section 2.7.3 opens Table 2-15
+  # further down that same folio. There is therefore NO folio for a further
+  # 2-14 entry to pick wrongly, and the asymmetry between the two is a
+  # property of the MANUAL and not a lapse in this file.
+  #
+  # THE ASYMMETRY SURVIVED THE RETARGET AND WIDENED. On the MCF5307, Table 3-12
+  # occupied one page and Table 3-13 spanned two. Here Table 2-14 still
+  # occupies one folio and Table 2-15 spans three, so the one-versus-many
+  # difference this constant rests on is larger than it was, not smaller.
   #
   # RECORDED RATHER THAN LEFT TO BE RE-DERIVED, because an asymmetry with no
-  # written reason is exactly how the 3-13 defect entered: the reader who does
+  # written reason is exactly how the Table 2-15 defect entered: the reader who does
   # not know why one of the pair is parameterized concludes that neither needs
-  # to be. THE DERIVATION `table313PageOf` PERFORMS DOES NOT GENERALISE HERE,
+  # to be. THE DERIVATION `table215FolioOf` PERFORMS DOES NOT GENERALISE HERE,
   # AND ADDING IT WOULD BE A GREEN MIRAGE - on a table that occupies one page
   # the derived page is a constant, so the comparison could not fail for any
   # input and would assert nothing while looking exactly like assertion (7).
   whyDashMemory312 =
-    "Table 3-12 p.3-27: the row carries Rn 1(0/0) and a DASH under (An), " &
+    "Table 2-14 folio 2-27: the row carries Rn 1(0/0) and a DASH under (An), " &
     "(An)+, -(An), (d16,An), (d8,An,Xi*SF), xxx.wl and #xxx"
 
 proc cov(op: Operation; family: Family; legal, illegal: EA; why: string;
@@ -564,20 +649,20 @@ proc cov(op: Operation; family: Family; legal, illegal: EA; why: string;
            why: why, discriminating: discriminating, dirToEa: dirToEa,
            regOperand: regOperand, destMode: destMode, destReg: destReg)
 
-proc cov313(op: Operation; family: Family; page: Table313Page;
-            imm: Table313Imm): Coverage =
+proc cov215(op: Operation; family: Family; page: Table215Folio;
+            imm: Table215Imm): Coverage =
   ## THE TABLE 3-13 ENTRIES, WHOSE PAGE IS STATED EXACTLY ONCE. Routing the
   ## citation string and the checked field through one parameter is what stops
-  ## the two from drifting apart, which a second `page313 = ...` argument
-  ## alongside a `whyDashMemory313(...)` argument would have invited.
+  ## the two from drifting apart, which a second `folio215 = ...` argument
+  ## alongside a `whyDashMemory215(...)` argument would have invited.
   ##
   ## Every one of these rows is a `{eaDn}` mask whose cited illegal mode is
   ## `(An)`, so `legal` and `illegal` are fixed here rather than repeated
   ## on every row. An entry needing a different pair does not belong to this
   ## constructor and must state its own citation through `cov`.
-  result = cov(op, family, mDn, mAnInd, whyDashMemory313(page, imm))
-  result.page313 = some(page)
-  result.imm313 = some(imm)
+  result = cov(op, family, mDn, mAnInd, whyDashMemory215(page, imm))
+  result.folio215 = some(page)
+  result.imm215 = some(imm)
 
 let coverage: seq[Coverage] = @[
   # --- eaAllModes / eaValid7: every printed mode is legal, so the only
@@ -642,28 +727,28 @@ let coverage: seq[Coverage] = @[
   # --- {eaDn}: a data register and nothing else. The manual dashes every
   # memory column of each of these rows, so `(An)` is the cited illegal mode.
   cov(opNot, famLogic, mDn, mAnInd, whyDashMemory312),
-  # The Table 3-13 rows. `imm313Timed` marks the four shift rows, which are the
+  # The Table 2-15 rows. `imm215Timed` marks the four shift rows, which are the
   # only ones whose `#xxx` column is timed rather than dashed.
-  cov313(opAndi, famLogic, p313Start, imm313Dashed),
-  cov313(opOri, famLogic, p313Cont, imm313Dashed),
-  cov313(opEori, famLogic, p313Start, imm313Dashed),
-  cov313(opAsl, famLogic, p313Start, imm313Timed),
-  cov313(opAsr, famLogic, p313Start, imm313Timed),
-  cov313(opLsl, famLogic, p313Start, imm313Timed),
-  cov313(opLsr, famLogic, p313Start, imm313Timed),
-  cov313(opAddi, famAlu, p313Start, imm313Dashed),
-  cov313(opSubi, famAlu, p313Cont, imm313Dashed),
+  cov215(opAndi, famLogic, f215First, imm215Dashed),
+  cov215(opOri, famLogic, f215Third, imm215Dashed),
+  cov215(opEori, famLogic, f215Second, imm215Dashed),
+  cov215(opAsl, famLogic, f215First, imm215Timed),
+  cov215(opAsr, famLogic, f215First, imm215Timed),
+  cov215(opLsl, famLogic, f215Second, imm215Timed),
+  cov215(opLsr, famLogic, f215Second, imm215Timed),
+  cov215(opAddi, famAlu, f215First, imm215Dashed),
+  cov215(opSubi, famAlu, f215Third, imm215Dashed),
   cov(opNeg, famAlu, mDn, mAnInd, whyDashMemory312),
   cov(opNegx, famAlu, mDn, mAnInd, whyDashMemory312),
   cov(opExt, famAlu, mDn, mAnInd, whyDashMemory312),
   cov(opExtb, famAlu, mDn, mAnInd, whyDashMemory312),
-  cov313(opAddx, famAlu, p313Start, imm313Dashed),
-  cov313(opSubx, famAlu, p313Cont, imm313Dashed),
+  cov215(opAddx, famAlu, f215First, imm215Dashed),
+  cov215(opSubx, famAlu, f215Third, imm215Dashed),
   cov(opScc, famControl, mDn, mAnInd, whyDashMemory312),
-  cov313(opCmpi, famControl, p313Start, imm313Dashed),
+  cov215(opCmpi, famControl, f215Second, imm215Dashed),
 
-  # SWAP's mask is `{eaDn}` on Table 3-7 p.3-25's `Dn` operand syntax and
-  # Table 3-12 p.3-27's `swap Dx` row, timed 1(0/0) under Rn with a dash in
+  # SWAP's mask is `{eaDn}` on Table 2-8 folio 2-22's `Dx` operand syntax and
+  # Table 2-14 folio 2-27's `swap Dx` row, timed 1(0/0) under Rn with a dash in
   # every other column, both read from RENDERED pages.
   cov(opSwap, famMove, mDn, mAnInd, whyDashMemory312),
 
@@ -734,7 +819,7 @@ proc pristine(r: RunResult): bool =
     if r.aRegs[i] != aRegSeed(i): return false
   r.sp == stackBase and r.pc == execBase and r.sr == srAfterResetMustMatchCpuNim
 
-proc table313ImmOf(c: Coverage): Option[Table313Imm] =
+proc table215ImmOf(c: Coverage): Option[Table215Imm] =
   ## THE `#xxx` COLUMN, DERIVED FROM THE EXECUTOR AND NOT FROM THIS FILE. The
   ## entry is run twice on its LEGAL operand with two different immediates and
   ## nothing else changed. If the two runs differ, the executor consumed the
@@ -767,10 +852,10 @@ proc table313ImmOf(c: Coverage): Option[Table313Imm] =
   ## themselves are checked by `m68k-elf-as` measurements recorded in
   ## `decode_types.nim` and `logic.nim`, not here.
   let low = runFamily(c, c.legal, imm = 1'u8)
-  if low.fault or low.cycles == 0'u32: return none(Table313Imm)
+  if low.fault or low.cycles == 0'u32: return none(Table215Imm)
   let high = runFamily(c, c.legal, imm = 3'u8)
-  if high.fault or high.cycles == 0'u32: return none(Table313Imm)
-  some(if low == high: imm313Dashed else: imm313Timed)
+  if high.fault or high.cycles == 0'u32: return none(Table215Imm)
+  some(if low == high: imm215Dashed else: imm215Timed)
 
 proc runCoverage(c: Coverage) =
   let name = $c.op
@@ -803,23 +888,23 @@ proc runCoverage(c: Coverage) =
     " cycles=" & $bad.cycles & " busAccesses=" & $bad.accesses &
     " registersPristine=" & $pristine(bad))
 
-  # (7) The declared Table 3-13 page, held against the derived one. This runs
-  # for the Table 3-13 entries alone; the block defining `Table313Page` carries
+  # (7) The declared Table 2-15 folio, held against the derived one. This runs
+  # for the Table 2-15 entries alone; the block defining `Table215Folio` carries
   # the argument.
-  if c.page313.isSome:
-    let derived = table313PageOf(c.op)
-    checkDetail(c.page313.get == derived,
-      name & ": its Table 3-13 row is on the page the entry cites",
-      "the entry declares p." & $c.page313.get &
+  if c.folio215.isSome:
+    let derived = table215FolioOf(c.op)
+    checkDetail(c.folio215.get == derived,
+      name & ": its Table 2-15 row is on the folio the entry cites",
+      "the entry declares p." & $c.folio215.get &
       " and the mnemonic derives p." & $derived)
 
   # (8) The declared `#xxx` column, held against the one the executor shows.
-  # `table313ImmOf` carries the argument and the limit.
-  if c.imm313.isSome:
-    let derivedImm = table313ImmOf(c)
-    checkDetail(derivedImm.isSome and c.imm313.get == derivedImm.get,
-      name & ": its Table 3-13 `#xxx` column is the one the executor shows",
-      "the entry declares \"" & $c.imm313.get & "\" and varying the immediate " &
+  # `table215ImmOf` carries the argument and the limit.
+  if c.imm215.isSome:
+    let derivedImm = table215ImmOf(c)
+    checkDetail(derivedImm.isSome and c.imm215.get == derivedImm.get,
+      name & ": its Table 2-15 `#xxx` column is the one the executor shows",
+      "the entry declares \"" & $c.imm215.get & "\" and varying the immediate " &
       (if derivedImm.isSome: "derives \"" & $derivedImm.get & "\""
        else: "derives nothing: the legal operand never executed") &
       " - EITHER the citation is wrong OR the executor consumes `d.imm` for " &
@@ -878,34 +963,34 @@ block:
     " reached; these ran nothing: " & $deadRows)
 
   # AND EVERY TABLE 3-13 CITATION MUST CARRY A PAGE FOR (7) TO CHECK. That
-  # assertion runs only where `page313` is set, so a `cov313` that stopped
+  # assertion runs only where `folio215` is set, so a `cov215` that stopped
   # setting it would DELETE those assertions and print a smaller total with no
   # red anywhere - the case count is printed and nothing asserts it, which is
   # the same silence this file was built to remove.
   #
-  # The citation string and the `page313` field are written by one call but are
+  # The citation string and the `folio215` field are written by one call but are
   # two different values, so each is a witness for the other: a row citing
-  # Table 3-13 with no page, or a page on a row citing something else, is red.
+  # Table 2-15 with no folio, or a folio on a row citing something else, is red.
   # Both counts falling to ZERO is the remaining way out - every entry
   # rewritten to hand-built strings - so that is refused as well.
   #
   # `carriesImm` JOINS THE SAME EQUALITY, because assertion (8) runs exactly
-  # where `imm313` is set and a `cov313` that stopped setting it would delete
+  # where `imm215` is set and a `cov215` that stopped setting it would delete
   # those assertions the same silent way.
-  var cited313 = 0
+  var cited215 = 0
   var carriesPage = 0
   var carriesImm = 0
   for c in coverage:
-    if c.why.startsWith("Table 3-13 p."): inc cited313
-    if c.page313.isSome: inc carriesPage
-    if c.imm313.isSome: inc carriesImm
-  check(cited313 == carriesPage and cited313 == carriesImm and cited313 > 0,
-    "every Table 3-13 citation carries a page for assertion (7) and a `#xxx` " &
-    "column for assertion (8) to hold it against: " & $cited313 &
-    " rows cite Table 3-13, " & $carriesPage & " carry a page and " &
+    if c.why.startsWith("Table 2-15 folio "): inc cited215
+    if c.folio215.isSome: inc carriesPage
+    if c.imm215.isSome: inc carriesImm
+  check(cited215 == carriesPage and cited215 == carriesImm and cited215 > 0,
+    "every Table 2-15 citation carries a folio for assertion (7) and a `#xxx` " &
+    "column for assertion (8) to hold it against: " & $cited215 &
+    " rows cite Table 2-15, " & $carriesPage & " carry a folio and " &
     $carriesImm & " carry a `#xxx` column, and no figure may be zero")
 
-  # (10) Every `Operation` member name begins with `op`. `table313PageOf`
+  # (10) Every `Operation` member name begins with `op`. `table215FolioOf`
   # asserts this for the members it is called with and crashes on a
   # member that breaks it - a crash rather than a case. Checking it for the
   # whole enumeration turns "a misnamed member would crash the derivation" from
@@ -926,7 +1011,7 @@ block:
   # citation this file uses names a manual table, so that is what is required.
   var uncited: seq[string] = @[]
   for c in coverage:
-    if not c.why.startsWith("Table 3-"): uncited.add($c.op)
+    if not c.why.startsWith("Table 2-"): uncited.add($c.op)
   checkDetail(uncited.len == 0,
     "every `coverage` row cites a manual table for its `illegal` mode",
     "these do not: " & $uncited)
@@ -934,7 +1019,7 @@ block:
 # ---------------------------------------------------------------------------
 # (12) The multiply and divide carry two masks, one per size, and the four
 # `coverage` rows above cannot see the split. Those rows cite the `An` row of
-# Table 3-5, which is dashed at both sizes, so widening or narrowing either
+# Table 2-5, which is dashed at both sizes, so widening or narrowing either
 # mask anywhere else leaves all four green. This block is the guard for the
 # split itself.
 #
@@ -1056,7 +1141,7 @@ block:
 #
 # The four cells this block exists for are `(d8,An,Xi)`, `(xxx).L`,
 # `(d16,PC)` and `(d8,PC,Xi)`. A control-class mask on `eaLegalityFor`'s
-# `opMovem` arm admits all four, while the arm's own comment cites Table 3-14
+# `opMovem` arm admits all four, while the arm's own comment cites Table 2-16
 # as timing MOVEM under `(An)` and `(d16,An)` alone.
 #
 # IT WAS NOT LATENT. Measured on the wide mask, before the
@@ -1153,11 +1238,12 @@ block:
 # `coverage` rows for `opLea` and `opPea` cite `Dn`, which stays outside the
 # widened mask, so assertion (1) cannot see it.
 #
-# The source. `m68k-elf-as -mcpu=5307` rejects `lea (%a0)+,%a1`, `lea #4,%a1`,
+# The source. `m68k-elf-as -mcpu=5407` rejects `lea (%a0)+,%a1`, `lea #4,%a1`,
 # `pea (%a0)+` and `pea #4`, all four with "operands mismatch", and accepts
-# every mode named in the positive control below. MCF5307 User's Manual Table
-# 3-13 p.3-28 dashes the `lea | <ea>,Ax` row under `(An)+` and `#xxx`, and
-# Table 3-14 p.3-29 dashes the `pea | <ea>` row under the same two columns.
+# every mode named in the positive control below. MCF5407 User's Manual Table
+# 2-15 folio 2-28 dashes the `lea | <ea>,Ax` row under `(An)+` and `#xxx` -
+# and under `-(An)` as well - and Table 2-16 folio 2-29 dashes the
+# `pea | <ea>` row under those same two columns.
 #
 # The positive control includes `(xxx).W`, which is the cell `eaLeaPeaTarget`
 # was created to admit and the one MOVEM must not have. A repair of block (13)
@@ -1184,11 +1270,11 @@ block:
     for (label, ea) in leaPeaLegal:
       check(eaIsLegalFor(op, ea),
         name & ": the mask accepts " & label &
-        " (Table 3-13 p.3-28 and Table 3-14 p.3-29 time the column)")
+        " (Table 2-15 folio 2-28 and Table 2-16 folio 2-29 time the column)")
     for (label, ea) in leaPeaIllegal:
       check(not eaIsLegalFor(op, ea),
         name & ": the mask REJECTS " & label &
-        " (Table 3-13 p.3-28 and Table 3-14 p.3-29 dash the column; " &
+        " (Table 2-15 folio 2-28 and Table 2-16 folio 2-29 dash the column; " &
         "`m68k-elf-as -mcpu=5307` answers \"operands mismatch\")")
 
 # ---------------------------------------------------------------------------

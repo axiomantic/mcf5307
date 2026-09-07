@@ -435,7 +435,7 @@ add_test(NAME t_checks_on
 #   Then EA legality, enumerated over `Operation` and not over a roster of
 #      opcode names. Every operation whose `eaLegalityFor` mask is non-empty
 #      carries four assertions: the mask rejects an illegal mode cited from the
-#      MCF5307 User's Manual and never derived from the mask itself, the mask
+#      MCF5407 User's Manual and never derived from the mask itself, the mask
 #      accepts a legal mode, the executor runs the legal operand, and the
 #      executor traps the illegal one. Every operation whose mask is empty
 #      carries one assertion instead - that no stale coverage entry names it.
@@ -1147,13 +1147,17 @@ add_test(NAME t_logic
 # Those 1024 words are not "the Scc and DBcc space". The split is measured:
 #
 #     `Scc Dn`, the EA field `000 rrr`. Scc takes a data register operand and
-#         nothing else on this part - Table 3-7, page 3-25, gives Scc an
-#         operand syntax of `Dx`, and Table 3-12, page 3-27, one `scc Dx` row
-#         and no memory column - so `st (%a0)` is not an instruction.
+#         nothing else on this part - MCF5407 User's Manual Table 2-8,
+#         "User-Level Instruction Set Summary", folio 2-22, gives Scc an
+#         operand syntax of `Dx`, and Table 2-14, "One-Operand Instruction
+#         Execution Times", folio 2-27, one `scc Dx` row timed under `Rn` alone
+#         and dashed in every memory column - so `st (%a0)` is not an
+#         instruction.
 #
-#     DBcc, WHICH IS NOT ON THIS PART AT ALL. Section 3.9, page 3-21, lists
-#         "decrement and branch" among the removed instructions and no table
-#         carries a row. The words `0101 cccc 11 001 rrr` are a 68000 DBcc slot
+#     DBcc, WHICH IS NOT ON THIS PART AT ALL. Section 2.6, "Instruction Set
+#         Summary", folio 2-15, lists "decrement and branch" among the
+#         instructions removed from the M68000 set and no table carries a
+#         row. The words `0101 cccc 11 001 rrr` are a 68000 DBcc slot
 #         and nothing here.
 #
 #       3 are TRAPF - `51fa`, `51fb` and `51fc`, measured from `trapf.w #1`,

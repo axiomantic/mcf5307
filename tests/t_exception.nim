@@ -4,20 +4,22 @@
 ## THE DOCUMENTS THIS FILE CITES ARE OUTSIDE THIS REPOSITORY and each is named
 ## in full, as `tests/t_control.nim` and `tests/t_logic.nim` name theirs.
 ##
-##   THE MCF5307 USER'S MANUAL: Motorola, "MCF5307 ColdFire Integrated
-##   Microprocessor User's Manual", order number MCF5307UM/AD, (c) 1998. Every
-##   citation below names its section, table and folio page.
+##   THE MCF5407 USER'S MANUAL: Motorola, "MCF5407 ColdFire Integrated
+##   Microprocessor User's Manual", order number MCF5407UM/D, Rev. 0.1,
+##   11/2001. Every citation below names its section, table and folio page.
 ##
 ##   THE COLDFIRE FAMILY PROGRAMMER'S REFERENCE MANUAL, Rev. 3 (Freescale).
-##   It is a SECOND oracle for the frame layout and it is the only one of the
-##   two that states why the vector table is 1 MByte aligned.
+##   It is a SECOND oracle for the frame layout. On the MCF5307 it was the only
+##   one of the two that stated WHY the vector table is 1 MByte aligned; the
+##   MCF5407 User's Manual states the mechanism itself, and BLOCK 4 records
+##   where.
 ##
 ## EVERY EXPECTED VALUE IN BLOCK 1 IS A HAND-DERIVED LITERAL, written beside
 ## the bit string it came from, and NOT a second call of the procedure under
 ## test.
 ##
 ## The frame layout, the vector assignments and the format encoding are facts
-## about Motorola silicon, taken from the MCF5307 User's Manual and the
+## about Motorola silicon, taken from the MCF5407 User's Manual and the
 ## ColdFire Family Programmer's Reference Manual.
 
 import std/strutils
@@ -76,10 +78,13 @@ template checkEq(got: uint32; want: uint32; label: string) =
 #
 # CFPRM Rev. 3 section 11.1.2, Figure 11-1, folio 11-4, prints the bit numbers
 # 31, 28, 27, 26, 25, 18, 17, 16, 15 and 0 over the fields
-# `FORMAT | FS[3-2] | VEC | FS[1-0] | Status Register`. MCF5307 User's Manual
-# section 3.4, Figure 3-7, folio 3-13, prints the same figure with the same
-# numbers. The two agree, and each expected value below is the bit string those
-# two figures define, written out and converted by hand.
+# `FORMAT | FS[3-2] | VEC | FS[1-0] | Status Register`. MCF5407 User's Manual
+# section 2.8.1, Figure 2-1, "Exception Stack Frame Form", folio 2-33, prints
+# the same figure with the same numbers. (Figure number 2-1 is reused in that
+# chapter - it is also "ColdFire Enhanced Pipeline" on folio 2-3 - so the title
+# and the folio, not the number, identify it.) The two agree, and each expected
+# value below is the bit string those two figures define, written out and
+# converted by hand.
 
 checkEq(frameFirstLongword(4'u32, fsWriteProtected, 2'u8, 0x2700'u32),
         0x48092700'u32,
@@ -137,9 +142,9 @@ checkEq(uint32(frameVector(0x7C0C2000'u32)), 3'u32,
 # ---------------------------------------------------------------------------
 # BLOCK 3. The vector numbers, and the offsets the manuals print beside them.
 #
-# MCF5307 User's Manual section 3.4, Table 3-1, "Exception Vector Assignments",
-# folios 3-12 and 3-13; CFPRM Rev. 3 section 11.1, Table 11-1, folios 11-2 and
-# 11-3. Both tables carry a VECTOR NUMBER column and a VECTOR OFFSET column,
+# MCF5407 User's Manual section 2.8, Table 2-19, "Exception Vector
+# Assignments", folio 2-32; CFPRM Rev. 3 section 11.1, Table 11-1, folios 11-2
+# and 11-3. Both tables carry a VECTOR NUMBER column and a VECTOR OFFSET column,
 #
 # THE TWO MANUALS' TABLES ARE NOT IDENTICAL and this file takes only rows where
 # they agree. Their disagreement is recorded in `src/mcf5307/exception.nim`.
@@ -167,8 +172,10 @@ checkEq(vectorAddress(0'u32, vecUserFirst), 0x100'u32,
 checkEq(vectorAddress(0'u32, vecUserLast), 0x3FC'u32,
         "vector offset: last user-defined vector at $3FC")
 
-# The table is 1024 bytes (User's Manual section 3.3, folio 3-12; CFPRM section
-# 11.1, folio 11-2) and its last longword is the one at $3FC.
+# The table is 1024 bytes (User's Manual section 2.8, folio 2-31, "ColdFire
+# processors support a 1024-byte vector table aligned on any 1-Mbyte address
+# boundary"; CFPRM section 11.1, folio 11-2) and its last longword is the one
+# at $3FC.
 checkEq(vectorTableBytes, 1024'u32, "vector table: 1024 bytes")
 checkEq(vectorAddress(0'u32, vecUserLast) + 4'u32, vectorTableBytes,
         "vector table: the $3FC longword is its last")
@@ -178,10 +185,13 @@ checkEq(vectorAddress(0'u32, vecUserLast) + 4'u32, vectorTableBytes,
 #
 # CFPRM Rev. 3 section 11.1, folio 11-2, verbatim: "VBR[19-0] are not
 # implemented and are assumed to be zero, forcing the vector table to be
-# aligned on a 0-modulo-1-Mbyte boundary." The User's Manual states the
-# CONSEQUENCE - section 3.3, folio 3-12, "aligned on any 1 MByte address
-# boundary" - and not the mechanism, so the low bits of VBR are pinned from the
-# CFPRM alone.
+# aligned on a 0-modulo-1-Mbyte boundary." THE MCF5407 USER'S MANUAL CARRIES
+# THE MECHANISM TOO, which the MCF5307 User's Manual did not: section 2.2.2.2,
+# "Vector Base Register (VBR)", folio 2-12, verbatim, "VBR[19-0] are not
+# implemented and are assumed to be zero, forcing the vector table to be
+# aligned on a 0-modulo-1-Mbyte boundary." So the low bits of VBR are pinned by
+# both documents rather than by the CFPRM alone, and the two agree word for
+# word.
 
 checkEq(vectorAddress(0x0010_0000'u32, vecAccessError), 0x0010_0008'u32,
         "VBR 0x00100000: access error at 0x00100008")
@@ -213,7 +223,7 @@ const
   trapHandler = 0x500'u32
   accessHandler = 0x600'u32
   addressHandler = 0x700'u32
-  frameBase = 0x7F8'u32     ## Table 3-2: 0x800-8, 0x801-9, 0x802-10, 0x803-11
+  frameBase = 0x7F8'u32     ## Table 2-20: 0x800-8, 0x801-9, 0x802-10, 0x803-11
   srReset = 0x2700'u32
   opTrap0 = 0x4E40'u16      ## `trap #0`, m68k-elf-as -mcpu=5307
   opRteWord = 0x4E73'u16    ## `rte`, the same assembler
@@ -280,15 +290,16 @@ proc mem32(address: uint32): uint32 =
 # The path is the published one - `mcf5307_create`, `mcf5307_reset`,
 # `mcf5307_exec` - and not an internal helper reached around the back.
 #
-# MCF5307 User's Manual section 3.4, Table 3-2, "Format Field Encoding", folio
-# 3-14, is what makes an A7 whose low two bits are 00, 01, 10 or 11 leave the
+# MCF5407 User's Manual section 2.8.1, Table 2-20, "Format Field Encoding",
+# folio 2-33, is what makes an A7 whose low two bits are 00, 01, 10 or 11 leave the
 # handler with A7-8, A7-9, A7-10 or A7-11 and a FORMAT of 4, 5, 6 or 7. All of
 # the A7 values below produce the same frame base, 0x7F8, and each subtraction
 # is written out above `frameBase`.
 #
-# THE STACKED PROGRAM COUNTER IS `execBase + 2`. Table 3-1 gives vectors 32 to
-# 47 a STACKED PROGRAM COUNTER of "Next", and its footnote defines Next as the
-# instruction after the one that caused the fault; `trap #0` is one word.
+# THE STACKED PROGRAM COUNTER IS `execBase + 2`. Table 2-19 gives vectors 32 to
+# 47 a STACKED PROGRAM COUNTER of "Next", and its footnote defines "next" as
+# "the PC of the instruction that immediately follows the instruction that
+# caused the fault"; `trap #0` is one word.
 
 proc runTrapAndRte(startSp: uint32; startSr: uint32;
                    expectFrame: uint32; label: string) =
@@ -325,9 +336,10 @@ proc runTrapAndRte(startSp: uint32; startSr: uint32;
   mcf5307_destroy(ctx)
 
 # The expected frames are hand-derived exactly as block 1's are. `FS` is 0000
-# for a TRAP - Table 3-3, folio 3-14, defines the field for access and address
-# errors only and writes zeros for every other exception - and the vector is
-# 32, which Table 3-1 gives to `trap #0`.
+# for a TRAP - Table 2-21, folio 2-33, defines the field for access and address
+# errors and for interrupted debug service routines only, and writes zeros for
+# every other exception - and the vector is 32, which Table 2-19 gives to
+# `trap #0`.
 #   0100 | 00 | 00100000 | 00 | 0010011100000000 -> 0x40802700
 runTrapAndRte(0x800'u32, srReset, 0x40802700'u32, "A7 0x800, FORMAT 4")
 runTrapAndRte(0x801'u32, srReset, 0x50802700'u32, "A7 0x801, FORMAT 5")
@@ -335,9 +347,9 @@ runTrapAndRte(0x802'u32, srReset, 0x60802700'u32, "A7 0x802, FORMAT 6")
 runTrapAndRte(0x803'u32, srReset, 0x70802700'u32, "A7 0x803, FORMAT 7")
 
 # THE STACKED STATUS REGISTER IS THE COPY TAKEN BEFORE THE EXCEPTION CHANGED
-# IT. Section 3.3, folio 3-11: the processor "makes an internal copy of the SR
-# and then enters supervisor mode by setting the S-bit and disabling trace mode
-# by clearing the T-bit". Entered with T set, the FRAME must carry T and the
+# IT. Section 2.8, folio 2-31: the processor "makes an internal copy of the SR
+# and then enters supervisor mode by setting SR[S] and disabling trace mode by
+# clearing SR[T]". Entered with T set, the FRAME must carry T and the
 # HANDLER must not.
 #   0100 | 00 | 00100000 | 00 | 1010011100000000 -> 0x4080A700
 runTrapAndRte(0x800'u32, 0xA700'u32, 0x4080A700'u32, "A7 0x800, T set")
@@ -345,7 +357,7 @@ runTrapAndRte(0x800'u32, 0xA700'u32, 0x4080A700'u32, "A7 0x800, T set")
 # ---------------------------------------------------------------------------
 # BLOCK 6. The access error and the address error are NOT the same exception.
 #
-# Table 3-1 gives vector 2 at $008 to the access error and vector 3 at $00C to
+# Table 2-19 gives vector 2 at $008 to the access error and vector 3 at $00C to
 # the address error, and the core must not conflate them. Neither has a
 # producer in the core yet, so both are raised through `takeException`, which is
 # the procedure every producer will call.

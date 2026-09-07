@@ -19,8 +19,9 @@
 ## bit. No constant here names the line-A or line-F vector, because a constant
 ## no caller reads is a destination that looks like a decision and is not one.
 ##
-## The manuals were read as page images: the MCF5307 User's Manual (1998) and
-## the ColdFire Family Programmer's Reference Manual, Rev. 3.
+## The manuals were read as page images: the MCF5407 User's Manual
+## (MCF5407UM/D, Rev. 0.1, 11/2001) and the ColdFire Family Programmer's
+## Reference Manual, Rev. 3.
 
 proc opcodeLine(word: uint16): uint16 =
   (word shr 12) and 0xF'u16

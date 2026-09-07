@@ -257,16 +257,21 @@ proc expectFault(o: Outcome; label: string) =
 # `SWAP Dn` - the halves of a data register exchange.
 #
 # The encoding and the operation are manual-grounded and measured.
-#   - MCF5307 User's Manual Table 3-7, "Instruction Set Summary", page 3-25,
-#     read as a rendered image: `SWAP | Dn | 16 | MSW of Dn <-> LSW of Dn`.
-#     (The row does not survive `pdftotext`; a text-extracted search for
-#     "SWAP" over the whole manual returns only the Table 3-12 timing row.)
-#   - Table 3-12, "One Operand Instruction Execution Times", page 3-27:
+#   - MCF5407 User's Manual Table 2-8, "User-Level Instruction Set Summary",
+#     folio 2-22, read as a rendered image: `SWAP | Dx | .W | MSW of Dx <-> LSW
+#     of Dx`. (The MCF5307's corresponding row, Table 3-7 on page 3-25, did not
+#     survive `pdftotext` at all; the MCF5407's does, and the rendered page was
+#     read anyway rather than trusting the extraction.)
+#   - Table 2-14, "One-Operand Instruction Execution Times", folio 2-27:
 #     `swap | Dx | Rn 1(0/0)` and a dash in every other column, which is
 #     this project's legality oracle for "a data register and nothing else".
-#   - Section 3.9, page 3-21, lists the removed instruction groups - BCD, bit
-#     field, logical rotate, decrement and branch, integer division, and
-#     integer multiply with a 64-bit result. SWAP is not among them.
+#   - Section 2.6, "Instruction Set Summary", folio 2-15, lists the removed
+#     instruction groups - BCD, bit field, logical rotate, decrement and
+#     branch, and integer multiply with a 64-bit result. SWAP is not among
+#     them. (Integer division was on the MCF5307's list and is NOT on this
+#     one: the Version 4 core has a hardware divide unit - section 2.1.2.2.3,
+#     folio 2-6 - and Table 2-15 times `divs.l`, `divu.l`, `rems.l` and
+#     `remu.l` at 35 cycles on folios 2-28 and 2-29.)
 #   - The pinned `m68k-elf-as -mcpu=5307` (GNU Binutils 2.47.20260726) emits
 #     `4840` for `swap %d0`, `4843` for `swap %d3` and `4847` for `swap %d7`.
 #   - The shipped G2 operating system uses it: its firmware image holds
@@ -278,37 +283,41 @@ proc expectFault(o: Outcome; label: string) =
 #     high word.
 #
 # The condition codes come from the generic rule and not from a per-instruction
-# one, because no per-instruction rule exists to read: Table 3-7's operation
-# column for SWAP reads `MSW of Dn <-> LSW of Dn` with no condition-code clause
-# and Table 3-12 gives timing only, and those two rows are the only places the
-# manual names SWAP. The generic rule is section 3.2.1.5, which opens at the
-# foot of page 3-8 with the CCR bit-field figure and does not end there; page
-# 3-9 defines each bit - N "Set if the most significant bit of the result is
-# set; otherwise cleared", Z "Set if the result equals zero; otherwise
-# cleared", V "Set if an arithmetic overflow occurs implying that the result
-# cannot be represented in the operand size; otherwise cleared", C "Set if a
-# carryout of the operand MSB occurs for an addition, or if a borrow occurs in
-# a subtraction; otherwise cleared", X "Set to the value of the C-bit for
-# arithmetic operations; otherwise not affected". Exchanging a register's
+# one, because no per-instruction rule exists to read: Table 2-8's operation
+# column for SWAP reads `MSW of Dx <-> LSW of Dx` with no condition-code clause
+# and Table 2-14 gives timing only, and those two rows are the only places the
+# manual names SWAP. The generic rule is section 2.2.1.5, whose Figure 2-4 puts
+# the CCR bit-field on folio 2-9; Table 2-1, "CCR Field Descriptions", on the
+# same folio defines each bit - N "Set if the msb of the result is set;
+# otherwise cleared", Z "Set if the result equals zero; otherwise cleared",
+# V "Set if an arithmetic overflow occurs, implying that the result cannot be
+# represented in the operand size; otherwise cleared", C "Set if a carry-out of
+# the data operand msb occurs for an addition or if a borrow occurs in a
+# subtraction; otherwise cleared", X "Assigned the value of the carry bit for
+# arithmetic operations; otherwise not affected or set to a specified
+# result". Exchanging a register's
 # halves is no addition, no subtraction and no arithmetic operation, so V and C
 # are cleared and X is untouched, and N and Z come from the result. That is
 # `setNzClearVc(ctx, result, 4)`, the rule this core already shares between
 # MOVE, MOVEQ, EXT, EXTB and the 32-bit multiply.
 #
-# Section 3.9 is not the oracle. Section 3.9's removed list is itself
-# unreliable - page 3-21 names "integer division" as removed while Table 3-7 on
-# page 3-23 carries DIVS and DIVU rows and Table 3-13 on page 3-28 times
-# `divs.w`, `divu.w`, `divs.l` and `divu.l`. And "reduced version" is a claim
-# about set membership, not per-instruction semantics: Table 3-7 gives ADD,
-# SUB, AND, OR, EOR and CMP an operand size of 32 alone where the 68000 has
-# `.b`, `.w` and `.l`, so retained instructions here are not semantically
-# identical to their 68000 originals. Section 3.9 is still good for what it is
-# used for above - SWAP not appearing in a removal list is evidence about
-# membership, which is the one kind of claim that list makes.
+# The removed list is not the oracle. On the MCF5307 that list was itself
+# unreliable - its page 3-21 named "integer division" as removed while its
+# Table 3-7 carried DIVS and DIVU rows and its Table 3-13 timed `divs.w`,
+# `divu.w`, `divs.l` and `divu.l`. The MCF5407's list, section 2.6 on folio
+# 2-15, drops "integer division" and so no longer contradicts its own tables.
+# It is still only a claim about set membership, not about per-instruction
+# semantics: Table 2-8, folio 2-19 onwards, gives ADD, SUB, AND, OR and EOR an
+# operand size of `.L` alone where the 68000 has `.b`, `.w` and `.l`, so
+# retained instructions here are not semantically identical to their 68000
+# originals. (CMP is no longer in that list of five - this part restores its
+# byte and word forms; see Table 2-7, folio 2-19.) The removed list is still
+# good for what it is used for above: SWAP not appearing in it is evidence
+# about membership, which is the one kind of claim that list makes.
 #
-# What section 3.2.1.5 does not give is the width. It says "the result" and
-# never states how wide that result is, while Table 3-7's operand size column
-# for SWAP says 16. A reader who takes the flags from the operand size sets N
+# What section 2.2.1.5 does not give is the width. It says "the result" and
+# never states how wide that result is, while Table 2-8's operand size column
+# for SWAP says `.W`. A reader who takes the flags from the operand size sets N
 # from bit 15 and Z from the low half; this core takes the whole 32-bit
 # register, because the register is what the instruction writes. The two
 # readings disagree on any value whose halves differ in their top bit, and that
@@ -384,21 +393,24 @@ block:
 # The manual puts `(xxx).W` in the control category, and each instruction is
 # settled by its own row rather than by that category alone - LEA and PEA are
 # legal at `(xxx).W` and MOVEM is not:
-#   - Table 3-5, "Effective Addressing Modes and Categories", page 3-21:
-#     "Absolute Data Addressing / Short", syntax `(xxx).W`, mode field 111,
-#     register field 000, carries an `x` under Data, Memory and Control.
-#   - Table 3-13, "Two Operand Instruction Execution Times", page 3-28: the
-#     `lea | <ea>,Ax` row is timed 1(0/0) under `xxx.wl` and dashed under
-#     `Rn`, `(An)+`, `-(An)` and `#xxx`.
-#   - Table 3-14, "Miscellaneous Instruction Execution Times", page 3-29: the
-#     `pea | <ea>` row is timed 2(0/1) under `xxx.wl`. PEA has its own row in
-#     its own table and does not have to borrow LEA's.
-#   - Page 3-26 defines the column: 'The nomenclature "xxx.wl" refers to both
-#     forms of absolute addressing, xxx.w and xxx.l.' So a time under
-#     `xxx.wl` is a time under `(xxx).W`.
-#   - Table 3-14 again, and this is what keeps MOVEM out: the `movem.l`
+#   - Table 2-5, "ColdFire Effective Addressing Modes", folio 2-15:
+#     "Absolute data addressing / Short", syntax `(xxx).W`, mode field 111,
+#     register field 000, carries an `X` under Data, Memory and Control.
+#   - Table 2-15, "Two-Operand Instruction Execution Times", folio 2-28: the
+#     `lea | <ea>,Ax` row is timed 1(0/0) under `(xxx).wl` and dashed under
+#     `Rn`, `(An)+`, `-(An)` and `#<xxx>`.
+#   - Table 2-16, "Miscellaneous Instruction Execution Times", folio 2-29: the
+#     `pea | <ea>` row is timed 1(0/1) under `(xxx).wl`. PEA has its own row in
+#     its own table and does not have to borrow LEA's. (The MCF5307 timed the
+#     same cell 2(0/1); the V4 figure is 1(0/1), and 2(0/1) is the indexed
+#     column. This file asserts no timing, so nothing below moves with it.)
+#   - The NOTE in section 2.7.1, folio 2-25, defines the column: 'The
+#     nomenclature "(xxx).wl" refers to both forms of absolute addressing,
+#     (xxx).w and (xxx).l.' So a time under `(xxx).wl` is a time under
+#     `(xxx).W`.
+#   - Table 2-16 again, and this is what keeps MOVEM out: the `movem.l`
 #     rows are timed under `(An)` and `(d16,An)` only, and dashed under
-#     `xxx.wl`. Table 3-13's dash is this project's legality oracle, and here
+#     `(xxx).wl`. Table 2-15's dash is this project's legality oracle, and here
 #     it points the other way from LEA's and PEA's times.
 #
 # The pinned `m68k-elf-as -mcpu=5307` agrees: it accepts
@@ -497,7 +509,7 @@ block:
     "movem.l to (d8,An,Xi) traps")
 
   # The positive control. `48d0 0003` is `movem.l %d0-%d1,(%a0)`, which
-  # the assembler does emit and which Table 3-14 times under `(An)`. A0 points
+  # the assembler does emit and which Table 2-16 times under `(An)`. A0 points
   # into the scratch area, well clear of the instruction words and the stack.
   expectDAll(runIns([0x48D0'u16, 0x0003'u16],
                     d = [0xAABBCCDD'u32, 0x11223344, 0, 0, 0, 0, 0, 0],

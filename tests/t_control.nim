@@ -1,10 +1,10 @@
 ## `t_control` - control flow and comparison.
 ##
-## The MCF5307 User's Manual is the document every table and page cited below
-## refers to: Motorola, "MCF5307 ColdFire Integrated Microprocessor User's
-## Manual", order number MCF5307UM/AD, (c) 1998. It is not in this repository
-## and may not be copied into it, which is why every citation below names its
-## table, page and row instead of quoting.
+## The MCF5407 User's Manual is the document every table and folio cited below
+## refers to: Motorola, "MCF5407 ColdFire Integrated Microprocessor User's
+## Manual", order number MCF5407UM/D, Rev. 0.1, 11/2001. It is not in this
+## repository and may not be copied into it, which is why every citation below
+## names its table, folio and row instead of quoting.
 ##
 ## WHY THIS FILE EXISTS BESIDE `mcf5307_conformance_control`. That corpus is
 ## POSITIVE cases: encodings this part has, run against an expected state. A
@@ -208,8 +208,10 @@ template checkMask(got: bool; want: bool; label: string) =
   checkMaskImpl(site, got, want, label)
 # The dirty condition codes an instruction of this group must carry through
 # untouched. NOP, BRA, BSR, Bcc, JMP, JSR and Scc write no flag at all -
-# MCF5307 User's Manual Table 3-7, "Instruction Set Summary", pages 3-23 and
-# 3-25, gives each of them an OPERATION column that names no condition code -
+# MCF5407 User's Manual Table 2-8, "User-Level Instruction Set Summary",
+# folios 2-20 (BRA, BSR, Bcc, JMP, JSR) and 2-22 (NOP, Scc), gives each of them
+# an OPERATION column that names no condition code, and the BRA page of section
+# 2.9, folio 2-38, says outright "Condition codes: Not affected" -
 # so every one of them is entered with all five set and asserted unchanged.
 const allDirty = srBase or ccrN or ccrZ or ccrV or ccrC or ccrX
 
@@ -222,8 +224,9 @@ const trapA: array[8, uint32] = [dirtyA, 0, 0, 0, 0, 0, 0, 0]
 #
 # Bit k of each vector is the condition's answer when the condition-code bits
 # hold the value k - C at bit 0, V at bit 1, Z at bit 2, N at bit 3, which is
-# the layout section 3.2.1.5 of the MCF5307 User's Manual prints on page 3-8
-# and the layout `machine.nim`'s `ccrC` .. `ccrX` name.
+# the layout section 2.2.1.5 of the MCF5407 User's Manual prints in Figure 2-4,
+# "Condition Code Register (CCR)", on folio 2-9, and the layout
+# `machine.nim`'s `ccrC` .. `ccrX` name.
 #
 # These are literals and not a second copy of the implementation's expression.
 # A test that re-derived `(not C) and (not Z)` beside the core's own
@@ -234,11 +237,14 @@ const trapA: array[8, uint32] = [dirtyA, 0, 0, 0, 0, 0, 0, 0]
 # hand.
 #
 # WHAT THE MANUAL ON THIS MACHINE DOES AND DOES NOT SETTLE. It gives the
-# condition-code bits (section 3.2.1.5, page 3-8) and it names the wildcard
-# `cc` as "Logical Condition (example: NE for not equal)" in Table 3-6, whose
-# `cc` row is on page 3-21 where the table begins, and it prints NO table of
-# the sixteen conditions and their tests anywhere. The four-bit ENCODING of
-# each is measured rather than assumed:
+# condition-code bits (section 2.2.1.5, Figure 2-4, folio 2-9) and it names the
+# wildcard `cc` as "Logical condition (example: NE for not equal)" in
+# Table 2-6, "Notational Conventions", whose `cc` row is on folio 2-16 where
+# the table begins. The Bcc page of section 2.9, folio 2-37, prints a grid of
+# fourteen condition MNEMONICS - CC(HI), CS(LO), EQ, GE, GT, HI, LE, LS, LT,
+# MI, NE, PL, VC, VS - against their English names, and no more: it gives no
+# boolean TEST for any of them, no T or F row, and no four-bit encoding. The
+# four-bit ENCODING of each is therefore measured rather than assumed:
 # every mnemonic below was assembled by `m68k-elf-as -mcpu=5307`, which put
 # `bhi` at 0x62, `bls` at 0x63, `bcc` at 0x64, `bcs` at 0x65, `bne` at 0x66,
 # `beq` at 0x67, `bvc` at 0x68, `bvs` at 0x69, `bpl` at 0x6a, `bmi` at 0x6b,
@@ -312,8 +318,8 @@ block:
 # ---------------------------------------------------------------------------
 # Block 2. The sixteen conditions, through `Scc`.
 #
-# `0101 cccc 11 000 rrr` writes ones or zeros into the LOW BYTE of Dn - Table
-# 3-7, page 3-25, gives `Scc Dx` an OPERAND SIZE of 8 - so the register is
+# `0101 cccc 11 000 rrr` writes ones or zeros into the LOW BYTE of Dn -
+# Table 2-8, folio 2-22, gives `Scc Dx` an OPERAND SIZE of `.B` - so the register is
 # seeded with `DIRTY_D` and the answer is read off its low byte.
 #
 # BOTH TABLES ARE RUN THROUGH THE SAME SIXTEEN VECTORS ON PURPOSE. `Bcc` and
@@ -384,8 +390,23 @@ block:
 block:
   # `4ac0 | <ea>` is TAS and not a `TST` whose size field is 11. Measured:
   # `4ad0` decodes as `tas %a0@` on `m68k-elf-objdump -m m68k:68020` and as
-  # `.short 0x4ad0` on `-m m68k:5307`. Manual section 3.9, page 3-21, lists the
-  # removed instructions and Table 3-12 has no `tas` row at all. If `TST` were
+  # `.short 0x4ad0` on `-m m68k:5307`. On the MCF5307's V3 core TAS is absent:
+  # its section 3.9, page 3-21, lists the removed instructions and its
+  # Table 3-12 has no `tas` row.
+  #
+  # THE MCF5407 HAS TAS AND THESE TWO EXPECTATIONS ARE WRONG FOR IT. The
+  # MCF5407 User's Manual states the presence positively three times:
+  # Table 2-7, "ColdFire ISA_B Extension Summary", folio 2-19, lists "Test and
+  # Set an Operand / tas.b"; Table 2-8, folio 2-22, carries the row
+  # `TAS | <ea>x | .B | Set CCR; 1 -> Bit 7 of <ea>x`; and Table 2-14,
+  # "One-Operand Instruction Execution Times", folio 2-27, carries a `tas <ea>`
+  # row timed in every addressing-mode column but `#xxx`. The per-core presence
+  # table on the TAS page, folio 2-51, reads `V2, V3 Core - No; V4 Core - Yes`.
+  # ONLY THE FIRST OF THE TWO EXPECTATIONS IS WRONG. The TAS page's own
+  # addressing-mode table, folio 2-51, dashes `Dx` and `Ax`, so `4ac0`
+  # (`tas %d0`) stays illegal on the V4 while `4ad0` (`tas (%a0)`) does not.
+  # Both expected values are left unchanged, so the `4ad0` case goes red when
+  # TAS is decoded rather than being silently re-aimed. If `TST` were
   # decoded on `word and 0xFF00 == 0x4a00` without a size guard, this word
   # would become a `TST` of size zero.
   expectDecode(0x4AD0'u16, opIllegal, "tas (%a0) (4ad0) is not a TST")
@@ -421,9 +442,10 @@ block:
   # Three words inside `0101 cccc 11 <ea>` are TRAPF and not Scc, and TRAPF is
   # not implemented. Measured with the pinned assembler under `-mcpu=5307`:
   # `trapf` assembles to `51fc`, `trapf.w #1` to `51fa 0001` and `trapf.l #1`
-  # to `51fb 0000 0001`. Table 3-7, page 3-25, carries the row
-  # `TRAPF | none/#<data> | none,16,32 | PC+2->PC; PC+4->PC; PC+6->PC`, and
-  # Table 3-14, page 3-29, gives `trapf`, `trapf.w` and `trapf.l` a row each.
+  # to `51fb 0000 0001`. Table 2-8, folio 2-22, carries the row
+  # `TRAPF | None/#<data> | Unsized,.W,.L | PC+2->PC; PC+4->PC; PC+6->PC`, and
+  # Table 2-16, "Miscellaneous Instruction Execution Times", folio 2-29, gives
+  # `trapf`, `trapf.w` and `trapf.l` a row each.
   #
   # It is exactly three words and not a condition family. The same assembler
   # rejects `trapt`, `trapeq`, `trapne` and `traphi` under `-mcpu=5307` -
@@ -447,10 +469,18 @@ block:
 # ---------------------------------------------------------------------------
 # Block 5. The 32-bit displacement.
 #
-# `Bcc <label>`, `BRA <label>` and `BSR <label>` carry an operand size of
-# "8,16" in Table 3-7, page 3-23, and no third value. An 8-bit displacement of
-# 0xff is the marker for a 32-bit displacement, which is ISA_B, and this part
-# does not have it.
+# `Bcc <label>`, `BRA <label>` and `BSR <label>` carried an operand size of
+# "8,16" in the MCF5307's Table 3-7, page 3-23, and no third value there. An
+# 8-bit displacement of 0xff is the marker for a 32-bit displacement, which is
+# ISA_B.
+#
+# THE MCF5407 HAS ISA_B AND THIS BLOCK'S EXPECTATION IS WRONG FOR IT. MCF5407
+# User's Manual Table 2-7, folio 2-19, lists `bra.l`, `bcc.l` and `bsr.l`;
+# Table 2-8, folio 2-20, gives all three the operand sizes `.B,.W,.L`; and the
+# per-core presence tables on the BRA and BSR pages, folios 2-38 and 2-39, read
+# `Operand sizes supported: V2, V3 Core .b, .w; V4 Core .b, .w, .l`. The
+# expected values are left unchanged so the cases go red when the longword form
+# is decoded.
 #
 # The pinned assembler agrees and its disassembler does not, and both
 # measurements are named here because the second is a laxity that reads like
@@ -510,16 +540,17 @@ block:
 # as an instruction on neither `-m m68k:5307` nor `-m m68k:68020`.
 
 block:
-  # Scc takes a data register and nothing else. Table 3-12, page 3-27: the
+  # Scc takes a data register and nothing else. Table 2-14, folio 2-27: the
   # `scc Dx` row is timed under `Rn` alone and dashed under all seven other
   # columns. `m68k-elf-as -mcpu=5307` rejects `scc (%a0)`, `scc %a0` and
   # `scc 0x1234.w`.
   #
   # `51c8` is the 68000 `DBcc` slot. `0101 cccc 11 001 rrr` is
   # `DBcc Dn,<label>` on a 68000 and no
-  # instruction at all on this part: section 3.9, which begins on page 3-21,
-  # lists "decrement and branch" among the removed instructions, no table in
-  # the manual carries a DBcc row, and `m68k-elf-as -mcpu=5307` rejects
+  # instruction at all on this part: section 2.6, "Instruction Set Summary",
+  # folio 2-15, lists "decrement and branch" among the instructions removed
+  # from the M68000 set, no table in the manual carries a DBcc row, and
+  # `m68k-elf-as -mcpu=5307` rejects
   # `dbra %d0,.` and `dbf %d0,.`.
   # `m68k-elf-objdump -m m68k:5307` prints `51c8` as `sf %d0` - it ignores the
   # mode field entirely - while `-m m68k:68020` reads the same two words as
@@ -546,8 +577,9 @@ block:
     dirtyD, dirtyA, stackBase, allDirty,
     "seq (xxx).w (57f8) traps: an Scc destination is a data register")
 
-  # JMP and JSR take control addressing. Table 3-15, page 3-30, dashes `Rn`,
-  # `(An)+`, `-(An)` and `#xxx` for both.
+  # JMP and JSR take control addressing. Table 2-17, "Branch Instruction
+  # Execution Times", folio 2-30, dashes `Rn`, `(An)+`, `-(An)` and `#xxx` for
+  # both.
   expectTrap(runIns([0x4EC0'u16], d = trapD, a = trapA, sr = allDirty),
     dirtyD, dirtyA, stackBase, allDirty,
     "jmp %d0 (4ec0) traps: a data register is not a control operand")
@@ -571,8 +603,9 @@ block:
     dirtyD, dirtyA, stackBase, allDirty,
     "jsr (%a0)+ (4e98) traps: postincrement is not a control operand")
 
-  # TST TAKES EVERY MODE - Table 3-12, page 3-27, has no dash in any of its
-  # three rows - EXCEPT that a BYTE operand may not be an address register.
+  # TST TAKES EVERY MODE - Table 2-14, folio 2-27, has no dash in any of its
+  # three `tst` rows - EXCEPT that a BYTE operand may not be an address
+  # register.
   # `m68k-elf-as -mcpu=5307` accepts `tst.w %a0` and `tst.l %a0` and REJECTS
   # `tst.b %a0`. That is a rule about the SIZE and not about the mask.
   expectTrap(runIns([0x4A08'u16], d = trapD, a = trapA, sr = allDirty),
@@ -587,10 +620,18 @@ block:
     check(got == want, "tst.w %a0 (4a48) runs: the word form reaches An",
       $got, $want)
 
-  # CMP, CMPA and CMPI are 32-bit and there is no other size. Table 3-7, page
-  # 3-23, gives all three an operand size column of `32` alone, and
-  # `m68k-elf-as -mcpu=5307` rejects `cmp.b`, `cmp.w`, `cmpa.w`, `cmpi.b` and
-  # `cmpi.w`.
+  # CMP, CMPA and CMPI were 32-bit and had no other size on the MCF5307: its
+  # Table 3-7, page 3-23, gave all three an operand size column of `32` alone,
+  # and `m68k-elf-as -mcpu=5307` rejects `cmp.b`, `cmp.w`, `cmpa.w`, `cmpi.b`
+  # and `cmpi.w`.
+  #
+  # THE MCF5407 ADDS THE BYTE AND WORD FORMS AND THESE EXPECTATIONS ARE WRONG
+  # FOR IT. MCF5407 User's Manual Table 2-7, "ColdFire ISA_B Extension
+  # Summary", folio 2-19, lists `cmp.{b,w,l}`, `cmpa.w` and `cmpi.{b,w}`;
+  # Table 2-8, folio 2-20, gives CMP and CMPI `.B,.W,.L` and CMPA `.W,.L`; and
+  # Table 2-15 carries `cmp.b`, `cmp.w`, `cmpi.b` and `cmpi.w` rows on folio
+  # 2-28. The expected values are left unchanged so the cases go red when the
+  # byte and word forms are decoded.
   #
   # `b2c0` is CMPA.W and the disassembler settles it. `m68k-elf-objdump
   # -m m68k:68020` prints `b2c0` as `cmpaw %d0,%a1`; `-m m68k:5307` prints
@@ -613,8 +654,9 @@ block:
     dirtyD, dirtyA, stackBase, allDirty,
     "cmpi.w #5,%d0 (0c40) traps: CMPI on this part is 32-bit")
 
-  # The CMPI destination is a data register and nothing else. Table 3-13, page
-  # 3-28: the `cmpi.l #imm,Dx` row is timed under `Rn` alone. `m68k-elf-as
+  # The CMPI destination is a data register and nothing else. Table 2-15,
+  # "Two-Operand Instruction Execution Times", folio 2-28: the
+  # `cmpi.l #imm,Dx` row is timed under `Rn` alone. `m68k-elf-as
   # -mcpu=5307` rejects `cmpi.l #5,(%a0)` and `cmpi.l #5,%a0`.
   expectTrap(runIns([0x0C90'u16, 0x0000'u16, 0x0005'u16], d = trapD,
                     a = trapA, sr = allDirty),
@@ -628,10 +670,11 @@ block:
 # ---------------------------------------------------------------------------
 # Block 7. The `RTE` format field.
 #
-# MCF5307 User's Manual section 3.5.7, "RTE and Format Error Exceptions", page
-# 3-16: "any attempted execution of an RTE where the format is not equal to
-# {4,5,6,7} generates a format error". Those four values are exactly the rows
-# of Table 3-2 on page 3-14.
+# MCF5407 User's Manual section 2.8.2, Table 2-22, "MCF5407 Exceptions", the
+# "RTE and Format Error Exceptions" row, folio 2-35: "any attempted execution
+# of an RTE where the format is not equal to {4,5,6,7} generates a format
+# error". Those four values are exactly the rows of Table 2-20, "Format Field
+# Encoding", on folio 2-33.
 #
 # THIS CORE TRAPS RATHER THAN TAKING THE FORMAT-ERROR VECTOR, AND THAT IS
 # UNCERTAINTY 4 IN `control.nim`'s HEADER. Vector 14 is a real exception on
@@ -665,7 +708,7 @@ block:
 # way, and both are executed here instead.
 
 block:
-  # `cmp.l #imm,Dx` in the line-1011 immediate form. Table 3-13, page 3-28,
+  # `cmp.l #imm,Dx` in the line-1011 immediate form. Table 2-15, folio 2-28,
   # gives the `cmp.l <ea>,Rx` row a time of `1(0/0)` under `#xxx`, so the form
   # exists - but `m68k-elf-as -mcpu=5307` assembles `cmp.l #5,%d1` as the CMPI
   # encoding `0c81 0000 0005` and never emits `b2bc`. The word here is built
@@ -700,9 +743,11 @@ block:
 # Block 9. The masks themselves.
 #
 # `eaJumpTarget` is
-# CONTROL ADDRESSING INCLUDING `(xxx).W`: Table 3-5, page 3-21, marks the
-# absolute short row CONTROL, and page 3-26 says the timing tables' `xxx.wl`
-# column "refers to both forms of absolute addressing".
+# CONTROL ADDRESSING INCLUDING `(xxx).W`: Table 2-5, "ColdFire Effective
+# Addressing Modes", folio 2-15, marks the absolute short row CONTROL, and the
+# NOTE in section 2.7.1, folio 2-25, says the timing tables' nomenclature
+# "(xxx).wl" "refers to both forms of absolute addressing, (xxx).w and
+# (xxx).l".
 #
 # `(xxx).W` separates this class from MOVEM's. `m68k-elf-as -mcpu=5307`
 # accepts `lea 0x1234.w,%a0`, `pea 0x1234.w`,
@@ -744,8 +789,9 @@ block:
 
 block:
   # TST and CMP read, so both admit the PC-relative pair and the immediate,
-  # and both admit an address register: Table 3-12's three `tst` rows and
-  # Table 3-13's `cmp.l <ea>,Rx` row carry a time in every column.
+  # and both admit an address register: Table 2-14's three `tst` rows (folio
+  # 2-27) and Table 2-15's `cmp.l <ea>,Rx` row (folio 2-28) carry a time in
+  # every column.
   for (field, name) in [(0x00'u16, "%d0"), (0x08'u16, "%a0"),
                         (0x10'u16, "(%a0)"), (0x18'u16, "(%a0)+"),
                         (0x20'u16, "-(%a0)"), (0x28'u16, "(d16,%a0)"),
@@ -802,8 +848,9 @@ block:
     $got, $want)
 
 block:
-  # `trap #0` takes vector 32 and writes a two-longword frame. Table 3-1, page
-  # 3-13, and Figure 3-7, page 3-13. The vector longword is seeded at 4 * 32.
+  # `trap #0` takes vector 32 and writes a two-longword frame. Table 2-19,
+  # "Exception Vector Assignments", folio 2-32, and Figure 2-1, "Exception
+  # Stack Frame Form", folio 2-33. The vector longword is seeded at 4 * 32.
   let o = runIns([0x4E40'u16], d = trapD,
                  a = [dirtyA, 0, 0, 0, 0, 0, 0, stackBase], sr = allDirty,
                  mem = @[(0x80'u32, 0x00000400'u32),
@@ -823,9 +870,10 @@ block:
 # ---------------------------------------------------------------------------
 # BLOCK 11. THE ODD CONTROL-TRANSFER TARGET.
 #
-# "Any attempted execution transferring control to an odd instruction address
-# (i.e., if bit 0 of the target address is set) results in an address error
-# exception" - MCF5307 User's Manual, section 3.5.2, printed page 3-15. The
+# An address error is "Caused by an attempted execution transferring control to
+# an odd instruction address (that is, if bit 0 of the target address is set)"
+# - MCF5407 User's Manual section 2.8.2, Table 2-22, the Address Error row,
+# folio 2-34. The
 # ColdFire Family Programmer's Reference Manual, Rev. 3 does NOT answer this:
 # its section 11.1.3 names a table of processor exceptions that the revision
 # does not contain, so the vector assignment is all it carries.
@@ -842,13 +890,13 @@ block:
 # 6's branch rows - so the pair is a known positive beside each negative.
 #
 # THE STACKED PROGRAM COUNTER IS THE TRANSFERRING INSTRUCTION'S OWN ADDRESS.
-# Table 3-1 marks vector 3 `Fault`, and "fault refers to the PC of the
-# instruction that caused the exception".
+# Table 2-19, folio 2-32, marks vector 3 `Fault`, and its footnote reads "The
+# term 'fault' refers to the PC of the instruction that caused the exception".
 #
-# THE FAULT STATUS IS `0100`, "error on instruction fetch", the one code of
-# Table 3-3 that names the access this exception refuses to make. FS[3-2] and
-# FS[1-0] are not adjacent in the frame word, so `0100` reaches it as
-# `1 shl 26` alone.
+# THE FAULT STATUS IS `0100`, "Error on instruction fetch", the one code of
+# Table 2-21, folio 2-33, that names the access this exception refuses to make.
+# FS[3-2] and FS[1-0] are not adjacent in the frame word, so `0100` reaches it
+# as `1 shl 26` alone.
 #
 # THE CHECK IS PINNED BY MUTATION AND NOT BY THIS PARAGRAPH.
 # `tests/t_claims.cmake` registers
@@ -915,7 +963,17 @@ block:
 block:
   # `rts`. The odd address comes off the stack, and the pop has already moved
   # A7 when the transfer is refused - so the frame lands eight bytes below the
-  # POPPED pointer and not below the one the instruction started with.
+  # POPPED pointer and not below the one the instruction started with. That
+  # places the frame over the stack slot the return PC came from.
+  #
+  # THAT IS V2/V3 BEHAVIOUR AND THE MCF5407 REVERSES IT, SO THIS EXPECTED FRAME
+  # BASE IS WRONG FOR THIS PART. MCF5407 User's Manual section 2.8.2,
+  # Table 2-22, the Address Error row, folio 2-34: "If an address error occurs
+  # on an RTS instruction, the Version 4 processor preserves the original
+  # return PC and writes the exception stack frame above this value. On Version
+  # 2 and 3 processors, the faulting return PC is overwritten by the address
+  # error stack frame." The literal is left unchanged so the case goes red when
+  # the V4 rule is implemented.
   let o = runIns([0x4E75'u16],
                  a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase - 4'u32],
                  sr = allDirty,
@@ -926,7 +984,11 @@ block:
 
 block:
   # `bsr.b`. The return address is pushed BEFORE the transfer, so the push
-  # stands and the frame goes below it. The pushed value is read back here
+  # stands and the frame goes below it. The MCF5407 states the equivalent
+  # ordering for JSR outright - Table 2-22, the Address Error row, folio 2-34,
+  # "the Version 4 processor first pushes the return address onto the stack and
+  # then calculates the target address" - which is the order this case pins.
+  # The pushed value is read back here
   # rather than left to the frame assertion: a BSR that skipped its push and
   # then faulted would put the frame at the same place.
   let o = runIns([0x6101'u16], a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase],

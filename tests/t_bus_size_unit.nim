@@ -42,7 +42,9 @@
 ## red.
 ##
 ## The MOVE encodings below are facts about Motorola silicon, from the ColdFire
-## Family Programmer's Reference Manual and the MCF5307 User's Manual.
+## Family Programmer's Reference Manual and Motorola, "MCF5407 ColdFire
+## Integrated Microprocessor User's Manual", order number MCF5407UM/D,
+## Rev. 0.1, 11/2001.
 
 import std/algorithm
 import std/strutils

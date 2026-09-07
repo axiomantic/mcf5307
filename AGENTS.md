@@ -1,6 +1,6 @@
 # mcf5307 — agent instructions
 
-An emulator for the Freescale MCF5307 ColdFire processor, and a model of the
+An emulator for the Motorola MCF5407 ColdFire processor, and a model of the
 Philips ISP1181 USB device controller. The core is written in Nim. CMake drives
 the Nim compiler and produces a static library plus a C header for a C or C++
 caller.
@@ -195,6 +195,64 @@ The Nim compile step uses `-d:release` and `--panics:on`. It does **not** use
 run-time checks stay in the release build deliberately: a check that stops the
 process is better than a check that lets the library return a wrong result.
 
+## Hardware documentation — get these
+
+Two ColdFire user's manuals are read in this project, and both stay.
+
+| Document | Designation | Where to get it |
+|---|---|---|
+| MCF5407 ColdFire Integrated Microprocessor User's Manual | `MCF5407UM/D`, Rev. 0.1, 11/2001, 546 pages | `axiomantic/nmg2-artifacts`, `datasheets/MCF5407UM.pdf`. The pinned copy was obtained from `https://www.farnell.com/datasheets/2291337.pdf`. |
+| MCF5307 ColdFire Integrated Microprocessor User's Manual | `MCF5307UM/AD`, 1998, 456 pages, scanned paper | `axiomantic/nmg2-artifacts`, `datasheets/MCF5307UM.pdf`. Obtain it by its designation if you cannot reach that repository. |
+| ColdFire Family Programmer's Reference Manual | `CFPRM`, Rev. 3 | No repository of this project holds it. Obtain it from the vendor archive by its designation. |
+
+`docs/sources.md` pins the SHA-256 of each copy and is the register these rows
+summarise. **Check the hash before you take a value out of a PDF.** The register
+pins an edition, and a re-issued PDF under the same title is a different
+document.
+
+**The MCF5407 manual is the authority for the part.** Its numbering is not the
+MCF5307's: the ColdFire core is Chapter 2 and not Chapter 3, the interrupt
+controller registers are in Chapter 9 and not Chapter 7, level-7 interrupt
+semantics are in section 18.7 and not 7.6, and chip selects are section 10.4 and
+not 9.4. Re-point a citation by finding the fact in the MCF5407 manual and
+reading the folio off the page that carries it. Never re-point one by editing
+the part number in front of a table number that has also moved.
+
+**The MCF5307 manual is still read, and a header may still cite it.** Where a
+fact is common to both parts and only the older manual prints it, that manual is
+the source and the citation says so in the same sentence.
+
+**`pdftotext` extraction of both manuals is lossy inside instruction tables.** A
+grep that returns nothing is not evidence of absence. Read the per-core presence
+table under the instruction's description in the MCF5407 manual's section 2.9,
+or render the page.
+
+## Revision B opcodes are deliberately not implemented
+
+The MCF5407's V4 core implements Revision B of the ColdFire instruction set,
+which adds six opcodes over Revision A: `INTOUCH`, `MOV3Q.L`, `MVS.{B,W}`,
+`MVZ.{B,W}`, `SATS.L` and `TAS.B`. MCF5407 User's Manual Table 2-7, "ColdFire
+ISA_B Extension Summary", folio 2-19, lists them, and section 2.9, folio 2-36
+onward, describes each one with a per-core presence table. Revision B also
+widens existing instructions: a long displacement for `Bcc`, `BRA` and `BSR`, a
+byte and a word form of `CMP` and `CMPI`, a word form of `CMPA`, and byte and
+word `MOVE #<data>,d16(Ax)`.
+
+**None of the six is implemented, and that is a decision rather than an
+oversight.** MEASURED, in an earlier pass over the emulated firmware image and
+not re-measured here: its code regions hold zero Revision B instructions. Nothing
+the emulator has to run reaches one, so implementing them would add decode paths
+that no consumer and no test in this tree can exercise.
+
+What the decision does not cover: a firmware image other than the one measured,
+and a consumer that assembles its own code for the part. Either reopens it.
+Re-measure before writing a decoder for any of the six.
+
+The conformance corpus is assembled with `-mcpu=5307`, which is Revision A, so
+it cannot hold a Revision B case. That flag is what keeps the corpus and the
+implemented subset in agreement, and it is the thing to change first if the
+decision is reopened.
+
 ## The clean-room rule
 
 This repository is MIT, and every contribution obeys a clean-room rule with
@@ -211,8 +269,10 @@ respect to GPL and LGPL code.
   decoder or a peripheral model while reading another project's source as a
   template or a decode specification.
 - **Implement from** the Motorola manual set — the ColdFire Family
-  Programmer's Reference Manual, the MCF5307 User's Manual, the 1997 ColdFire
-  PRM — published datasheets, and this project's own measurements.
+  Programmer's Reference Manual, the MCF5407 User's Manual, the MCF5307 User's
+  Manual where a fact is common to both parts and only the older manual prints
+  it, the 1997 ColdFire PRM — published datasheets, and this project's own
+  measurements.
 
 ColdFire condition codes differ from the 68000. Check the ColdFire PRM, not a
 68000 reference.
@@ -273,7 +333,7 @@ asserts no exclusivity and no sequence. What goes is ONLY, FIRST, NEXT, and
 whole of the rule.
 
 **A DATASHEET CITATION IS NOT A PLAN REFERENCE, and it stays.** "CFPRM Rev. 3
-§2.2.11", "MCF5307 User's Manual §9.4", an ISP1181 register table — these name a
+§2.2.11", "MCF5407 User's Manual §10.4", an ISP1181 register table — these name a
 primary source the reader needs to check the line beside them, they belong to a
 published document that does not renumber under us, and this tree's prose is
 mostly hardware explanation of exactly that kind. **Do not cull them by

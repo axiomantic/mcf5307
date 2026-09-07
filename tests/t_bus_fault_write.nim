@@ -29,6 +29,11 @@
 ## string or the manual row it came from, and not a second call of the
 ## procedure under test. Every opcode is the output of `m68k-elf-as -mcpu=5307`
 ## on the mnemonic printed beside it.
+##
+## The manual this file cites is Motorola, "MCF5407 ColdFire Integrated
+## Microprocessor User's Manual", order number MCF5407UM/D, Rev. 0.1, 11/2001,
+## except where a citation names the MCF5307 User's Manual (order number
+## MCF5307UM/AD, (c) 1998) and says why.
 
 import std/strutils
 
@@ -185,11 +190,12 @@ proc runWrite(opcode: uint16; at: uint32; a0Init: uint32;
 #
 # The frame's first longword is hand-derived from the bit positions and not
 # from a second call of the encoder. A7 is 0x800 with its low two bits 00, so
-# Table 3-2, folio 3-14, gives format 4 and a frame at 0x800 - 8. The vector is
-# 2. `FS` is `1001`, Table 3-3's "Attempted write to write-protected space",
-# and its two halves land in two non-adjacent fields of Figure 3-7:
+# MCF5407 User's Manual Table 2-20, "Format Field Encoding", folio 2-33, gives
+# format 4 and a frame at 0x800 - 8. The vector is 2. `FS` is `1001`,
+# Table 2-21's "Attempted write to write-protected space", and its two halves
+# land in two non-adjacent fields of Figure 2-1, "Exception Stack Frame Form":
 #   0100 | 10 | 00000010 | 01 | 0010011100000000 -> 0x48092700
-# This longword carries no program counter. Figure 3-7, folio 3-13, puts the
+# This longword carries no program counter. Figure 2-1, folio 2-33, puts the
 # program counter in the second longword, which is the one this suite reads
 # outside its asserted tuple.
 #
@@ -299,9 +305,13 @@ check(accepted.outcome == wantAccepted,
 #
 # `bsr` to an odd target whose return-address push lands on the refused
 # longword. The push records the access error and lets the instruction finish,
-# which is section 3.5.1's rule; `transferControl` then takes the address
-# error, because MCF5307 User's Manual section 3.5.2 makes a transfer to an
-# odd address one. Stacking the recorded access error afterwards would put two
+# which is the rule of MCF5307 User's Manual section 3.5.1, folio 3-15 - cited
+# because the MCF5407 manual condenses that section into Table 2-22 and does
+# not reproduce the sentence; `transferControl` then takes the address error,
+# because MCF5407 User's Manual Table 2-22, "Address Error", folio 2-34, makes
+# "an attempted execution transferring control to an odd instruction address
+# (that is, if bit 0 of the target address is set)" one. Stacking the recorded
+# access error afterwards would put two
 # frames on the stack for one instruction, and the access handler's `RTE`
 # would return into the address handler's first instruction rather than into
 # the program.
@@ -316,9 +326,9 @@ check(accepted.outcome == wantAccepted,
 # frame's first word would land, and a run that stacked one leaves it
 # non-zero.
 #
-# The frame's first longword is hand-derived from Figure 3-7's bit positions.
-# A7 is 0x0C00 with its low two bits 00, so Table 3-2 gives format 4 and a
-# frame at 0x0C00 - 8. The vector is 3. `FS` is `0100`, Table 3-3's "error on
+# The frame's first longword is hand-derived from Figure 2-1's bit positions.
+# A7 is 0x0C00 with its low two bits 00, so Table 2-20 gives format 4 and a
+# frame at 0x0C00 - 8. The vector is 3. `FS` is `0100`, Table 2-21's "Error on
 # instruction fetch":
 #   0100 | 01 | 00000011 | 00 | 0010011100000000 -> 0x440C2700
 

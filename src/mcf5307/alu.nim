@@ -12,8 +12,16 @@
 ## Arithmetic on this part is 32-bit. `ADD.B`, `ADD.W`, `ADDA.W`, `ADDI.B`,
 ## `ADDQ.W`, `NEG.W`, `ADDX.W` and the rest of the byte and word forms are
 ## 68000 encodings that ISA_A dropped, and each one traps here. `CLR` is the
-## exception: it keeps all three sizes, which `m68k-elf-as -mcpu=5307`
-## confirms by accepting `clr.b` and `clr.w`.
+## exception: it keeps all three sizes, which `m68k-elf-as -mcpu=5407`
+## confirms by accepting `clr.b` and `clr.w`, and which MCF5407 User's Manual
+## Table 2-8, folio 2-20, prints as an operand size of `.B,.W,.L` for CLR.
+##
+## THE BYTE AND WORD COMPARES LEFT THAT DROPPED LIST ON THIS PART. Rev. B
+## restores `CMP.B`, `CMP.W`, `CMPI.B` and `CMPI.W` - MCF5407 User's Manual
+## Table 2-7, "ColdFire ISA_B Extension Summary", folio 2-19 - and
+## `control.nim` records what this core does about them. The byte and word
+## forms of ADD, ADDA, ADDQ, NEG and ADDX named above are not in Rev. B and
+## stay dropped.
 ##
 ## The ColdFire divide is not the 68020 divide. `DIVU.L`/`DIVS.L` reuse the
 ## 68020 two-word encoding, and the second word names a quotient register Dq
@@ -24,27 +32,40 @@
 ## A divide by zero is a trap vector on silicon; this core halts the context
 ## with `fault` instead, the same channel every other illegal operand uses.
 ##
-## CYCLES. See the block above the constants in `cpu.nim`. `adda.l`, `suba.l`,
-## `rems.l` and `remu.l` have no timing row in Table 3-13 (folios 3-28 and
-## 3-29) or Table 3-12 (folio 3-27) at all, established by full enumeration of
-## those pages rather than by looking at neighbours: the opcode column is not
+## CYCLES. See the block above the constants in `cpu.nim`. `adda.l` and
+## `suba.l` have no timing row in MCF5407 User's Manual Table 2-15 (folios 2-27
+## to 2-29) or Table 2-14 (folio 2-27) at all, established by reading those
+## pages whole rather than by looking at neighbours: the opcode column is not
 ## alphabetical, so a gap between neighbours proves nothing - `msac.w` and
-## `msac.l` print before `moveq` on folio 3-28, and `divs.w`/`divu.w` before
-## `divs.l`/`divu.l`. `control.nim` records the same absence for CMPA.
+## `msac.l` print before `muls.w` on folio 2-28. `control.nim` records the same
+## absence for CMPA.
 ##
-## The REMx forms do not inherit the divide row. This module models them as
-## behaviour of their own inside `execDiv` - an unequal register pair writes
-## the remainder and leaves Dq alone - and Table 3-13 does not price them:
-## there is no `rems.l` row and no `remu.l` row, and the `divs.l`/`divu.l` row
-## names those two opcodes and no others. That is folios 3-28 and 3-29 and not
-## the rest of the manual. A reader who priced REMS.L or REMU.L off the divide
-## row would be quoting a cell the table never offered for them.
+## THE REMx FORMS ARE PRICED ON THIS PART AND WERE NOT ON THE MCF5307. That is
+## a difference in the silicon's documentation and not a renumbering. Table
+## 2-15's final page, folio 2-29, carries a `rems.l <ea>,Dx` row and a
+## `remu.l <ea>,Dx` row, each reading `35(0/0)` under `Rn` and `35(1/0)` under
+## `(An)`, `(An)+`, `-(An)` and `(d16,An)`, and dashing `(d8,An,Xi*SF)`,
+## `xxx.wl` and `#<xxx>`. The MCF5307's Table 3-13 had neither row, and this
+## module's note used to say a reader who priced REMS.L or REMU.L off the
+## divide row would be quoting a cell the table never offered. On the MCF5407
+## the table offers it directly, and it is the same 35 the `divs.l`/`divu.l`
+## row carries, so `execDiv`'s single return is right for all four opcodes
+## rather than right for two and invented for the other two.
+##
+## That row was read off the RENDERED folio and not off a text extraction.
+## `pdftotext` is lossy inside these tables, so the absence of `adda.l` and
+## `suba.l` above rests on the printed page with its neighbours either side,
+## which is evidence a failed grep would not be.
+##
+## This module still models the REMx forms as behaviour of their own inside
+## `execDiv` - an unequal register pair writes the remainder and leaves Dq
+## alone - because the timing row prices them without saying what they compute.
 ##
 ## The word MUL and DIV returns equal a cell of their own row and say so at the
 ## site; nothing else here was derived from a table.
 ##
 ## Instruction semantics, the condition-code rules and the encodings are taken
-## from the ColdFire Family Programmer's Reference Manual and the MCF5307
+## from the ColdFire Family Programmer's Reference Manual and the MCF5407
 ## User's Manual, and from this project's own measurements with the pinned
 ## cross assembler.
 
@@ -154,7 +175,14 @@ proc execAddSub(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   if ctx.halted: return 0'u32
   if isSub: setSubCc(ctx, src, dst, res, c, false)
   else: setAddCc(ctx, src, dst, res, c, false)
-  6'u32
+  # MCF5407 User's Manual Table 2-15, folio 2-27, `add.l`/`sub.l`: 1(0/0)
+  # under `Rn` and `#xxx`, 1(1/0) under the four memory modes and `xxx.wl` in
+  # the to-register direction, 1(1/1) in the to-memory direction, and 2 under
+  # `(d8,An,Xi*SF)` in both. Every cell but the indexed one is 1.
+  #
+  # This return was 6 while the target was an MCF5307, where the same cells
+  # read 3 and 4. The V4 pipeline is why it is 1 now.
+  1'u32
 
 proc execAddSubA(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   ## ADDA.L and SUBA.L. They touch no condition code: an address computation
@@ -167,7 +195,12 @@ proc execAddSubA(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   if ctx.halted: return 0'u32
   let dst = regA(ctx, d.destReg)
   setRegA(ctx, d.destReg, if isSub: dst - src else: dst + src)
-  4'u32
+  # `adda.l`/`suba.l` HAVE NO ROW - see the header - so this number is this
+  # core's own and no cell backs it. It was 4; it is 1 because every
+  # arithmetic row Table 2-15 does carry reads 1 for the register and memory
+  # forms, and an ADDA that cost four times an ADD would be an outlier the
+  # manual gives no reason for. Still a choice, not a measurement.
+  1'u32
 
 proc execAddSubI(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   ## ADDI.L and SUBI.L. The long immediate is the two words after the opcode.
@@ -185,7 +218,9 @@ proc execAddSubI(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   setRegD(ctx, d.ea.reg, res)
   if isSub: setSubCc(ctx, src, dst, res, c, false)
   else: setAddCc(ctx, src, dst, res, c, false)
-  6'u32
+  # MCF5407 User's Manual Table 2-15, folio 2-27, `addi.l`/`subi.l #imm,Dx`: the single
+  # cell 1(0/0). Was 6.
+  1'u32
 
 proc execAddSubQ(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   ## ADDQ.L and SUBQ.L. An address register destination sets no condition
@@ -209,7 +244,10 @@ proc execAddSubQ(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   if ctx.halted: return 0'u32
   if isSub: setSubCc(ctx, src, dst, res, c, false)
   else: setAddCc(ctx, src, dst, res, c, false)
-  4'u32
+  # MCF5407 User's Manual Table 2-15, folio 2-27, `addq.l`/`subq.l #imm,<ea>`: 1(0/0)
+  # under `Rn`, 1(1/1) under the memory modes and `xxx.wl`, 2(1/1) under
+  # `(d8,An,Xi*SF)`. Was 4.
+  1'u32
 
 proc execAddSubX(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   ## ADDX.L Dy,Dx and SUBX.L Dy,Dx. The register form is the only one this
@@ -227,7 +265,9 @@ proc execAddSubX(ctx: MCF5307Ctx; d: Decoded; isSub: bool): uint32 =
   setRegD(ctx, d.destReg, res)
   if isSub: setSubCc(ctx, src, dst, res, c, true)
   else: setAddCc(ctx, src, dst, res, c, true)
-  4'u32
+  # MCF5407 User's Manual Table 2-15, folio 2-27, `addx.l`/`subx.l Dy,Dx`: the single
+  # cell 1(0/0). Was 4.
+  1'u32
 
 # ---------------------------------------------------------------------------
 # NEG, NEGX and CLR.
@@ -244,7 +284,9 @@ proc execNeg(ctx: MCF5307Ctx; d: Decoded; extended: bool): uint32 =
   let (res, borrow) = subWithBorrow(0'u32, src, x)
   setRegD(ctx, d.ea.reg, res)
   setSubCc(ctx, src, 0'u32, res, borrow, extended)
-  4'u32
+  # MCF5407 User's Manual Table 2-14, folio 2-27, `neg.l Dx` and `negx.l Dx`: the
+  # single cell 1(0/0) each. Was 4.
+  1'u32
 
 proc execClr(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## CLR.B/.W/.L. N, V and C take fixed values, Z is always set, and X is
@@ -259,7 +301,10 @@ proc execClr(ctx: MCF5307Ctx; d: Decoded): uint32 =
   eaRefWrite(ctx, dest, d.size, 0'u32)
   if ctx.halted: return 0'u32
   ctx.sr = (ctx.sr and not (ccrN or ccrV or ccrC)) or ccrZ
-  4'u32
+  # MCF5407 User's Manual Table 2-14, folio 2-27, `clr.b`/`clr.w`/`clr.l <ea>`: 1(0/0)
+  # under `Rn`, 1(0/1) under the memory modes and `xxx.wl`, 2(0/1) under
+  # `(d8,An,Xi*SF)`. All three sizes read alike. Was 4.
+  1'u32
 
 # ---------------------------------------------------------------------------
 # EXT and EXTB.
@@ -280,7 +325,9 @@ proc execExt(ctx: MCF5307Ctx; d: Decoded; fromByte: bool): uint32 =
   else:
     setRegD(ctx, d.ea.reg, widened)
   setNzClearVc(ctx, widened, d.size)
-  4'u32
+  # MCF5407 User's Manual Table 2-14, folio 2-27, `ext.w`, `ext.l` and `extb.l`, all
+  # `Dx`: the single cell 1(0/0) each. Was 4.
+  1'u32
 
 # ---------------------------------------------------------------------------
 # MULU.L, MULS.L, DIVU.L, DIVS.L and REMx.L.
@@ -328,10 +375,15 @@ proc execMulWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # and neither continuation page (4-56, 4-58) carries a second. The word
   # table therefore governs both sizes.
   setNzClearVc(ctx, res, 4)
-  # MCF5307 User's Manual Table 3-13, folio 3-28, `muls.w`/`mulu.w <ea>,Dx`:
-  # `3(0/0)` under `Rn` and under `#xxx`. The equality is not a model. The rest
-  # of the row is `6(1/0)` for the four memory modes, `7(1/0)` for
-  # `(d8,An,Xi*SF)` and `6(1/0)` for `xxx.wl`, none of which this core returns.
+  # MCF5407 User's Manual Table 2-15, "Two Operand Instruction Execution
+  # Times", folio 2-27, `muls.w`/`mulu.w <ea>,Dx`: `3(0/0)` under `Rn` and
+  # under `#xxx`, `3(1/0)` for the four memory modes and for `xxx.wl`, and
+  # `4(1/0)` for `(d8,An,Xi*SF)`. This flat 3 is therefore every cell of the
+  # row except the indexed one.
+  #
+  # It was a worse fit on the MCF5307, whose Table 3-13 read `6(1/0)` for the
+  # memory modes and `7(1/0)` indexed - the V4 pipeline is what closed the gap,
+  # not a change here. The number did not move; the part underneath it did.
   3'u32
 
 proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
@@ -371,15 +423,27 @@ proc execMul(ctx: MCF5307Ctx; d: Decoded): uint32 =
   let res = uint32((uint64(dst) * uint64(src)) and 0xFFFFFFFF'u64)
   setRegD(ctx, dl, res)
   setNzClearVc(ctx, res, 4)
-  # `muls.l`/`mulu.l <ea>,Dx` reads `5(0/0)` under `Rn` and `8(1/0)` under the
-  # four memory modes, Table 3-13 folio 3-28. 10 is neither.
-  10'u32
+  # `muls.l`/`mulu.l <ea>,Dx` reads `5(0/0)` under `Rn` and `5(1/0)` under the
+  # four memory modes, MCF5407 User's Manual Table 2-15, folio 2-27, and dashes
+  # `(d8,An,Xi*SF)`, `xxx.wl` and `#<xxx>`. Every cell the row defines is 5, so
+  # 5 is the whole row and not a flattening of it.
+  #
+  # This return was 10 while the target was an MCF5307, whose Table 3-13 read
+  # `5(0/0)` and `8(1/0)` - two different numbers, so no single return matched
+  # and 10 matched neither of them. The V4 row is uniform and the return can
+  # now be exact.
+  5'u32
 
 const divWordCycles = 20'u32
-  ## MCF5307 User's Manual Table 3-13, folio 3-28, `divs.w`/`divu.w <ea>,Dx`:
-  ## `20(0/0)` under `Rn` and under `#xxx`. The equality is not a model - the
-  ## rest of the row is `23(1/0)` for the memory modes, `24(1/0)` for
-  ## `(d8,An,Xi*SF)` and `23(1/0)` for `xxx.wl`.
+  ## MCF5407 User's Manual Table 2-15, "Two Operand Instruction Execution
+  ## Times", folio 2-27, `divs.w`/`divu.w <ea>,Dx`: `20(0/0)` under `Rn` and
+  ## under `#xxx`, `20(1/0)` for the four memory modes and for `xxx.wl`, and
+  ## `21(1/0)` for `(d8,An,Xi*SF)`. This constant is therefore every cell of
+  ## the row except the indexed one.
+  ##
+  ## The MCF5307's Table 3-13 read `23(1/0)` for the memory modes and `24(1/0)`
+  ## indexed, so 20 named one cell there and names six here. The constant did
+  ## not move; the part underneath it did.
 
 proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ## DIVU.W and DIVS.W: a 32-bit dividend in Dx over a 16-bit source, with
@@ -432,7 +496,7 @@ proc execDivWord(ctx: MCF5307Ctx; d: Decoded): uint32 =
     #
     # Nothing in the CFPRM settles it and no oracle available here does
     # either: `m68k-elf-as` decides what assembles, not what a quotient does
-    # at run time, and Table 3-13 times the instruction without saying what it
+    # at run time, and Table 2-15 times the instruction without saying what it
     # computes. What would settle it is a run on silicon or on a hardware
     # model - `divs.w` with a dividend of -65536 and a divisor of 2, reading V
     # afterwards - or an erratum or a later revision of the folio that states
@@ -498,7 +562,10 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
     # with "V Set if an overflow occurs" and "C Always cleared". X is "Not
     # affected" and is the one bit that survives.
     ctx.sr = (ctx.sr and not (ccrC or ccrN or ccrZ)) or ccrV
-    return 10'u32
+    # The same cost as a divide that produced a quotient: the manual gives the
+    # row one number and does not time the overflow separately. See the return
+    # at the end of this procedure for the cell.
+    return 35'u32
   var quotient: uint32
   var written: uint32
   if signed:
@@ -527,10 +594,10 @@ proc execDiv(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # forms purely to feed this line.
   setNzClearVc(ctx, quotient, 4)
   # `divs.l`/`divu.l <ea>,Dx` reads `35(0/0)` under `Rn` and `35(1/0)` under
-  # the four memory modes, Table 3-13 folio 3-28, and dashes the rest. 10 is
-  # neither, and it is the same 10 the long multiply returns for a row that
-  # reads 5 and 8. The overflow path above returns it too.
-  10'u32
+  # the four memory modes, MCF5407 User's Manual Table 2-15, folio 2-27, and
+  # dashes the rest. Every cell the row defines is 35, so 35 is the whole row.
+  # The overflow path above returns it too.
+  35'u32
 
 # ---------------------------------------------------------------------------
 # The dispatch entry `step` calls.

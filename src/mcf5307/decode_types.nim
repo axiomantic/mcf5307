@@ -141,14 +141,14 @@ type
     # this module.
     #
     # The split into a presented level and an armed latch is the whole model,
-    # and it is what the User's Manual asks for. Section 7.6, folio 7-23,
-    # NOTE: "Interrupt levels 1 through 6 are level-sensitive only. Interrupt
-    # level 7 is both level sensitive and edge triggered". So the presented
+    # and it is what the User's Manual asks for. Section 18.7, folio 18-18,
+    # NOTE: "Interrupt levels 1-7 are level-sensitive. Level 7 is also
+    # edge-triggered." So the presented
     # fields are the board's CURRENT presentation and carry no history at all,
     # and the armed fields are the level-7 rising edge the core does latch.
     # A model with one group and not two either latches a level source, which
     # drops it at the acknowledge instead of at the device, or it re-recognizes
-    # a held level 7, which section 7.6.1 forbids.
+    # a held level 7, which section 18.7.1, folio 18-18, forbids.
     irqLevel*: cint             ## the presented level: 0 for none, or 1 to 7
     irqVector*: uint8           ## the presented vector, when not autovectored
     irqAutovector*: bool        ## the presented autovector flag
@@ -157,8 +157,9 @@ type
     irq7Autovector*: bool       ## the autovector flag that edge presented
 
     # The program counter is at the entry of an exception handler whose first
-    # instruction has not run. MCF5307 User's Manual Table 3-1, closing
-    # paragraph, folio 3-13: "ColdFire processors inhibit sampling for
+    # instruction has not run. MCF5407 User's Manual, the paragraph closing
+    # Table 2-19 in section 2.8, folio 2-32: "ColdFire processors inhibit
+    # sampling for
     # interrupts during the first instruction of all exception handlers."
     #
     # It is a field and not a local of `mcf5307_exec` because the caller owns
@@ -175,17 +176,26 @@ type
 
     # An access error on an operand write is recorded here and taken at the
     # instruction boundary, and the manual is why it cannot be taken where it
-    # is detected. MCF5307 User's Manual section 3.5.1, "Access Error
-    # Exception", printed page 3-15, of an access error on an operand write:
+    # is detected. THE SOURCE HERE IS THE MCF5307 MANUAL AND STAYS THE MCF5307
+    # MANUAL: the MCF5407 manual carries no equivalent passage. Its section
+    # 2.8.2 "Access Error" row of Table 2-22, folio 2-34, says only that access
+    # errors are reported for an attempted store to write-protected memory, and
+    # its account of decoupled writes is a store-buffer description (section
+    # 4.9.5.2.1, folio 4-18) that never states what happens to the faulting
+    # instruction's programming-model updates. The MCF5307 User's Manual
+    # section 3.5.1, "Access Error
+    # Exception", printed page 3-15, is the only manual in the set that does,
+    # of an access error on an operand write:
     # "The ColdFire processor uses an imprecise reporting mechanism for access
     # errors on operand writes. Because the actual write cycle may be decoupled
     # from the processor's issuing of the operation, the signaling of an access
     # error appears to be decoupled from the instruction that generated the
     # write. ... All programming model updates associated with the write
-    # instruction are completed."
+    # instruction are completed." The V4 keeps the decoupled write path that
+    # sentence describes, so the reading still holds for this part.
     #
     # So the faulting instruction finishes first and the exception follows it.
-    # An exception taken at the store instead runs section 3.3's four steps -
+    # An exception taken at the store instead runs section 2.8's four steps -
     # which move A7 to the frame base and the program counter to the handler -
     # in the middle of an instruction that then completes against the state
     # those steps left. That is neither ordering the silicon has: measured,
@@ -196,12 +206,13 @@ type
     #
     # The companion fields carry what the frame must say, taken at the store
     # and not at the boundary, so that deferring when the frame is written does
-    # not change what it contains. Section 3.5.1's own sentence is
+    # not change what it contains. The MCF5307 section 3.5.1 sentence quoted
+    # above is
     # what makes the two differ: the instruction's remaining programming-model
     # updates run between the store and the boundary, so an SR read at the
     # boundary would carry condition codes the store did not see.
     pendingWriteFault*: bool    ## a store faulted; the vector is not yet taken
-    pendingFaultStatus*: uint32 ## `FS` for that store, Table 3-3
+    pendingFaultStatus*: uint32 ## `FS` for that store, Table 2-21 (folio 2-33)
     pendingStackedSr*: uint32   ## the status register as the store found it
     pendingStackedPc*: uint32   ## the program counter as the store found it
 
@@ -228,9 +239,10 @@ const eaMemoryAlterable* = EaLegality(modes: eaMemAlterableModes,
 
 const eaDataAddressing* = EaLegality(modes: eaDataAlterableModes,
                                      ea7: eaValid7)
-  ## THE MANUAL'S `DATA` CLASS, WHICH DOES NOT INCLUDE `An`. The MCF5307
-  ## User's Manual Table 3-5 marks every mode but address-register direct as
-  ## DATA, and `m68k-elf-as -mcpu=5307` agrees: it rejects `and.l %a0,%d1` and
+  ## THE MANUAL'S `DATA` CLASS, WHICH DOES NOT INCLUDE `An`. The MCF5407
+  ## User's Manual Table 2-5, "ColdFire Effective Addressing Modes", folio
+  ## 2-15, marks every mode but address-register direct as
+  ## Data, and `m68k-elf-as -mcpu=5307` agrees: it rejects `and.l %a0,%d1` and
   ## accepts every other source this mask names, `(4,%pc)` and `#imm`
   ## included.
   ##
@@ -248,30 +260,33 @@ const eaBitDynamic* = EaLegality(modes: eaDataAlterableModes,
   ## The operand of a dynamic bit test: the manual's data class without the
   ## immediate. It is `eaDataAddressing` minus one sub-variant.
   ##
-  ## The manual puts the immediate out. MCF5307 User's Manual Table 3-13,
-  ## "Two Operand Instruction Execution Times", page 3-28: the row
+  ## The manual puts the immediate out. MCF5407 User's Manual Table 2-15,
+  ## "Two-Operand Instruction Execution Times", folio 2-28: the row
   ## `btst | Dy,<ea>` carries a time under every column but the last, where
-  ## `#xxx` reads a dash. The dash is the table's mark for a form this part
-  ## does not have, and not a gap in the timing data: Table 3-12, page 3-27,
+  ## `#<xxx>` reads a dash. The dash is the table's mark for a form this part
+  ## does not have, and not a gap in the timing data: Table 2-14, folio 2-27,
   ## gives `tst.l <ea>` a `#xxx` of `1(0/0)`, so a read-only operand does not
-  ## lose its row for being useless.
+  ## lose its row for being useless. It is the DYNAMIC row that dashes it -
+  ## the `btst | #imm,<ea>` row directly below carries `1(0/0)` under
+  ## `#<xxx>`, which is the static form and a different constant.
   ##
-  ## The second table of the same manual reads the other way. MCF5307 User's
-  ## Manual Table 3-5, "Effective Addressing Modes and Categories", page 3-21,
-  ## marks Immediate `#<xxx>` with an `x` in the DATA column. A dynamic BTST
-  ## reads its operand, so DATA is its class, and that column restores the
-  ## immediate Table 3-13 dashes. That reading, and not the assembler, is what
+  ## The second table of the same manual reads the other way. MCF5407 User's
+  ## Manual Table 2-5, "ColdFire Effective Addressing Modes", folio 2-15,
+  ## marks Immediate `#<xxx>` with an `X` in the Data column. A dynamic BTST
+  ## reads its operand, so Data is its class, and that column restores the
+  ## immediate Table 2-15 dashes. That reading, and not the assembler, is what
   ## a future reader would reverse this constant on. Cutting the other way,
-  ## Table 3-7 on page 3-23 gives BTST's operand syntax as `Dy,<ea>x`, and the
+  ## Table 2-8, "User-Level Instruction Set Summary", folio 2-20, gives BTST's
+  ## operand syntax as `Dy,<ea>x`, and the
   ## `x` suffix is the manual's destination mark, which an immediate is not.
   ##
   ## What would overturn this is the ColdFire Family Programmer's Reference
   ## Manual, whose per-instruction operand table names the modes directly.
   ##
   ## It is a constant of its own and not a narrowed `eaDataAddressing`, because
-  ## AND and OR keep the immediate: Table 3-13's `and.l <ea>,Rx` row on
-  ## page 3-28 and its `or.l <ea>,Rx` row on the continuation page 3-29 both
-  ## give `#xxx` a time of `1(0/0)`.
+  ## AND and OR keep the immediate: Table 2-15's `and.l <ea>,Rx` row on
+  ## folio 2-27 and its `or.l <ea>,Rx` row on the continuation folio 2-28 both
+  ## give `#<xxx>` a time of `1(0/0)`.
 
 const eaBitStatic* = EaLegality(
   modes: {eaDn, eaAnInd, eaAnPost, eaAnPre, eaAnDisp}, ea7: {})
@@ -279,14 +294,22 @@ const eaBitStatic* = EaLegality(
   ## dynamic one. `0000 1000 tt <ea>` takes a data register or one of the
   ## address-register indirect modes above and nothing else on this part.
   ##
-  ## The manual prints this mask, mode for mode. MCF5307 User's Manual
-  ## Table 3-13, "Two Operand Instruction Execution Times", page 3-28: the
+  ## The manual prints this mask, mode for mode. MCF5407 User's Manual
+  ## Table 2-15, "Two-Operand Instruction Execution Times", folios 2-27 and
+  ## 2-28, read as a rendered page: the
   ## `#imm,<ea>` rows of `bchg`, `bclr`, `bset` and `btst` carry a time under
   ## `Rn`, `(An)`, `(An)+`, `-(An)` and `(d16,An)` and a dash under
-  ## `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`. The `Dy,<ea>` rows of the same
-  ## operations do carry times under `(d8,An,Xi*SF)` and `xxx.wl`, so the
+  ## `(d8,An,Xi*SF)` and `(xxx).wl`. The `Dy,<ea>` rows of the same
+  ## operations do carry times under `(d8,An,Xi*SF)` and `(xxx).wl`, so the
   ## dashes separate the static form from the dynamic one and are not a
   ## property of the bit operations as a family.
+  ##
+  ## THE `#<xxx>` COLUMN NO LONGER RUNS WITH THE OTHER THREE, AND THIS MASK
+  ## STILL EXCLUDES IT. On the MCF5407 the `btst | #imm,<ea>` row carries
+  ## `1(0/0)` under `#<xxx>` where `bchg`, `bclr` and `bset` dash it; the
+  ## MCF5307's Table 3-13 dashed all four. A static BTST of an immediate has
+  ## no destination to test, so the `ea7: {}` above is unchanged and the
+  ## divergence is recorded rather than followed.
   ##
   ## The dynamic form is wider: it also reaches the indexed and absolute
   ## modes and the PC-relative pair. It reads
@@ -305,18 +328,22 @@ const eaJumpTarget* = EaLegality(
   ##
   ## The manual gives the class twice and both readings include `(xxx).W`.
   ##
-  ##   - MCF5307 User's Manual Table 3-15, "General Branch Instruction
-  ##     Execution Times", page 3-30. The `jmp <ea>` row carries a time under
-  ##     `(An)`, under the merged `(d16,An)/(d16,PC)` column, under
-  ##     `(d8,An,Xi*SF)/(d8,PC,Xi*SF)` and under `xxx.wl`, and a dash under
-  ##     `Rn`, `(An)+`, `-(An)` and `#xxx`. The `jsr <ea>` row directly below
-  ##     it dashes and times exactly the same columns. Page 3-26 states what
-  ##     the column heading means: 'The nomenclature "xxx.wl" refers to both
-  ##     forms of absolute addressing, xxx.w and xxx.l.'
+  ##   - MCF5407 User's Manual Table 2-17, "Branch Instruction
+  ##     Execution Times", folio 2-30. The `jmp <ea>` row carries a time under
+  ##     `(An)`, `(d16,An)`,
+  ##     `(d8,An,Xi*SF)` and `(xxx).wl`, and a dash under
+  ##     `Rn`, `(An)+`, `-(An)` and `#<xxx>`. The `jsr <ea>` row directly below
+  ##     it dashes and times exactly the same columns. The MCF5407 table prints
+  ##     no merged An/PC columns; the NOTE on folio 2-25 carries the PC-relative
+  ##     modes instead - the execution time of a PC-relative mode "is equivalent
+  ##     to the time using comparable An-relative mode". That same NOTE states
+  ##     what the absolute column heading means: 'The nomenclature "(xxx).wl"
+  ##     refers to both forms of absolute addressing, (xxx).w and (xxx).l.'
   ##
-  ##   - Table 3-5, "Effective Addressing Modes and Categories", page 3-21.
-  ##     The Control column carries an `x` on `(An)`, `(d16,An)`,
-  ##     `(d8,An,Xi)`, `(d16,PC)`, `(d8,PC,Xi)`, `(xxx).W` and `(xxx).L`, and
+  ##   - Table 2-5, "ColdFire Effective Addressing Modes", folio 2-15.
+  ##     The Control column carries an `X` on `(An)`, `(d16,An)`,
+  ##     `(d8,An,Xi*SF)`, `(d16,PC)`, `(d8,PC,Xi*SF)`, `(xxx).W` and
+  ##     `(xxx).L`, and
   ##     nothing on `Dn`, `An`, `(An)+`, `-(An)` and `#<xxx>`.
   ##
   ## MOVEM DOES NOT READ THIS CLASS. Its arm carries `{eaAnInd, eaAnDisp}`
@@ -338,38 +365,58 @@ const eaLeaPeaTarget* = EaLegality(
   ## would mean a later correction to one silently moving the other.
   ##
   ## The manual times both instructions under the absolute column, and each
-  ## has its own row. Read as rendered images - the `SWAP` row of Table 3-7
-  ## does not survive `pdftotext` and neither do these:
+  ## has its own row. Read as rendered images - the `SWAP` row of the
+  ## instruction set summary does not survive `pdftotext` and neither do
+  ## these:
   ##
-  ##   - MCF5307 User's Manual Table 3-13, "Two Operand Instruction Execution
-  ##     Times", page 3-28. The `lea | <ea>,Ax` row is timed `1(0/0)` under
-  ##     `xxx.wl`, `1(0/0)` under `(An)` and under the merged
-  ##     `(d16,An)/(d16,PC)` column, `2(0/0)` under
-  ##     `(d8,An,Xi*SF)/(d8,PC,Xi*SF)`, and dashed under `Rn`, `(An)+`,
-  ##     `-(An)` and `#xxx`.
+  ##   - MCF5407 User's Manual Table 2-15, "Two-Operand Instruction Execution
+  ##     Times", folio 2-28. The `lea | <ea>,Ax` row is timed `1(0/0)` under
+  ##     `(xxx).wl`, `1(0/0)` under `(An)` and `(d16,An)`, `2(0/0)` under
+  ##     `(d8,An,Xi*SF)`, and dashed under `Rn`, `(An)+`,
+  ##     `-(An)` and `#<xxx>`.
   ##
-  ##   - Table 3-14, "Miscellaneous Instruction Execution Times", page 3-29.
-  ##     The `pea | <ea>` row is timed `2(0/1)` under `xxx.wl`, `2(0/1)` under
-  ##     `(An)` and `(d16,An)`, `3(0/1)` under `(d8,An,Xi*SF)`, and dashed
-  ##     under `Rn`, `(An)+`, `-(An)` and `#xxx`. PEA is not borrowing LEA's
-  ##     row: it has its own, in its own table, and the two agree.
+  ##   - Table 2-16, "Miscellaneous Instruction Execution Times", folio 2-29.
+  ##     The `pea | <ea>` row is timed `1(0/1)` under `(xxx).wl`, `1(0/1)`
+  ##     under
+  ##     `(An)` and `(d16,An)`, `2(0/1)` under `(d8,An,Xi*SF)`, and dashed
+  ##     under `Rn`, `(An)+`, `-(An)` and `#<xxx>`. PEA is not borrowing LEA's
+  ##     row: it has its own, in its own table, and the two agree on which
+  ##     columns carry a time. The V4 costs one cycle less than the V3 in
+  ##     every timed PEA cell.
   ##
-  ##   - Page 3-26 defines the column heading: 'The nomenclature "xxx.wl"
-  ##     refers to both forms of absolute addressing, xxx.w and xxx.l.' So a
-  ##     time under `xxx.wl` is a time under `(xxx).W`.
+  ##   - The NOTE on folio 2-25 defines the column heading: 'The nomenclature
+  ##     "(xxx).wl" refers to both forms of absolute addressing, (xxx).w and
+  ##     (xxx).l.' So a
+  ##     time under `(xxx).wl` is a time under `(xxx).W`.
   ##
-  ##   - Table 3-5, "Effective Addressing Modes and Categories", page 3-21,
-  ##     carries an `x` for "Absolute Data Addressing / Short" `(xxx).W` in
+  ##   - Table 2-5, "ColdFire Effective Addressing Modes", folio 2-15,
+  ##     carries an `X` for "Absolute data addressing / Short" `(xxx).W` in
   ##     the Control column, beside `(xxx).L`.
   ##
   ## `MOVEM` DOES NOT READ THIS AND MUST NOT: its operand class is narrower
-  ## still. Table 3-14's `movem.l` rows are timed under `(An)` and `(d16,An)`
-  ## only and are dashed under `xxx.wl`.
+  ## still. Table 2-16's `movem.l` rows are timed under `(An)` and `(d16,An)`
+  ## only and are dashed under `(xxx).wl`.
 
-const table313LastRowOnPage328* = "mulu"
-  ## The last opcode row Table 3-13 prints on page 3-28; `or.l`, `ori.l`,
-  ## `sub.l`, `subi.l`, `subq.l` and `subx.l` are on the continuation page
-  ## 3-29.
+const
+  table215LastRowOnFolio227* = "asr"
+    ## Where MCF5407 User's Manual Table 2-15 first breaks across a folio.
+    ## `asr.l` is the last opcode row on folio 2-27; `bchg Dy,<ea>` follows it
+    ## there but `bchg #imm,<ea>` opens folio 2-28, so `bchg` straddles the
+    ## break and is not usable as the boundary. No row this constant is
+    ## compared against is a `bchg`.
+  table215LastRowOnFolio228* = "or"
+    ## Where it breaks a SECOND time. `or.l | <ea>,Rx` is the last opcode row
+    ## on folio 2-28; `or.l | Dy,<ea>`, `or.l | #imm,Dx`, `rems.l`, `remu.l`,
+    ## `sub.l`, `subi.l`, `subq.l` and `subx.l` are on folio 2-29. `or`
+    ## straddles this break the way `bchg` straddles the first, and the
+    ## comparison in `tests/t_ea_masks.nim` is `<=`, so an `ori` row - which is
+    ## `or.l | #imm,Dx`, on folio 2-29 - sorts strictly after `"or"` and lands
+    ## on the third folio correctly.
+    ##
+    ## THE MCF5307 NEEDED ONLY ONE OF THESE. Its Table 3-13 spanned two pages
+    ## and broke once, after `mulu` on page 3-28. This part's table spans
+    ## three folios, so a two-valued page type is structurally wrong for it.
+    ## Both values were read from the rendered folios.
 
 proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
   ## The legality mask the opcode carries. An opcode with no effective
@@ -437,12 +484,13 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
   of opAnd, opOr:
     # The source of the `<ea> op Dn -> Dn` direction of AND and OR. It reads
     # and does not write, so the class is data addressing: no An, and the
-    # PC-relative pair and the immediate are in. MCF5307 User's Manual
-    # Table 3-13: the `and.l <ea>,Rx` row on page 3-28 and the `or.l <ea>,Rx`
-    # row on the continuation page 3-29 both give `#xxx` a time of `1(0/0)`,
+    # PC-relative pair and the immediate are in. MCF5407 User's Manual
+    # Table 2-15: the `and.l <ea>,Rx` row on folio 2-27 and the `or.l <ea>,Rx`
+    # row on the continuation folio 2-28 both give `#<xxx>` a time of `1(0/0)`,
     # and `c0bc 0000 0005` disassembles as `andl #5,%d0` on
     # `m68k-elf-objdump -m m68k:5307`. The table spans two pages;
-    # `table313LastRowOnPage328` above records where the break falls.
+    # `table215LastRowOnFolio227` and `table215LastRowOnFolio228` above
+    # record where the two breaks fall.
     #
     # The other direction of AND and OR writes memory and carries
     # `eaMemoryAlterable`, which this table cannot hold because the direction
@@ -465,16 +513,20 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # row by row. Every row carries `Dx` or `#imm,Dx` in the `<EA>` column,
     # a time under `Rn`, and a dash under every memory column:
     #
-    #   - MCF5307 User's Manual Table 3-12, page 3-27: `not.l | Dx |
+    #   - MCF5407 User's Manual Table 2-14, "One-Operand Instruction Execution
+    #     Times", folio 2-27: `not.l | Dx |
     #     Rn 1(0/0)` and a dash under `(An)`, `(An)+`, `-(An)`, `(d16,An)`,
-    #     `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`. The `clr.l` row above it and
+    #     `(d8,An,Xi*SF)`, `(xxx).wl` and `#xxx`. The `clr.l` row above it and
     #     the `tst.l` row below it carry times in those columns, so the
     #     dashes belong to this row.
-    #   - Table 3-13: `andi.l | #imm,Dx` and `eori.l | #imm,Dx` on page 3-28,
-    #     and `ori.l | #imm,Dx` on the continuation page 3-29, each read
-    #     `1(0/0)` under `Rn` and a dash everywhere else, `#xxx` included.
-    #   - Table 3-13 again: `asl.l`, `asr.l`, `lsl.l` and `lsr.l` all read
-    #     `<ea>,Dx` with `1(0/0)` under `Rn` and under `#xxx` - the immediate
+    #   - Table 2-15: `andi.l | #imm,Dx` on folio 2-27, `eori.l | #imm,Dx` on
+    #     folio 2-28,
+    #     and the ORI row on the continuation folio 2-29 - which the MCF5407
+    #     spells `or.l | #imm,Dx`, not `ori.l` - each read
+    #     `1(0/0)` under `Rn` and a dash everywhere else, `#<xxx>` included.
+    #   - Table 2-15 again: `asl.l` and `asr.l` on folio 2-27 and `lsl.l` and
+    #     `lsr.l` on folio 2-28 all read
+    #     `<ea>,Dx` with `1(0/0)` under `Rn` and under `#<xxx>` - the immediate
     #     count - and a dash under the memory columns.
     #
     # An immediate count is still legal for the shifts, because the count is
@@ -492,12 +544,13 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # These write nothing, and their class is the widest one: `eaAllModes` and
     # not `eaDataAddressing`, because they admit an address register.
     # `eaDataAddressing` is the manual's data class, which excludes `An`, and
-    # it is the mask AND and OR read. Every column of Table 3-12's `tst` rows
-    # on page 3-27 - `Rn`, `(An)`, `(An)+`, `-(An)`, `(d16,An)`,
-    # `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx` - carries a time, and so does every
-    # column of Table 3-13's `cmp.l <ea>,Rx` row on page 3-28. There is no
+    # it is the mask AND and OR read. Every column of Table 2-14's `tst` rows
+    # on folio 2-27 - `Rn`, `(An)`, `(An)+`, `-(An)`, `(d16,An)`,
+    # `(d8,An,Xi*SF)`, `(xxx).wl` and `#xxx` - carries a time, and so does
+    # every
+    # column of Table 2-15's `cmp.l <ea>,Rx` row on folio 2-28. There is no
     # dash in any of those rows, which is the same mark that puts
-    # `and.l Dy,<ea>`'s `Rn` and `btst #imm,<ea>`'s `xxx.wl` out.
+    # `and.l Dy,<ea>`'s `Rn` and `btst #imm,<ea>`'s `(xxx).wl` out.
     #
     # A byte operand may still not be an address register, and that rule is
     # about the size rather than the mode. `control.nim`'s `execTst`
@@ -509,20 +562,22 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # A data register and nothing else, and the manual's timing tables say so
     # row by row.
     #
-    #   - Table 3-12, "One Operand Instruction Execution Times", page 3-27:
+    #   - Table 2-14, "One-Operand Instruction Execution Times", folio 2-27:
     #     the `scc Dx` row reads `1(0/0)` under `Rn` and a dash under `(An)`,
-    #     `(An)+`, `-(An)`, `(d16,An)`, `(d8,An,Xi*SF)`, `xxx.wl` and `#xxx`.
-    #     The `clr.b` rows above it and the `tst.b` rows below it carry times
+    #     `(An)+`, `-(An)`, `(d16,An)`, `(d8,An,Xi*SF)`, `(xxx).wl` and `#xxx`.
+    #     The `clr.b` row above it and the `tst.b` row below it carry times
     #     in those same columns, so the dashes belong to this row.
-    #   - Table 3-13, page 3-28: the `cmpi.l #imm,Dx` row reads `1(0/0)` under
-    #     `Rn` and a dash everywhere else, `#xxx` included - the same shape as
+    #   - Table 2-15, folio 2-28: the `cmpi.l #imm,Dx` row reads `1(0/0)`
+    #     under
+    #     `Rn` and a dash everywhere else, `#<xxx>` included - the same shape
+    #     as
     #     `andi.l`, `eori.l` and `subi.l`.
     #
     # This mask is also what refuses the 68000 `DBcc` word.
     # `0101 cccc 11 001 rrr` is `DBcc Dn,<label>` on a 68000; here it is an Scc
     # word whose operand is an address register, and no DBcc at all, because
-    # manual section 3.9, which begins on page 3-21, lists "decrement and
-    # branch" among the removed instructions.
+    # manual section 2.6, "Instruction Set Summary", folio 2-15, lists
+    # "decrement and branch" among the removed instructions.
     EaLegality(modes: {eaDn}, ea7: {})
   of opLea, opPea:
     # Control addressing including `(xxx).W`. A mask that excludes `(xxx).W`
@@ -559,8 +614,9 @@ proc eaLegalityFor*(op: Operation; size: uint8): EaLegality =
     # set is unreachable through this mask and constrains nothing.
     EaLegality(modes: {eaAnInd, eaAnDisp}, ea7: {})
   of opSwap:
-    # A data register and nothing else. Table 3-7, page 3-25, gives the
-    # operand syntax as `Dn`, and Table 3-12, page 3-27, times `swap Dx`
+    # A data register and nothing else. Table 2-8, "User-Level Instruction Set
+    # Summary", folio 2-22, gives the
+    # operand syntax as `Dx`, and Table 2-14, folio 2-27, times `swap Dx`
     # at 1(0/0) under `Rn` with a dash in the other columns - the same shape
     # as `ext`, `extb`, `neg`, `negx` and `not` in that table.
     EaLegality(modes: {eaDn}, ea7: {})
