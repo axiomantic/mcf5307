@@ -244,6 +244,23 @@ jobs:
         with:
           submodules: recursive
 
+      # The configure step compiles the Nim sources, so this job needs the
+      # pinned compiler exactly as `build-and-t0` does. Without it the job
+      # stops at configure and never reaches the sanitizers. The pin is read
+      # from `.nim-version` here too; no version string is written in this
+      # file. This runner is Linux only, so it takes the choosenim path alone.
+      - name: Install the pinned Nim
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < .nim-version)
+          echo "The pin recorded in .nim-version is ${version}"
+          curl -fsSL https://nim-lang.org/choosenim/init.sh -o init.sh
+          sh init.sh -y
+          export PATH="${HOME}/.nimble/bin:${PATH}"
+          choosenim "${version}"
+          echo "${HOME}/.nimble/bin" >> "$GITHUB_PATH"
+
       - name: Configure and build with the address and undefined sanitizers
         run: |
           set -euo pipefail
