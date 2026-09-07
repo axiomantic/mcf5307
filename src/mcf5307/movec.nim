@@ -13,8 +13,10 @@
 ## does not implement them.
 ##
 ## The encoding, the register numbers and the privilege rule are facts about
-## Motorola silicon, from the MCF5307 User's Manual (1998) and the ColdFire
-## Family Programmer's Reference Manual, Rev. 3.
+## Motorola silicon. The control-register map is the MCF5407's, from the
+## MCF5407 User's Manual Table 2-2, folio 2-11; the encoding and the privilege
+## rule are the family's, from the ColdFire Family Programmer's Reference
+## Manual, Rev. 3, and read the same in the MCF5307 User's Manual (1998).
 
 import mcf5307/decode_types
 import mcf5307/machine
@@ -54,7 +56,7 @@ type
     ## part does not have would be a destination nothing can reach and a decode
     ## that looks successful.
     crUnimplemented
-    crCacr, crAcr0, crAcr1, crVbr, crRambar0, crRambar1, crMbar
+    crCacr, crAcr0, crAcr1, crAcr2, crAcr3, crVbr, crRambar0, crRambar1, crMbar
 
 proc controlRegisterFor*(rc: uint16): ControlRegister =
   ## Decode against the ColdFire map only. The 68k collision is silent in both
@@ -62,13 +64,20 @@ proc controlRegisterFor*(rc: uint16): ControlRegister =
   ## the 68040, and `0x800` is USP on the 68040 and names no register of this
   ## part.
   ##
-  ## RAMBAR1 at `0xC05` is accepted rather than treated as a decode error: the
-  ## firmware writes that number in genuine code. `crRambar0` carries the
-  ## family spelling of `0xC04` because that spelling distinguishes the two.
+  ## The map is Table 2-2 whole and not the subset the firmware happens to
+  ## write. That table lists nine numbers and this arm carries all nine. Three
+  ## of them are the reason the part matters here: ACR2 and ACR3 at `0x006` and
+  ## `0x007` are the instruction-space access control registers, and RAMBAR1 at
+  ## `0xC05` is the second SRAM bank. The MCF5307 has none of the three, so a
+  ## reader holding the older manual finds this arm three entries too long.
+  ## `crRambar0` carries the family spelling of `0xC04` because that spelling
+  ## distinguishes the two banks.
   case rc
   of 0x002'u16: crCacr
   of 0x004'u16: crAcr0
   of 0x005'u16: crAcr1
+  of 0x006'u16: crAcr2
+  of 0x007'u16: crAcr3
   of 0x801'u16: crVbr
   of 0xC04'u16: crRambar0
   of 0xC05'u16: crRambar1
@@ -134,6 +143,8 @@ proc movecFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
   of crCacr: ctx.cacr = source
   of crAcr0: ctx.acr0 = source
   of crAcr1: ctx.acr1 = source
+  of crAcr2: ctx.acr2 = source
+  of crAcr3: ctx.acr3 = source
   of crVbr: ctx.vbr = source
   of crRambar0: ctx.rambar0 = source
   of crRambar1: ctx.rambar1 = source

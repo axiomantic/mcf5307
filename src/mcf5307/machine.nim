@@ -45,7 +45,13 @@ import mcf5307/exception
 # `regFileGet`/`regFileSet` are the single-index view the ABI accessors and
 # the MOVEM mask use: 0..7 = d0..d7, 8..15 = a0..a7, 16 = sr, 17 = pc, and
 # 18 upwards the control registers - 18 = vbr, 19 = cacr, 20 = acr0,
-# 21 = acr1, 22 = rambar0, 23 = rambar1, 24 = mbar.
+# 21 = acr1, 22 = rambar0, 23 = rambar1, 24 = mbar, 25 = acr2, 26 = acr3.
+#
+# ACR2 AND ACR3 ARE APPENDED RATHER THAN PLACED BESIDE ACR0 AND ACR1, which
+# would read better and would renumber every index above 21. The numbers are
+# the only channel a host has and `include/mcf5307.h` publishes them, so a
+# caller compiled against the old header would silently read a different
+# register.
 #
 # The control registers are not part of the register file. They are here
 # because this index space is the only channel a host has: `MOVEC` reaches
@@ -55,6 +61,14 @@ import mcf5307/exception
 # 17 stays read-only through `regFileSet` and the control registers do not. The
 # program counter is written by `mcf5307_reset`, which is the entry point that
 # owns it.
+
+const regFileHighIndex* = 26
+  ## The highest index `regFileGet` and `regFileSet` answer. It is stated here,
+  ## beside the two procedures that define the space, because the C ABI
+  ## accessors below bound their argument with it. A literal restated at each
+  ## accessor is one fact in three places, and the copy that is not updated
+  ## refuses a register the register file answers - silently, because an
+  ## out-of-range read returns zero rather than reporting anything.
 
 proc regD*(ctx: MCF5307Ctx; n: uint8): uint32 =
   ctx.dRegs[n and 7]
@@ -95,6 +109,10 @@ proc regFileGet*(ctx: MCF5307Ctx; index: int): uint32 =
     ctx.rambar1
   elif index == 24:
     ctx.mbar
+  elif index == 25:
+    ctx.acr2
+  elif index == 26:
+    ctx.acr3
   else:
     0
 
@@ -131,6 +149,12 @@ proc regFileSet*(ctx: MCF5307Ctx; index: int; v: uint32): bool =
     true
   elif index == 24:
     ctx.mbar = v
+    true
+  elif index == 25:
+    ctx.acr2 = v
+    true
+  elif index == 26:
+    ctx.acr3 = v
     true
   else:
     false
@@ -756,12 +780,12 @@ proc transferControl*(ctx: MCF5307Ctx; target: uint32; faultPc: uint32) =
 # The register access the conformance harness needs. The C ABI in
 # `include/mcf5307.h` declares these. The index space is the register file's,
 # stated once at the head of this module; these two calls take the whole of
-# it, 0 through 24, and 17 is read-only through `mcf5307_set_reg` for the
-# reason given there.
+# it, 0 through `regFileHighIndex`, and 17 is read-only through
+# `mcf5307_set_reg` for the reason given there.
 
 proc mcf5307_set_reg*(ctx: MCF5307Ctx; index: cint; value: uint32): cint
     {.exportc: "mcf5307_set_reg", cdecl, dynlib.} =
-  if ctx.isNil or index < 0 or index > 24:
+  if ctx.isNil or index < 0 or index > regFileHighIndex:
     return cast[cint](0)
   if regFileSet(ctx, int(index), value):
     return cast[cint](1)
@@ -769,7 +793,7 @@ proc mcf5307_set_reg*(ctx: MCF5307Ctx; index: cint; value: uint32): cint
 
 proc mcf5307_get_reg*(ctx: MCF5307Ctx; index: cint): uint32
     {.exportc: "mcf5307_get_reg", cdecl, dynlib.} =
-  if ctx.isNil or index < 0 or index > 24:
+  if ctx.isNil or index < 0 or index > regFileHighIndex:
     return 0'u32
   regFileGet(ctx, int(index))
 

@@ -159,6 +159,8 @@ proc mcf5307_reset*(ctx: MCF5307Ctx; initialSp: uint32; initialPc: uint32)
   ctx.cacr = 0'u32
   ctx.acr0 = 0'u32
   ctx.acr1 = 0'u32
+  ctx.acr2 = 0'u32
+  ctx.acr3 = 0'u32
   ctx.rambar0 = 0'u32
   ctx.rambar1 = 0'u32
   ctx.mbar = 0'u32
@@ -264,18 +266,30 @@ proc step(ctx: MCF5307Ctx): uint32 =
   of opMoveFromSr, opMoveFromCcr, opMoveToCcr, opMoveToSr:
     result = fetchCycles + systemControlFamily(ctx, opWord, decoded)
   of opExg, opTas, opNbcd:
-    # EXG, TAS and NBCD are not on this part, so nothing decodes them. The arm
-    # is kept rather than deleted because the enum members are reachable
-    # through `eaLegalityFor` and a `case` over `Operation` must be exhaustive.
-    # `halted` is set and `fault` is not, because an encoding that never
-    # arrives here is not an illegal one.
+    # Nothing decodes these three, so this arm is unreachable. It is kept
+    # rather than deleted because the enum members are reachable through
+    # `eaLegalityFor` and a `case` over `Operation` must be exhaustive.
     #
-    # The evidence that the part lacks them is the manual and the assembler:
-    # Table 3-7, pages 3-23 to 3-25, carries no EXG, TAS or NBCD row, Table
-    # 3-12, page 3-27, none either, and `m68k-elf-as -mcpu=5307` rejects
-    # `exg %d0,%d1`, `tas %d0` and `nbcd %d0`. Section 3.9, page 3-21, names
-    # BCD among the removed groups, which is NBCD; it does not name EXG or
-    # TAS, whose absence is the tables' and the assembler's.
+    # EXG AND NBCD ARE NOT ON THIS PART. `m68k-elf-as` rejects `exg %d0,%d1`
+    # and `nbcd %d0` under both `-mcpu=5307` and `-mcpu=5407`, neither
+    # mnemonic appears anywhere in the MCF5407 User's Manual, and section 3.9
+    # of the MCF5307 User's Manual, page 3-21, names BCD among the removed
+    # groups, which is NBCD.
+    #
+    # TAS IS ON THIS PART AND IS SIMPLY NOT IMPLEMENTED, which is why it is
+    # described apart from the other two. MCF5407 User's Manual folio 2-51
+    # carries the full TAS description, and its per-core table on that page
+    # reads `Opcode present: V2, V3 Core - No; V4 Core - Yes`. This is a V4.
+    # Implementing it needs an indivisible read-modify-write the bus does not
+    # have and a V4 cycle count the manual does not tabulate, so the decoder
+    # leaves TAS alone and every TAS encoding reaches `opIllegal` below with
+    # `fault` set - measured, not assumed, for `4ac0` and `4ad0`. That is a
+    # divergence from the silicon and not a statement about it.
+    #
+    # `tas %d0` is not the counter-example it looks like. The assembler
+    # accepts it for `-mcpu=5407`, but folio 2-51's addressing-mode table
+    # gives Dx neither a mode nor a register field, so the register direct
+    # form is the assembler being permissive rather than a form the part has.
     #
     # SWAP is not in this arm, though it looks like it belongs: Table 3-7,
     # page 3-25, carries `SWAP | Dn | 16 | MSW of Dn <-> LSW of Dn`, Table
@@ -284,6 +298,10 @@ proc step(ctx: MCF5307Ctx): uint32 =
     # above. `decode.nim` must test `0xFFF8`/`0x4840` ahead of its PEA arm,
     # whose `0xFFC0` mask spans `4840`-`487f` and would otherwise swallow the
     # SWAP encodings.
+    #
+    # `halted` is set and `fault` is not: reaching an arm no encoding decodes
+    # to is this core losing track of itself, not the program executing
+    # something illegal.
     ctx.halted = true
     result = 0
   of opIllegal:

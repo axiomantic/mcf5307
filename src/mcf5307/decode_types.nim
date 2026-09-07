@@ -128,8 +128,10 @@ type
     # changes no behaviour. A core that dropped the write instead would let
     # firmware configure a register and report nothing.
     cacr*: uint32               ## the cache control register
-    acr0*: uint32               ## access control register 0
-    acr1*: uint32               ## access control register 1
+    acr0*: uint32               ## access control register 0, data space
+    acr1*: uint32               ## access control register 1, data space
+    acr2*: uint32               ## access control register 2, instruction space
+    acr3*: uint32               ## access control register 3, instruction space
     rambar0*: uint32            ## the SRAM base address register
     rambar1*: uint32            ## the second SRAM base address register
     mbar*: uint32               ## the peripheral module base address register
