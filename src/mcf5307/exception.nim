@@ -1,12 +1,16 @@
 ## `exception` - the exception stack frame, the fault status codes and the
 ## vector table.
 ##
-## The two manuals disagree about vector 5 and nothing reconciles it. User's
-## Manual Table 3-1, folio 3-13, gives vectors 5 to 7 as "Reserved"; CFPRM
-## Rev. 3 Table 11-1, folio 11-2, gives vector 5 to "Divide by zero" and its
-## footnote 2 reserves that vector on the 5202, 5204 and 5206 alone - not this
-## part. The same tables differ at vectors 12 and 13, where CFPRM footnote 3
-## does reconcile them. No constant below names vector 5, 12 or 13.
+## Vector 5 was an open disagreement and the part settles it. The MCF5307
+## User's Manual Table 3-1, folio 3-13, gives vectors 5 to 7 as "Reserved",
+## while CFPRM Rev. 3 Table 11-1, folio 11-2, gives vector 5 to "Divide by
+## zero"; the disagreement stood only because the MCF5307 manual is for a
+## different part. This is an MCF5407, whose User's Manual Table 2-22, section
+## 2.8.2, folio 2-34, reads "Attempted division by zero causes an exception
+## (vector 5, offset = 0x014)". The CFPRM reading is the right one and
+## `alu.nim` states it correctly. The same tables differ at vectors 12 and 13,
+## where CFPRM footnote 3 does reconcile them. No constant below names vector
+## 5, 12 or 13.
 
 # User's Manual Table 3-3, section 3.5.1, folio 3-14: the defined set for this
 # part. CFPRM Table 11-2, folio 11-5, adds codes tagged "V4 and beyond, if MMU"

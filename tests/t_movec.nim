@@ -117,13 +117,20 @@ check(controlRegisterFor(movecControlField(0x0800'u16)), crUnimplemented,
     "extension word 0x0800 selects no register and is not USP")
 
 # ---------------------------------------------------------------------------
-# A number the ColdFire family assigns and this part does not implement.
-# RAMBAR1 is the one number this core accepts on the family table alone, and
-# without this case a map that accepted every family number would look the same
-# as one that accepted the part's own.
+# The instruction-space access control registers. This part is an MCF5407 and
+# carries all four ACRs; an MCF5307 carries ACR0 and ACR1 only, so a map built
+# from the older manual answers every case above and fails these two.
 
-check(controlRegisterFor(0x006'u16), crUnimplemented,
-    "0x006 is ACR2 on the family and is not implemented here")
+check(controlRegisterFor(0x006'u16), crAcr2, "0x006 is ACR2")
+check(controlRegisterFor(0x007'u16), crAcr3, "0x007 is ACR3")
+
+# ---------------------------------------------------------------------------
+# A number inside the ACR run that Table 2-2 assigns to nothing. Without it a
+# map that answered the whole `0x002`-`0x007` range would look the same as one
+# that answered the table.
+
+check(controlRegisterFor(0x003'u16), crUnimplemented,
+    "0x003 names no register of this part")
 
 # ---------------------------------------------------------------------------
 # The instruction driven through the shipped path.
@@ -274,6 +281,10 @@ check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0004'u16], srSuper)),
     accepted, "movec %d0,ACR0 (0x004) executes")
 check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0005'u16], srSuper)),
     accepted, "movec %d0,ACR1 (0x005) executes")
+check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0006'u16], srSuper)),
+    accepted, "movec %d0,ACR2 (0x006) executes")
+check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0007'u16], srSuper)),
+    accepted, "movec %d0,ACR3 (0x007) executes")
 check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0801'u16], srSuper)),
     accepted, "movec %d0,VBR (0x801) executes")
 check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0C05'u16], srSuper)),
@@ -293,7 +304,7 @@ check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x8C04'u16], srSuper)),
 # A control-register number this part does not carry halts the core, and it
 # halts without a fault. An access to unimplemented control register space produces undefined
 # results, so the encoding is a valid `MOVEC` with only the destination absent
-# from this part, which is the `opExg`/`opTas`/`opNbcd` shape `cpu.nim` already
+# from this part, which is the unreachable-arm shape `cpu.nim` already
 # states: `halted` set and `fault` clear. A core that accepted these instead
 # would run on with a register write that reached nothing.
 
@@ -301,8 +312,8 @@ const refused = (ran: false, fault: false, halted: true,
                  pc: execBase + 4'u32, d0: dirtyD, a0: dirtyA,
                  sr: srSuper, a7: stackBase)
 
-check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0006'u16], srSuper)),
-    refused, "movec %d0,0x006 halts: ACR2 is not on this part")
+check(ranAndConsumedBothWords(runIns([0x4E7B'u16, 0x0003'u16], srSuper)),
+    refused, "movec %d0,0x003 halts: it names no register of this part")
 
 # `0x800` is assigned to nothing on this part. A fork that restored the 68k
 # reading would make this number a register and this case is what goes red.
@@ -339,7 +350,7 @@ block:
 # CARRIES A DIFFERENT VALUE. Two stores wired to each other's destination then
 # leave BOTH read-backs holding a value that belongs to the other, and both
 # cases go red; a single shared value would let a swap pass. The A/D bit and
-# Ry are varied across the seven for the same reason: a store that read `d0`
+# Ry are varied across the nine for the same reason: a store that read `d0`
 # whatever the extension word named would answer every case that used `d0`.
 #
 # THE WHOLE CONTROL FILE IS ASSERTED PER CASE AND NOT ONLY THE REGISTER UNDER
@@ -361,7 +372,8 @@ const
     0xA000_5A5A'u32, 0xA111_5A5A'u32, 0xA222_5A5A'u32, 0xA333_5A5A'u32,
     0xA444_5A5A'u32, 0xA555_5A5A'u32, 0xA666_5A5A'u32]
 
-type ControlFile = tuple[cacr, acr0, acr1, vbr, rambar0, rambar1, mbar: uint32]
+type ControlFile = tuple[cacr, acr0, acr1, acr2, acr3, vbr,
+                         rambar0, rambar1, mbar: uint32]
 
 const
   # The register-file indices the ABI publishes for the control registers.
@@ -372,15 +384,19 @@ const
   ixRambar0 = 22
   ixRambar1 = 23
   ixMbar = 24
+  ixAcr2 = 25
+  ixAcr3 = 26
 
   noControlRegisterWritten: ControlFile =
-    (cacr: 0'u32, acr0: 0'u32, acr1: 0'u32, vbr: 0'u32,
-     rambar0: 0'u32, rambar1: 0'u32, mbar: 0'u32)
+    (cacr: 0'u32, acr0: 0'u32, acr1: 0'u32, acr2: 0'u32, acr3: 0'u32,
+     vbr: 0'u32, rambar0: 0'u32, rambar1: 0'u32, mbar: 0'u32)
 
 proc controlFileOf(ctx: MCF5307Ctx): ControlFile =
   (cacr: mcf5307_get_reg(ctx, ixCacr),
    acr0: mcf5307_get_reg(ctx, ixAcr0),
    acr1: mcf5307_get_reg(ctx, ixAcr1),
+   acr2: mcf5307_get_reg(ctx, ixAcr2),
+   acr3: mcf5307_get_reg(ctx, ixAcr3),
    vbr: mcf5307_get_reg(ctx, ixVbr),
    rambar0: mcf5307_get_reg(ctx, ixRambar0),
    rambar1: mcf5307_get_reg(ctx, ixRambar1),
@@ -423,10 +439,11 @@ proc landed(ext: uint16): auto =
 proc onlyAt(position: int; value: uint32): ControlFile =
   ## The control file in which ONE register holds `value` and every other holds
   ## its reset value. `position` counts along `ControlFile`'s own order.
-  var slots: array[7, uint32]
+  var slots: array[9, uint32]
   slots[position] = value
-  (cacr: slots[0], acr0: slots[1], acr1: slots[2], vbr: slots[3],
-   rambar0: slots[4], rambar1: slots[5], mbar: slots[6])
+  (cacr: slots[0], acr0: slots[1], acr1: slots[2], acr2: slots[3],
+   acr3: slots[4], vbr: slots[5], rambar0: slots[6], rambar1: slots[7],
+   mbar: slots[8])
 
 proc landedWant(want: ControlFile): auto =
   (ctl: want, halted: false, fault: false, pc: execBase + 4'u32)
@@ -440,16 +457,22 @@ check(landed(0x2004'u16), landedWant(onlyAt(1, dSeed[2])),
 check(landed(0xB005'u16), landedWant(onlyAt(2, aSeed[3])),
       "movec %a3,ACR1 (0x005) stores a3 into ACR1 and nothing else")
 
-check(landed(0x4801'u16), landedWant(onlyAt(3, dSeed[4])),
+check(landed(0x3006'u16), landedWant(onlyAt(3, dSeed[3])),
+      "movec %d3,ACR2 (0x006) stores d3 into ACR2 and nothing else")
+
+check(landed(0xA007'u16), landedWant(onlyAt(4, aSeed[2])),
+      "movec %a2,ACR3 (0x007) stores a2 into ACR3 and nothing else")
+
+check(landed(0x4801'u16), landedWant(onlyAt(5, dSeed[4])),
       "movec %d4,VBR (0x801) stores d4 unmasked into VBR and nothing else")
 
-check(landed(0xDC04'u16), landedWant(onlyAt(4, aSeed[5])),
+check(landed(0xDC04'u16), landedWant(onlyAt(6, aSeed[5])),
       "movec %a5,RAMBAR0 (0xC04) stores a5 into RAMBAR0 and nothing else")
 
-check(landed(0x6C05'u16), landedWant(onlyAt(5, dSeed[6])),
+check(landed(0x6C05'u16), landedWant(onlyAt(7, dSeed[6])),
       "movec %d6,RAMBAR1 (0xC05) stores d6 into RAMBAR1 and nothing else")
 
-check(landed(0xEC0F'u16), landedWant(onlyAt(6, aSeed[6])),
+check(landed(0xEC0F'u16), landedWant(onlyAt(8, aSeed[6])),
       "movec %a6,MBAR (0xC0F) stores a6 into MBAR and nothing else")
 
 # THE REFUSAL PATH WRITES NOTHING, AND IT IS ASSERTED AND NOT ASSUMED. A store
@@ -457,10 +480,10 @@ check(landed(0xEC0F'u16), landedWant(onlyAt(6, aSeed[6])),
 # and this case is what separates the two orders.
 
 block:
-  let o = runControlWrite(0x0006'u16)
+  let o = runControlWrite(0x0003'u16)
   check((ctl: o.ctl, halted: o.halted, fault: o.fault),
         (ctl: noControlRegisterWritten, halted: true, fault: false),
-        "movec %d0,0x006 halts and writes no control register")
+        "movec %d0,0x003 halts and writes no control register")
 
 # ---------------------------------------------------------------------------
 # RESET.
@@ -473,11 +496,13 @@ block:
   let ctx = freshSeededCtx([0x4E7B'u16, 0x1002'u16,
                             0x4E7B'u16, 0x2004'u16,
                             0x4E7B'u16, 0xB005'u16,
+                            0x4E7B'u16, 0x3006'u16,
+                            0x4E7B'u16, 0xA007'u16,
                             0x4E7B'u16, 0x4801'u16,
                             0x4E7B'u16, 0xDC04'u16,
                             0x4E7B'u16, 0x6C05'u16,
                             0x4E7B'u16, 0xEC0F'u16])
-  for _ in 0 .. 6:
+  for _ in 0 .. 8:
     discard mcf5307_exec(ctx, 1'u32)
   let before = controlFileOf(ctx)
   mcf5307_reset(ctx, stackBase, execBase)
@@ -489,17 +514,17 @@ block:
   # rather than one it states; `cpu.nim` carries the same note at the site.
   check((before: before, after: after),
         (before: (cacr: dSeed[1], acr0: dSeed[2], acr1: aSeed[3],
-                  vbr: dSeed[4], rambar0: aSeed[5], rambar1: dSeed[6],
-                  mbar: aSeed[6]),
+                  acr2: dSeed[3], acr3: aSeed[2], vbr: dSeed[4],
+                  rambar0: aSeed[5], rambar1: dSeed[6], mbar: aSeed[6]),
          after: noControlRegisterWritten),
-        "reset clears every control register the seven writes had filled")
+        "reset clears every control register the nine writes had filled")
 
 # ---------------------------------------------------------------------------
 # THE CONSUMER.
 #
 # STORING IS NOT THE DELIVERABLE. A core that kept the value in a field no
 # dispatch consulted would pass every case above and would fail identically to
-# one that discarded it. VBR is the one register of the seven this core
+# one that discarded it. VBR is the one register of the nine this core
 # consumes, so its case runs an exception AFTER the write and asserts that the
 # handler address came from the base the instruction supplied.
 #

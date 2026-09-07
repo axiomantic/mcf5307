@@ -149,8 +149,10 @@ const
   ixD0 = 0
   ixD1 = 1
   ixD2 = 2
+  ixD3 = 3
   ixD4 = 4
   ixD6 = 6
+  ixA2 = 10
   ixA3 = 11
   ixA5 = 13
   ixA6 = 14
@@ -163,6 +165,8 @@ const
   ixRambar0 = 22
   ixRambar1 = 23
   ixMbar = 24
+  ixAcr2 = 25
+  ixAcr3 = 26
 
 # ---------------------------------------------------------------------------
 # BLOCK 1. THE VECTOR BASE, DRIVEN THROUGH THE PUBLISHED PATH.
@@ -240,6 +244,8 @@ const
   cacrSeed = 0xC1C1_0002'u32
   acr0Seed = 0xA0A0_0004'u32
   acr1Seed = 0xA1A1_0005'u32
+  acr2Seed = 0xA2A2_0006'u32
+  acr3Seed = 0xA3A3_0007'u32
   rambar0Seed = 0xB0B0_0C04'u32
   rambar1Seed = 0xB1B1_0C05'u32
   mbarSeed = 0xB2B2_0C0F'u32
@@ -248,30 +254,37 @@ const
     ## `vbrSource` in an IMPLEMENTED bit, so a load that failed to restore VBR
     ## is visible rather than masked away at the dispatch.
 
-  # `movec %d1,CACR`, `%d2,ACR0`, `%a3,ACR1`, `%d4,VBR`, `%a5,RAMBAR0`,
-  # `%d6,RAMBAR1`, `%a6,MBAR`, then `%d0,VBR` as the run after the save.
+  # `movec %d1,CACR`, `%d2,ACR0`, `%a3,ACR1`, `%d3,ACR2`, `%a2,ACR3`,
+  # `%d4,VBR`, `%a5,RAMBAR0`, `%d6,RAMBAR1`, `%a6,MBAR`, then `%d0,VBR` as the
+  # run after the save.
   controlProgram = [
     opMovec, 0x1002'u16,
     opMovec, 0x2004'u16,
     opMovec, 0xB005'u16,
+    opMovec, 0x3006'u16,
+    opMovec, 0xA007'u16,
     opMovec, 0x4801'u16,
     opMovec, 0xDC04'u16,
     opMovec, 0x6C05'u16,
     opMovec, 0xEC0F'u16,
     opMovec, 0x0801'u16]
-  writeCount = 7
+  writeCount = 9
     ## The instructions ahead of the save.
 
-type ControlFile = tuple[cacr, acr0, acr1, vbr, rambar0, rambar1, mbar: uint32]
+type ControlFile = tuple[cacr, acr0, acr1, acr2, acr3, vbr,
+                         rambar0, rambar1, mbar: uint32]
 
 const seededFile: ControlFile =
-  (cacr: cacrSeed, acr0: acr0Seed, acr1: acr1Seed, vbr: vbrSource,
-   rambar0: rambar0Seed, rambar1: rambar1Seed, mbar: mbarSeed)
+  (cacr: cacrSeed, acr0: acr0Seed, acr1: acr1Seed, acr2: acr2Seed,
+   acr3: acr3Seed, vbr: vbrSource, rambar0: rambar0Seed,
+   rambar1: rambar1Seed, mbar: mbarSeed)
 
 proc controlFileOf(ctx: MCF5307Ctx): ControlFile =
   (cacr: mcf5307_get_reg(ctx, ixCacr),
    acr0: mcf5307_get_reg(ctx, ixAcr0),
    acr1: mcf5307_get_reg(ctx, ixAcr1),
+   acr2: mcf5307_get_reg(ctx, ixAcr2),
+   acr3: mcf5307_get_reg(ctx, ixAcr3),
    vbr: mcf5307_get_reg(ctx, ixVbr),
    rambar0: mcf5307_get_reg(ctx, ixRambar0),
    rambar1: mcf5307_get_reg(ctx, ixRambar1),
@@ -285,6 +298,8 @@ proc seededCtx(): MCF5307Ctx =
   discard mcf5307_set_reg(result, ixD1, cacrSeed)
   discard mcf5307_set_reg(result, ixD2, acr0Seed)
   discard mcf5307_set_reg(result, ixA3, acr1Seed)
+  discard mcf5307_set_reg(result, ixD3, acr2Seed)
+  discard mcf5307_set_reg(result, ixA2, acr3Seed)
   discard mcf5307_set_reg(result, ixD4, vbrSource)
   discard mcf5307_set_reg(result, ixA5, rambar0Seed)
   discard mcf5307_set_reg(result, ixD6, rambar1Seed)
@@ -329,6 +344,7 @@ block:
   # never left.
   check((ctl: afterFirstRun, pc: pcAfterFirstRun),
         (ctl: (cacr: cacrSeed, acr0: acr0Seed, acr1: acr1Seed,
+               acr2: acr2Seed, acr3: acr3Seed,
                vbr: vbrAfterRun, rambar0: rambar0Seed, rambar1: rambar1Seed,
                mbar: mbarSeed),
          pc: execBase + 4'u32 * uint32(writeCount + 1)),
@@ -337,7 +353,7 @@ block:
   check((status: status, ctl: restored, pc: pcRestored),
         (status: stateOk, ctl: seededFile,
          pc: execBase + 4'u32 * uint32(writeCount)),
-        "the load restores the seven registers and the program counter")
+        "the load restores the nine registers and the program counter")
 
   check((ctl: afterSecondRun, pc: pcAfterSecondRun),
         (ctl: afterFirstRun, pc: pcAfterFirstRun),
@@ -352,12 +368,12 @@ block:
 
 const
   vbrByteOffset = 86
-  mbarByteOffset = 110
+  mbarByteOffset = 118
 
 check(be32(savedBlock, vbrByteOffset), vbrSource,
       "the block carries VBR at byte 86")
 check(be32(savedBlock, mbarByteOffset), mbarSeed,
-      "the block carries MBAR at byte 110")
+      "the block carries MBAR at byte 118")
 
 # A PERTURBED BYTE IN THE REGISTER REGION IS REFUSED BY NAME, AND THE CONTEXT
 # IS LEFT ALONE. A load that accepted the block would report `stateOk` and

@@ -240,23 +240,30 @@ uint32_t mcf5307_exec(mcf5307_ctx* ctx, uint32_t max_cycles);
  *     17     the program counter (read-only through this call)
  *     18     VBR, the vector base register
  *     19     CACR, the cache control register
- *     20     ACR0
- *     21     ACR1
+ *     20     ACR0, data space
+ *     21     ACR1, data space
  *     22     RAMBAR0
  *     23     RAMBAR1
  *     24     MBAR
+ *     25     ACR2, instruction space
+ *     26     ACR3, instruction space
+ *
+ * ACR2 AND ACR3 SIT AFTER MBAR RATHER THAN BESIDE ACR0 AND ACR1. Grouping
+ * them would renumber every index above 21, and a caller compiled against an
+ * earlier copy of this header would then read a different register without
+ * any diagnostic.
  *
  * INDICES 18 AND ABOVE ARE CONTROL REGISTERS AND NOT PART OF THE REGISTER
  * FILE. `MOVEC` is the machine's own way to write them and it reaches nothing
  * outside a running program, so this call is the only channel a host has: a
  * host that must place the machine at a vector table before the firmware has
  * written one, or that must see where a `MOVEC` put its value, has no other
- * door. Of the seven, only VBR changes what the core does - it bases the
- * exception vector table. The other six hold what was written and are
+ * door. Of the nine, only VBR changes what the core does - it bases the
+ * exception vector table. The other eight hold what was written and are
  * consumed by nothing: this core models neither the cache, nor the access
  * control regions, nor the on-chip SRAM, nor the peripheral base.
  *
- * `mcf5307_reset` sets all seven to zero.
+ * `mcf5307_reset` sets all nine to zero.
  *
  * `mcf5307_set_reg` returns 1 on success and 0 for an out-of-range index or
  * a nil context; `mcf5307_get_reg` returns the register's value and 0 for an
