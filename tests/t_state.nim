@@ -61,7 +61,7 @@ const expectedLayout = @[
   ("irq7Armed", 1), ("irq7Vector", 1), ("irq7Autovector", 1),
   ("atHandlerEntry", 1),
   ("pendingWriteFault", 1), ("pendingFaultStatus", 4),
-  ("pendingStackedSr", 4), ("pendingStackedPc", 4)]
+  ("pendingStackedSr", 4)]
 
 # EVERY MEASURED VALUE IS TAKEN ONCE INTO A `let` AND THE CASE READS THE `let`.
 # `check` is a TEMPLATE, so an expression written into it is evaluated once for
@@ -75,9 +75,9 @@ check(measuredLayout == expectedLayout,
       $measuredLayout, $expectedLayout)
 
 let measuredSize = int(mcf5407_state_size())
-check(measuredSize == 149,
+check(measuredSize == 145,
       "size: header, payload and checksum",
-      $measuredSize, "149")
+      $measuredSize, "145")
 
 # ---------------------------------------------------------------------------
 # BLOCK 2. The header words, and the buffer every save in this file writes into.
@@ -88,7 +88,7 @@ check(measuredSize == 149,
 # one case there rather than a result returned to each caller.
 
 const
-  blockBytes = 149
+  blockBytes = 145
   guardBytes = 8
   filler = 0xEE'u8
 
@@ -133,8 +133,8 @@ let headerProbe = savedBlock(freshContext())
 let headerWords = (magic: be32(headerProbe, 0),
                    version: be32(headerProbe, 4),
                    payload: be32(headerProbe, 8))
-let wantHeaderWords = (magic: 0x4D435335'u32, version: 4'u32,
-                       payload: 133'u32)
+let wantHeaderWords = (magic: 0x4D435335'u32, version: 5'u32,
+                       payload: 129'u32)
 
 check(headerWords == wantHeaderWords,
       "header: the magic, the version word and the payload width",
@@ -255,8 +255,8 @@ for name, wantValue, gotValue in fieldPairs(stamped[], restored[]):
 # a checksum it did not also compute with the same constants.
 
 const goldenStampedBlock = @[
-  0x4D'u8, 0x43'u8, 0x53'u8, 0x35'u8, 0x00'u8, 0x00'u8, 0x00'u8, 0x04'u8,
-  0x00'u8, 0x00'u8, 0x00'u8, 0x85'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x01'u8,
+  0x4D'u8, 0x43'u8, 0x53'u8, 0x35'u8, 0x00'u8, 0x00'u8, 0x00'u8, 0x05'u8,
+  0x00'u8, 0x00'u8, 0x00'u8, 0x81'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x01'u8,
   0xA5'u8, 0xA5'u8, 0x00'u8, 0x02'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x03'u8,
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x04'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x05'u8,
   0xC3'u8, 0xC3'u8, 0x00'u8, 0x06'u8, 0xC3'u8, 0xC3'u8, 0x00'u8, 0x07'u8,
@@ -272,8 +272,8 @@ const goldenStampedBlock = @[
   0x00'u8, 0x1B'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x1C'u8, 0xA5'u8, 0xA5'u8,
   0x00'u8, 0x1D'u8, 0x00'u8, 0x00'u8, 0x01'u8, 0x1E'u8, 0x5F'u8, 0x00'u8,
   0x01'u8, 0x62'u8, 0x01'u8, 0x00'u8, 0x01'u8, 0xA5'u8, 0xA5'u8, 0x00'u8,
-  0x26'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x27'u8, 0xA5'u8, 0xA5'u8, 0x00'u8,
-  0x28'u8, 0x96'u8, 0x54'u8, 0x54'u8, 0x5D'u8
+  0x26'u8, 0xA5'u8, 0xA5'u8, 0x00'u8, 0x27'u8, 0x4C'u8, 0x88'u8, 0x0B'u8,
+  0x2E'u8
 ]
 
 check(stampedBytes == goldenStampedBlock,

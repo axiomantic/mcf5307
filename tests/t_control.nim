@@ -961,26 +961,35 @@ block:
     "jmp to an odd target takes the address error")
 
 block:
-  # `rts`. The odd address comes off the stack, and the pop has already moved
-  # A7 when the transfer is refused - so the frame lands eight bytes below the
-  # POPPED pointer and not below the one the instruction started with. That
-  # places the frame over the stack slot the return PC came from.
+  # `rts`. The odd address comes off the stack, and A7 STAYS WHERE THE
+  # INSTRUCTION FOUND IT when the transfer is refused - so the frame lands
+  # eight bytes below the pointer the RTS started with, and the stack slot the
+  # return PC came from is still under it.
   #
-  # THAT IS V2/V3 BEHAVIOUR AND THE MCF5407 REVERSES IT, SO THIS EXPECTED FRAME
-  # BASE IS WRONG FOR THIS PART. MCF5407 User's Manual section 2.8.2,
-  # Table 2-22, the Address Error row, folio 2-34: "If an address error occurs
-  # on an RTS instruction, the Version 4 processor preserves the original
-  # return PC and writes the exception stack frame above this value. On Version
-  # 2 and 3 processors, the faulting return PC is overwritten by the address
-  # error stack frame." The literal is left unchanged so the case goes red when
-  # the V4 rule is implemented.
+  # MCF5407 User's Manual section 2.8.2, Table 2-22, the Address Error row,
+  # folio 2-34: "If an address error occurs on an RTS instruction, the Version
+  # 4 processor preserves the original return PC and writes the exception stack
+  # frame above this value. On Version 2 and 3 processors, the faulting return
+  # PC is overwritten by the address error stack frame." A7 enters at
+  # `stackBase - 4`; a Version 3 advances it to `stackBase` and puts the frame
+  # at `stackBase - 8`, across that slot. This part leaves it, so Table 2-20's
+  # frame base is `stackBase - 12`.
+  #
+  # THE PRESERVED RETURN PC IS READ BACK, because the frame base alone does not
+  # say it survived. A core that wrote its frame at `stackBase - 12` and
+  # zeroed, moved or re-pushed the slot above would satisfy the case above.
   let o = runIns([0x4E75'u16],
                  a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase - 4'u32],
                  sr = allDirty,
                  mem = @[(addressErrorVector, addressErrorHandler),
                          (stackBase - 4'u32, 0x301'u32)])
-  expectAddressError(o, stackBase - 8'u32,
+  expectAddressError(o, stackBase - 12'u32,
     "rts to an odd target takes the address error")
+  let gotRts = mem32(stackBase - 4'u32)
+  let wantRts = 0x301'u32
+  check(gotRts == wantRts,
+    "rts to an odd target preserves the return PC the frame goes above",
+    $gotRts, $wantRts)
 
 block:
   # `bsr.b`. The return address is pushed BEFORE the transfer, so the push
@@ -1000,6 +1009,42 @@ block:
   let want = execBase + 2'u32
   check(got == want,
     "bsr.b to an odd target has already pushed the return address",
+    $got, $want)
+
+# ---------------------------------------------------------------------------
+# BLOCK 12. JSR PUSHES BEFORE IT CALCULATES.
+#
+# MCF5407 User's Manual section 2.8.2, Table 2-22, the Address Error row, folio
+# 2-34: "If an address error occurs on a JSR instruction, the Version 4
+# processor first pushes the return address onto the stack and then calculates
+# the target address. On Version 2 and 3 processors, these functions are
+# reversed."
+#
+# THE ORDER IS MEASURED ON AN OPERAND THAT READS A7, AND IT HAS TO BE. A target
+# that does not depend on the stack pointer is the same number in both orders,
+# so `jsr 0x700` cannot tell them apart however it faults - which is why
+# `t_bus_fault.nim`'s faulting-JSR case does not pin this and says so.
+# `jsr (%a7)` is the shape that can: Table 2-8, folio 2-20, gives JSR
+# "Address of <ea> -> PC", so the target IS A7, and the push has moved A7 by
+# four before the calculation reads it.
+#
+# THE TARGET IS EVEN IN BOTH ORDERS, so this case is about the order alone and
+# not about the address error. A7 at `stackBase` gives a Version 3 the target
+# `stackBase` and this part the target `stackBase - 4`, and the pushed return
+# address is the same word at the same place either way - which is the second
+# assertion here, and it is what stops a core that simply skipped the push from
+# passing the first.
+#
+# `4e97` is `jsr (%a7)` out of m68k-elf-as -mcpu=5307.
+block:
+  let o = runIns([0x4E97'u16], a = [0'u32, 0, 0, 0, 0, 0, 0, stackBase],
+                 sr = allDirty)
+  let got = (pc: o.pc, a7: o.a[7], pushed: mem32(stackBase - 4'u32),
+             fault: o.fault, halted: o.halted)
+  let want = (pc: stackBase - 4'u32, a7: stackBase - 4'u32,
+              pushed: execBase + 2'u32, fault: false, halted: false)
+  check(got == want,
+    "jsr (%a7) calculates its target from the pushed stack pointer",
     $got, $want)
 
 # ---------------------------------------------------------------------------

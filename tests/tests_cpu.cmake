@@ -1281,7 +1281,7 @@ mcf5407_check_case_sites("t_control" "@MCF5407_CONTROL_SOURCE@" "${control_run_o
 # states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
 # what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
 # CASE COUNT.
-mcf5407_check_case_total("t_control" "${control_run_out}" 175)
+mcf5407_check_case_total("t_control" "${control_run_out}" 177)
 
 ]==])
 
@@ -2552,7 +2552,7 @@ mcf5407_check_case_sites("t_bus_fault_write"
 # states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
 # what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
 # CASE COUNT.
-mcf5407_check_case_total("t_bus_fault_write" "${bus_fault_write_run_out}" 6)
+mcf5407_check_case_total("t_bus_fault_write" "${bus_fault_write_run_out}" 9)
 
 ]==])
 
@@ -2815,7 +2815,7 @@ mcf5407_check_case_sites("t_state" "@MCF5407_STATE_SOURCE@" "${state_run_out}"
 # to `MCF5407Ctx` moves this figure. That coupling is the point: a field that
 # enters the snapshot without anyone deciding it should is what this figure
 # refuses to let pass quietly.
-mcf5407_check_case_total("t_state" "${state_run_out}" 47)
+mcf5407_check_case_total("t_state" "${state_run_out}" 46)
 
 ]==])
 

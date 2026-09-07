@@ -203,13 +203,12 @@ proc mcf5407_reset*(ctx: MCF5407Ctx; initialSp: uint32; initialPc: uint32)
   ctx.mbar = 0'u32
 
   # A reset discards a store's recorded access error rather than carrying it
-  # into the reset handler. The capture names a program counter and a status
-  # register of the program this call has just ended; taking it after the reset
-  # would stack a frame describing a machine that no longer exists.
+  # into the reset handler. The capture names a status register of the program
+  # this call has just ended; taking it after the reset would stack a frame
+  # describing a machine that no longer exists.
   ctx.pendingWriteFault = false
   ctx.pendingFaultStatus = 0'u32
   ctx.pendingStackedSr = 0'u32
-  ctx.pendingStackedPc = 0'u32
   # The reset exception is an exception, so its first instruction is inhibited
   # like every other handler's. Table 3-1's closing paragraph, folio 3-13:
   # "ColdFire processors inhibit sampling for interrupts during the first
@@ -246,6 +245,10 @@ proc step(ctx: MCF5407Ctx): uint32 =
     ctx.fault = true
     ctx.halted = true
     return 0
+  # The address of the instruction about to run, taken before the fetch moves
+  # the program counter off it. `takePendingWriteFault` at the foot of this
+  # procedure is what needs it, and folio 4-17 is why.
+  let insnPc = ctx.pc
   var status = Mcf5407BusStatus.busOk
   let word = ctx.readFn(ctx.user, ctx.pc, 2, addr status)
   if status != Mcf5407BusStatus.busOk:
@@ -359,7 +362,7 @@ proc step(ctx: MCF5407Ctx): uint32 =
   # after every arm and not inside the arms that write memory, so the rule is a
   # property of the boundary rather than a list of executors that remembered
   # it. `machine.nim`'s `writeMem` carries the manual reading.
-  takePendingWriteFault(ctx)
+  takePendingWriteFault(ctx, insnPc)
 
 proc mcf5407_exec*(ctx: MCF5407Ctx; maxCycles: uint32): uint32
     {.exportc: "mcf5407_exec", cdecl, dynlib.} =

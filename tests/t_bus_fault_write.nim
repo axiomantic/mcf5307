@@ -1,29 +1,22 @@
-## `t_bus_fault_write` - the imprecise stacked program counter of an operand
-## write fault.
+## `t_bus_fault_write` - the stacked program counter of an operand write fault,
+## and the condition codes a refused CLR leaves in the frame.
 ##
-## It asserts that the fault was taken and that the write instruction's
-## register write-back completed. It does not assert the stacked program
-## counter, and no expected value in this file carries one.
+## It asserts that the fault was taken, that the write instruction's register
+## write-back completed, and that the frame names the FAULTING INSTRUCTION.
 ##
 ## The write cycle may be decoupled from the processor's issuing of the
-## operation, so the PC in the exception stack frame merely represents the
-## location in the program when the access error was signaled, and all
-## programming model updates associated with the write instruction are
-## completed.
+## operation, and all programming model updates associated with the write
+## instruction are completed. The MCF5307 leaves the stacked program counter
+## at whatever point in that pipeline the error was signaled; THIS PART DOES
+## NOT. MCF5407 User's Manual section 4.9.5.1, "Cache Filling", folio 4-17:
+## "Note that unlike Version 2 and Version 3 access errors, the program counter
+## stored on the exception stack frame points to the faulting instruction."
 ##
-## So a pinned program counter would be a defect in this file and not a
-## measurement. The general rule stacks the PC of the instruction that caused
-## the exception, and the write direction withdraws exactly that. A case that
-## held the frame's second longword to any literal would go red against a core that reported at a different point in the write
-## pipeline, which is behaviour the manual permits; the reader would then be
-## told a correct core is broken.
-##
-## The omission is made non-vacuous rather than left as silence. The same
-## faulting instruction runs at two program addresses and the asserted outcome
-## is one constant for both, so the outcome is measured to be independent of a
-## stacked program counter that provably moved between the runs; and the runner
-## returns that program counter outside the asserted tuple, so a later edit
-## cannot fold it back in without deleting a field.
+## So the frame's second longword is pinned here, and it is pinned to a value
+## that is not `ctx.pc` at any point of any instruction in this file. The same
+## faulting instruction runs at two program addresses and each run is held to
+## its own instruction address, so the pin measures the sentence rather than a
+## constant that a core stacking nothing could also satisfy.
 ##
 ## Every expected value below is a hand-derived literal, written beside the bit
 ## string or the manual row it came from, and not a second call of the
@@ -237,26 +230,27 @@ check(postAlt.outcome == wantFaultedPost,
       $postAlt.outcome, $wantFaultedPost)
 
 # ---------------------------------------------------------------------------
-# Block 2. The stacked program counter moved between those two runs, and
-# neither value is pinned.
+# Block 2. The stacked program counter is the faulting instruction's address.
 #
-# This is the one case that reads the frame's second longword, and it compares
-# the two runs with each other rather than either with a literal. Folio 3-15
-# fixes the stacked value only as "the location in the program when the access
-# error was signaled", so an implementation may report at more than one point
-# in its write pipeline and every such choice is correct. What the manual does
-# not permit is a value unrelated to where the program was: two runs of one
-# instruction placed 0x40 apart must not stack the same location.
+# MCF5407 User's Manual section 4.9.5.1, "Cache Filling", folio 4-17: "Note
+# that unlike Version 2 and Version 3 access errors, the program counter stored
+# on the exception stack frame points to the faulting instruction." The
+# instruction is `move.l %d0,(%a0)+`, one word, so a Version 2 or 3 stacks the
+# word after it and this part stacks the word itself.
 #
-# Without this case the omission above would be indistinguishable from an
-# oversight. The two runs are asserted against one constant, and a core that
-# stacked nothing at all in either run would satisfy that constant just as
-# well; this case is what requires the program counter to have been stacked and
-# to have moved.
-check(post.stackedPc != postAlt.stackedPc,
-      "the stacked program counter tracks the program and is not pinned here",
-      "0x" & toHex(post.stackedPc) & " vs 0x" & toHex(postAlt.stackedPc),
-      "two different values")
+# THE PAIR IS THE MEASUREMENT AND NOT EITHER LITERAL. Each run is held to ITS
+# OWN program address, so a core that stacked a constant satisfies neither, a
+# core that stacked nothing satisfies neither, and a core that stacked the
+# Version 3 value satisfies neither - while a core that stacked the address of
+# whatever instruction it happened to be running satisfies both, which is what
+# the sentence says.
+let stackedPair = (at: post.stackedPc, atAlt: postAlt.stackedPc)
+let wantStackedPair = (at: execBase, atAlt: execBaseAlt)
+check(stackedPair == wantStackedPair,
+      "the stacked program counter points to the faulting instruction",
+      "0x" & toHex(stackedPair.at) & " and 0x" & toHex(stackedPair.atAlt),
+      "0x" & toHex(wantStackedPair.at) & " and 0x" &
+        toHex(wantStackedPair.atAlt))
 
 # ---------------------------------------------------------------------------
 # Block 3. The other auto-addressing direction, so that the surviving register
@@ -299,6 +293,64 @@ let accepted = runWrite(opMovePost, execBase, openWord, openWord)
 check(accepted.outcome == wantAccepted,
       "the same store to an accepted address takes no fault at all",
       $accepted.outcome, $wantAccepted)
+
+# ---------------------------------------------------------------------------
+# Block 5. THE CONDITION CODES A REFUSED CLR LEAVES IN THE FRAME.
+#
+# MCF5407 User's Manual Table 2-22, "MCF5407 Exceptions", the Access Error row,
+# folio 2-34: "The Version 4 processor, unlike the Version 2 and 3 processors,
+# updates the condition code register if a write-protect error occurs during a
+# CLR or MOV3Q operation to memory." MOV3Q is Revision B and this core does not
+# decode it, so CLR is the whole of the reachable half.
+#
+# WHAT VALUE THE REGISTER TAKES IS NOT IN THE MANUAL. It is this core's choice,
+# argued for at `execClr` in `src/mcf5407/alu.nim` and settled by nothing in
+# this repository: the value is CLR's ordinary result, N, V and C clear and Z
+# set. THE LITERALS BELOW PIN THAT CHOICE AND CITE THE MANUAL ONLY FOR THE FACT
+# THAT SOME UPDATE HAPPENS. A run on silicon replaces them.
+#
+# The frame's first longword is hand-derived from Figure 2-1's bit positions,
+# and it is the case's whole subject: it differs from every other frame in this
+# file in its low sixteen bits alone.
+#   0100 | 10 | 00000010 | 01 | 0010011100000100 -> 0x48092704
+# A Version 2 or 3 stacks 0x48092700 there - the status register as the store
+# found it, which is what `writeMem` records and what a MOVE still stacks.
+#
+# THE ACCEPTED RUN IS WHERE THE CHOSEN VALUE COMES FROM, AND IT IS HERE SO THAT
+# THE CHOICE CANNOT BE READ AS AN INVENTION. The same CLR to an address the
+# board takes leaves the live status register at 0x2704; the refused run puts
+# that same word in the frame. A core that wrote some other value into the
+# frame would break the equality between the two runs, which is the argument
+# `execClr` makes stated as a case.
+
+const
+  opClrInd = 0x4290'u16      ## `clr.l (%a0)`, m68k-elf-as -mcpu=5307
+
+const wantClrRefused: WriteOutcome =
+  (sp: frameBase, pc: accessHandler, sr: 0x2704'u32, halted: false,
+   fault: false, frame: 0x48092704'u32, a0: protectedWord,
+   d0: sourceD0, stored: 0'u32, offBoard: 0)
+
+let clrRefused = runWrite(opClrInd, execBase, protectedWord, protectedWord)
+check(clrRefused.outcome == wantClrRefused,
+      "a refused CLR stacks the condition codes the clear wrote",
+      $clrRefused.outcome, $wantClrRefused)
+
+const wantClrAccepted: WriteOutcome =
+  (sp: startSp, pc: execBase + 2'u32, sr: 0x2704'u32, halted: false,
+   fault: false, frame: 0'u32, a0: openWord, d0: sourceD0,
+   stored: 0'u32, offBoard: 0)
+
+let clrAccepted = runWrite(opClrInd, execBase, openWord, openWord)
+check(clrAccepted.outcome == wantClrAccepted,
+      "the same CLR to an accepted address takes no fault and sets the same Z",
+      $clrAccepted.outcome, $wantClrAccepted)
+
+let clrCcPair = (inFrame: clrRefused.outcome.frame and 0xFFFF'u32,
+                 live: clrAccepted.outcome.sr and 0xFFFF'u32)
+check(clrCcPair.inFrame == clrCcPair.live,
+      "the stacked status register is the one an unrefused CLR leaves live",
+      $clrCcPair, "the two equal")
 
 # ---------------------------------------------------------------------------
 # One instruction, two faults, and the second one is not stacked.

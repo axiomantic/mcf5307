@@ -331,7 +331,6 @@ proc writeMem*(ctx: MCF5407Ctx; address: uint32; size: uint8; value: uint32) =
     ctx.pendingWriteFault = true
     ctx.pendingFaultStatus = faultStatusFor(st, operandWrite)
     ctx.pendingStackedSr = ctx.sr and 0xFFFF'u32
-    ctx.pendingStackedPc = ctx.pc
 
 proc fetchExt*(ctx: MCF5407Ctx): uint16 =
   ## Read one extension word from the instruction stream and advance the pc
@@ -732,10 +731,19 @@ proc takeException*(ctx: MCF5407Ctx; vector: uint8; stackedPc: uint32;
   ## section 2.8's copy of the status register is the live word.
   takeExceptionCopiedSr(ctx, vector, stackedPc, fs, ctx.sr and 0xFFFF'u32)
 
-proc takePendingWriteFault*(ctx: MCF5407Ctx) =
+proc takePendingWriteFault*(ctx: MCF5407Ctx; insnPc: uint32) =
   ## Take the access error a faulted store recorded, at the instruction
   ## boundary. `cpu.nim`'s `step` is the one caller, and `writeMem` above
   ## carries the manual reading that puts the take here.
+  ##
+  ## `insnPc` is the address of the instruction whose store faulted, and it is
+  ## a parameter because it is the ONE thing the frame carries that the store
+  ## itself cannot supply. MCF5407 User's Manual section 4.9.5.1, "Cache
+  ## Filling", folio 4-17: "Note that unlike Version 2 and Version 3 access
+  ## errors, the program counter stored on the exception stack frame points to
+  ## the faulting instruction." A Version 2 or 3 core stacks wherever the write
+  ## pipeline had reached, which is `ctx.pc` at the store; this part names one
+  ## address and the caller is where it is still known.
   ##
   ## The capture fields are cleared whether or not the vector is taken, and a
   ## snapshot is why. `state.nim` encodes every context field, so a machine
@@ -748,11 +756,9 @@ proc takePendingWriteFault*(ctx: MCF5407Ctx) =
   ## a handler's first one either.
   if not ctx.pendingWriteFault:
     return
-  let stackedPc = ctx.pendingStackedPc
   let stackedSr = ctx.pendingStackedSr
   let fs = ctx.pendingFaultStatus
   ctx.pendingWriteFault = false
-  ctx.pendingStackedPc = 0'u32
   ctx.pendingStackedSr = 0'u32
   ctx.pendingFaultStatus = 0'u32
   if ctx.halted:
@@ -769,7 +775,29 @@ proc takePendingWriteFault*(ctx: MCF5407Ctx) =
     ctx.fault = true
     ctx.halted = true
     return
-  takeExceptionCopiedSr(ctx, vecAccessError, stackedPc, fs, stackedSr)
+  takeExceptionCopiedSr(ctx, vecAccessError, insnPc, fs, stackedSr)
+
+proc pendingWriteFaultTakesCc*(ctx: MCF5407Ctx) =
+  ## Re-take the status-register copy an outstanding write fault will stack, so
+  ## that it carries the condition codes the instruction has just written.
+  ##
+  ## MCF5407 User's Manual Table 2-22, "MCF5407 Exceptions", the Access Error
+  ## row, folio 2-34: "The Version 4 processor, unlike the Version 2 and 3
+  ## processors, updates the condition code register if a write-protect error
+  ## occurs during a CLR or MOV3Q operation to memory." MOV3Q is a Revision B
+  ## opcode this core does not decode, so `alu.nim`'s `execClr` is the one
+  ## caller.
+  ##
+  ## Calling it is what an executor OPTS IN to, and every other write
+  ## instruction opts out by not calling it - which is the same sentence read
+  ## the other way. `writeMem` takes the copy at the store, so a faulting
+  ## `MOVE` stacks the condition codes it found and not the ones it went on to
+  ## write.
+  ##
+  ## WHAT VALUE THE REGISTER TAKES IS A CHOICE OF THIS CORE'S AND NOT A
+  ## READING OF THE MANUAL. See the block above `execClr`.
+  if ctx.pendingWriteFault:
+    ctx.pendingStackedSr = ctx.sr and 0xFFFF'u32
 
 proc transferControl*(ctx: MCF5407Ctx; target: uint32; faultPc: uint32) =
   ## Write `target` into the program counter, or take the address error when

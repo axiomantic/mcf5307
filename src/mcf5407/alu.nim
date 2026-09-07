@@ -288,6 +288,42 @@ proc execNeg(ctx: MCF5407Ctx; d: Decoded; extended: bool): uint32 =
   # single cell 1(0/0) each. Was 4.
   1'u32
 
+# THE CONDITION CODES A WRITE-PROTECT FAULT ON CLR STACKS ARE THIS CORE'S
+# CHOICE. THE MANUAL DOES NOT STATE THEM.
+#
+# What the manual states, and the whole of it: MCF5407 User's Manual Table
+# 2-22, "MCF5407 Exceptions", the Access Error row, folio 2-34: "The Version 4
+# processor, unlike the Version 2 and 3 processors, updates the condition code
+# register if a write-protect error occurs during a CLR or MOV3Q operation to
+# memory." That THE REGISTER IS UPDATED is a manual fact. WHAT IT IS UPDATED TO
+# is nowhere in the manual set.
+#
+# THE VALUE CHOSEN IS CLR'S ORDINARY RESULT: N, V and C clear, Z set, X
+# untouched - the same word the line below writes for a clear that stores. It
+# is what the exception stack frame then carries, because `writeMem` takes its
+# copy of the status register at the store and the call below re-takes it.
+#
+# THE ARGUMENT FOR THAT CHOICE IS REASONING AND NOT EVIDENCE. Two strands, both
+# inference:
+#
+#   CLR's condition codes do not depend on the store. They are the same four
+#   fixed values for every operand and every size, so a core that computes them
+#   in its execute stage has them before the store buffer can report a
+#   write-protect error at all. On that reading there is nothing else for the
+#   register to be updated TO, and a sentence saying the V4 "updates" it is a
+#   sentence saying the V4 does not cancel an update the V2 and V3 cancel.
+#
+#   The neighbouring rule points the same way. MCF5307 User's Manual section
+#   3.5.1, "Access Error Exception", printed page 3-15, of an access error on
+#   an operand write: "All programming model updates associated with the write
+#   instruction are completed." The condition code register is a
+#   programming-model register, so CLR's write to it is such an update.
+#
+# WHAT WOULD SETTLE IT: a run on silicon or on a hardware model. Write-protect
+# a RAMBAR region, execute `clr.l` into it, and read the status register out of
+# the access error's stack frame in the handler. Any answer that run gives
+# replaces this choice; nothing in this repository can.
+
 proc execClr(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## CLR.B/.W/.L. N, V and C take fixed values, Z is always set, and X is
   ## untouched - a clear is not an arithmetic result and must not disturb a
@@ -301,6 +337,7 @@ proc execClr(ctx: MCF5407Ctx; d: Decoded): uint32 =
   eaRefWrite(ctx, dest, d.size, 0'u32)
   if ctx.halted: return 0'u32
   ctx.sr = (ctx.sr and not (ccrN or ccrV or ccrC)) or ccrZ
+  pendingWriteFaultTakesCc(ctx)
   # MCF5407 User's Manual Table 2-14, folio 2-27, `clr.b`/`clr.w`/`clr.l <ea>`: 1(0/0)
   # under `Rn`, 1(0/1) under the memory modes and `xxx.wl`, 2(0/1) under
   # `(d8,An,Xi*SF)`. All three sizes read alike. Was 4.
