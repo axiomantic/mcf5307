@@ -67,10 +67,12 @@ jobs:
         with:
           submodules: recursive
 
-      # CTest 3.20 is the floor because `--no-tests=error` is a CTest flag and
-      # the earlier releases do not carry it. Without that flag every `-R` check
-      # in this project passes against no code at all.
-      - name: Require CMake and CTest 3.20 or newer
+      # 3.21 is the floor. `--no-tests=error` is a CTest flag the releases
+      # before 3.20 do not carry, and without it every `-R` check in this
+      # project passes against no code at all; `PROJECT_IS_TOP_LEVEL`, which
+      # guards the test tree, was added in 3.21 and is undefined before it, so
+      # on 3.20 the guarded tests are never registered at all.
+      - name: Require CMake and CTest 3.21 or newer
         shell: bash
         run: |
           set -euo pipefail
@@ -79,8 +81,8 @@ jobs:
           have=$(cmake --version | head -1 | grep -Eo '[0-9]+\.[0-9]+' | head -1)
           major=${have%%.*}
           minor=${have##*.}
-          if [ "${major}" -lt 3 ] || { [ "${major}" -eq 3 ] && [ "${minor}" -lt 20 ]; }; then
-            echo "FAILURE: CMake ${have} is older than the 3.20 floor."
+          if [ "${major}" -lt 3 ] || { [ "${major}" -eq 3 ] && [ "${minor}" -lt 21 ]; }; then
+            echo "FAILURE: CMake ${have} is older than the 3.21 floor."
             exit 1
           fi
 

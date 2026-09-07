@@ -15,7 +15,7 @@ cmake --build build
 ctest --test-dir build
 ```
 
-Requirements: CMake 3.20 or later, and the exact Nim version named in
+Requirements: CMake 3.21 or later, and the exact Nim version named in
 `.nim-version`. The configure step reads `.nim-version`, runs `nim --version`,
 and stops with an error that prints both versions when they disagree.
 
