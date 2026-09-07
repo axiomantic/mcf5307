@@ -3,7 +3,7 @@
 ##
 ## This module executes AND, ANDI, OR, ORI, EOR, EORI, NOT, BTST, BSET, BCLR,
 ## BCHG, LSL, LSR, ASL and ASR, and nothing else. The register file, the board
-## accesses and the effective-address evaluation are `mcf5307/machine`'s.
+## accesses and the effective-address evaluation are `mcf5407/machine`'s.
 ##
 ## Its whole import list is `{decode_types, ea, machine}`, and it imports no
 ## sibling executor. An executor that reaches into another executor for a
@@ -143,14 +143,14 @@
 ##      states no modulus, and no other passage does. Nothing here distinguishes
 ##      modulo 64 from modulo 256 or from no reduction at all.
 
-import mcf5307/decode_types
-import mcf5307/ea
-import mcf5307/machine
+import mcf5407/decode_types
+import mcf5407/ea
+import mcf5407/machine
 
 # ---------------------------------------------------------------------------
 # Trapping.
 
-proc trap(ctx: MCF5307Ctx): uint32 =
+proc trap(ctx: MCF5407Ctx): uint32 =
   ## Halt the context with `fault`. Every illegal size and illegal operand
   ## mode in this module ends here, so that "the core refused" is one
   ## observable and not several.
@@ -173,7 +173,7 @@ proc combine(op: Operation; src, dst: uint32): uint32 =
 # ---------------------------------------------------------------------------
 # AND and OR, both directions.
 
-proc execAndOr(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execAndOr(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## `<ea> op Dn -> Dn` when `dirToEa` is false, `Dn op <ea> -> <ea>` when it
   ## is true. The two directions carry different operand masks: the first
   ## reads any data-addressing mode, the immediate and the PC-relative pair
@@ -210,7 +210,7 @@ proc execAndOr(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # was near the MCF5307's cells and is nowhere near these.
   1'u32
 
-proc execEor(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execEor(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## `Dn ^ <ea> -> <ea>`. EOR has one direction on this part and the
   ## destination is always the effective address: `m68k-elf-as -mcpu=5307`
   ## rejects `eor.l (%a0),%d1`, so `eor.l %d0,%d1` puts the source in bits
@@ -233,7 +233,7 @@ proc execEor(ctx: MCF5307Ctx; d: Decoded): uint32 =
 # ---------------------------------------------------------------------------
 # ANDI, ORI, EORI and NOT.
 
-proc execImmediate(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execImmediate(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## ANDI.L, ORI.L and EORI.L. The long immediate is the two words after the
   ## opcode, and the destination is a data register and nothing else.
   ##
@@ -257,7 +257,7 @@ proc execImmediate(ctx: MCF5307Ctx; d: Decoded): uint32 =
   # `or.l | #imm,Dx` rather than `ori.l`.)
   1'u32
 
-proc execNot(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execNot(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## NOT.L Dn. The memory forms of the 68000 are gone, and the manual is what
   ## says so. MCF5407 User's Manual Table 2-14, "One-Operand Instruction
   ## Execution Times", folio 2-27: the `not.l` row carries `Dx` in the `<ea>`
@@ -287,7 +287,7 @@ proc execNot(ctx: MCF5307Ctx; d: Decoded): uint32 =
 # ---------------------------------------------------------------------------
 # BTST, BSET, BCLR and BCHG.
 
-proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execBitOp(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## One bit operation, in either of its two forms.
   ##
   ## The operand width decides the width of the access. A data register operand
@@ -371,7 +371,7 @@ proc execBitOp(ctx: MCF5307Ctx; d: Decoded): uint32 =
 # ---------------------------------------------------------------------------
 # LSL, LSR, ASL and ASR.
 
-proc execShift(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execShift(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## One register shift. See the module header for the one-bit-at-a-time note
   ## and for where each condition-code rule comes from.
   ##
@@ -439,9 +439,9 @@ proc execShift(ctx: MCF5307Ctx; d: Decoded): uint32 =
 # ---------------------------------------------------------------------------
 # The dispatch entry `step` calls.
 
-proc logicFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
+proc logicFamily*(ctx: MCF5407Ctx; word: uint16; d: Decoded): uint32 =
   ## Execute one logic, bit-operation or shift instruction. Called from `step`
-  ## in `mcf5307/cpu` with the opcode word and the decoded operation. Returns a
+  ## in `mcf5407/cpu` with the opcode word and the decoded operation. Returns a
   ## placeholder cycle count excluding the fetch - see the cycle block in
   ## `cpu.nim` - and halts the context with `fault` set on an illegal size or
   ## an illegal effective address.

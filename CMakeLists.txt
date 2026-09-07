@@ -1,4 +1,4 @@
-# The root of the `mcf5307` CMake project.
+# The root of the `mcf5407` CMake project.
 #
 # Each test is registered in the list that governs its own directory:
 # `tests/tests_cpu.cmake` or `conformance/conformance_cpu.cmake`.
@@ -18,7 +18,7 @@
 
 cmake_minimum_required(VERSION 3.26)
 
-project(mcf5307
+project(mcf5407
     VERSION 0.1.0
     DESCRIPTION "An MCF5307 ColdFire core and an ISP1181 USB device model"
     LANGUAGES C CXX)
@@ -70,34 +70,34 @@ enable_testing()
 # and the standalone results do not move.
 include(CheckCXXCompilerFlag)
 
-set(MCF5307_TEST_WARNING_RELAXATIONS "")
+set(MCF5407_TEST_WARNING_RELAXATIONS "")
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     check_cxx_compiler_flag("-Wno-error=deprecated-ofast"
-        MCF5307_HAVE_WNO_ERROR_DEPRECATED_OFAST)
-    if(MCF5307_HAVE_WNO_ERROR_DEPRECATED_OFAST)
-        list(APPEND MCF5307_TEST_WARNING_RELAXATIONS
+        MCF5407_HAVE_WNO_ERROR_DEPRECATED_OFAST)
+    if(MCF5407_HAVE_WNO_ERROR_DEPRECATED_OFAST)
+        list(APPEND MCF5407_TEST_WARNING_RELAXATIONS
             "-Wno-error=deprecated-ofast")
     endif()
 endif()
 
 # The T0 test aggregate. A test executable attaches itself with
-# `add_dependencies(mcf5307_tests <its target>)`.
+# `add_dependencies(mcf5407_tests <its target>)`.
 #
 # It is a custom target and not an ALL target: the test executables are
 # ordinary `add_executable` targets and are in ALL already, so
-# `--target mcf5307_tests` is a way to build the test set alone rather than a
+# `--target mcf5407_tests` is a way to build the test set alone rather than a
 # second path to the same build.
-add_custom_target(mcf5307_tests
-    COMMENT "Building the mcf5307 T0 test set")
+add_custom_target(mcf5407_tests
+    COMMENT "Building the mcf5407 T0 test set")
 
 # CMake drives Nim. Its integration steps run there, at configure time, and
-# they leave `mcf5307_nim_objs`, `mcf5307` and `mcf5307::mcf5307` defined. The
+# they leave `mcf5407_nim_objs`, `mcf5407` and `mcf5407::mcf5407` defined. The
 # include comes before the test directories because a test that links the core
 # needs the target to exist when its own list is read.
 include(cmake/Nim.cmake)
 
 # The build gate. It registers `t0_build_is_current` -- at top level only --
-# and defines `mcf5307_require_current_build()`, which each registration list
+# and defines `mcf5407_require_current_build()`, which each registration list
 # calls at its own end to put its own tests behind that gate. It is included
 # before the test directories because the function must exist when their lists
 # are read, and after `enable_testing()` because it registers a test.
@@ -119,4 +119,4 @@ endif()
 # what makes the `REMOVE_ITEM` inside the function reachable: this is the only
 # scope that holds `t0_build_is_current`, and a gate required to wait for
 # itself never runs.
-mcf5307_require_current_build()
+mcf5407_require_current_build()

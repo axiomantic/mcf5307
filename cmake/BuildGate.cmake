@@ -35,7 +35,7 @@
 #   passes and only the wrong test fails -- the ordinary reading.
 #
 # What it also fixes. `cmake --build --preset t0` builds only the
-# `mcf5307_tests` target, which does not reach `conformance/`'s
+# `mcf5407_tests` target, which does not reach `conformance/`'s
 # `t0_corpus_parses` executable, while `ctest --preset t0` DOES select that
 # test by name; a clean tree therefore reported `t0_corpus_parses (Not Run)`.
 # The gate builds the default target of the tree it runs in, so the executable
@@ -44,14 +44,14 @@
 # not on the path to the verdict.
 #
 # It builds the tree and not a list of targets. Naming the targets the run
-# needs -- `mcf5307_tests` plus `t0_corpus_parses` -- would be a roster, and a
+# needs -- `mcf5407_tests` plus `t0_corpus_parses` -- would be a roster, and a
 # roster amended once per case is the very thing that produced the `Not Run`
 # above: the t0 BUILD preset's target list stopped matching the set of tests
 # the t0 TEST preset selects, and nothing was there to notice. The default
 # target of the tree is not a roster, so it cannot drift out of date.
 #
 # T0 is wider than its build preset. `cmake --build --preset t0` narrows the
-# build to `mcf5307_tests`; `ctest --preset t0` does not grade a tree it has
+# build to `mcf5407_tests`; `ctest --preset t0` does not grade a tree it has
 # not built. Measured: a syntax error in `conformance/runner.cpp`, which the t0
 # build preset never compiles, now turns `ctest --preset t0` red. T0's
 # narrowing was always of the run; the tree it runs in is the whole project.
@@ -61,7 +61,7 @@
 # the conformance targets that the t0 BUILD preset skips, once. Measured on an
 # already-built t0 tree, the gate adds about a second to the run.
 
-set(MCF5307_BUILD_GATE_FIXTURE "MCF5307_BUILD_IS_CURRENT")
+set(MCF5407_BUILD_GATE_FIXTURE "MCF5407_BUILD_IS_CURRENT")
 
 # `t0_` so that the T0 name filter -- `^t0_|^t_`, carried by the test presets
 # and by `T0_PATTERN` in `.github/workflows/ci.yml` -- selects it. A gate that
@@ -69,7 +69,7 @@ set(MCF5307_BUILD_GATE_FIXTURE "MCF5307_BUILD_IS_CURRENT")
 if(PROJECT_IS_TOP_LEVEL)
     add_test(NAME t0_build_is_current
         COMMAND "${CMAKE_COMMAND}"
-            "-DMCF5307_BUILD_DIR=${CMAKE_BINARY_DIR}"
+            "-DMCF5407_BUILD_DIR=${CMAKE_BINARY_DIR}"
             -P "${CMAKE_CURRENT_LIST_DIR}/run_build_gate.cmake")
 
     # RUN_SERIAL because the gate writes the executables the other tests
@@ -77,15 +77,15 @@ if(PROJECT_IS_TOP_LEVEL)
     # every registered test is a dependent, but a serial gate is the property
     # that says why rather than relying on that remaining true.
     set_tests_properties(t0_build_is_current PROPERTIES
-        FIXTURES_SETUP "${MCF5307_BUILD_GATE_FIXTURE}"
+        FIXTURES_SETUP "${MCF5407_BUILD_GATE_FIXTURE}"
         RUN_SERIAL TRUE)
 
-    set(MCF5307_BUILD_GATE_ARMED TRUE)
+    set(MCF5407_BUILD_GATE_ARMED TRUE)
 else()
     # A consumer's tree has no gate, so nothing there may require one: a
     # fixture requirement naming a fixture no test sets up makes every
     # requiring test unrunnable.
-    set(MCF5307_BUILD_GATE_ARMED FALSE)
+    set(MCF5407_BUILD_GATE_ARMED FALSE)
 endif()
 
 # Put every test registered in the CALLING directory behind the gate.
@@ -96,8 +96,8 @@ endif()
 # configure error, not a no-op. So each registration list makes this call at
 # its own end, which is also the one place where every test it registers is
 # already known.
-function(mcf5307_require_current_build)
-    if(NOT MCF5307_BUILD_GATE_ARMED)
+function(mcf5407_require_current_build)
+    if(NOT MCF5407_BUILD_GATE_ARMED)
         return()
     endif()
 
@@ -108,10 +108,10 @@ function(mcf5307_require_current_build)
     endif()
 
     set_tests_properties(${dir_tests} PROPERTIES
-        FIXTURES_REQUIRED "${MCF5307_BUILD_GATE_FIXTURE}")
+        FIXTURES_REQUIRED "${MCF5407_BUILD_GATE_FIXTURE}")
 
     list(LENGTH dir_tests dir_test_count)
     message(STATUS
-        "mcf5307: the build gate covers ${dir_test_count} test(s) registered in "
+        "mcf5407: the build gate covers ${dir_test_count} test(s) registered in "
         "${CMAKE_CURRENT_SOURCE_DIR}")
 endfunction()

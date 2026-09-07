@@ -33,10 +33,10 @@
 ## behaviour are taken from the ColdFire Family Programmer's Reference Manual
 ## and the MCF5407 User's Manual, and from this project's own measurements.
 
-import mcf5307/bus
-import mcf5307/decode_types
-import mcf5307/ea
-import mcf5307/exception
+import mcf5407/bus
+import mcf5407/decode_types
+import mcf5407/ea
+import mcf5407/exception
 
 # ---------------------------------------------------------------------------
 # The register file.
@@ -49,7 +49,7 @@ import mcf5307/exception
 #
 # ACR2 AND ACR3 ARE APPENDED RATHER THAN PLACED BESIDE ACR0 AND ACR1, which
 # would read better and would renumber every index above 21. The numbers are
-# the only channel a host has and `include/mcf5307.h` publishes them, so a
+# the only channel a host has and `include/mcf5407.h` publishes them, so a
 # caller compiled against the old header would silently read a different
 # register.
 #
@@ -59,7 +59,7 @@ import mcf5307/exception
 # 15, so widening this view does not widen that instruction.
 #
 # 17 stays read-only through `regFileSet` and the control registers do not. The
-# program counter is written by `mcf5307_reset`, which is the entry point that
+# program counter is written by `mcf5407_reset`, which is the entry point that
 # owns it.
 
 const regFileHighIndex* = 26
@@ -70,21 +70,21 @@ const regFileHighIndex* = 26
   ## refuses a register the register file answers - silently, because an
   ## out-of-range read returns zero rather than reporting anything.
 
-proc regD*(ctx: MCF5307Ctx; n: uint8): uint32 =
+proc regD*(ctx: MCF5407Ctx; n: uint8): uint32 =
   ctx.dRegs[n and 7]
 
-proc regA*(ctx: MCF5307Ctx; n: uint8): uint32 =
+proc regA*(ctx: MCF5407Ctx; n: uint8): uint32 =
   let k = n and 7
   if k == 7: ctx.sp else: ctx.aRegs[k]
 
-proc setRegD*(ctx: MCF5307Ctx; n: uint8; v: uint32) =
+proc setRegD*(ctx: MCF5407Ctx; n: uint8; v: uint32) =
   ctx.dRegs[n and 7] = v
 
-proc setRegA*(ctx: MCF5307Ctx; n: uint8; v: uint32) =
+proc setRegA*(ctx: MCF5407Ctx; n: uint8; v: uint32) =
   let k = n and 7
   if k == 7: ctx.sp = v else: ctx.aRegs[k] = v
 
-proc regFileGet*(ctx: MCF5307Ctx; index: int): uint32 =
+proc regFileGet*(ctx: MCF5407Ctx; index: int): uint32 =
   if index in 0 .. 7:
     ctx.dRegs[index]
   elif index in 8 .. 14:
@@ -116,7 +116,7 @@ proc regFileGet*(ctx: MCF5307Ctx; index: int): uint32 =
   else:
     0
 
-proc regFileSet*(ctx: MCF5307Ctx; index: int; v: uint32): bool =
+proc regFileSet*(ctx: MCF5407Ctx; index: int; v: uint32): bool =
   if index in 0 .. 7:
     ctx.dRegs[index] = v
     true
@@ -185,7 +185,7 @@ proc mergeSized*(old: uint32; value: uint32; size: uint8): uint32 =
   ## it.
   (old and not sizeMask(size)) or (value and sizeMask(size))
 
-proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
+proc setNzClearVc*(ctx: MCF5407Ctx; value: uint32; size: uint8) =
   ## N and Z from the result, V and C cleared, X unchanged. Instructions that
   ## also compute a carry or an overflow set those bits themselves in their own
   ## group's module.
@@ -202,8 +202,8 @@ proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
 # A bus fault anywhere in an operand access halts the context with `fault`
 # set; the callers check `ctx.halted` after each step and unwind.
 
-# An absent callback is a refused access and not an abort. `mcf5307_create`
-# (`include/mcf5307.h`) forbids no argument, so a context whose board callbacks
+# An absent callback is a refused access and not an abort. `mcf5407_create`
+# (`include/mcf5407.h`) forbids no argument, so a context whose board callbacks
 # are all nil is one a caller may build, and nothing here may abort the host
 # process.
 #
@@ -224,20 +224,20 @@ proc setNzClearVc*(ctx: MCF5307Ctx; value: uint32; size: uint8) =
 # this module and the executor modules, and each of those runs only from
 # `step`, whose first statement faults on a nil `readFn`.
 
-proc boardRead(ctx: MCF5307Ctx; address: uint32; size: uint8;
-               st: var Mcf5307BusStatus): uint32 =
+proc boardRead(ctx: MCF5407Ctx; address: uint32; size: uint8;
+               st: var Mcf5407BusStatus): uint32 =
   ## One board read, reporting what the board reported and deciding nothing.
   ## The callers below are the decision and they differ.
-  st = Mcf5307BusStatus.busOk
+  st = Mcf5407BusStatus.busOk
   if ctx.readFn.isNil:
     ctx.fault = true
     ctx.halted = true
     return 0'u32
   ctx.readFn(ctx.user, address, cint(size), addr st)
 
-proc boardWrite(ctx: MCF5307Ctx; address: uint32; size: uint8; value: uint32;
-                st: var Mcf5307BusStatus) =
-  st = Mcf5307BusStatus.busOk
+proc boardWrite(ctx: MCF5407Ctx; address: uint32; size: uint8; value: uint32;
+                st: var Mcf5407BusStatus) =
+  st = Mcf5407BusStatus.busOk
   if ctx.writeFn.isNil:
     ctx.fault = true
     ctx.halted = true
@@ -254,18 +254,18 @@ proc boardWrite(ctx: MCF5307Ctx; address: uint32; size: uint8; value: uint32;
 # `stackingWrite`, neither of which can re-enter it, so there is no state to
 # set, to clear, or to leave set on a path that returned early.
 
-proc stackingRead(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
-  var st = Mcf5307BusStatus.busOk
+proc stackingRead(ctx: MCF5407Ctx; address: uint32; size: uint8): uint32 =
+  var st = Mcf5407BusStatus.busOk
   result = boardRead(ctx, address, size, st)
-  if st != Mcf5307BusStatus.busOk:
+  if st != Mcf5407BusStatus.busOk:
     ctx.fault = true
     ctx.halted = true
 
-proc stackingWrite(ctx: MCF5307Ctx; address: uint32; size: uint8;
+proc stackingWrite(ctx: MCF5407Ctx; address: uint32; size: uint8;
                    value: uint32) =
-  var st = Mcf5307BusStatus.busOk
+  var st = Mcf5407BusStatus.busOk
   boardWrite(ctx, address, size, value, st)
-  if st != Mcf5307BusStatus.busOk:
+  if st != Mcf5407BusStatus.busOk:
     ctx.fault = true
     ctx.halted = true
 
@@ -280,7 +280,7 @@ proc stackingWrite(ctx: MCF5307Ctx; address: uint32; size: uint8;
 # its previous value.
 #
 # Taking it at the instruction boundary is the fix and it is not writable from
-# this module: it needs either a pending-fault field on `MCF5307Ctx`, which
+# this module: it needs either a pending-fault field on `MCF5407Ctx`, which
 # `decode_types.nim` holds, or a check after the executor returns, which
 # `cpu.nim`'s `step` holds.
 #
@@ -308,13 +308,13 @@ proc stackingWrite(ctx: MCF5307Ctx; address: uint32; size: uint8;
 # records the fault on the context and `cpu.nim`'s `step` takes it at the
 # instruction boundary.
 
-proc readMem*(ctx: MCF5307Ctx; address: uint32; size: uint8): uint32 =
+proc readMem*(ctx: MCF5407Ctx; address: uint32; size: uint8): uint32 =
   stackingRead(ctx, address, size)
 
-proc writeMem*(ctx: MCF5307Ctx; address: uint32; size: uint8; value: uint32) =
-  var st = Mcf5307BusStatus.busOk
+proc writeMem*(ctx: MCF5407Ctx; address: uint32; size: uint8; value: uint32) =
+  var st = Mcf5407BusStatus.busOk
   boardWrite(ctx, address, size, value, st)
-  if st != Mcf5307BusStatus.busOk and not ctx.pendingWriteFault:
+  if st != Mcf5407BusStatus.busOk and not ctx.pendingWriteFault:
     # The first faulted store of an instruction is the one reported, and the
     # manual settles neither this nor its alternative. MCF5307 section 3.5.1
     # says the
@@ -333,7 +333,7 @@ proc writeMem*(ctx: MCF5307Ctx; address: uint32; size: uint8; value: uint32) =
     ctx.pendingStackedSr = ctx.sr and 0xFFFF'u32
     ctx.pendingStackedPc = ctx.pc
 
-proc fetchExt*(ctx: MCF5307Ctx): uint16 =
+proc fetchExt*(ctx: MCF5407Ctx): uint16 =
   ## Read one extension word from the instruction stream and advance the pc
   ## past it.
   ##
@@ -341,9 +341,9 @@ proc fetchExt*(ctx: MCF5307Ctx): uint16 =
   ## address *of* the displacement word, which is the pc before this call, so
   ## `eaAddr` reads `ctx.pc` into a local before it calls this procedure; the
   ## citation is on the two PC arms there.
-  var st = Mcf5307BusStatus.busOk
+  var st = Mcf5407BusStatus.busOk
   let v = ctx.readFn(ctx.user, ctx.pc, 2, addr st)
-  if st != Mcf5307BusStatus.busOk:
+  if st != Mcf5407BusStatus.busOk:
     ctx.fault = true
     ctx.halted = true
     return 0'u16
@@ -368,7 +368,7 @@ func s16*(x: uint16): int32 =
 func s8*(x: uint16): int32 =
   int32(cast[int8](uint8(x and 0xFF'u16)))
 
-proc indexOperand*(ctx: MCF5307Ctx; ext: uint16): uint32 =
+proc indexOperand*(ctx: MCF5407Ctx; ext: uint16): uint32 =
   ## The scaled index operand of an indexed extension word. Bit 15 selects
   ## Dn(0) or An(1), bits 14..12 the index register, bit 11 word(0) or long(1)
   ## index, bits 10..9 the scale (1, 2, 4, 8), bit 8 the brief-format marker,
@@ -404,7 +404,7 @@ proc indexOperand*(ctx: MCF5307Ctx; ext: uint16): uint32 =
     v = uint32(s16(uint16(v and 0xFFFF'u32)))
   v shl scale
 
-proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
+proc eaAddr*(ctx: MCF5407Ctx; ea: EA; size: uint8): uint32 =
   ## The effective address of a memory-addressing mode. Register and
   ## immediate modes have no address; a caller that asks for one gets 0.
   ##
@@ -484,7 +484,7 @@ proc eaAddr*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
   else:
     discard
 
-proc eaRead*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
+proc eaRead*(ctx: MCF5407Ctx; ea: EA; size: uint8): uint32 =
   ## Read the operand of an effective address. Immediate mode reads its
   ## extension words; register modes read the register (low bits used by the
   ## caller's size); memory modes read through the board.
@@ -511,7 +511,7 @@ proc eaRead*(ctx: MCF5307Ctx; ea: EA; size: uint8): uint32 =
       ctx.halted = true
       result = 0
 
-proc eaWrite*(ctx: MCF5307Ctx; ea: EA; size: uint8; value: uint32) =
+proc eaWrite*(ctx: MCF5407Ctx; ea: EA; size: uint8; value: uint32) =
   ## Write the operand of an alterable effective address. A Dn write replaces
   ## the low `size` bytes and keeps the rest of the register; memory modes write
   ## through the board; PC-relative and immediate mode-7 sub-variants are not
@@ -560,7 +560,7 @@ type
     reg*: uint8
     address*: uint32
 
-proc eaResolve*(ctx: MCF5307Ctx; ea: EA; size: uint8): EaRef =
+proc eaResolve*(ctx: MCF5407Ctx; ea: EA; size: uint8): EaRef =
   ## Evaluate an effective address exactly once and return a reference that
   ## `eaRefRead` and `eaRefWrite` reuse. An immediate, a PC-relative operand
   ## or a reserved mode-7 encoding cannot be a destination; each halts the
@@ -581,14 +581,14 @@ proc eaResolve*(ctx: MCF5307Ctx; ea: EA; size: uint8): EaRef =
       ctx.halted = true
       EaRef(kind: erNone)
 
-proc eaRefRead*(ctx: MCF5307Ctx; r: EaRef; size: uint8): uint32 =
+proc eaRefRead*(ctx: MCF5407Ctx; r: EaRef; size: uint8): uint32 =
   case r.kind
   of erDn: regD(ctx, r.reg)
   of erAn: regA(ctx, r.reg)
   of erMem: readMem(ctx, r.address, size)
   of erNone: 0'u32
 
-proc eaRefWrite*(ctx: MCF5307Ctx; r: EaRef; size: uint8; value: uint32) =
+proc eaRefWrite*(ctx: MCF5407Ctx; r: EaRef; size: uint8; value: uint32) =
   case r.kind
   of erDn: setRegD(ctx, r.reg, mergeSized(regD(ctx, r.reg), value, size))
   of erAn: setRegA(ctx, r.reg, value)
@@ -631,7 +631,7 @@ proc exceptionFormat*(sp: uint32): uint32 =
   ## frame base removed, so that `RTE` can put it back.
   4'u32 + (sp and 3'u32)
 
-proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
+proc takeExceptionCopiedSr*(ctx: MCF5407Ctx; vector: uint8; stackedPc: uint32;
                             fs: uint32; stackedSr: uint32) =
   ## Stack a two-longword exception frame, then load the program counter from
   ## the vector table.
@@ -701,7 +701,7 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
   # machine that outlives this call. MCF5407 User's Manual, the paragraph
   # closing Table 2-19 in section 2.8,
   # folio 2-32: "ColdFire processors inhibit sampling for interrupts
-  # during the first instruction of all exception handlers." `mcf5307_exec`
+  # during the first instruction of all exception handlers." `mcf5407_exec`
   # reads this field at its sample and clears it.
   #
   # It is written here, after the program counter: every exception this core
@@ -726,13 +726,13 @@ proc takeExceptionCopiedSr*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
 # the manual already fixes. `frameFirstLongword` keeps its own `fs` parameter
 # undefaulted, so the layout is still closed by the compiler one layer down.
 
-proc takeException*(ctx: MCF5307Ctx; vector: uint8; stackedPc: uint32;
+proc takeException*(ctx: MCF5407Ctx; vector: uint8; stackedPc: uint32;
                     fs: uint32 = fsNotAnAccessError) =
   ## An exception whose processing begins where the fault was detected, so
   ## section 2.8's copy of the status register is the live word.
   takeExceptionCopiedSr(ctx, vector, stackedPc, fs, ctx.sr and 0xFFFF'u32)
 
-proc takePendingWriteFault*(ctx: MCF5307Ctx) =
+proc takePendingWriteFault*(ctx: MCF5407Ctx) =
   ## Take the access error a faulted store recorded, at the instruction
   ## boundary. `cpu.nim`'s `step` is the one caller, and `writeMem` above
   ## carries the manual reading that puts the take here.
@@ -771,7 +771,7 @@ proc takePendingWriteFault*(ctx: MCF5307Ctx) =
     return
   takeExceptionCopiedSr(ctx, vecAccessError, stackedPc, fs, stackedSr)
 
-proc transferControl*(ctx: MCF5307Ctx; target: uint32; faultPc: uint32) =
+proc transferControl*(ctx: MCF5407Ctx; target: uint32; faultPc: uint32) =
   ## Write `target` into the program counter, or take the address error when
   ## it is odd. `faultPc` is the address of the instruction doing the
   ## transferring.
@@ -814,21 +814,21 @@ proc transferControl*(ctx: MCF5307Ctx; target: uint32; faultPc: uint32) =
 
 # ---------------------------------------------------------------------------
 # The register access the conformance harness needs. The C ABI in
-# `include/mcf5307.h` declares these. The index space is the register file's,
+# `include/mcf5407.h` declares these. The index space is the register file's,
 # stated once at the head of this module; these two calls take the whole of
 # it, 0 through `regFileHighIndex`, and 17 is read-only through
-# `mcf5307_set_reg` for the reason given there.
+# `mcf5407_set_reg` for the reason given there.
 
-proc mcf5307_set_reg*(ctx: MCF5307Ctx; index: cint; value: uint32): cint
-    {.exportc: "mcf5307_set_reg", cdecl, dynlib.} =
+proc mcf5407_set_reg*(ctx: MCF5407Ctx; index: cint; value: uint32): cint
+    {.exportc: "mcf5407_set_reg", cdecl, dynlib.} =
   if ctx.isNil or index < 0 or index > regFileHighIndex:
     return cast[cint](0)
   if regFileSet(ctx, int(index), value):
     return cast[cint](1)
   cast[cint](0)
 
-proc mcf5307_get_reg*(ctx: MCF5307Ctx; index: cint): uint32
-    {.exportc: "mcf5307_get_reg", cdecl, dynlib.} =
+proc mcf5407_get_reg*(ctx: MCF5407Ctx; index: cint): uint32
+    {.exportc: "mcf5407_get_reg", cdecl, dynlib.} =
   if ctx.isNil or index < 0 or index > regFileHighIndex:
     return 0'u32
   regFileGet(ctx, int(index))
@@ -844,18 +844,18 @@ proc mcf5307_get_reg*(ctx: MCF5307Ctx; index: cint): uint32
 # not written yet" the same answer, and the conformance runner has to separate
 # exactly those two.
 #
-# They report and they do not clear. `mcf5307_reset` is what clears both bits,
+# They report and they do not clear. `mcf5407_reset` is what clears both bits,
 # so a reader may ask twice and get the same answer. A nil context answers 0
 # to both: a caller with no context has no halted core and no faulted one.
 
-proc mcf5307_halted*(ctx: MCF5307Ctx): cint
-    {.exportc: "mcf5307_halted", cdecl, dynlib.} =
+proc mcf5407_halted*(ctx: MCF5407Ctx): cint
+    {.exportc: "mcf5407_halted", cdecl, dynlib.} =
   if ctx.isNil or not ctx.halted:
     return cast[cint](0)
   cast[cint](1)
 
-proc mcf5307_faulted*(ctx: MCF5307Ctx): cint
-    {.exportc: "mcf5307_faulted", cdecl, dynlib.} =
+proc mcf5407_faulted*(ctx: MCF5407Ctx): cint
+    {.exportc: "mcf5407_faulted", cdecl, dynlib.} =
   if ctx.isNil or not ctx.fault:
     return cast[cint](0)
   cast[cint](1)

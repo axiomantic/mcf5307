@@ -13,7 +13,7 @@
 ##        ^          ^
 ##            cpu               `step`, the dispatch, and the lifecycle ABI
 ##
-## `cpu.nim` owns `step` and the `mcf5307_*` lifecycle calls, because `step`
+## `cpu.nim` owns `step` and the `mcf5407_*` lifecycle calls, because `step`
 ## is the one procedure that needs both the decoder and every executor. A new
 ## instruction group adds one module, one import in `cpu.nim` and one `case`
 ## arm there, and no dependency here.
@@ -22,8 +22,8 @@
 ## ColdFire Family Programmer's Reference Manual and the MCF5307 User's
 ## Manual, and from this project's own measurements.
 
-import mcf5307/decode_types
-import mcf5307/ea
+import mcf5407/decode_types
+import mcf5407/ea
 
 # ---------------------------------------------------------------------------
 # The decoder.

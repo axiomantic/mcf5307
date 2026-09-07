@@ -1,4 +1,4 @@
-/* mcf5307.h - the C application binary interface of the MCF5307 ColdFire core
+/* mcf5407.h - the C application binary interface of the MCF5307 ColdFire core
  * and the ISP1181 USB device model.
  *
  * The Nim implementation exports these symbols with
@@ -21,8 +21,8 @@
  * and it holds no pointer.
  */
 
-#ifndef MCF5307_H
-#define MCF5307_H
+#ifndef MCF5407_H
+#define MCF5407_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -37,14 +37,14 @@
  * `warn_unused_result` under every older standard, and this header is parsed
  * as C11 by `cmake/Nim.cmake`. A toolchain with neither gets an empty macro. */
 #if defined(__cplusplus) && __cplusplus >= 201703L
-#  define MCF5307_MUST_USE [[nodiscard]]
+#  define MCF5407_MUST_USE [[nodiscard]]
 #elif !defined(__cplusplus) && defined(__STDC_VERSION__) && \
       __STDC_VERSION__ >= 202311L
-#  define MCF5307_MUST_USE [[nodiscard]]
+#  define MCF5407_MUST_USE [[nodiscard]]
 #elif defined(__GNUC__) || defined(__clang__)
-#  define MCF5307_MUST_USE __attribute__((warn_unused_result))
+#  define MCF5407_MUST_USE __attribute__((warn_unused_result))
 #else
-#  define MCF5307_MUST_USE
+#  define MCF5407_MUST_USE
 #endif
 
 #ifdef __cplusplus
@@ -53,32 +53,32 @@ extern "C" {
 
 /* ---------------------------------------------------------------- CPU core */
 
-/* The core's context. It is allocated by `mcf5307_create` and it is opaque:
+/* The core's context. It is allocated by `mcf5407_create` and it is opaque:
  * no caller may see inside it, and its definition never appears here. */
-typedef struct mcf5307_ctx mcf5307_ctx;
+typedef struct mcf5407_ctx mcf5407_ctx;
 
 /* The status of one bus access.
  *
  * On real silicon the MCF5307 reports an access error ONLY for an attempted
  * store to write-protected space; an error on an instruction fetch or on an
- * operand read is not possible on this part. `MCF5307_BUS_UNMAPPED` and
- * `MCF5307_BUS_SIZE_ILLEGAL` are therefore a deliberate emulator-only
+ * operand read is not possible on this part. `MCF5407_BUS_UNMAPPED` and
+ * `MCF5407_BUS_SIZE_ILLEGAL` are therefore a deliberate emulator-only
  * extension, kept because a board that invented an answer for unmapped space
  * would hide exactly the class of firmware bug this core exists to expose.
  * They are reachable only through a board's own address decode. */
 typedef enum {
-    MCF5307_BUS_OK           = 0, /* the access completed                    */
-    MCF5307_BUS_UNMAPPED     = 1, /* no device answers at this address       */
-    MCF5307_BUS_SIZE_ILLEGAL = 2, /* the device answers, the width is not
+    MCF5407_BUS_OK           = 0, /* the access completed                    */
+    MCF5407_BUS_UNMAPPED     = 1, /* no device answers at this address       */
+    MCF5407_BUS_SIZE_ILLEGAL = 2, /* the device answers, the width is not
                                      one it accepts                          */
-    MCF5307_BUS_FAULT        = 3  /* the device answers and reports a fault
+    MCF5407_BUS_FAULT        = 3  /* the device answers and reports a fault
                                      of its own                              */
-} mcf5307_bus_status;
+} mcf5407_bus_status;
 
 /* The board's two memory handlers.
  *
  * `status` IS AN OUT-PARAMETER ON BOTH, and the core writes
- * `MCF5307_BUS_OK` into it before every call. A board that models no fault
+ * `MCF5407_BUS_OK` into it before every call. A board that models no fault
  * behaves exactly as it did before the parameter existed: silence means
  * success. A board that writes a non-OK value also logs the address, the
  * width and the direction, so that a fault cannot be reported without a
@@ -88,11 +88,11 @@ typedef enum {
  * still return zero, so that a board defect does not depend on an
  * uninitialised value. */
 /* `size` is a count of bytes: 1, 2 or 4. */
-typedef uint32_t (*mcf5307_read_fn)(void* user, uint32_t addr, int size,
-                                    mcf5307_bus_status* status);
+typedef uint32_t (*mcf5407_read_fn)(void* user, uint32_t addr, int size,
+                                    mcf5407_bus_status* status);
 /* `size` is a count of bytes: 1, 2 or 4. */
-typedef void (*mcf5307_write_fn)(void* user, uint32_t addr, int size,
-                                 uint32_t value, mcf5307_bus_status* status);
+typedef void (*mcf5407_write_fn)(void* user, uint32_t addr, int size,
+                                 uint32_t value, mcf5407_bus_status* status);
 
 /* Interrupt acknowledge. The core calls it once, after it has stacked the
  * exception frame and before it fetches the first handler instruction.
@@ -103,12 +103,12 @@ typedef void (*mcf5307_write_fn)(void* user, uint32_t addr, int size,
  * the source drops when the device model clears its own condition. A level 7
  * source is not cleared here either, because the core clears its own edge
  * latch when it takes the interrupt. */
-typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
+typedef void (*mcf5407_iack_fn)(void* user, int level, uint8_t vector);
 
 /* What a board may call back into while the core is inside its callbacks, and
- * what `mcf5307_reset` does to interrupt state.
+ * what `mcf5407_reset` does to interrupt state.
  *
- * The acknowledge callback may call `mcf5307_get_reg` and `mcf5307_set_irq`,
+ * The acknowledge callback may call `mcf5407_get_reg` and `mcf5407_set_irq`,
  * which is what a chained controller needs. The frame is already stacked when
  * it runs, so the registers it reads are the machine as the handler will find
  * it: a7 holding the address OF the 8-byte frame and not an address below it -
@@ -118,15 +118,15 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * interrupt priority mask raised to the level being acknowledged.
  *
  * The level-7 arm is decided against the presentation the call has not yet
- * overwritten. `mcf5307_set_irq` arms an edge only on a transition to level 7
+ * overwritten. `mcf5407_set_irq` arms an edge only on a transition to level 7
  * from a lower presented level, and the level it compares against is the one
  * in effect at entry to that call - the board's own last presentation, which
  * taking an interrupt does not disturb. A board that presents level 7 while
  * level 7 is already the presented level therefore arms nothing; to raise a
- * fresh edge it must present a lower level, or `MCF5307_IRQ_NONE`, and then
+ * fresh edge it must present a lower level, or `MCF5407_IRQ_NONE`, and then
  * level 7.
  *
- * The write callback may call `mcf5307_set_irq` as well, and the core reaches
+ * The write callback may call `mcf5407_set_irq` as well, and the core reaches
  * that callback while it is stacking the exception frame. An edge armed there
  * arrives before the frame is complete and survives the take in progress, for
  * a different reason on each side of the level split: a take of level 7 clears
@@ -136,44 +136,44 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * the first handler instruction has executed, and it carries the vector and
  * the autovector flag of the presentation that armed it.
  *
- * `mcf5307_reset` inhibits interrupt sampling for the first instruction at
+ * `mcf5407_reset` inhibits interrupt sampling for the first instruction at
  * `initial_pc`. Reset is an exception, and sampling is inhibited during the
  * first instruction of every exception handler. That is a deduction rather
  * than a quotation: User's Manual Table 3-1, closing paragraph, folio 3-13,
  * carries no reset row, and the reset exception's own entry at section 3.5.11,
  * folio 3-17, never calls the reset program counter a handler.
  *
- * `mcf5307_reset` also raises the interrupt priority mask to 7 - section
+ * `mcf5407_reset` also raises the interrupt priority mask to 7 - section
  * 3.5.11, folio 3-17, "sets the processor's interrupt priority mask in the SR
  * to the highest level (level 7)". A board that presents a level 1 to 6
- * interrupt immediately after `mcf5307_reset` does not get it taken at any
+ * interrupt immediately after `mcf5407_reset` does not get it taken at any
  * boundary at all: the mask inhibits every level at or below itself, so
  * nothing under 7 is taken until the program lowers the mask itself. Level 7
  * is therefore the only interrupt the inhibition above can defer, because it
  * is the only one a mask of 7 leaves takeable at all.
  *
- * `mcf5307_reset` also clears the latched level-7 edge and then re-observes
+ * `mcf5407_reset` also clears the latched level-7 edge and then re-observes
  * the board's last presentation. That is an inference and not a citation: the
  * manual set is silent on reset against a latched edge. The argument for it is
  * that a level 7 request must be held until the second interrupt-acknowledge
  * bus cycle has begun (section 7.6.1, folio 7-24), so an edge whose pin has
  * since been released has nothing left to acknowledge. The presentation itself
  * survives the call: it is the board's state and reset has no newer answer for
- * it. A level 7 still presented across `mcf5307_reset` is armed again,
+ * it. A level 7 still presented across `mcf5407_reset` is armed again,
  * carrying the vector and the autovector flag of that presentation; one the
  * board had already lowered is not. */
 
-/* `MCF5307_MUST_CHECK` marks a return value a caller should not drop. It is a
+/* `MCF5407_MUST_CHECK` marks a return value a caller should not drop. It is a
  * compiler diagnostic and not a mechanism: a toolchain that does not know the
  * attribute expands it to nothing and says so in no way at all, which is the
  * silent-success shape this project refuses to rest anything on. It is here
  * because it costs nothing and catches the mistake early on gcc and clang.
  * What actually protects a caller who
- * ignores the status is described at `mcf5307_runtime_init` below. */
+ * ignores the status is described at `mcf5407_runtime_init` below. */
 #if defined(__GNUC__) || defined(__clang__)
-#  define MCF5307_MUST_CHECK __attribute__((warn_unused_result))
+#  define MCF5407_MUST_CHECK __attribute__((warn_unused_result))
 #else
-#  define MCF5307_MUST_CHECK
+#  define MCF5407_MUST_CHECK
 #endif
 
 /* Runs the Nim runtime's initialiser once. It is idempotent, and it is what
@@ -182,7 +182,7 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * Returns 1 when the runtime is initialised and the library is usable, and 0
  * when it is not. It is a truth value and not a POSIX-style error code, which
  * is the convention every other `int` in this header already uses:
- * `mcf5307_set_reg`, `mcf5307_halted`, `isp1181_setup` and
+ * `mcf5407_set_reg`, `mcf5407_halted`, `isp1181_setup` and
  * `isp1181_set_backend` all answer 1 for yes. Two conventions inside one
  * contract is a footgun a caller reads once and gets backwards.
  *
@@ -198,25 +198,25 @@ typedef void (*mcf5307_iack_fn)(void* user, int level, uint8_t vector);
  * user loses unsaved work that has nothing to do with this core.
  *
  * What happens to a caller that ignores this status, which C permits and no
- * attribute can prevent. `mcf5307_create` and `isp1181_create` ask the same
+ * attribute can prevent. `mcf5407_create` and `isp1181_create` ask the same
  * latch themselves, and both return null once it is abandoned. Every remaining
  * call in this header already documents its answer for a nil context - 0, a
  * refusal, or nothing at all - so a caller that dropped the status gets a
  * library that does nothing, and never one that answers out of a runtime that
  * was never initialised. That refusal is the mechanism; this status is the
  * advice that lets a host report the fault instead of guessing at it. */
-MCF5307_MUST_CHECK int mcf5307_runtime_init(void);
+MCF5407_MUST_CHECK int mcf5407_runtime_init(void);
 
-/* Allocates a core context, or returns null when `mcf5307_runtime_init` has
+/* Allocates a core context, or returns null when `mcf5407_runtime_init` has
  * reported a stall. The allocation needs the runtime this call refuses to
  * assume, and a null context is a value every other core call above already
- * answers for. See `mcf5307_runtime_init`. */
-mcf5307_ctx* mcf5307_create(void* user,
-                            mcf5307_read_fn rd,
-                            mcf5307_write_fn wr,
-                            mcf5307_iack_fn iack);
-void mcf5307_destroy(mcf5307_ctx* ctx);
-void mcf5307_reset(mcf5307_ctx* ctx, uint32_t initial_sp, uint32_t initial_pc);
+ * answers for. See `mcf5407_runtime_init`. */
+mcf5407_ctx* mcf5407_create(void* user,
+                            mcf5407_read_fn rd,
+                            mcf5407_write_fn wr,
+                            mcf5407_iack_fn iack);
+void mcf5407_destroy(mcf5407_ctx* ctx);
+void mcf5407_reset(mcf5407_ctx* ctx, uint32_t initial_sp, uint32_t initial_pc);
 
 /* Runs until at least `max_cycles` cycles have been spent, and returns the
  * cycles actually spent.
@@ -229,7 +229,7 @@ void mcf5307_reset(mcf5307_ctx* ctx, uint32_t initial_sp, uint32_t initial_pc);
  *
  * It returns 0 when nothing ran: a nil or already-halted context, a budget of
  * zero, or a first instruction that trapped. */
-uint32_t mcf5307_exec(mcf5307_ctx* ctx, uint32_t max_cycles);
+uint32_t mcf5407_exec(mcf5407_ctx* ctx, uint32_t max_cycles);
 
 /* The register file, indexed by one integer:
  *
@@ -263,49 +263,49 @@ uint32_t mcf5307_exec(mcf5307_ctx* ctx, uint32_t max_cycles);
  * consumed by nothing: this core models neither the cache, nor the access
  * control regions, nor the on-chip SRAM, nor the peripheral base.
  *
- * `mcf5307_reset` sets all nine to zero.
+ * `mcf5407_reset` sets all nine to zero.
  *
- * `mcf5307_set_reg` returns 1 on success and 0 for an out-of-range index or
- * a nil context; `mcf5307_get_reg` returns the register's value and 0 for an
+ * `mcf5407_set_reg` returns 1 on success and 0 for an out-of-range index or
+ * a nil context; `mcf5407_get_reg` returns the register's value and 0 for an
  * out-of-range index. */
-int mcf5307_set_reg(mcf5307_ctx* ctx, int index, uint32_t value);
-uint32_t mcf5307_get_reg(const mcf5307_ctx* ctx, int index);
+int mcf5407_set_reg(mcf5407_ctx* ctx, int index, uint32_t value);
+uint32_t mcf5407_get_reg(const mcf5407_ctx* ctx, int index);
 
 /* The core's run state, and the only way to see it across this interface.
  *
- * `mcf5307_exec` returns a cycle count and nothing else. A cycle count cannot
+ * `mcf5407_exec` returns a cycle count and nothing else. A cycle count cannot
  * say WHY the core stopped, so these two calls are what tells an instruction
  * that executed from an instruction that trapped.
  *
  * Both return 1 for true and 0 for false, and both return 0 for a nil
  * context - a caller with no context has no halted core and no faulted one.
  *
- * `mcf5307_halted` is 1 when the core has stopped and will run no further
- * instruction until the next `mcf5307_reset`. `mcf5307_exec` returns
+ * `mcf5407_halted` is 1 when the core has stopped and will run no further
+ * instruction until the next `mcf5407_reset`. `mcf5407_exec` returns
  * immediately on a halted context.
  *
- * `mcf5307_faulted` is 1 when the reason for that stop was a fault: a bus
+ * `mcf5407_faulted` is 1 when the reason for that stop was a fault: a bus
  * error on an operand or instruction access, an illegal instruction word, an
  * illegal effective address for the opcode, an illegal operand size, or a
  * divide by zero. The two are not the same flag. A core can be halted without
  * a fault - a valid opcode that has no executor yet halts and does not
  * fault - so a caller that wants "did this instruction trap" must ask
- * `mcf5307_faulted`, and a caller that wants "may I run more" must ask
- * `mcf5307_halted`. A faulted core is always also halted.
+ * `mcf5407_faulted`, and a caller that wants "may I run more" must ask
+ * `mcf5407_halted`. A faulted core is always also halted.
  *
  * Neither call changes any state, which is why both take a const context. */
-int mcf5307_halted(const mcf5307_ctx* ctx);
-int mcf5307_faulted(const mcf5307_ctx* ctx);
+int mcf5407_halted(const mcf5407_ctx* ctx);
+int mcf5407_faulted(const mcf5407_ctx* ctx);
 
 /* The named zero of the `level` argument below: no interrupt is pending. */
-#define MCF5307_IRQ_NONE 0
+#define MCF5407_IRQ_NONE 0
 
 /* Presents the board's CURRENT highest-priority pending interrupt. The board
  * owns the pending bit of each source and the arbitration among them; the
  * core owns the mask against the interrupt priority level in the status
  * register, and the exception frame.
  *
- * `level` is `MCF5307_IRQ_NONE` for none, or 1 to 7. `vector` is the vector
+ * `level` is `MCF5407_IRQ_NONE` for none, or 1 to 7. `vector` is the vector
  * number when `autovector` is zero; a non-zero `autovector` makes the core
  * use the autovector for `level` and ignore `vector`. The call is
  * IDEMPOTENT, so a board may call it unconditionally after every
@@ -314,16 +314,16 @@ int mcf5307_faulted(const mcf5307_ctx* ctx);
  * For levels 1 to 6 the core latches nothing: the arguments of the last call
  * are the whole truth until the next call, exactly as hardware compares a
  * level on a pin, and deasserting is a call with a lower level or with
- * `MCF5307_IRQ_NONE`. Level 7 is different - it is edge-triggered and
+ * `MCF5407_IRQ_NONE`. Level 7 is different - it is edge-triggered and
  * non-maskable on this part, so the core latches a rising edge to level 7,
  * a level 7 held across two calls arms no second interrupt, and the core
  * clears the latch when it takes the interrupt. */
-void mcf5307_set_irq(mcf5307_ctx* ctx, int level, uint8_t vector,
+void mcf5407_set_irq(mcf5407_ctx* ctx, int level, uint8_t vector,
                      int autovector);
 
-size_t mcf5307_state_size(void);
-void mcf5307_state_save(const mcf5307_ctx* ctx, void* dst);
-void mcf5307_state_load(mcf5307_ctx* ctx, const void* src);
+size_t mcf5407_state_size(void);
+void mcf5407_state_save(const mcf5407_ctx* ctx, void* dst);
+void mcf5407_state_load(mcf5407_ctx* ctx, const void* src);
 
 /* ------------------------------------------------ ISP1181 USB device model */
 
@@ -338,8 +338,8 @@ typedef void (*isp1181_irq_fn)(void* user, int asserted);
 typedef void (*isp1181_tx_fn)(void* user, int endpoint,
                               const uint8_t* data, size_t len);
 
-/* Allocates a device handle, or returns null when `mcf5307_runtime_init` has
- * reported a stall, for the reason `mcf5307_create` gives. */
+/* Allocates a device handle, or returns null when `mcf5407_runtime_init` has
+ * reported a stall, for the reason `mcf5407_create` gives. */
 isp1181_ctx* isp1181_create(void* user, isp1181_irq_fn irq, isp1181_tx_fn tx);
 void isp1181_destroy(isp1181_ctx* ctx);
 uint8_t isp1181_read(isp1181_ctx* ctx, uint32_t addr);
@@ -357,7 +357,7 @@ void isp1181_write(isp1181_ctx* ctx, uint32_t addr, uint8_t value);
  *
  * Which of them it was is in the log, one line per refusal, read through
  * `isp1181_log_written`, `isp1181_log_retained` and `isp1181_log_line`. */
-MCF5307_MUST_USE
+MCF5407_MUST_USE
 int isp1181_rx(isp1181_ctx* ctx, int endpoint, const uint8_t* data,
                size_t len);
 
@@ -407,8 +407,8 @@ int isp1181_in_token(isp1181_ctx* ctx, int endpoint);
  * callback is ever called. The full model is a different device - it answers
  * reads from its register file, keeps the packets `isp1181_rx` delivers, and
  * may call back. */
-#define MCF5307_ISP1181_BACKEND_STUB 0
-#define MCF5307_ISP1181_BACKEND_FULL_MODEL 1
+#define MCF5407_ISP1181_BACKEND_STUB 0
+#define MCF5407_ISP1181_BACKEND_FULL_MODEL 1
 
 /* Returns 1 when the handle moved and 0 when the call was refused. A nil
  * handle and a `backend` value neither macro above names are both refused,
@@ -441,8 +441,8 @@ void isp1181_tick(isp1181_ctx* ctx, uint32_t sof_frames);
  *
  * Neither count ever decreases for a live handle, and no call here changes
  * any device state. Both answer 0 for a nil handle. */
-MCF5307_MUST_USE size_t isp1181_log_written(const isp1181_ctx* ctx);
-MCF5307_MUST_USE size_t isp1181_log_retained(const isp1181_ctx* ctx);
+MCF5407_MUST_USE size_t isp1181_log_written(const isp1181_ctx* ctx);
+MCF5407_MUST_USE size_t isp1181_log_retained(const isp1181_ctx* ctx);
 
 /* Copies retained line `index` into `dst` and NUL-terminates it.
  *
@@ -459,7 +459,7 @@ MCF5307_MUST_USE size_t isp1181_log_retained(const isp1181_ctx* ctx);
  * `dst` may be NULL, or `capacity` may be 0, and then nothing is copied and
  * the size is still returned. That is how a caller sizes a buffer before it
  * allocates one. Nothing is written to `dst` past `capacity` bytes. */
-MCF5307_MUST_USE size_t isp1181_log_line(const isp1181_ctx* ctx, size_t index,
+MCF5407_MUST_USE size_t isp1181_log_line(const isp1181_ctx* ctx, size_t index,
                                          char* dst, size_t capacity);
 
 /* ------------------------------- how the firmware configured the endpoints
@@ -472,7 +472,7 @@ MCF5307_MUST_USE size_t isp1181_log_line(const isp1181_ctx* ctx, size_t index,
  * The slot order is ISP1362 Rev. 06 section 15.1.1 p.107: slot 0 is control
  * OUT, slot 1 is control IN, and slot k for k >= 2 is endpoint k - 1, up to
  * endpoint 14. The command code that writes slot k is `0x20 + k`. */
-MCF5307_MUST_USE size_t isp1181_config_slots(void);
+MCF5407_MUST_USE size_t isp1181_config_slots(void);
 
 /* Returns 1 when the firmware has written configuration slot `slot` since the
  * last reset, 0 when it has not, and -1 when there is no such slot or no
@@ -486,7 +486,7 @@ MCF5307_MUST_USE size_t isp1181_config_slots(void);
  * Rev. 06 Table 110 p.107 places it and Table 111 p.107 gives its meaning. The
  * same table places FIFOEN at bit 7, DBLBUF at bit 5, FFOISO at bit 4 and
  * FFOSZ[3:0] in the low nibble. Every bit resets to 0. */
-MCF5307_MUST_USE int isp1181_config_slot(const isp1181_ctx* ctx, size_t slot,
+MCF5407_MUST_USE int isp1181_config_slot(const isp1181_ctx* ctx, size_t slot,
                                          uint8_t* value);
 
 /* --------------------------------- what an endpoint's buffer will hold
@@ -573,7 +573,7 @@ MCF5307_MUST_USE int isp1181_config_slot(const isp1181_ctx* ctx, size_t slot,
  * A caller that wants to act only on a configured endpoint asks
  * `isp1181_config_slot` first; a caller that only needs a packet size may read
  * this call alone, because every answer other than 1 withholds one. */
-MCF5307_MUST_USE int isp1181_slot_buffer(const isp1181_ctx* ctx, size_t slot,
+MCF5407_MUST_USE int isp1181_slot_buffer(const isp1181_ctx* ctx, size_t slot,
                                          size_t* max_packet_bytes,
                                          size_t* buffer_count);
 
@@ -600,10 +600,10 @@ MCF5307_MUST_USE int isp1181_slot_buffer(const isp1181_ctx* ctx, size_t slot,
  * Returns 0 only for a NULL handle - a live handle always has a report.
  *
  * The same report is written at teardown without any call at all when the
- * environment variable `MCF5307_ISP1181_REPORT` names a file: `isp1181_destroy`
+ * environment variable `MCF5407_ISP1181_REPORT` names a file: `isp1181_destroy`
  * APPENDS the report to it. Unset or empty changes nothing - no file is
  * created, no default path is used and nothing is written anywhere. */
-MCF5307_MUST_USE size_t isp1181_report(const isp1181_ctx* ctx, char* dst,
+MCF5407_MUST_USE size_t isp1181_report(const isp1181_ctx* ctx, char* dst,
                                        size_t capacity);
 
 size_t isp1181_state_size(void);
@@ -614,4 +614,4 @@ void isp1181_state_load(isp1181_ctx* ctx, const void* src);
 } /* extern "C" */
 #endif
 
-#endif /* MCF5307_H */
+#endif /* MCF5407_H */

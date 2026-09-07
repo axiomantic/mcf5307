@@ -33,7 +33,7 @@
 ## than being silently re-aimed at the old answer.
 ##
 ## THE SIGN EXTENSION IS WRITTEN OUT HERE AND NOT IMPORTED FROM THE CORE. `s8`
-## and `s16` live in `mcf5307/machine`, and a sweep that reached for them would
+## and `s16` live in `mcf5407/machine`, and a sweep that reached for them would
 ## compare the core against itself and agree with any sign convention it had.
 ##
 ## THE ODD TARGETS ARE HALF OF THE SWEEP AND THEY ARE NOT AN ASIDE. The base is
@@ -66,9 +66,9 @@
 
 import std/strutils
 
-import mcf5307/cpu
-import mcf5307/decode_types
-import mcf5307/machine
+import mcf5407/cpu
+import mcf5407/decode_types
+import mcf5407/machine
 
 var failures: seq[string]
 import ./case_sites
@@ -118,21 +118,21 @@ proc boardReadValue(b: TestBoard; address: uint32; size: int): uint32 =
     result = (result shl 8) or uint32(b.bytes[int(address) + i])
 
 proc bRead(user: pointer; address: uint32; size: cint;
-           status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+           status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return 0'u32
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardReadValue(b[], address, int(size))
 
 proc bWrite(user: pointer; address: uint32; size: cint; value: uint32;
-            status: ptr Mcf5307BusStatus) {.cdecl.} =
+            status: ptr Mcf5407BusStatus) {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardWrite(b[], address, int(size), value)
 
 proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
@@ -174,17 +174,17 @@ proc runDisplacement(disp: int): Row =
   boardWrite(board, execBase, 2, 0x6000'u32 or uint32(disp))
   boardWrite(board, execBase + 2'u32, 2, uint32(wordDisplacement))
 
-  let ctx = mcf5307_create(addr board, bRead, bWrite, bIack)
-  mcf5307_reset(ctx, stackBase, execBase)
-  discard mcf5307_set_reg(ctx, 16, srDirty)
-  discard mcf5307_exec(ctx, 1'u32)
+  let ctx = mcf5407_create(addr board, bRead, bWrite, bIack)
+  mcf5407_reset(ctx, stackBase, execBase)
+  discard mcf5407_set_reg(ctx, 16, srDirty)
+  discard mcf5407_exec(ctx, 1'u32)
   result = (disp: disp,
-            pc: mcf5307_get_reg(ctx, 17),
-            sp: mcf5307_get_reg(ctx, 15),
-            sr: mcf5307_get_reg(ctx, 16),
+            pc: mcf5407_get_reg(ctx, 17),
+            sp: mcf5407_get_reg(ctx, 15),
+            sr: mcf5407_get_reg(ctx, 16),
             fault: ctx.fault,
             halted: ctx.halted)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # The rule, written out from the manual.

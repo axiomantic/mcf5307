@@ -3,7 +3,7 @@
  * Each assertion below can fail on its own.
  *
  * (1) The link itself. The test takes the address of every function
- *     `include/mcf5307.h` declares and the library defines. A renamed
+ *     `include/mcf5407.h` declares and the library defines. A renamed
  *     definition, a definition that lost its `exportc` name, or a
  *     declaration that lost its `extern "C"` block is a link error here, not
  *     a warning, and the test fails before `main` runs. That is the
@@ -24,19 +24,19 @@
  *     configure step with the symbol named. The measured set is the fact;
  *     the committed list is the expectation.
  *
- * (2) The twice-call. The test calls `mcf5307_runtime_init()` twice and
+ * (2) The twice-call. The test calls `mcf5407_runtime_init()` twice and
  *     asserts both calls return. The function is documented as idempotent;
  *     a re-entrant call that crashes is a regression in the runtime. C++
  *     never names `NimMain`; the C names are the whole contract.
  *
  * (3) The backend macro values, not their names. The two
- *     `MCF5307_ISP1181_BACKEND_*` macros are written out in
- *     `include/mcf5307.h` and again, as Nim constants, in
+ *     `MCF5407_ISP1181_BACKEND_*` macros are written out in
+ *     `include/mcf5407.h` and again, as Nim constants, in
  *     `src/isp1181/stub.nim`. Every other mechanism here compares symbol
  *     names: step 4a, the committed list and the address set above would all
  *     stay green if one side renumbered. `tests/t_isp1181_stub.nim` pins the
  *     numbers on the Nim side only, so it would stay green too, and a C
- *     caller passing `MCF5307_ISP1181_BACKEND_FULL_MODEL` would then be
+ *     caller passing `MCF5407_ISP1181_BACKEND_FULL_MODEL` would then be
  *     refused - or worse, silently handed the stub.
  *
  *     The assertion is behavioural rather than a returned 1, because an
@@ -46,7 +46,7 @@
  *     select, and the read that follows says which device actually answered.
  *
  * (4) The concurrent first call. Several threads enter
- *     `mcf5307_runtime_init` on a cold latch behind a start gate, and every
+ *     `mcf5407_runtime_init` on a cold latch behind a start gate, and every
  *     one of them must return 1. A latch built on a plain boolean lets two
  *     threads run the initializer, which is the failure this shape catches.
  *
@@ -56,7 +56,7 @@
  * The address-taking is the only way to make a rename a fail. The C++
  * translation unit reads no field of any function pointer, and the linker
  * is what turns a missing symbol into a build error. The test is C++17
- * clean, links against the `mcf5307` static library, and exits 0 on
+ * clean, links against the `mcf5407` static library, and exits 0 on
  * success.
  */
 
@@ -67,7 +67,7 @@
 #include <thread>
 #include <vector>
 
-#include "mcf5307.h"
+#include "mcf5407.h"
 
 namespace {
 
@@ -91,12 +91,12 @@ namespace {
  * directions, and it fails naming the symbols that differ. An unintended
  * export is therefore both a stopped configure step and a diff a reviewer
  * reads. Neither file is generated from the other. */
-#define MCF5307_ABI_FN(name)                                                   \
+#define MCF5407_ABI_FN(name)                                                   \
     extern "C" auto const abi_addr_##name = &name;
 
 #include "abi_smoke_implemented.h"
 
-#undef MCF5307_ABI_FN
+#undef MCF5407_ABI_FN
 
 /* The same list again, as one array that `main` reads in full at run time.
  *
@@ -121,14 +121,14 @@ namespace {
  * one failure mode is the qualifier's position, and the `static_assert`
  * above fails the build over that. Prefer the mechanism whose breakage is
  * loud. */
-#define MCF5307_ABI_FN(name)                                                   \
+#define MCF5407_ABI_FN(name)                                                   \
     reinterpret_cast<void const*>(abi_addr_##name),
 
 void const* const volatile abi_addr_all[] = {
 #include "abi_smoke_implemented.h"
 };
 
-#undef MCF5307_ABI_FN
+#undef MCF5407_ABI_FN
 
 /* An empty address set would make the link assertion vacuous and would still
  * compile as `main` alone. The generator refuses to write an empty header;
@@ -148,7 +148,7 @@ static_assert(
  * started after the winner had already finished. */
 constexpr int kRacers = 8;
 
-/* True when every racer returned from `mcf5307_runtime_init`. A thread that
+/* True when every racer returned from `mcf5407_runtime_init`. A thread that
  * hangs never joins and the test times out instead of answering. */
 bool all_racers_returned() {
     std::atomic<bool> gate{false};
@@ -164,9 +164,9 @@ bool all_racers_returned() {
             while (!gate.load(std::memory_order_acquire)) {
             }
             /* The status is consumed, not discarded: the entry point is
-             * MCF5307_MUST_CHECK. No racer stalls the latch, so a healthy
+             * MCF5407_MUST_CHECK. No racer stalls the latch, so a healthy
              * runtime answers 1 to every one of them. */
-            if (mcf5307_runtime_init() == 1) {
+            if (mcf5407_runtime_init() == 1) {
                 returned.fetch_add(1, std::memory_order_relaxed);
             }
         });
@@ -215,8 +215,8 @@ int peek_endpoint0(isp1181_ctx* h, int expect_accepted) {
 /* Non-zero on the first failure. Each return value is distinct so a red run
  * names the case through the exit status alone. */
 int check_backend_macros() {
-    static_assert(MCF5307_ISP1181_BACKEND_STUB !=
-                      MCF5307_ISP1181_BACKEND_FULL_MODEL,
+    static_assert(MCF5407_ISP1181_BACKEND_STUB !=
+                      MCF5407_ISP1181_BACKEND_FULL_MODEL,
                   "abi_smoke: the two backend macros carry the same value, so "
                   "neither selects anything.");
 
@@ -224,11 +224,11 @@ int check_backend_macros() {
     if (h == nullptr) return 10;
 
     int rc = 0;
-    if (isp1181_set_backend(h, MCF5307_ISP1181_BACKEND_FULL_MODEL) != 1) {
+    if (isp1181_set_backend(h, MCF5407_ISP1181_BACKEND_FULL_MODEL) != 1) {
         rc = 11; /* the header's full-model number is not one the model takes */
     } else if (peek_endpoint0(h, 1) != kDelivered) {
         rc = 12; /* it was taken, but it did not select the full model */
-    } else if (isp1181_set_backend(h, MCF5307_ISP1181_BACKEND_STUB) != 1) {
+    } else if (isp1181_set_backend(h, MCF5407_ISP1181_BACKEND_STUB) != 1) {
         rc = 13; /* the header's stub number is not one the model takes */
     } else if (peek_endpoint0(h, 0) != 0x00) {
         rc = 14; /* it was taken, but it did not select the stub */
@@ -246,7 +246,7 @@ int main() {
     /* The concurrent first call, before any other call closes the latch. */
     if (!all_racers_returned()) return 4;
 
-    /* The twice-call. `mcf5307_runtime_init()` is documented as idempotent.
+    /* The twice-call. `mcf5407_runtime_init()` is documented as idempotent.
      * A second call that reaches unmapped memory, that re-enters a partial
      * initialiser, or that panics is a regression in the runtime itself.
      *
@@ -256,10 +256,10 @@ int main() {
      * every reason would satisfy it just as well. The answer is read through
      * the published C entry point rather than against the Nim procedure
      * behind it. */
-    if (mcf5307_runtime_init() != 1) {
+    if (mcf5407_runtime_init() != 1) {
         return 2;
     }
-    if (mcf5307_runtime_init() != 1) {
+    if (mcf5407_runtime_init() != 1) {
         return 3;
     }
 

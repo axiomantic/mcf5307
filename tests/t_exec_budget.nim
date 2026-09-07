@@ -1,8 +1,8 @@
-## `t_exec_budget` - what `mcf5307_exec` RETURNS when the budget runs out in
+## `t_exec_budget` - what `mcf5407_exec` RETURNS when the budget runs out in
 ## the middle of an instruction, asserted as an arithmetic identity rather than
 ## as a flag.
 ##
-## THE PROPERTY. `mcf5307_exec` never abandons an instruction it has started:
+## THE PROPERTY. `mcf5407_exec` never abandons an instruction it has started:
 ## the loop decides whether to continue AFTER a step, so the last instruction of
 ## a call has already retired when the budget is found to be spent. The return
 ## is therefore the cost of everything that RAN, and it may EXCEED the budget -
@@ -24,9 +24,9 @@
 ## the defect this project keeps finding: a cost transcribed beside the code
 ## that computes it, and then left behind when the code moves.
 
-import mcf5307/cpu
-import mcf5307/decode_types
-import mcf5307/machine
+import mcf5407/cpu
+import mcf5407/decode_types
+import mcf5407/machine
 
 var failures: seq[string]
 import ./case_sites
@@ -75,21 +75,21 @@ proc boardReadValue(b: TestBoard; address: uint32; size: int): uint32 =
     result = (result shl 8) or uint32(b.bytes[int(address) + i])
 
 proc bRead(user: pointer; address: uint32; size: cint;
-           status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+           status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return 0'u32
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardReadValue(b[], address, int(size))
 
 proc bWrite(user: pointer; address: uint32; size: cint; value: uint32;
-            status: ptr Mcf5307BusStatus) {.cdecl.} =
+            status: ptr Mcf5407BusStatus) {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardWrite(b[], address, int(size), value)
 
 proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
@@ -109,7 +109,7 @@ const
     ## STOP the budget did not cause - and an encoding the core executes would
     ## not supply one.
 
-proc freshCore(word: uint16; copies: int; tail: uint16): MCF5307Ctx =
+proc freshCore(word: uint16; copies: int; tail: uint16): MCF5407Ctx =
   ## A core whose memory holds `copies` of `word` at `execBase`, followed by
   ## `tail`. Every field the runs below read is set through the published
   ## entry points.
@@ -119,11 +119,11 @@ proc freshCore(word: uint16; copies: int; tail: uint16): MCF5307Ctx =
     boardWrite(board, execBase + uint32(index * 2), 2, uint32(word))
   boardWrite(board, execBase + uint32(copies * 2), 2, uint32(tail))
 
-  result = mcf5307_create(addr board, bRead, bWrite, bIack)
-  mcf5307_reset(result, stackBase, execBase)
-  # The status register is set LAST: `mcf5307_reset` writes it, so an earlier
+  result = mcf5407_create(addr board, bRead, bWrite, bIack)
+  mcf5407_reset(result, stackBase, execBase)
+  # The status register is set LAST: `mcf5407_reset` writes it, so an earlier
   # write would be overwritten.
-  discard mcf5307_set_reg(result, 16, srBase)
+  discard mcf5407_set_reg(result, 16, srBase)
 
 proc costOf(word: uint16): uint32 =
   ## ONE INSTRUCTION'S COST, MEASURED AND NOT TRANSCRIBED. The memory holds one
@@ -132,8 +132,8 @@ proc costOf(word: uint16): uint32 =
   ## halt and never on the budget, so the return is the instruction's whole
   ## cost by a path on which no saturation can occur.
   let ctx = freshCore(word, 1, refusedWord)
-  result = mcf5307_exec(ctx, uint32(memSize))
-  mcf5307_destroy(ctx)
+  result = mcf5407_exec(ctx, uint32(memSize))
+  mcf5407_destroy(ctx)
 
 let nopCost = costOf(nopWord)
 let addqCost = costOf(addqWord)
@@ -169,9 +169,9 @@ proc totalOverSingleCycleBudgets(word: uint16): (uint32, uint32) =
   let ctx = freshCore(word, insWords, refusedWord)
   var total = 0'u32
   for _ in 0 ..< insWords:
-    total = total + mcf5307_exec(ctx, 1'u32)
-  result = (total, mcf5307_get_reg(ctx, 17))
-  mcf5307_destroy(ctx)
+    total = total + mcf5407_exec(ctx, 1'u32)
+  result = (total, mcf5407_get_reg(ctx, 17))
+  mcf5407_destroy(ctx)
 
 let nopRun = totalOverSingleCycleBudgets(nopWord)
 check(nopRun,
@@ -197,7 +197,7 @@ check(addqRun,
 # `spent >= budget` passes for a core that overruns by any amount at all.
 
 # THE SWEEP'S LENGTH IS A CONSTANT AND NOT A MULTIPLE OF THE MEASURED COST.
-# `mcf5307_check_case_total` in this suite's driver is a TYPED figure, and a
+# `mcf5407_check_case_total` in this suite's driver is a TYPED figure, and a
 # sweep whose length moved with the cost would move that figure whenever a
 # cycle count in the core changed - a red with nothing wrong in it, and the
 # shape that teaches an author to retype the figure.
@@ -205,8 +205,8 @@ const budgetSweep = 12'u32
 
 for budget in 1'u32 .. budgetSweep:
   let ctx = freshCore(nopWord, insWords, refusedWord)
-  let spent = mcf5307_exec(ctx, budget)
-  mcf5307_destroy(ctx)
+  let spent = mcf5407_exec(ctx, budget)
+  mcf5407_destroy(ctx)
   let wholeInstructions = (budget + nopCost - 1'u32) div nopCost
   check(spent, nopCost * wholeInstructions,
         "a budget of " & $budget & " returns the cost of the instructions it ran")

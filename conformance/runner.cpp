@@ -6,16 +6,16 @@
 // `--group <name>` in its COMMAND.
 //
 // One executable, built from this one translation unit, linked against the
-// `mcf5307` static library through the C ABI (`include/mcf5307.h`). It reads
+// `mcf5407` static library through the C ABI (`include/mcf5407.h`). It reads
 // the committed corpus, replays each case against the core, and compares the
 // resulting register state with the expected state. The registered tests
 // select the group:
 //
-//   `mcf5307_conformance_move`     runner --group move
-//   `mcf5307_conformance_alu`      runner --group alu
-//   `mcf5307_conformance_logic`    runner --group logic
-//   `mcf5307_conformance_control`  runner --group control
-//   `mcf5307_conformance_all`      runner            (every group)
+//   `mcf5407_conformance_move`     runner --group move
+//   `mcf5407_conformance_alu`      runner --group alu
+//   `mcf5407_conformance_logic`    runner --group logic
+//   `mcf5407_conformance_control`  runner --group control
+//   `mcf5407_conformance_all`      runner            (every group)
 //
 // What a case has to satisfy: the core must not be halted or faulted after
 // the case's one instruction, every register the case's `expected` state
@@ -26,7 +26,7 @@
 //
 // The corpus contract (conformance/generate.py) requires the runner to set
 // the `initial` registers and read back the `expected` registers, through
-// `mcf5307_set_reg`/`mcf5307_get_reg`. That section is the runner's single
+// `mcf5407_set_reg`/`mcf5407_get_reg`. That section is the runner's single
 // integration point for register access, so a later change to the access
 // touches exactly it and nothing else.
 
@@ -39,7 +39,7 @@
 #include <string>
 #include <vector>
 
-#include "mcf5307.h"
+#include "mcf5407.h"
 
 namespace {
 
@@ -458,7 +458,7 @@ Group loadGroup(const std::string& path, const std::string& expectedGroup) {
 // The encoding of each case is placed at the case's program counter, and the
 // case's `initial` and `expected` `mem` writes go through the same array, so
 // a memory case has a place without a second mechanism. A read
-// of an address no case wrote answers zero and MCF5307_BUS_OK.
+// of an address no case wrote answers zero and MCF5407_BUS_OK.
 
 struct MemBoard {
   std::vector<uint8_t> bytes;
@@ -494,13 +494,13 @@ struct MemBoard {
 };
 
 extern "C" uint32_t boardRead(void* user, uint32_t addr, int size,
-                              mcf5307_bus_status* status) {
-  *status = MCF5307_BUS_OK;
+                              mcf5407_bus_status* status) {
+  *status = MCF5407_BUS_OK;
   return static_cast<MemBoard*>(user)->read(addr, size);
 }
 extern "C" void boardWrite(void* user, uint32_t addr, int size, uint32_t value,
-                           mcf5307_bus_status* status) {
-  *status = MCF5307_BUS_OK;
+                           mcf5407_bus_status* status) {
+  *status = MCF5407_BUS_OK;
   static_cast<MemBoard*>(user)->write(addr, size, value);
 }
 extern "C" void boardIack(void* user, int level, uint8_t vector) {
@@ -512,7 +512,7 @@ extern "C" void boardIack(void* user, int level, uint8_t vector) {
 //
 // This is the runner's single integration point for setting the `initial`
 // registers and reading the `expected` registers, through
-// `mcf5307_set_reg`/`mcf5307_get_reg`.
+// `mcf5407_set_reg`/`mcf5407_get_reg`.
 //
 // `sr` is index 16 and it goes through this bridge in both directions. That
 // is the whole mechanism by which a case asserts a condition code: a case
@@ -524,8 +524,8 @@ extern "C" void boardIack(void* user, int level, uint8_t vector) {
 // condition codes. `conformance/generate.py` documents which cases do so and
 // why the incoming word is deliberately dirty.
 //
-// `pc` (index 17) is read-only through this bridge: `mcf5307_set_reg` refuses
-// it and `runCase` routes an initial `pc` through `mcf5307_reset` instead.
+// `pc` (index 17) is read-only through this bridge: `mcf5407_set_reg` refuses
+// it and `runCase` routes an initial `pc` through `mcf5407_reset` instead.
 
 std::string registerBridgeError = "no register bridge";
 
@@ -541,31 +541,31 @@ int registerIndex(const std::string& name) {
   return -1;
 }
 
-bool coreWriteReg(mcf5307_ctx* ctx, const std::string& name, uint32_t value) {
+bool coreWriteReg(mcf5407_ctx* ctx, const std::string& name, uint32_t value) {
   const int idx = registerIndex(name);
   if (idx < 0) {
     registerBridgeError = "no register named '" + name + "'";
     return false;
   }
-  if (idx > 16) {  // pc is set through mcf5307_reset, not through the bridge
+  if (idx > 16) {  // pc is set through mcf5407_reset, not through the bridge
     registerBridgeError = "cannot set '" + name + "' through the bridge";
     return false;
   }
-  if (mcf5307_set_reg(ctx, idx, value) == 0) {
+  if (mcf5407_set_reg(ctx, idx, value) == 0) {
     registerBridgeError =
-        "mcf5307_set_reg refused index " + std::to_string(idx);
+        "mcf5407_set_reg refused index " + std::to_string(idx);
     return false;
   }
   return true;
 }
 
-bool coreReadReg(mcf5307_ctx* ctx, const std::string& name, uint32_t& out) {
+bool coreReadReg(mcf5407_ctx* ctx, const std::string& name, uint32_t& out) {
   const int idx = registerIndex(name);
   if (idx < 0) {
     registerBridgeError = "no register named '" + name + "'";
     return false;
   }
-  out = mcf5307_get_reg(ctx, idx);
+  out = mcf5407_get_reg(ctx, idx);
   return true;
 }
 
@@ -586,14 +586,14 @@ struct CaseRun {
 // The cycle budget is one, and that is what makes the run state readable.
 //
 // A corpus case is one instruction, and the runner has to judge that
-// instruction. `mcf5307_exec` is a loop: it keeps stepping while the budget
+// instruction. `mcf5407_exec` is a loop: it keeps stepping while the budget
 // lasts and the core has not halted. Under a generous budget the loop walks
 // off the end of the case's encoding into the board's zero fill, `0x0000`
 // decodes as an illegal instruction, and the core ends every case halted and
 // faulted - the fault belonging to the zero word after the case, not to the
 // case.
 //
-// A budget of one executes exactly one instruction. `mcf5307_exec` tests the
+// A budget of one executes exactly one instruction. `mcf5407_exec` tests the
 // budget before it steps, so it always starts the first instruction; it
 // completes that instruction whatever the instruction costs, and then the
 // budget is spent and the loop ends. The run state read afterwards is
@@ -603,7 +603,7 @@ struct CaseRun {
 // completed instruction reports the budget and a halted core reports zero - so
 // it is read as "did an instruction complete" and never as a cost. The corpus
 // asserts no cycle count (`conformance/generate.py`), and neither does anything
-// else in this tree: the block above the constants in `src/mcf5307/cpu.nim`
+// else in this tree: the block above the constants in `src/mcf5407/cpu.nim`
 // carries that fact and the evidence for it, and every executor module points
 // at that block rather than repeating it.
 //
@@ -638,8 +638,8 @@ CaseRun runCase(const Case& cs) {
     board.write(pc + 2u * static_cast<uint32_t>(i), 2, w);
   }
 
-  mcf5307_ctx* ctx = mcf5307_create(&board, boardRead, boardWrite, boardIack);
-  mcf5307_reset(ctx, sp, pc);
+  mcf5407_ctx* ctx = mcf5407_create(&board, boardRead, boardWrite, boardIack);
+  mcf5407_reset(ctx, sp, pc);
 
   // Set the non-pc/sp initial registers through the bridge.
   for (const auto& r : cs.initialRegs) {
@@ -650,13 +650,13 @@ CaseRun runCase(const Case& cs) {
       out.reason =
           "cannot set initial register '" + r.first + "': " +
           std::string(registerBridgeError);
-      mcf5307_destroy(ctx);
+      mcf5407_destroy(ctx);
       return out;
     }
   }
 
   // One instruction. See the note on `kBudget` above.
-  const uint32_t cycles = mcf5307_exec(ctx, kBudget);
+  const uint32_t cycles = mcf5407_exec(ctx, kBudget);
 
   // ---------------------------------------------------------------------
   // The run state, asserted before any value is compared.
@@ -669,7 +669,7 @@ CaseRun runCase(const Case& cs) {
   // `fault`, and `d0` and `d1` are untouched.
   //
   // This runner goes through the C ABI, so it reads the two bits through
-  // `mcf5307_halted` and `mcf5307_faulted` (`include/mcf5307.h`).
+  // `mcf5407_halted` and `mcf5407_faulted` (`include/mcf5407.h`).
   //
   // The checks are ordered from the most specific reason to the least, so
   // the message names why the case is wrong rather than a register value
@@ -686,33 +686,33 @@ CaseRun runCase(const Case& cs) {
   // it only when `expected.regs` is empty would let naming any register
   // silently remove the runner's only "it ran" assertion. All three checks
   // below run for every case.
-  if (mcf5307_faulted(ctx) != 0) {
+  if (mcf5407_faulted(ctx) != 0) {
     out.ran = true;
     out.ok = false;
     out.reason =
         "the instruction TRAPPED: the core halted with a fault "
-        "(mcf5307_faulted is 1). A bus error, an illegal instruction word, "
+        "(mcf5407_faulted is 1). A bus error, an illegal instruction word, "
         "an illegal effective address, an illegal size or a divide by zero. "
         "The registers this case names may still match, and that is exactly "
         "why this is checked before them.";
-    mcf5307_destroy(ctx);
+    mcf5407_destroy(ctx);
     return out;
   }
-  if (mcf5307_halted(ctx) != 0) {
+  if (mcf5407_halted(ctx) != 0) {
     out.ran = true;
     out.ok = false;
     out.reason =
-        "the core HALTED without a fault (mcf5307_halted is 1, "
-        "mcf5307_faulted is 0). The encoding is valid and its semantics are "
+        "the core HALTED without a fault (mcf5407_halted is 1, "
+        "mcf5407_faulted is 0). The encoding is valid and its semantics are "
         "not written yet.";
-    mcf5307_destroy(ctx);
+    mcf5407_destroy(ctx);
     return out;
   }
   if (cycles == 0) {
     out.ran = true;
     out.ok = false;
     out.reason = "the instruction did not execute (0 cycles returned)";
-    mcf5307_destroy(ctx);
+    mcf5407_destroy(ctx);
     return out;
   }
 
@@ -727,7 +727,7 @@ CaseRun runCase(const Case& cs) {
       out.reason =
           "cannot read expected register '" + r.first + "': " +
           std::string(registerBridgeError);
-      mcf5307_destroy(ctx);
+      mcf5407_destroy(ctx);
       return out;
     }
     if (actual != r.second) {
@@ -736,7 +736,7 @@ CaseRun runCase(const Case& cs) {
       out.mismatchReg = r.first;
       out.expectedValue = r.second;
       out.actualValue = actual;
-      mcf5307_destroy(ctx);
+      mcf5407_destroy(ctx);
       return out;
     }
   }
@@ -753,14 +753,14 @@ CaseRun runCase(const Case& cs) {
           "mem[" + std::to_string(w.addr) + ":" + std::to_string(w.size) + "]";
       out.expectedValue = w.value;
       out.actualValue = actual;
-      mcf5307_destroy(ctx);
+      mcf5407_destroy(ctx);
       return out;
     }
   }
 
   out.ran = true;
   out.ok = true;
-  mcf5307_destroy(ctx);
+  mcf5407_destroy(ctx);
   return out;
 }
 
@@ -780,11 +780,11 @@ int main(int argc, char** argv) {
   // context. It is idempotent and called here rather than per case.
   //
   // The status is read and the run stops on a 0. Every case below calls
-  // `mcf5307_create`, which returns null behind a runtime that did not come
+  // `mcf5407_create`, which returns null behind a runtime that did not come
   // up, and a corpus that reported thousands of cases as "no context" would
   // bury the one fact that matters.
-  if (mcf5307_runtime_init() != 1) {
-    std::cerr << "runner: mcf5307_runtime_init reported that the runtime is "
+  if (mcf5407_runtime_init() != 1) {
+    std::cerr << "runner: mcf5407_runtime_init reported that the runtime is "
                  "not initialised\n";
     return 2;
   }
@@ -885,7 +885,7 @@ int main(int argc, char** argv) {
         }
       }
     }
-    std::cout << "mcf5307_conformance_" << g << ": " << groupData.cases.size()
+    std::cout << "mcf5407_conformance_" << g << ": " << groupData.cases.size()
               << " cases, " << groupFailures << " failed\n";
   }
 

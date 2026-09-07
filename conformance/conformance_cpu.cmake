@@ -24,28 +24,28 @@
 add_executable(t0_corpus_parses ${PROJECT_SOURCE_DIR}/conformance/parse_check.cpp)
 target_compile_features(t0_corpus_parses PRIVATE cxx_std_17)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-    # `MCF5307_TEST_WARNING_RELAXATIONS` is the root list's probe result. It is
+    # `MCF5407_TEST_WARNING_RELAXATIONS` is the root list's probe result. It is
     # empty for a standalone configure and for every compiler that does not
     # know the diagnostic; it demotes only a diagnostic a consumer's own flags
     # produce, and never a warning in this project's source. See the root
     # `CMakeLists.txt` for the measurement.
     target_compile_options(t0_corpus_parses PRIVATE
         -Wall -Wextra -pedantic -Werror
-        ${MCF5307_TEST_WARNING_RELAXATIONS})
+        ${MCF5407_TEST_WARNING_RELAXATIONS})
 endif()
 add_test(NAME t0_corpus_parses
     COMMAND t0_corpus_parses "${PROJECT_SOURCE_DIR}/conformance/corpus")
 
 # A test the T0 pattern selects reaches `ctest --preset t0` only if its
-# executable is attached here: the t0 build preset builds `mcf5307_tests` and
+# executable is attached here: the t0 build preset builds `mcf5407_tests` and
 # nothing else. The root `CMakeLists.txt` states that convention where it
 # creates the aggregate, and `t0_test_set_builds_what_it_runs` is what makes an
 # omission of this line a named failure rather than a masked one.
 #
-# `mcf5307_conformance` deliberately gets no such line. Its registered names are
-# `mcf5307_conformance_*`, which the T0 pattern does not select, and attaching it
+# `mcf5407_conformance` deliberately gets no such line. Its registered names are
+# `mcf5407_conformance_*`, which the T0 pattern does not select, and attaching it
 # would put the corpus runner into every narrow build.
-add_dependencies(mcf5307_tests t0_corpus_parses)
+add_dependencies(mcf5407_tests t0_corpus_parses)
 
 # The conformance runner and its registered tests.
 #
@@ -55,13 +55,13 @@ add_dependencies(mcf5307_tests t0_corpus_parses)
 # CTest does not forward arguments after `--`, so each registration carries
 # its `--group <name>` in its own COMMAND.
 #
-# The whole-corpus test is named `mcf5307_conformance_all` and NOT
-# `mcf5307_conformance`. The shorter name is a PREFIX of every group name,
-# so `-R ^mcf5307_conformance$` would match nothing (anchored) and an
-# unanchored `-R mcf5307_conformance` would run every one of them twice.
+# The whole-corpus test is named `mcf5407_conformance_all` and NOT
+# `mcf5407_conformance`. The shorter name is a PREFIX of every group name,
+# so `-R ^mcf5407_conformance$` would match nothing (anchored) and an
+# unanchored `-R mcf5407_conformance` would run every one of them twice.
 #
-# The runner links the `mcf5307` static library through the C ABI
-# (`include/mcf5307.h`). The executable is built once in the build; the tests
+# The runner links the `mcf5407` static library through the C ABI
+# (`include/mcf5407.h`). The executable is built once in the build; the tests
 # then run it. Unlike `t0_corpus_parses`, this asserts a property of the core
 # against committed data, so the ordinary build-and-run shape is the right one.
 #
@@ -69,31 +69,31 @@ add_dependencies(mcf5307_tests t0_corpus_parses)
 # takes `<corpus-dir>` from argv, so the test command names it exactly as it
 # exists in the source tree, and the build needs no generated path.
 
-add_executable(mcf5307_conformance
+add_executable(mcf5407_conformance
     "${PROJECT_SOURCE_DIR}/conformance/runner.cpp")
-target_include_directories(mcf5307_conformance PRIVATE
+target_include_directories(mcf5407_conformance PRIVATE
     "${PROJECT_SOURCE_DIR}/include")
-target_link_libraries(mcf5307_conformance PRIVATE mcf5307)
-target_compile_features(mcf5307_conformance PRIVATE cxx_std_17)
+target_link_libraries(mcf5407_conformance PRIVATE mcf5407)
+target_compile_features(mcf5407_conformance PRIVATE cxx_std_17)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     # See `t0_corpus_parses` above and the root `CMakeLists.txt`.
-    target_compile_options(mcf5307_conformance PRIVATE
+    target_compile_options(mcf5407_conformance PRIVATE
         -Wall -Wextra -pedantic -Werror
-        ${MCF5307_TEST_WARNING_RELAXATIONS})
+        ${MCF5407_TEST_WARNING_RELAXATIONS})
 endif()
 
-set(MCF5307_CONFORMANCE_CORPUS "${PROJECT_SOURCE_DIR}/conformance/corpus")
+set(MCF5407_CONFORMANCE_CORPUS "${PROJECT_SOURCE_DIR}/conformance/corpus")
 
-add_test(NAME mcf5307_conformance_move
-    COMMAND mcf5307_conformance --group move "${MCF5307_CONFORMANCE_CORPUS}")
-add_test(NAME mcf5307_conformance_alu
-    COMMAND mcf5307_conformance --group alu "${MCF5307_CONFORMANCE_CORPUS}")
-add_test(NAME mcf5307_conformance_logic
-    COMMAND mcf5307_conformance --group logic "${MCF5307_CONFORMANCE_CORPUS}")
-add_test(NAME mcf5307_conformance_control
-    COMMAND mcf5307_conformance --group control "${MCF5307_CONFORMANCE_CORPUS}")
-add_test(NAME mcf5307_conformance_all
-    COMMAND mcf5307_conformance "${MCF5307_CONFORMANCE_CORPUS}")
+add_test(NAME mcf5407_conformance_move
+    COMMAND mcf5407_conformance --group move "${MCF5407_CONFORMANCE_CORPUS}")
+add_test(NAME mcf5407_conformance_alu
+    COMMAND mcf5407_conformance --group alu "${MCF5407_CONFORMANCE_CORPUS}")
+add_test(NAME mcf5407_conformance_logic
+    COMMAND mcf5407_conformance --group logic "${MCF5407_CONFORMANCE_CORPUS}")
+add_test(NAME mcf5407_conformance_control
+    COMMAND mcf5407_conformance --group control "${MCF5407_CONFORMANCE_CORPUS}")
+add_test(NAME mcf5407_conformance_all
+    COMMAND mcf5407_conformance "${MCF5407_CONFORMANCE_CORPUS}")
 
 # ---------------------------------------------------------------------------
 # Put every test this list registered behind the build gate.
@@ -106,4 +106,4 @@ add_test(NAME mcf5307_conformance_all
 #
 # Last line for the same reason as in `tests/tests_cpu.cmake`: it reads the
 # directory's `TESTS` property and so covers what is registered above it.
-mcf5307_require_current_build()
+mcf5407_require_current_build()

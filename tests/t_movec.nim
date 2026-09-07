@@ -1,10 +1,10 @@
 ## `t_movec` - the `MOVEC` encoding and the control-register map of
-## `mcf5307/movec`.
+## `mcf5407/movec`.
 
-import mcf5307/movec
-import mcf5307/machine
-import mcf5307/cpu
-import mcf5307/decode_types
+import mcf5407/movec
+import mcf5407/machine
+import mcf5407/cpu
+import mcf5407/decode_types
 
 var failures: seq[string]
 import ./case_sites
@@ -139,13 +139,13 @@ check(controlRegisterFor(0x003'u16), crUnimplemented,
 # machine. A suite that calls `controlRegisterFor` directly answers the same way
 # whether or not any instruction can reach it, so a full pass of those cases
 # alone is consistent with `MOVEC` decoding to nothing and trapping as an
-# illegal opcode. The cases below run the encoding through `mcf5307_reset`,
-# `mcf5307_set_reg`, `mcf5307_exec` and `mcf5307_get_reg` - four of the calls
-# `include/mcf5307.h` publishes - so that the map above is asserted on the path
+# illegal opcode. The cases below run the encoding through `mcf5407_reset`,
+# `mcf5407_set_reg`, `mcf5407_exec` and `mcf5407_get_reg` - four of the calls
+# `include/mcf5407.h` publishes - so that the map above is asserted on the path
 # a boot loader takes.
 #
 # This suite still compiles the core from source through `--path:src` and never
-# links `libmcf5307.a`, so it cannot see a module that the entry module's import
+# links `libmcf5407.a`, so it cannot see a module that the entry module's import
 # graph fails to reach. `conformance/runner.cpp` is what links the archive.
 
 const
@@ -182,21 +182,21 @@ proc boardReadValue(b: TestBoard; address: uint32; size: int): uint32 =
     result = (result shl 8) or uint32(b.bytes[int(address) + i])
 
 proc bRead(user: pointer; address: uint32; size: cint;
-           status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+           status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return 0'u32
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardReadValue(b[], address, int(size))
 
 proc bWrite(user: pointer; address: uint32; size: cint; value: uint32;
-            status: ptr Mcf5307BusStatus) {.cdecl.} =
+            status: ptr Mcf5407BusStatus) {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardWrite(b[], address, int(size), value)
 
 proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
@@ -204,7 +204,7 @@ proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
 
 type Outcome = object
   ran: bool
-    ## DID THE INSTRUCTION RUN? It is `mcf5307_exec(ctx, 1) > 0`, and it is a
+    ## DID THE INSTRUCTION RUN? It is `mcf5407_exec(ctx, 1) > 0`, and it is a
     ## BOOLEAN because that is all the call can tell this suite. The return is
     ## the whole retired cost of the instruction - `cpu.nim`'s header block is
     ## the contract - and that cost differs per encoding, so an expectation
@@ -226,7 +226,7 @@ type Outcome = object
 
 proc runIns(words: openArray[uint16]; sr: uint32;
             mem: seq[(uint32, uint32)] = @[]): Outcome =
-  ## Place `words` at `execBase`, seed d0 and a0, run one `mcf5307_exec`, and
+  ## Place `words` at `execBase`, seed d0 and a0, run one `mcf5407_exec`, and
   ## report the whole machine state.
   for i in 0 ..< memSize:
     board.bytes[i] = 0'u8
@@ -235,23 +235,23 @@ proc runIns(words: openArray[uint16]; sr: uint32;
   for (address, value) in mem:
     boardWrite(board, address, 4, value)
 
-  let ctx = mcf5307_create(addr board, bRead, bWrite, bIack)
-  mcf5307_reset(ctx, stackBase, execBase)
-  discard mcf5307_set_reg(ctx, 0, dirtyD)
-  discard mcf5307_set_reg(ctx, 8, dirtyA)
-  # The status register is set last, because `mcf5307_reset` writes it and an
+  let ctx = mcf5407_create(addr board, bRead, bWrite, bIack)
+  mcf5407_reset(ctx, stackBase, execBase)
+  discard mcf5407_set_reg(ctx, 0, dirtyD)
+  discard mcf5407_set_reg(ctx, 8, dirtyA)
+  # The status register is set last, because `mcf5407_reset` writes it and an
   # earlier write would be overwritten - which would run every user-state case
   # in supervisor state and pass.
-  discard mcf5307_set_reg(ctx, 16, sr)
+  discard mcf5407_set_reg(ctx, 16, sr)
 
-  result.ran = mcf5307_exec(ctx, 1'u32) > 0'u32
+  result.ran = mcf5407_exec(ctx, 1'u32) > 0'u32
   result.fault = ctx.fault
   result.halted = ctx.halted
-  result.d0 = mcf5307_get_reg(ctx, 0)
-  result.a0 = mcf5307_get_reg(ctx, 8)
-  result.sr = mcf5307_get_reg(ctx, 16)
-  result.pc = mcf5307_get_reg(ctx, 17)
-  result.a7 = mcf5307_get_reg(ctx, 15)
+  result.d0 = mcf5407_get_reg(ctx, 0)
+  result.a0 = mcf5407_get_reg(ctx, 8)
+  result.sr = mcf5407_get_reg(ctx, 16)
+  result.pc = mcf5407_get_reg(ctx, 17)
+  result.a7 = mcf5407_get_reg(ctx, 15)
 
 proc ranAndConsumedBothWords(o: Outcome): auto =
   ## The shape every accepted `MOVEC` must produce. The program counter is the
@@ -391,44 +391,44 @@ const
     (cacr: 0'u32, acr0: 0'u32, acr1: 0'u32, acr2: 0'u32, acr3: 0'u32,
      vbr: 0'u32, rambar0: 0'u32, rambar1: 0'u32, mbar: 0'u32)
 
-proc controlFileOf(ctx: MCF5307Ctx): ControlFile =
-  (cacr: mcf5307_get_reg(ctx, ixCacr),
-   acr0: mcf5307_get_reg(ctx, ixAcr0),
-   acr1: mcf5307_get_reg(ctx, ixAcr1),
-   acr2: mcf5307_get_reg(ctx, ixAcr2),
-   acr3: mcf5307_get_reg(ctx, ixAcr3),
-   vbr: mcf5307_get_reg(ctx, ixVbr),
-   rambar0: mcf5307_get_reg(ctx, ixRambar0),
-   rambar1: mcf5307_get_reg(ctx, ixRambar1),
-   mbar: mcf5307_get_reg(ctx, ixMbar))
+proc controlFileOf(ctx: MCF5407Ctx): ControlFile =
+  (cacr: mcf5407_get_reg(ctx, ixCacr),
+   acr0: mcf5407_get_reg(ctx, ixAcr0),
+   acr1: mcf5407_get_reg(ctx, ixAcr1),
+   acr2: mcf5407_get_reg(ctx, ixAcr2),
+   acr3: mcf5407_get_reg(ctx, ixAcr3),
+   vbr: mcf5407_get_reg(ctx, ixVbr),
+   rambar0: mcf5407_get_reg(ctx, ixRambar0),
+   rambar1: mcf5407_get_reg(ctx, ixRambar1),
+   mbar: mcf5407_get_reg(ctx, ixMbar))
 
-proc seedContext(ctx: MCF5307Ctx) =
+proc seedContext(ctx: MCF5407Ctx) =
   ## Every data and address register carries a value no other register carries.
   for n in 0 .. 7:
-    discard mcf5307_set_reg(ctx, cint(n), dSeed[n])
+    discard mcf5407_set_reg(ctx, cint(n), dSeed[n])
   for n in 0 .. 6:
-    discard mcf5307_set_reg(ctx, cint(8 + n), aSeed[n])
+    discard mcf5407_set_reg(ctx, cint(8 + n), aSeed[n])
 
 proc freshSeededCtx(words: openArray[uint16];
-                    mem: seq[(uint32, uint32)] = @[]): MCF5307Ctx =
+                    mem: seq[(uint32, uint32)] = @[]): MCF5407Ctx =
   for i in 0 ..< memSize:
     board.bytes[i] = 0'u8
   for i in 0 ..< words.len:
     boardWrite(board, execBase + 2'u32 * uint32(i), 2, uint32(words[i]))
   for (address, value) in mem:
     boardWrite(board, address, 4, value)
-  result = mcf5307_create(addr board, bRead, bWrite, bIack)
-  mcf5307_reset(result, stackBase, execBase)
+  result = mcf5407_create(addr board, bRead, bWrite, bIack)
+  mcf5407_reset(result, stackBase, execBase)
   seedContext(result)
-  discard mcf5307_set_reg(result, 16, srSuper)
+  discard mcf5407_set_reg(result, 16, srSuper)
 
 proc runControlWrite(ext: uint16): tuple[ctl: ControlFile, halted: bool,
                                          fault: bool, pc: uint32] =
   ## Execute one `movec` and report the whole control file behind it.
   let ctx = freshSeededCtx([0x4E7B'u16, ext])
-  discard mcf5307_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
   (ctl: controlFileOf(ctx), halted: ctx.halted, fault: ctx.fault,
-   pc: mcf5307_get_reg(ctx, 17))
+   pc: mcf5407_get_reg(ctx, 17))
 
 proc landed(ext: uint16): auto =
   ## The shape an accepted `movec` produced: the whole control file, and the
@@ -503,9 +503,9 @@ block:
                             0x4E7B'u16, 0x6C05'u16,
                             0x4E7B'u16, 0xEC0F'u16])
   for _ in 0 .. 8:
-    discard mcf5307_exec(ctx, 1'u32)
+    discard mcf5407_exec(ctx, 1'u32)
   let before = controlFileOf(ctx)
-  mcf5307_reset(ctx, stackBase, execBase)
+  mcf5407_reset(ctx, stackBase, execBase)
   let after = controlFileOf(ctx)
   # THE RESET VALUES ARE THE MANUAL'S. The MCF5407 User's Manual gives VBR
   # `0x0000_0000` at reset - section 2.2.2.2, Figure 2-6, "Vector Base Register
@@ -554,10 +554,10 @@ block:
     mem = @[(vbrTableBase + 4'u32 * 8'u32, vbrHandlerBase),
             (4'u32 * 8'u32, decoyHandler)])
   for _ in 0 .. 2:
-    discard mcf5307_exec(ctx, 1'u32)
-  check((pc: mcf5307_get_reg(ctx, 17), vbr: mcf5307_get_reg(ctx, ixVbr),
+    discard mcf5407_exec(ctx, 1'u32)
+  check((pc: mcf5407_get_reg(ctx, 17), vbr: mcf5407_get_reg(ctx, ixVbr),
          halted: ctx.halted, fault: ctx.fault,
-         mbar: mcf5307_get_reg(ctx, ixMbar)),
+         mbar: mcf5407_get_reg(ctx, ixMbar)),
         (pc: vbrHandlerBase, vbr: dSeed[4], halted: false, fault: false,
          mbar: 0'u32),
         "the exception after movec to VBR dispatches from the base it wrote")

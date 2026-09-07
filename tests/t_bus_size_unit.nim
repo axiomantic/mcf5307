@@ -2,7 +2,7 @@
 ## board callbacks, pinned as a behaviour of the core rather than as a sentence
 ## in a header.
 ##
-## WHAT IT EXISTS TO CATCH. `include/mcf5307.h` states that `size` is a COUNT OF
+## WHAT IT EXISTS TO CATCH. `include/mcf5407.h` states that `size` is a COUNT OF
 ## BYTES. A sentence in a header cannot fail, so this suite is the mechanism
 ## that can: it installs recording callbacks through the PUBLISHED entry points
 ## and asserts the values the core actually presents to a board.
@@ -15,7 +15,7 @@
 ## subsystems was the one thing neither suite reached.
 ##
 ## IT DRIVES THE CALLBACKS A CONSUMER INSTALLS, AND THAT IS THE WHOLE POINT. The
-## path is `mcf5307_create`, `mcf5307_reset`, `mcf5307_exec` - the three calls a
+## path is `mcf5407_create`, `mcf5407_reset`, `mcf5407_exec` - the three calls a
 ## board makes - so the values asserted are the values that cross the ABI. A
 ## suite that called `readMem` directly would assert the core's internal
 ## spelling of the argument and would have stayed green through exactly the
@@ -32,7 +32,7 @@
 ## they cannot show that NOTHING ELSE does. The sweep runs every one of the
 ## 65536 opcode words and collects every width any of them presents, so the
 ## claim is measured over the whole opcode space rather than over the encodings
-## someone thought to write. `sizeField` in `src/mcf5307/decode.nim` reports the
+## someone thought to write. `sizeField` in `src/mcf5407/decode.nim` reports the
 ## `11` size encoding as 0 and MOVE's own size decode has a 0 arm, so a value
 ## that is not a legal width EXISTS inside the decoder; the sweep is what
 ## establishes that no such value reaches a board.
@@ -49,9 +49,9 @@
 import std/algorithm
 import std/strutils
 
-import mcf5307/cpu
-import mcf5307/decode_types
-import mcf5307/machine
+import mcf5407/cpu
+import mcf5407/decode_types
+import mcf5407/machine
 
 var failures: seq[string]
 import ./case_sites
@@ -106,7 +106,7 @@ type
 var board: Board
 
 proc recordingRead(user: pointer; address: uint32; size: cint;
-                   status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+                   status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   let b = cast[ptr Board](user)
   b.reads.add((address: address, size: int(size)))
   if int(size) <= 0 or int(address) + int(size) > memSize:
@@ -115,7 +115,7 @@ proc recordingRead(user: pointer; address: uint32; size: cint;
     result = (result shl 8) or uint32(b.bytes[int(address) + i])
 
 proc recordingWrite(user: pointer; address: uint32; size: cint; value: uint32;
-                    status: ptr Mcf5307BusStatus) {.cdecl.} =
+                    status: ptr Mcf5407BusStatus) {.cdecl.} =
   let b = cast[ptr Board](user)
   b.writes.add((address: address, size: int(size)))
   if int(size) <= 0 or int(address) + int(size) > memSize:
@@ -142,12 +142,12 @@ proc runOne(opWord: uint16) =
   ## instruction: `step` charges at least the fetch, so the loop finds the
   ## budget spent when it next tests it and leaves after that instruction.
   freshBoard(opWord)
-  let ctx = mcf5307_create(addr board, recordingRead, recordingWrite,
+  let ctx = mcf5407_create(addr board, recordingRead, recordingWrite,
                            recordingIack)
-  mcf5307_reset(ctx, initialSp, execBase)
-  discard mcf5307_set_reg(ctx, 8, dataBase)   ## index 8 is a0
-  discard mcf5307_exec(ctx, 1'u32)
-  mcf5307_destroy(ctx)
+  mcf5407_reset(ctx, initialSp, execBase)
+  discard mcf5407_set_reg(ctx, 8, dataBase)   ## index 8 is a0
+  discard mcf5407_exec(ctx, 1'u32)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # THE NAMED PROGRAMS.

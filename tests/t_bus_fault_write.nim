@@ -37,9 +37,9 @@
 
 import std/strutils
 
-import mcf5307/cpu
-import mcf5307/decode_types
-import mcf5307/machine
+import mcf5407/cpu
+import mcf5407/decode_types
+import mcf5407/machine
 
 var failures: seq[string]
 import ./case_sites
@@ -71,7 +71,7 @@ template check(ok: bool; label: string; got: string; want: string) =
 
 # ---------------------------------------------------------------------------
 # The board. One flat byte array, big-endian, which refuses exactly one
-# longword and reports `MCF5307_BUS_FAULT` for it.
+# longword and reports `MCF5407_BUS_FAULT` for it.
 #
 # The refused row is the one that is real silicon. On this part an access error
 # is reported only for an attempted store to write-protected space, so such a
@@ -118,25 +118,25 @@ proc boardReadValue(b: TestBoard; address: uint32; size: int): uint32 =
     result = (result shl 8) or uint32(b.bytes[int(address) + i])
 
 proc protectedRead(user: pointer; address: uint32; size: cint;
-                   status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+                   status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return 0'u32
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardReadValue(b[], address, int(size))
 
 proc protectedWrite(user: pointer; address: uint32; size: cint; value: uint32;
-                    status: ptr Mcf5307BusStatus) {.cdecl.} =
+                    status: ptr Mcf5407BusStatus) {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
     inc offBoardWrites
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return
   if address == protectedWord:
-    status[] = Mcf5307BusStatus.busFault
+    status[] = Mcf5407BusStatus.busFault
     return
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardWrite(b[], address, int(size), value)
 
 proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
@@ -166,23 +166,23 @@ proc runWrite(opcode: uint16; at: uint32; a0Init: uint32;
   boardWrite(board, accessHandler, 2, uint32(opRteWord))
   boardWrite(board, 4'u32 * uint32(vecAccess), 4, accessHandler)
 
-  let ctx = mcf5307_create(addr board, protectedRead, protectedWrite, bIack)
-  mcf5307_reset(ctx, startSp, at)
-  discard mcf5307_set_reg(ctx, 0, sourceD0)
-  discard mcf5307_set_reg(ctx, 8, a0Init)
-  discard mcf5307_exec(ctx, 1'u32)
-  result = (outcome: (sp: mcf5307_get_reg(ctx, 15),
-                      pc: mcf5307_get_reg(ctx, 17),
-                      sr: mcf5307_get_reg(ctx, 16),
+  let ctx = mcf5407_create(addr board, protectedRead, protectedWrite, bIack)
+  mcf5407_reset(ctx, startSp, at)
+  discard mcf5407_set_reg(ctx, 0, sourceD0)
+  discard mcf5407_set_reg(ctx, 8, a0Init)
+  discard mcf5407_exec(ctx, 1'u32)
+  result = (outcome: (sp: mcf5407_get_reg(ctx, 15),
+                      pc: mcf5407_get_reg(ctx, 17),
+                      sr: mcf5407_get_reg(ctx, 16),
                       halted: ctx.halted,
                       fault: ctx.fault,
                       frame: boardReadValue(board, frameBase, 4),
-                      a0: mcf5307_get_reg(ctx, 8),
-                      d0: mcf5307_get_reg(ctx, 0),
+                      a0: mcf5407_get_reg(ctx, 8),
+                      d0: mcf5407_get_reg(ctx, 0),
                       stored: boardReadValue(board, target, 4),
                       offBoard: offBoardWrites),
             stackedPc: boardReadValue(board, frameBase + 4'u32, 4))
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # Block 1. The fault is taken and the write instruction's register write-back
@@ -348,16 +348,16 @@ block:
   boardWrite(board, 4'u32 * uint32(vecAddress), 4, addressHandler)
   boardWrite(board, 4'u32 * uint32(vecAccess), 4, accessHandler)
 
-  let ctx = mcf5307_create(addr board, protectedRead, protectedWrite, bIack)
-  mcf5307_reset(ctx, doubleSp, execBase)
-  discard mcf5307_exec(ctx, 1'u32)
-  let got = (sp: mcf5307_get_reg(ctx, 15),
-             pc: mcf5307_get_reg(ctx, 17),
+  let ctx = mcf5407_create(addr board, protectedRead, protectedWrite, bIack)
+  mcf5407_reset(ctx, doubleSp, execBase)
+  discard mcf5407_exec(ctx, 1'u32)
+  let got = (sp: mcf5407_get_reg(ctx, 15),
+             pc: mcf5407_get_reg(ctx, 17),
              halted: ctx.halted,
              fault: ctx.fault,
              frame: boardReadValue(board, doubleFrame, 4),
              below: boardReadValue(board, doubleFrame - 8'u32, 4))
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
   let wanted = (sp: doubleFrame, pc: addressHandler, halted: true,
                 fault: true, frame: 0x440C2700'u32, below: 0'u32)
   check(got == wanted,

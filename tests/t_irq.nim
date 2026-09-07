@@ -1,4 +1,4 @@
-## `t_irq` - the interrupt model of `mcf5307/irq`.
+## `t_irq` - the interrupt model of `mcf5407/irq`.
 ##
 ## The MCF5407 User's Manual is Motorola, "MCF5407 ColdFire Integrated
 ## Microprocessor User's Manual", order number MCF5407UM/D, Rev. 0.1, 11/2001.
@@ -20,11 +20,11 @@
 ## that acknowledged at the wrong point fails on the acknowledge's own snapshot
 ## of A7, the program counter, the read count and the status register.
 
-import mcf5307/cpu
-import mcf5307/decode_types
-import mcf5307/exception
-import mcf5307/irq
-import mcf5307/machine
+import mcf5407/cpu
+import mcf5407/decode_types
+import mcf5407/exception
+import mcf5407/irq
+import mcf5407/machine
 
 var failures: seq[string]
 import ./case_sites
@@ -69,19 +69,19 @@ const
   execBase = 0x400'u32      ## above the whole 1024-byte vector table
   execPc = execBase + 2'u32
     ## WHERE `newCtxSr` LEAVES THE PROGRAM COUNTER, and the offset is block 22's
-    ## rule and not an arbitrary choice. `mcf5307_reset` inhibits the interrupt
+    ## rule and not an arbitrary choice. `mcf5407_reset` inhibits the interrupt
     ## sample for the first instruction at the reset program counter, because the
     ## reset exception is an exception (the paragraph that closes Table 2-19,
     ## folio 2-32, PDF page 98). `newCtxSr` spends that inhibition on the NOP at
     ## `execBase` so that every block which is about something ELSE reaches its
-    ## own first `mcf5307_exec` with the machine able to sample. This is the
+    ## own first `mcf5407_exec` with the machine able to sample. This is the
     ## address such a block runs its first instruction at, and therefore the
     ## address its first exception frame stacks.
   startSp = 0x800'u32
   frameBase = 0x7F8'u32     ## Table 2-20: 0x800 - 8, longword aligned already
   opNopWord = 0x4E71'u16    ## `nop`, m68k-elf-as -mcpu=5307
   opTrapZeroWord = 0x4E40'u16
-    ## `trap #0`. `src/mcf5307/decode.nim` records that `m68k-elf-as
+    ## `trap #0`. `src/mcf5407/decode.nim` records that `m68k-elf-as
     ## -mcpu=5307` emits `4e40` for it. It is the only exception an
     ## instruction of this tree can take: `takeException` is the whole of
     ## the core's exception path and `execTrap` is its one caller from
@@ -110,7 +110,7 @@ const
 type
   # An acknowledge carries where it happened and not only that it happened.
   # The acknowledge is fixed after the 8-byte frame is on the stack and before
-  # the first handler instruction is fetched; `src/mcf5307/irq.nim` justifies
+  # the first handler instruction is fetched; `src/mcf5407/irq.nim` justifies
   # that position against section 2.8, folio 2-31, which puts the hardware's
   # acknowledge cycle second instead. A tuple of level and vector alone records
   # none of that. The fields below are what the position is observable through:
@@ -144,7 +144,7 @@ var acks: seq[Ack]
 # registers through its own
 # arguments. `newCtxSr` publishes the context here and every block in this file
 # creates its context through `newCtxSr`.
-var ackCtx: MCF5307Ctx
+var ackCtx: MCF5407Ctx
 
 # WHETHER THE ACKNOWLEDGE RE-PRESENTS A LEVEL 7. It is false for every block
 # but one; `freshBoard` clears it. Block 15 is the only place a second
@@ -172,26 +172,26 @@ proc boardReadValue(b: TestBoard; address: uint32; size: int): uint32 =
     result = (result shl 8) or uint32(b.bytes[int(address) + i])
 
 proc bRead(user: pointer; address: uint32; size: cint;
-           status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+           status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return 0'u32
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   if address < vectorTableBytes:
     vectorReads.add(address)
   boardReadValue(b[], address, int(size))
 
 proc bWrite(user: pointer; address: uint32; size: cint; value: uint32;
-            status: ptr Mcf5307BusStatus) {.cdecl.} =
+            status: ptr Mcf5407BusStatus) {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardWrite(b[], address, int(size), value)
   # THE PRESENTATION IS TWO CALLS AND THE FIRST ONE IS WHAT MAKES THE SECOND AN
-  # EDGE. `mcf5307_set_irq` arms only on a transition to level 7, and level 7 is
+  # EDGE. `mcf5407_set_irq` arms only on a transition to level 7, and level 7 is
   # what this block entered the take with, so a lone level-7 call here would
   # find the level already 7 and arm nothing. The level 3 drops the presented
   # level first. It is ONE-SHOT because `takeException` writes the frame twice
@@ -199,21 +199,21 @@ proc bWrite(user: pointer; address: uint32; size: cint; value: uint32;
   # names.
   if writeArmsLevelSeven:
     writeArmsLevelSeven = false
-    mcf5307_set_irq(ackCtx, 3, userVector, 1)
-    mcf5307_set_irq(ackCtx, 7, otherVector, 0)
+    mcf5407_set_irq(ackCtx, 3, userVector, 1)
+    mcf5407_set_irq(ackCtx, 7, otherVector, 0)
 
 proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
   ## THE SNAPSHOT IS TAKEN BEFORE ANY RE-PRESENTATION, so that the recorded
   ## state is the state the CORE was in when it called, and not a state this
   ## callback produced.
   acks.add((level: int(level), vector: vector,
-            sp: mcf5307_get_reg(ackCtx, 15),
-            pc: mcf5307_get_reg(ackCtx, 17),
+            sp: mcf5407_get_reg(ackCtx, 15),
+            pc: mcf5407_get_reg(ackCtx, 17),
             reads: vectorReads.len,
-            sr: mcf5307_get_reg(ackCtx, 16)))
+            sr: mcf5407_get_reg(ackCtx, 16)))
   if iackArmsLevelSeven:
     iackArmsLevelSeven = false
-    mcf5307_set_irq(ackCtx, 7, otherVector, 1)
+    mcf5407_set_irq(ackCtx, 7, otherVector, 1)
 
 proc freshBoard() =
   for i in 0 ..< memSize:
@@ -263,31 +263,31 @@ proc mem32(address: uint32): uint32 =
     return 0'u32
   boardReadValue(board, address, 4)
 
-proc observe(ctx: MCF5307Ctx): Outcome =
+proc observe(ctx: MCF5407Ctx): Outcome =
   ## THE FRAME IS READ AT THE CURRENT A7 AND NOT AT A FIXED ADDRESS, so that a
   ## block which takes a SECOND interrupt asserts the SECOND frame. Each frame
   ## is self-aligning and goes below the last (`exceptionFrameBase`), so a
   ## fixed address would keep reporting the first frame while the assertion's
   ## label claimed the second. When nothing was taken, A7 is the reset stack
   ## pointer and the two words below are the zeros `freshBoard` wrote.
-  (sp: mcf5307_get_reg(ctx, 15),
-   pc: mcf5307_get_reg(ctx, 17),
-   sr: mcf5307_get_reg(ctx, 16),
-   halted: mcf5307_halted(ctx) != 0,
-   frame: mem32(mcf5307_get_reg(ctx, 15)),
-   framePc: mem32(mcf5307_get_reg(ctx, 15) + 4'u32),
+  (sp: mcf5407_get_reg(ctx, 15),
+   pc: mcf5407_get_reg(ctx, 17),
+   sr: mcf5407_get_reg(ctx, 16),
+   halted: mcf5407_halted(ctx) != 0,
+   frame: mem32(mcf5407_get_reg(ctx, 15)),
+   framePc: mem32(mcf5407_get_reg(ctx, 15) + 4'u32),
    acks: acks,
    reads: vectorReads)
 
 # The status register with an interrupt priority mask of `ipm` and nothing
 # else set but S. Section 2.2.2.1, Figure 2-5, "Status Register (SR)", folio
-# 2-11, puts I[10-8], S at bit 13 and M at bit 12; `mcf5307_reset` writes
+# 2-11, puts I[10-8], S at bit 13 and M at bit 12; `mcf5407_reset` writes
 # 0x2700, which is S set and a mask of 7 (same section, same folio: "SR is set
 # to 0x27xx after reset").
 proc srWithIpm(ipm: uint32): uint32 =
   0x2000'u32 or (ipm shl 8)
 
-proc newCtxAtReset(sr: uint32): MCF5307Ctx =
+proc newCtxAtReset(sr: uint32): MCF5407Ctx =
   ## A context STANDING AT ITS RESET PROGRAM COUNTER, with the reset
   ## exception's own inhibition of the interrupt sample still unspent.
   ##
@@ -295,22 +295,22 @@ proc newCtxAtReset(sr: uint32): MCF5307Ctx =
   ## INHIBITED, which is block 22's subject and the reason this procedure is
   ## separate from `newCtxSr`. Every block that is about something else wants
   ## the machine PAST that instruction, because otherwise its own first
-  ## `mcf5307_exec` spends a call on it; the blocks that are about the reset
+  ## `mcf5407_exec` spends a call on it; the blocks that are about the reset
   ## itself want the machine before it.
   freshBoard()
-  result = mcf5307_create(addr board, bRead, bWrite, bIack)
+  result = mcf5407_create(addr board, bRead, bWrite, bIack)
   ackCtx = result
-  mcf5307_reset(result, startSp, execBase)
-  discard mcf5307_set_reg(result, 16, sr)
+  mcf5407_reset(result, startSp, execBase)
+  discard mcf5407_set_reg(result, 16, sr)
 
-proc newCtxSr(sr: uint32): MCF5307Ctx =
+proc newCtxSr(sr: uint32): MCF5407Ctx =
   ## The context every block that is NOT about the reset uses: `newCtxAtReset`
   ## with THE RESET EXCEPTION'S OWN FIRST INSTRUCTION ALREADY RETIRED, so that
-  ## the caller's first `mcf5307_exec` is a boundary at which an interrupt can
+  ## the caller's first `mcf5407_exec` is a boundary at which an interrupt can
   ## be sampled.
   ##
   ## THE SPEND IS IN THE HELPER AND NOT IN EACH BLOCK, and the trade is worth
-  ## stating. In each block it would be one more `mcf5307_exec` line per block
+  ## stating. In each block it would be one more `mcf5407_exec` line per block
   ## saying the same thing, and the property it spells is pinned in
   ## one place already (block 22). Here it is one line, and the price is that
   ## `execPc` rather than `execBase` is the address every other block's first
@@ -320,9 +320,9 @@ proc newCtxSr(sr: uint32): MCF5307Ctx =
   ## whether or not the sample is inhibited: every block presents its own after
   ## this returns. What the call spends is the inhibition and nothing else.
   result = newCtxAtReset(sr)
-  discard mcf5307_exec(result, 1'u32)
+  discard mcf5407_exec(result, 1'u32)
 
-proc newCtx(ipm: uint32): MCF5307Ctx =
+proc newCtx(ipm: uint32): MCF5407Ctx =
   newCtxSr(srWithIpm(ipm))
 
 # The first longword of the frame an interrupt at `vector` writes, entered
@@ -355,15 +355,15 @@ proc ackOf(level: int; vector: uint8; sp: uint32; pc: uint32; reads: int;
 
 block:
   let ctx = newCtx(3)
-  mcf5307_set_irq(ctx, 3, userVector, 1)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 3, userVector, 1)
+  discard mcf5407_exec(ctx, 1'u32)
   let got = observe(ctx)
   let want: Outcome = (sp: startSp, pc: execPc + 2'u32, sr: srWithIpm(3),
                        halted: false,
                        frame: 0'u32, framePc: 0'u32,
                        acks: @[], reads: @[])
   check(got == want, "mask 3 inhibits level 3", $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 2. THE SAME LEVEL AT A LOWER MASK IS TAKEN.
@@ -379,8 +379,8 @@ block:
 
 block:
   let ctx = newCtx(2)
-  mcf5307_set_irq(ctx, 3, userVector, 1)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 3, userVector, 1)
+  discard mcf5407_exec(ctx, 1'u32)
   let got = observe(ctx)
   let want: Outcome = (sp: frameBase,
                        pc: handlerAuto3 + 2'u32,
@@ -392,7 +392,7 @@ block:
                                      handlerAuto3, 1, srWithIpm(3))],
                        reads: @[vectorAddress(0'u32, autovectorFor(3))])
   check(got == want, "mask 2 admits level 3", $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 3. NOTHING LATCHES AT LEVELS 1 TO 6.
@@ -402,11 +402,11 @@ block:
 #   1  assert level 3 at a mask of 0, and take it
 #   2  run again at the raised mask and take NOTHING - the core does not
 #      re-enter its own handler
-#   3  lower the mask by hand, WITH NO SECOND `mcf5307_set_irq` CALL, and take
+#   3  lower the mask by hand, WITH NO SECOND `mcf5407_set_irq` CALL, and take
 #      the SAME interrupt again. The source is still pending because the
 #      device has not cleared its condition. THIS IS THE STEP A LATCHING CORE
 #      FAILS AND A TEST THAT STOPS AT THE ACKNOWLEDGE NEVER REACHES.
-#   4  deassert at the source with `MCF5307_IRQ_NONE`, lower the mask again,
+#   4  deassert at the source with `MCF5407_IRQ_NONE`, lower the mask again,
 #      and take nothing.
 #
 # A level source drops when the device model clears its own condition. Nothing
@@ -414,9 +414,9 @@ block:
 
 block:
   let ctx = newCtx(0)
-  mcf5307_set_irq(ctx, 3, userVector, 1)
+  mcf5407_set_irq(ctx, 3, userVector, 1)
 
-  discard mcf5307_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
   let firstTake = observe(ctx)
   let wantFirst: Outcome = (sp: frameBase,
                             pc: handlerAuto3 + 2'u32,
@@ -430,7 +430,7 @@ block:
   check(firstTake == wantFirst, "level-sensitive step 1: the first take",
         $firstTake, $wantFirst)
 
-  discard mcf5307_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
   let masked = observe(ctx)
   let wantMasked: Outcome = (sp: frameBase,
                              pc: handlerAuto3 + 4'u32,
@@ -445,10 +445,10 @@ block:
         "level-sensitive step 2: the raised mask holds it off",
         $masked, $wantMasked)
 
-  # NO `mcf5307_set_irq` CALL HERE. The board has not recomputed anything and
+  # NO `mcf5407_set_irq` CALL HERE. The board has not recomputed anything and
   # the device has not cleared its condition, so the level is still presented.
-  discard mcf5307_set_reg(ctx, 16, srWithIpm(0))
-  discard mcf5307_exec(ctx, 1'u32)
+  discard mcf5407_set_reg(ctx, 16, srWithIpm(0))
+  discard mcf5407_exec(ctx, 1'u32)
   let stillPending = observe(ctx)
   let wantStill: Outcome = (sp: frameBase - 8'u32,
                             pc: handlerAuto3 + 2'u32,
@@ -468,9 +468,9 @@ block:
 
   # The device clears its own condition and the board presents the whole new
   # state, which is no interrupt at all.
-  mcf5307_set_irq(ctx, 0, userVector, 1)
-  discard mcf5307_set_reg(ctx, 16, srWithIpm(0))
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 0, userVector, 1)
+  discard mcf5407_set_reg(ctx, 16, srWithIpm(0))
+  discard mcf5407_exec(ctx, 1'u32)
   let gone = observe(ctx)
   let wantGone: Outcome = (sp: frameBase - 8'u32,
                            pc: handlerAuto3 + 4'u32,
@@ -485,9 +485,9 @@ block:
                            reads: @[vectorAddress(0'u32, autovectorFor(3)),
                                     vectorAddress(0'u32, autovectorFor(3))])
   check(gone == wantGone,
-        "level-sensitive step 4: MCF5307_IRQ_NONE deasserts",
+        "level-sensitive step 4: MCF5407_IRQ_NONE deasserts",
         $gone, $wantGone)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 4. THE CALL IS IDEMPOTENT.
@@ -510,7 +510,7 @@ block:
 # second write of the same value is invisible; the FLAG is the field a model
 # that accumulated instead of overwriting would toggle. A first attempt at this
 # repair moved the block to a VECTORED presentation and lost that: a
-# `mcf5307_set_irq` whose flag assignment was `xor` instead of `=` went from
+# `mcf5407_set_irq` whose flag assignment was `xor` instead of `=` went from
 # one red case to none. The presented `vector` here is
 # `otherVector`, which the flag makes the core ignore, so a toggled flag lands
 # on `handlerVec67` where this block's assertion sees it.
@@ -519,10 +519,10 @@ proc runOnce(callCount: int; level: cint; vector: uint8;
              autovector: cint; ipm: uint32; budget: uint32): Outcome =
   let ctx = newCtx(ipm)
   for _ in 1 .. callCount:
-    mcf5307_set_irq(ctx, level, vector, autovector)
-  discard mcf5307_exec(ctx, budget)
+    mcf5407_set_irq(ctx, level, vector, autovector)
+  discard mcf5407_exec(ctx, budget)
   result = observe(ctx)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 block:
   let wantOne: Outcome = (sp: frameBase,
@@ -619,15 +619,15 @@ block:
 # recognizes only one level 7 interrupt because only one transition from a
 # lower level request to a level 7 request occurred."
 #
-# THE SECOND `mcf5307_exec` IS THE ASSERTION. The level is still 7 at that
+# THE SECOND `mcf5407_exec` IS THE ASSERTION. The level is still 7 at that
 # boundary and the acknowledge log must still hold ONE entry. A core that
 # treated level 7 as level-sensitive acknowledges twice.
 
 block:
   let ctx = newCtx(0)
-  mcf5307_set_irq(ctx, 7, otherVector, 1)
-  discard mcf5307_exec(ctx, 1'u32)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 7, otherVector, 1)
+  discard mcf5407_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
   let got = observe(ctx)
   let want: Outcome = (sp: frameBase,
                        pc: handlerAuto7 + 4'u32,
@@ -639,7 +639,7 @@ block:
                                      handlerAuto7, 1, srWithIpm(7))],
                        reads: @[vectorAddress(0'u32, autovectorFor(7))])
   check(got == want, "level 7 held: exactly one interrupt", $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 8. LEVEL 7 PRESENTED TWICE ARMS ONLY ONE.
@@ -651,11 +651,11 @@ block:
 
 block:
   let ctx = newCtx(0)
-  mcf5307_set_irq(ctx, 7, otherVector, 1)
-  mcf5307_set_irq(ctx, 7, otherVector, 1)
-  discard mcf5307_exec(ctx, 1'u32)
-  discard mcf5307_exec(ctx, 1'u32)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 7, otherVector, 1)
+  mcf5407_set_irq(ctx, 7, otherVector, 1)
+  discard mcf5407_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
   let got = observe(ctx)
   let want: Outcome = (sp: frameBase,
                        pc: handlerAuto7 + 6'u32,
@@ -667,7 +667,7 @@ block:
                                      handlerAuto7, 1, srWithIpm(7))],
                        reads: @[vectorAddress(0'u32, autovectorFor(7))])
   check(got == want, "level 7 twice: only one is armed", $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 9. THE LEVEL DROPPING BACK BEFORE THE TAKE DOES NOT DISARM IT.
@@ -698,9 +698,9 @@ block:
 
 block:
   let ctx = newCtx(0)
-  mcf5307_set_irq(ctx, 7, otherVector, 1)
-  mcf5307_set_irq(ctx, 3, userVector, 0)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 7, otherVector, 1)
+  mcf5407_set_irq(ctx, 3, userVector, 0)
+  discard mcf5407_exec(ctx, 1'u32)
   let got = observe(ctx)
   let want: Outcome = (sp: frameBase,
                        pc: handlerAuto7 + 2'u32,
@@ -714,7 +714,7 @@ block:
   check(got == want,
         "level 7 armed, level dropped: still taken, with the edge's flag",
         $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 10. THE INTERRUPT EXCEPTION CLEARS THE M-BIT, AND THE FRAME KEEPS IT.
@@ -737,8 +737,8 @@ block:
 block:
   const srWithMaster = 0x3000'u32   ## S at bit 13 and M at bit 12, mask 0
   let ctx = newCtxSr(srWithMaster)
-  mcf5307_set_irq(ctx, 4, userVector, 1)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 4, userVector, 1)
+  discard mcf5407_exec(ctx, 1'u32)
   let got = observe(ctx)
   let want: Outcome = (sp: frameBase,
                        pc: handlerAuto4 + 2'u32,
@@ -751,7 +751,7 @@ block:
                        reads: @[vectorAddress(0'u32, autovectorFor(4))])
   check(got == want, "the interrupt clears M and the frame keeps it",
         $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 11. THE LEVEL 7 THAT IS RE-PRESENTED AFTER ITS TAKE IS NOT A SECOND
@@ -760,7 +760,7 @@ block:
 # This is the board's documented normal behaviour and not an exotic one.
 # Two calls with the same arguments have the same effect as one, so the board
 # may call it unconditionally after every recomputation. A board that does
-# exactly that, with IRQ7 still asserted, calls `mcf5307_set_irq(7, ...)` again
+# exactly that, with IRQ7 still asserted, calls `mcf5407_set_irq(7, ...)` again
 # after the core has already taken the level 7 interrupt - which is the
 # sequence below and the one section 18.7.1, folio 18-18, forbids a second
 # recognition for: "if IRQ7 remains asserted, the MCF5407 recognizes only one
@@ -771,19 +771,19 @@ block:
 # take, so the two arms land on a latch that is still armed from the first, and
 # `irq7Armed` being a `bool` makes arming twice indistinguishable from arming
 # once. What decides block 8 is therefore the type of the field and not the
-# `and ctx.irqLevel != 7` guard in `mcf5307_set_irq`: deleting that guard
+# `and ctx.irqLevel != 7` guard in `mcf5407_set_irq`: deleting that guard
 # reddens nothing.
 # The take must happen between the two calls, because only then is the latch
 # consumed and only then can a second arm produce a second interrupt.
 
 block:
   let ctx = newCtx(0)
-  mcf5307_set_irq(ctx, 7, otherVector, 1)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 7, otherVector, 1)
+  discard mcf5407_exec(ctx, 1'u32)
   # The re-presentation, with the same arguments and after the take. The level
   # was 7 before this call and is 7 after it, so no transition occurred.
-  mcf5307_set_irq(ctx, 7, otherVector, 1)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 7, otherVector, 1)
+  discard mcf5407_exec(ctx, 1'u32)
   let got = observe(ctx)
   let want: Outcome = (sp: frameBase,
                        pc: handlerAuto7 + 4'u32,
@@ -797,7 +797,7 @@ block:
   check(got == want,
         "level 7 re-presented after its take: no transition, no second take",
         $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 12. A HELD LEVEL 7 WHOSE LATCH IS SPENT IS NOT TAKEN WHEN THE HANDLER
@@ -810,7 +810,7 @@ block:
 # recognizes a further level 7 interrupt there "even though no transition has
 # occurred on the interrupt control pins".
 #
-# `src/mcf5307/irq.nim` declares that this project implements the edge half and
+# `src/mcf5407/irq.nim` declares that this project implements the edge half and
 # not the level half, because the rule here is edge-only and no level-7 source
 # is programmed. Deleting `and level <= 6` from `pendingInterrupt` is exactly
 # the manual's second sequence: the spent level 7 falls through to the
@@ -824,14 +824,14 @@ block:
 
 block:
   let ctx = newCtx(0)
-  mcf5307_set_irq(ctx, 7, otherVector, 1)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 7, otherVector, 1)
+  discard mcf5407_exec(ctx, 1'u32)
   # The handler lowers the mask to 0 while level 7 is STILL PRESENTED and with
-  # NO second `mcf5307_set_irq` call - the device has not cleared its
+  # NO second `mcf5407_set_irq` call - the device has not cleared its
   # condition. This is block 3 step 3's sequence at level 7 instead of level 3,
   # and the asserted answer is the opposite one.
-  discard mcf5307_set_reg(ctx, 16, srWithIpm(0))
-  discard mcf5307_exec(ctx, 1'u32)
+  discard mcf5407_set_reg(ctx, 16, srWithIpm(0))
+  discard mcf5407_exec(ctx, 1'u32)
   let got = observe(ctx)
   let want: Outcome = (sp: frameBase,
                        pc: handlerAuto7 + 4'u32,
@@ -845,13 +845,13 @@ block:
   check(got == want,
         "held level 7, latch spent, mask lowered: NOT retaken (the divergence)",
         $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 13. A FAULT INSIDE THE STACKING HALTS THE TAKE, AND THE EDGE IT
 # CONSUMED STAYS CONSUMED.
 #
-# `src/mcf5307/irq.nim` justifies two orderings by this case.
+# `src/mcf5407/irq.nim` justifies two orderings by this case.
 #
 # The fault is reachable today. A7 is set to an address whose frame write is
 # off the end of the board, so `machine.nim`'s `writeMem` reports the refusal
@@ -871,7 +871,7 @@ block:
 #      after the reset program counter.
 #
 # A mutation that leaves the latch armed on the fault path is unobservable
-# through the ABI: `mcf5307_reset` clears the latch and re-arms it from the
+# through the ABI: `mcf5407_reset` clears the latch and re-arms it from the
 # presented level, so the latch after a reset is a function of the pin alone,
 # the core publishes no other way to read it, and a halted context cannot
 # execute an instruction. The clear before the stacking is still the shipped
@@ -889,9 +889,9 @@ block:
   # the FIRST of the two frame writes is the one that is refused.
   const faultingSp = 0x1008'u32
   let ctx = newCtx(0)
-  discard mcf5307_set_reg(ctx, 15, faultingSp)
-  mcf5307_set_irq(ctx, 7, otherVector, 1)
-  discard mcf5307_exec(ctx, 1'u32)
+  discard mcf5407_set_reg(ctx, 15, faultingSp)
+  mcf5407_set_irq(ctx, 7, otherVector, 1)
+  discard mcf5407_exec(ctx, 1'u32)
   let faulted = observe(ctx)
   let wantFaulted: Outcome = (sp: faultingSp,
                               pc: execPc,
@@ -903,15 +903,15 @@ block:
         "a refused frame write halts the take: no vector, no acknowledge",
         $faulted, $wantFaulted)
 
-  # THE RECOVERY IS TWO `mcf5307_exec` CALLS AND NOT ONE, because the reset
+  # THE RECOVERY IS TWO `mcf5407_exec` CALLS AND NOT ONE, because the reset
   # inhibits the sample at the reset program counter (block 22). The first call
   # retires the instruction there; the second is the first boundary at which an
   # interrupt can be taken at all.
-  mcf5307_reset(ctx, startSp, execBase)
-  discard mcf5307_exec(ctx, 1'u32)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_reset(ctx, startSp, execBase)
+  discard mcf5407_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
   let recovered = observe(ctx)
-  # `mcf5307_reset` writes 0x2700, which is S set and a mask of 7, and level 7
+  # `mcf5407_reset` writes 0x2700, which is S set and a mask of 7, and level 7
   # is nonmaskable, so the re-armed edge is taken under that mask.
   let wantRecovered: Outcome = (sp: frameBase,
                                 pc: handlerAuto7 + 2'u32,
@@ -927,13 +927,13 @@ block:
         "the reset re-observes the still-asserted level 7 the halted take " &
         "consumed",
         $recovered, $wantRecovered)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
-# BLOCK 14. `mcf5307_set_irq` ON A NIL CONTEXT RETURNS, AND THE LEVEL-6
+# BLOCK 14. `mcf5407_set_irq` ON A NIL CONTEXT RETURNS, AND THE LEVEL-6
 # AUTOVECTORED TAKE AFTER IT.
 #
-# `mcf5307_set_irq` is a C ABI entry point (`include/mcf5307.h`) and its first
+# `mcf5407_set_irq` is a C ABI entry point (`include/mcf5407.h`) and its first
 # statement is a nil guard. NOTHING MEASURED IT - deleting the guard left all
 # sixteen cases of the previous revision green, because no case ever passed a
 # nil context. The guard's whole contract is that the call RETURNS, and a call
@@ -950,7 +950,7 @@ block:
 # inhibited, so `handlerAuto6` and vector 30 are otherwise never reached.
 
 block:
-  mcf5307_set_irq(nil, 6, otherVector, 1)
+  mcf5407_set_irq(nil, 6, otherVector, 1)
   let got = runOnce(1, 6, otherVector, 1, 0, 1'u32)
   let want: Outcome = (sp: frameBase,
                        pc: handlerAuto6 + 2'u32,
@@ -962,7 +962,7 @@ block:
                                      handlerAuto6, 1, srWithIpm(6))],
                        reads: @[vectorAddress(0'u32, autovectorFor(6))])
   check(got == want,
-        "mcf5307_set_irq on a nil context returns; level 6 autovectored is " &
+        "mcf5407_set_irq on a nil context returns; level 6 autovectored is " &
         "then taken",
         $got, $want)
 
@@ -973,7 +973,7 @@ block:
 # Section 18.7, folio 18-18: "the MCF5407 executes at least one instruction in
 # an interrupt exception handler before recognizing another interrupt
 # request." The paragraph that closes Table 2-19, folio 2-32, states the same
-# rule for every handler. `src/mcf5307/cpu.nim` says its sample and its
+# rule for every handler. `src/mcf5407/cpu.nim` says its sample and its
 # `step` are ONE iteration for exactly this reason, and that making the take
 # `continue` instead would sample again before the handler had executed
 # anything. THAT
@@ -994,10 +994,10 @@ block:
 
 block:
   let ctx = newCtx(0)
-  mcf5307_set_irq(ctx, 3, userVector, 1)
+  mcf5407_set_irq(ctx, 3, userVector, 1)
   iackArmsLevelSeven = true
-  discard mcf5307_exec(ctx, 1'u32)
-  discard mcf5307_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
   let got = observe(ctx)
   let want: Outcome = (sp: frameBase - 8'u32,
                        pc: handlerAuto7 + 2'u32,
@@ -1015,13 +1015,13 @@ block:
         "a level 7 raised by the acknowledge waits for the handler's first " &
         "instruction",
         $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 16. A LEVEL OUTSIDE 0 TO 7 IS STORED AND NEVER TAKEN.
 #
-# `include/mcf5307.h` defines `level` as "`MCF5307_IRQ_NONE` for none, or 1 to
-# 7" and says nothing about any other value. `src/mcf5307/irq.nim` states what
+# `include/mcf5407.h` defines `level` as "`MCF5407_IRQ_NONE` for none, or 1 to
+# 7" and says nothing about any other value. `src/mcf5407/irq.nim` states what
 # the code guarantees for one anyway: such a level "is STORED AND NEVER TAKEN,
 # and that is a property of the comparisons below rather than a rule this
 # module states", and the property matters because it is what keeps an
@@ -1051,7 +1051,7 @@ block:
 # TAKE THAT IS STACKING IT. THIS IS WHERE THE LATCH CLEAR SITS IN THE
 # NON-FAULTING PATH.
 #
-# `src/mcf5307/irq.nim` clears the level-7 latch BEFORE `takeException` and
+# `src/mcf5407/irq.nim` clears the level-7 latch BEFORE `takeException` and
 # gives one reason for it: a fault inside the stacking must not leave an
 # interrupt armed. Block 13 pins that reason. IT IS NOT THE ONLY CONSEQUENCE OF
 # THE POSITION, and the other one needs a board that reaches the core WHILE the
@@ -1090,10 +1090,10 @@ block:
 
 block:
   let ctx = newCtx(0)
-  mcf5307_set_irq(ctx, 7, userVector, 1)
+  mcf5407_set_irq(ctx, 7, userVector, 1)
   writeArmsLevelSeven = true
-  discard mcf5307_exec(ctx, 1'u32)
-  discard mcf5307_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
   let got = observe(ctx)
   let want: Outcome = (sp: frameBase - 8'u32,
                        pc: handlerVec67 + 2'u32,
@@ -1111,13 +1111,13 @@ block:
         "a level 7 raised from inside the frame write survives the take " &
         "that is stacking it",
         $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 18. THE LEVEL-7 EDGE CARRIES ITS OWN VECTOR, AND A VECTORED LEVEL 7
 # READS THE SLOT THAT VECTOR NAMES.
 #
-# `mcf5307_set_irq` stores the vector and the flag of the edge in fields of
+# `mcf5407_set_irq` stores the vector and the flag of the edge in fields of
 # their own, and `pendingInterrupt` reads THOSE and not the presented pair.
 # Block 9 pins the FLAG half of that - an armed level 7 whose presentation has
 # dropped to a vectored level 3 still autovectors - and the registry entry
@@ -1128,12 +1128,12 @@ block:
 # the autovector without reading the stored field at all, so no autovectored
 # presentation can separate a stored vector from a dropped one. Against a file
 # carrying neither this block nor block 17, deleting `ctx.irq7Vector = vector`
-# from `mcf5307_set_irq` reddened nothing; against a copy of this file with
+# from `mcf5407_set_irq` reddened nothing; against a copy of this file with
 # THIS block removed, the same deletion reds block 17.
 #
 # WHY THIS BLOCK STAYS, given that block 17's re-entered edge is vectored too.
 # Block 17's vectored take is a SECOND take, reached only because the board
-# re-enters `mcf5307_set_irq` from inside the frame write - a mechanism
+# re-enters `mcf5407_set_irq` from inside the frame write - a mechanism
 # `takeException` allows through the write callback and which no document in
 # this repository describes. This block is the ordinary reading of the same
 # rule: one vectored level 7, taken FIRST, out of a context nothing has
@@ -1213,9 +1213,9 @@ block:
 
 block:
   let ctx = newCtx(0)
-  mcf5307_set_irq(ctx, 7, otherVector, 0)
-  mcf5307_set_irq(ctx, 3, userVector, 0)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 7, otherVector, 0)
+  mcf5407_set_irq(ctx, 3, userVector, 0)
+  discard mcf5407_exec(ctx, 1'u32)
   let got = observe(ctx)
   let want: Outcome = (sp: frameBase,
                        pc: handlerVec67 + 2'u32,
@@ -1229,7 +1229,7 @@ block:
   check(got == want,
         "a vectored level 7 whose level dropped keeps its edge's vector",
         $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 20. THE FIRST INSTRUCTION OF A *TRAP* HANDLER RUNS BEFORE AN INTERRUPT
@@ -1240,12 +1240,12 @@ block:
 # inhibit sampling for interrupts during the first instruction of all exception
 # handlers." ALL exception handlers, not only interrupt handlers - and an
 # interrupt handler is the only kind block 15 can reach, because the only
-# exception `mcf5307_exec` itself takes is the interrupt.
+# exception `mcf5407_exec` itself takes is the interrupt.
 #
 # THE OTHER HALF IS REACHABLE THROUGH `TRAP` AND THROUGH NOTHING ELSE IN THIS
-# TREE. An exception taken from inside `step` returns to `mcf5307_exec` with
+# TREE. An exception taken from inside `step` returns to `mcf5407_exec` with
 # the machine at a handler's entry and `halted` false - `execTrap` in
-# `src/mcf5307/control.nim` is that path - so the loop comes back round to its
+# `src/mcf5407/control.nim` is that path - so the loop comes back round to its
 # sample with the program counter on an instruction that has not run.
 #
 # THE SEPARATOR IS THE SECOND FRAME'S STACKED PROGRAM COUNTER, which is what
@@ -1255,7 +1255,7 @@ block:
 # handler's first instruction is unrecoverable - nothing on the stack says it
 # was skipped.
 #
-# THE INTERRUPT IS RAISED BETWEEN THE TWO `mcf5307_exec` CALLS AND NOT BEFORE
+# THE INTERRUPT IS RAISED BETWEEN THE TWO `mcf5407_exec` CALLS AND NOT BEFORE
 # THE FIRST, and the position is the whole construction. Raised before the
 # first call it would be sampled at `execPc` and taken instead of the TRAP,
 # and no trap handler would be entered at all. The board raising it while the
@@ -1264,7 +1264,7 @@ block:
 #
 # THE BUDGET IS ONE CYCLE PER CALL, so each call runs exactly one instruction:
 # the loop tests the budget only BEFORE a step (the cycle block at the head of
-# `src/mcf5307/cpu.nim`), and every instruction here costs more than one. The
+# `src/mcf5407/cpu.nim`), and every instruction here costs more than one. The
 # RETURN of each call is the instruction's whole cost and is discarded here.
 
 block:
@@ -1273,13 +1273,13 @@ block:
   # reset program counter, which is the one `execPc` stands on: `newCtxSr` has
   # already retired the first.
   boardWrite(board, execPc, 2, uint32(opTrapZeroWord))
-  discard mcf5307_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
 
   # The board presents a level 3 while the machine is at the trap handler's
   # entry, which is where Table 2-19's closing paragraph says sampling is
   # inhibited.
-  mcf5307_set_irq(ctx, 3, userVector, 1)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 3, userVector, 1)
+  discard mcf5407_exec(ctx, 1'u32)
   let firstInstruction = observe(ctx)
   let wantFirst: Outcome = (sp: frameBase,
                             pc: handlerTrap0 + 2'u32,
@@ -1293,7 +1293,7 @@ block:
         "trap handler entry: the level 3 is not sampled there",
         $firstInstruction, $wantFirst)
 
-  discard mcf5307_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
   let taken = observe(ctx)
   let wantTaken: Outcome = (sp: frameBase - 8'u32,
                             pc: handlerAuto3 + 2'u32,
@@ -1309,15 +1309,15 @@ block:
   check(taken == wantTaken,
         "the level 3 is taken one instruction later, and stacks that address",
         $taken, $wantTaken)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 21. A CONTEXT WITH NO BOARD CALLBACKS FAULTS AND DOES NOT END THE
 # PROCESS.
 #
 # Nothing may abort the process: an abort inside a plugin destroys the host's
-# session. `include/mcf5307.h` forbids no
-# argument of `mcf5307_create`, and `step` in `src/mcf5307/cpu.nim` opens with
+# session. `include/mcf5407.h` forbids no
+# argument of `mcf5407_create`, and `step` in `src/mcf5407/cpu.nim` opens with
 # a nil-`readFn` guard that faults and halts - so the core's own code is the
 # statement that a context without callbacks is a state it survives.
 #
@@ -1340,18 +1340,18 @@ block:
 # two.
 
 block:
-  let ctx = mcf5307_create(nil, nil, nil, nil)
-  mcf5307_set_irq(ctx, 3, otherVector, 1)
-  let cycles = mcf5307_exec(ctx, 1'u32)
+  let ctx = mcf5407_create(nil, nil, nil, nil)
+  mcf5407_set_irq(ctx, 3, otherVector, 1)
+  let cycles = mcf5407_exec(ctx, 1'u32)
   let got = (cycles: cycles,
-             halted: mcf5307_halted(ctx) != 0,
-             faulted: mcf5307_faulted(ctx) != 0,
-             sp: mcf5307_get_reg(ctx, 15),
-             pc: mcf5307_get_reg(ctx, 17),
-             sr: mcf5307_get_reg(ctx, 16))
-  # `mcf5307_create` leaves every register zero, so the mask is 0 and a level 3
+             halted: mcf5407_halted(ctx) != 0,
+             faulted: mcf5407_faulted(ctx) != 0,
+             sp: mcf5407_get_reg(ctx, 15),
+             pc: mcf5407_get_reg(ctx, 17),
+             sr: mcf5407_get_reg(ctx, 16))
+  # `mcf5407_create` leaves every register zero, so the mask is 0 and a level 3
   # is admitted. The frame write is refused, `takeException` returns early, and
-  # `mcf5307_exec` breaks without spending a cycle. A7 and the program counter
+  # `mcf5407_exec` breaks without spending a cycle. A7 and the program counter
   # never move: `takeException` assigns A7 only after both longwords are
   # written and the program counter only after the vector is read.
   let want = (cycles: 0'u32,
@@ -1363,34 +1363,34 @@ block:
   check(got == want,
         "no board callbacks at all: the frame write faults, nothing aborts",
         $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 block:
   # A BOARD THAT CAN BE WRITTEN AND NOT READ. The stack pointer is a real one,
   # so both frame longwords land and the take gets as far as the vector fetch.
   #
-  # THE STACK POINTER IS SET DIRECTLY AND NOT BY `mcf5307_reset`, AND THAT IS
+  # THE STACK POINTER IS SET DIRECTLY AND NOT BY `mcf5407_reset`, AND THAT IS
   # FORCED BY BLOCK 22'S RULE. A reset inhibits the interrupt sample until one
   # instruction has retired, and this board cannot retire one: `step` faults on
   # the nil read callback before it fetches. A reset here would therefore end
   # the run at the FETCH and never reach the take this case is about. The
-  # program counter stays at the zero `mcf5307_create` leaves - the ABI's
-  # `mcf5307_set_reg` refuses index 17 - and the frame carries that zero, which
+  # program counter stays at the zero `mcf5407_create` leaves - the ABI's
+  # `mcf5407_set_reg` refuses index 17 - and the frame carries that zero, which
   # costs this case nothing: what it separates is WHERE the take stopped, and
   # `sp`, the two frame longwords, the read list and the acknowledge log all
   # answer that.
   freshBoard()
-  let ctx = mcf5307_create(addr board, nil, bWrite, nil)
-  discard mcf5307_set_reg(ctx, 15, startSp)
-  discard mcf5307_set_reg(ctx, 16, srWithIpm(0))
-  mcf5307_set_irq(ctx, 3, otherVector, 1)
-  let cycles = mcf5307_exec(ctx, 1'u32)
+  let ctx = mcf5407_create(addr board, nil, bWrite, nil)
+  discard mcf5407_set_reg(ctx, 15, startSp)
+  discard mcf5407_set_reg(ctx, 16, srWithIpm(0))
+  mcf5407_set_irq(ctx, 3, otherVector, 1)
+  let cycles = mcf5407_exec(ctx, 1'u32)
   let got = (cycles: cycles,
-             halted: mcf5307_halted(ctx) != 0,
-             faulted: mcf5307_faulted(ctx) != 0,
-             sp: mcf5307_get_reg(ctx, 15),
-             pc: mcf5307_get_reg(ctx, 17),
-             sr: mcf5307_get_reg(ctx, 16),
+             halted: mcf5407_halted(ctx) != 0,
+             faulted: mcf5407_faulted(ctx) != 0,
+             sp: mcf5407_get_reg(ctx, 15),
+             pc: mcf5407_get_reg(ctx, 17),
+             sr: mcf5407_get_reg(ctx, 16),
              frame: mem32(frameBase),
              framePc: mem32(frameBase + 4'u32),
              reads: vectorReads,
@@ -1413,10 +1413,10 @@ block:
   check(got == want,
         "a write-only board: the vector read faults, nothing aborts",
         $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
-# BLOCK 22. `mcf5307_reset` INHIBITS THE FIRST INTERRUPT SAMPLE, BECAUSE THE
+# BLOCK 22. `mcf5407_reset` INHIBITS THE FIRST INTERRUPT SAMPLE, BECAUSE THE
 # RESET EXCEPTION IS AN EXCEPTION.
 #
 # THIS IS A CITATION AND NOT AN INFERENCE. The paragraph that closes Table
@@ -1428,7 +1428,7 @@ block:
 # reset program counter is the first instruction of an exception handler and
 # that rule governs it.
 #
-# `mcf5307_reset` DOES NOT ROUTE THROUGH `takeException`, which is where every
+# `mcf5407_reset` DOES NOT ROUTE THROUGH `takeException`, which is where every
 # other exception in this core acquires the inhibition (`machine.nim` states
 # why the write sits on that procedure's last line), so the reset has to write
 # the field itself. Writing `false` there would be a core that can take an
@@ -1445,7 +1445,7 @@ block:
 #
 # THIS BLOCK IS NOT THE ONLY PIN ON THE INHIBITION AND THE REGISTRY SAYS SO.
 # `tests/t_claims.cmake` carries `reset_inhibit_suite_t_irq`, which writes
-# `false` where `mcf5307_reset` writes `true` and requires `t_irq` to go
+# `false` where `mcf5407_reset` writes `true` and requires `t_irq` to go
 # EXACTLY SIX red. Six and not two, because the write reaches every case whose
 # outcome depends on WHEN the first post-reset sample happens: this block holds
 # two of them, and block 13's step 2, block 23's held pin, block 24 and block 25
@@ -1458,8 +1458,8 @@ block:
 
 block:
   let ctx = newCtxAtReset(srWithIpm(0))
-  mcf5307_set_irq(ctx, 3, userVector, 1)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 3, userVector, 1)
+  discard mcf5407_exec(ctx, 1'u32)
   let atReset = observe(ctx)
   let wantAtReset: Outcome = (sp: startSp, pc: execBase + 2'u32,
                               sr: srWithIpm(0),
@@ -1470,7 +1470,7 @@ block:
         "the reset pc's first instruction retires before a level 3 is sampled",
         $atReset, $wantAtReset)
 
-  discard mcf5307_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
   let taken = observe(ctx)
   let wantTaken: Outcome = (sp: frameBase,
                             pc: handlerAuto3 + 2'u32,
@@ -1485,7 +1485,7 @@ block:
         "the level 3 is taken at the boundary after it, and stacks the " &
         "instruction that follows the retired one",
         $taken, $wantTaken)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 23. WHAT A RESET DOES TO THE LEVEL-7 EDGE LATCH: IT CLEARS IT AND THEN
@@ -1540,14 +1540,14 @@ block:
 
 block:
   let released = newCtxAtReset(srWithIpm(0))
-  mcf5307_set_irq(released, 7, otherVector, 0)
+  mcf5407_set_irq(released, 7, otherVector, 0)
   # THE PIN IS RELEASED AND THE LATCH IS NOT DISARMED BY THAT - block 9 pins
   # the rule. What clears it is the reset on the next line.
-  mcf5307_set_irq(released, 0, otherVector, 0)
-  mcf5307_reset(released, startSp, execBase)
-  discard mcf5307_set_reg(released, 16, srWithIpm(0))
-  discard mcf5307_exec(released, 1'u32)
-  discard mcf5307_exec(released, 1'u32)
+  mcf5407_set_irq(released, 0, otherVector, 0)
+  mcf5407_reset(released, startSp, execBase)
+  discard mcf5407_set_reg(released, 16, srWithIpm(0))
+  discard mcf5407_exec(released, 1'u32)
+  discard mcf5407_exec(released, 1'u32)
   let gotReleased = observe(released)
   let wantReleased: Outcome = (sp: startSp, pc: execBase + 4'u32,
                                sr: srWithIpm(0),
@@ -1557,15 +1557,15 @@ block:
   check(gotReleased == wantReleased,
         "a level-7 edge whose pin was released does not survive a reset",
         $gotReleased, $wantReleased)
-  mcf5307_destroy(released)
+  mcf5407_destroy(released)
 
 block:
   let held = newCtxAtReset(srWithIpm(0))
-  mcf5307_set_irq(held, 7, otherVector, 0)
-  mcf5307_reset(held, startSp, execBase)
-  discard mcf5307_set_reg(held, 16, srWithIpm(0))
-  discard mcf5307_exec(held, 1'u32)
-  discard mcf5307_exec(held, 1'u32)
+  mcf5407_set_irq(held, 7, otherVector, 0)
+  mcf5407_reset(held, startSp, execBase)
+  discard mcf5407_set_reg(held, 16, srWithIpm(0))
+  discard mcf5407_exec(held, 1'u32)
+  discard mcf5407_exec(held, 1'u32)
   let gotHeld = observe(held)
   let wantHeld: Outcome = (sp: frameBase,
                            pc: handlerVec67 + 2'u32,
@@ -1580,14 +1580,14 @@ block:
         "a level 7 still asserted across a reset re-arms and is taken after " &
         "the reset pc's first instruction",
         $gotHeld, $wantHeld)
-  mcf5307_destroy(held)
+  mcf5407_destroy(held)
 
 # ---------------------------------------------------------------------------
 # BLOCK 24. THE EDGE A RESET RE-ARMS CARRIES THE VECTOR THE BOARD IS PRESENTING
 # NOW, AND NOT THE VECTOR THE CLEARED EDGE CARRIED.
 #
 # THIS IS THE ONE ARRANGEMENT IN WHICH THE TWO DIFFER, AND NOTHING IN THIS FILE
-# REACHED IT BEFORE. `mcf5307_set_irq` arms only on a TRANSITION to level 7, so
+# REACHED IT BEFORE. `mcf5407_set_irq` arms only on a TRANSITION to level 7, so
 # a second level-7 presentation writes `ctx.irqVector` and leaves
 # `ctx.irq7Vector` holding the first one. Every other case here presents level 7
 # at most once before its reset, where the two fields agree and no assertion can
@@ -1600,20 +1600,20 @@ block:
 # `ctx.irq7Vector` acknowledges 0x43 and enters at `handlerVec67`, and the
 # program counter, the read list and the acknowledge all separate it.
 #
-# `src/mcf5307/irq.nim` STATES THE REASON THE ANSWER IS THE PRESENTATION: the
+# `src/mcf5407/irq.nim` STATES THE REASON THE ANSWER IS THE PRESENTATION: the
 # procedure re-observes a pin and does not restore a latch, and `ctx.irq7Vector`
 # is the record of an edge the same procedure has just cleared.
 
 block:
   let ctx = newCtxAtReset(srWithIpm(0))
-  mcf5307_set_irq(ctx, 7, otherVector, 0)
+  mcf5407_set_irq(ctx, 7, otherVector, 0)
   # NO TRANSITION: the level is already 7, so this call arms nothing and the
   # edge keeps `otherVector` while the PRESENTATION becomes `userVector`.
-  mcf5307_set_irq(ctx, 7, userVector, 0)
-  mcf5307_reset(ctx, startSp, execBase)
-  discard mcf5307_set_reg(ctx, 16, srWithIpm(0))
-  discard mcf5307_exec(ctx, 1'u32)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 7, userVector, 0)
+  mcf5407_reset(ctx, startSp, execBase)
+  discard mcf5407_set_reg(ctx, 16, srWithIpm(0))
+  discard mcf5407_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
   let got = observe(ctx)
   let want: Outcome = (sp: frameBase,
                        pc: handlerVec66 + 2'u32,
@@ -1627,13 +1627,13 @@ block:
   check(got == want,
         "the reset re-arms from the presented vector, not the cleared edge's",
         $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
-# BLOCK 25. `mcf5307_reset` ON A NIL CONTEXT RETURNS.
+# BLOCK 25. `mcf5407_reset` ON A NIL CONTEXT RETURNS.
 #
-# THIS IS BLOCK 14'S SHAPE AND IT IS HERE FOR BLOCK 14'S REASON. `mcf5307_reset`
-# is a C ABI entry point (`include/mcf5307.h`), its guard's whole contract is
+# THIS IS BLOCK 14'S SHAPE AND IT IS HERE FOR BLOCK 14'S REASON. `mcf5407_reset`
+# is a C ABI entry point (`include/mcf5407.h`), its guard's whole contract is
 # that the call RETURNS, and a call that did not return would end the process
 # before the assertion below was reached - so REACHING A VERDICT AT ALL is what
 # decides it. No other case in this file passes a nil context to this entry
@@ -1646,12 +1646,12 @@ block:
 # still works.
 
 block:
-  mcf5307_reset(nil, startSp, execBase)
+  mcf5407_reset(nil, startSp, execBase)
   let ctx = newCtxAtReset(srWithIpm(0))
-  mcf5307_set_irq(ctx, 7, otherVector, 0)
-  discard mcf5307_set_reg(ctx, 16, srWithIpm(0))
-  discard mcf5307_exec(ctx, 1'u32)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 7, otherVector, 0)
+  discard mcf5407_set_reg(ctx, 16, srWithIpm(0))
+  discard mcf5407_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
   let got = observe(ctx)
   let want: Outcome = (sp: frameBase,
                        pc: handlerVec67 + 2'u32,
@@ -1663,21 +1663,21 @@ block:
                                      handlerVec67, 1, srWithIpm(7))],
                        reads: @[vectorAddress(0'u32, otherVector)])
   check(got == want,
-        "mcf5307_reset on a nil context returns; the next real context resets",
+        "mcf5407_reset on a nil context returns; the next real context resets",
         $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 26. `resetInterruptEdge` ON A NIL CONTEXT RETURNS.
 #
 # THIS IS BLOCK 25'S SHAPE FOR A PROCEDURE THAT IS NOT A C ABI ENTRY POINT, AND
-# THAT DIFFERENCE IS THE WHOLE ARGUMENT FOR THE CASE. `mcf5307_reset` and
-# `mcf5307_set_irq` guard their contexts because a C caller hands them whatever
+# THAT DIFFERENCE IS THE WHOLE ARGUMENT FOR THE CASE. `mcf5407_reset` and
+# `mcf5407_set_irq` guard their contexts because a C caller hands them whatever
 # it likes. `resetInterruptEdge` is reached only from Nim, and a sentence
 # naming its callers is a true sentence about the tree and NOT a mechanism.
 #
 # WHAT MADE IT WORTH A CASE IS THAT THE SENTENCE IS GREEN-FALSIFIABLE.
-# `mcf5307_reset`'s own nil guard returns BEFORE it reaches
+# `mcf5407_reset`'s own nil guard returns BEFORE it reaches
 # `resetInterruptEdge`, so block 25 does not exercise this path at all and no
 # case in this file ever passed a nil context to this procedure. A SECOND
 # CALLER COULD BE ADDED WITH EVERY REGISTERED TEST STILL GREEN, and the first
@@ -1700,8 +1700,8 @@ block:
 block:
   resetInterruptEdge(nil)
   let ctx = newCtx(2)
-  mcf5307_set_irq(ctx, 3, userVector, 1)
-  discard mcf5307_exec(ctx, 1'u32)
+  mcf5407_set_irq(ctx, 3, userVector, 1)
+  discard mcf5407_exec(ctx, 1'u32)
   let got = observe(ctx)
   let want: Outcome = (sp: frameBase,
                        pc: handlerAuto3 + 2'u32,
@@ -1716,7 +1716,7 @@ block:
         "resetInterruptEdge on a nil context returns; the next real context " &
         "takes a level 3",
         $got, $want)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
 # program reports what its text declares and what its run adjudicated,

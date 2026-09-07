@@ -28,7 +28,7 @@
 ##   the User's Manual are known wrong, so a value taken from text extraction
 ##   is not evidence; `pdftoppm -png` and read the image.
 ##
-## Why this file exists beside `mcf5307_conformance_logic`. That corpus holds
+## Why this file exists beside `mcf5407_conformance_logic`. That corpus holds
 ## positive cases: an encoding this part has, run against an expected register
 ## state. A positive corpus cannot see a wrongly-claimed encoding, which
 ## produces a passing execution of a different instruction, and it cannot see
@@ -60,11 +60,11 @@
 ## pair, so each Z assertion separates the two bases. The exact addresses are
 ## on `pcWindow` itself.
 
-import mcf5307/cpu
-import mcf5307/decode
-import mcf5307/decode_types
-import mcf5307/ea
-import mcf5307/machine
+import mcf5407/cpu
+import mcf5407/decode
+import mcf5407/decode_types
+import mcf5407/ea
+import mcf5407/machine
 
 var failures: seq[string]
 import ./case_sites
@@ -116,21 +116,21 @@ proc boardReadValue(b: TestBoard; address: uint32; size: int): uint32 =
     result = (result shl 8) or uint32(b.bytes[int(address) + i])
 
 proc bRead(user: pointer; address: uint32; size: cint;
-           status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+           status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return 0'u32
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardReadValue(b[], address, int(size))
 
 proc bWrite(user: pointer; address: uint32; size: cint; value: uint32;
-            status: ptr Mcf5307BusStatus) {.cdecl.} =
+            status: ptr Mcf5407BusStatus) {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardWrite(b[], address, int(size), value)
 
 proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
@@ -138,8 +138,8 @@ proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
 
 # ---------------------------------------------------------------------------
 # The runner. It is `t_alu`'s, for the reason that file gives: a pass here has
-# to be a pass of the shipped path - `mcf5307_reset`, `mcf5307_set_reg`,
-# `mcf5307_exec`, `mcf5307_get_reg` - and not of an internal helper reached
+# to be a pass of the shipped path - `mcf5407_reset`, `mcf5407_set_reg`,
+# `mcf5407_exec`, `mcf5407_get_reg` - and not of an internal helper reached
 # around the back.
 
 const
@@ -150,7 +150,7 @@ const
 
 type Outcome = object
   ran: bool
-    ## Did the instruction run? It is `mcf5307_exec(ctx, 1) > 0`, and it is a
+    ## Did the instruction run? It is `mcf5407_exec(ctx, 1) > 0`, and it is a
     ## boolean because that is all the call can tell this suite. The return is
     ## the whole retired cost of the instruction - `cpu.nim`'s header block is
     ## the contract - and that cost differs per encoding, so an expectation
@@ -174,7 +174,7 @@ proc runIns(words: openArray[uint16];
             sr: uint32 = srBase;
             mem: seq[(uint32, uint32)] = @[]): Outcome =
   ## Place `words` at `execBase`, set the register file and the status
-  ## register, run one `mcf5307_exec`, and report the whole machine state.
+  ## register, run one `mcf5407_exec`, and report the whole machine state.
   for i in 0 ..< memSize:
     board.bytes[i] = 0'u8
   for i in 0 ..< words.len:
@@ -183,29 +183,29 @@ proc runIns(words: openArray[uint16];
     boardWrite(board, address, 4, value)
 
   let sp = if a[7] == 0'u32: stackBase else: a[7]
-  let ctx = mcf5307_create(addr board, bRead, bWrite, bIack)
-  mcf5307_reset(ctx, sp, execBase)
+  let ctx = mcf5407_create(addr board, bRead, bWrite, bIack)
+  mcf5407_reset(ctx, sp, execBase)
   for i in 0 .. 7:
-    discard mcf5307_set_reg(ctx, cint(i), d[i])
+    discard mcf5407_set_reg(ctx, cint(i), d[i])
   for i in 0 .. 6:
-    discard mcf5307_set_reg(ctx, cint(8 + i), a[i])
-  # The status register is set last: `mcf5307_reset` writes it, so an earlier
+    discard mcf5407_set_reg(ctx, cint(8 + i), a[i])
+  # The status register is set last: `mcf5407_reset` writes it, so an earlier
   # write would be overwritten and every case that asserts an untouched
   # condition code would silently run with a clear one.
-  discard mcf5307_set_reg(ctx, 16, sr)
+  discard mcf5407_set_reg(ctx, 16, sr)
 
   # One instruction, and the budget is what stops the loop after it, exactly as
   # in `t_alu`: the memory after the encoding is zero and `0x0000` is not an
   # instruction this part has. The return is 1 for an instruction that ran and
   # 0 for one that trapped.
-  result.ran = mcf5307_exec(ctx, 1'u32) > 0'u32
+  result.ran = mcf5407_exec(ctx, 1'u32) > 0'u32
   result.fault = ctx.fault
   result.halted = ctx.halted
   for i in 0 .. 7:
-    result.d[i] = mcf5307_get_reg(ctx, cint(i))
-    result.a[i] = mcf5307_get_reg(ctx, cint(8 + i))
-  result.sr = mcf5307_get_reg(ctx, 16)
-  mcf5307_destroy(ctx)
+    result.d[i] = mcf5407_get_reg(ctx, cint(i))
+    result.a[i] = mcf5407_get_reg(ctx, cint(8 + i))
+  result.sr = mcf5407_get_reg(ctx, 16)
+  mcf5407_destroy(ctx)
 
 proc mem32(address: uint32): uint32 =
   boardReadValue(board, address, 4)
@@ -270,14 +270,14 @@ proc expectTrapA(o: Outcome; n: int; unchanged: uint32; label: string) =
   let wanted = (reg: unchanged, fault: true, halted: true, ran: false)
   check(got == wanted, label, $got, $wanted)
 
-proc freshCtx(): MCF5307Ctx =
+proc freshCtx(): MCF5407Ctx =
   ## A context reset onto a cleared board. It serves the assertions that call
   ## a `machine.nim` procedure directly; every instruction case goes through
   ## `runIns` and the shipped path instead.
   for i in 0 ..< memSize:
     board.bytes[i] = 0'u8
-  result = mcf5307_create(addr board, bRead, bWrite, bIack)
-  mcf5307_reset(result, stackBase, execBase)
+  result = mcf5407_create(addr board, bRead, bWrite, bIack)
+  mcf5407_reset(result, stackBase, execBase)
 
 proc expectUnresolvable(sub: EA7; label: string) =
   ## `eaResolve` must refuse this mode-7 sub-variant: no usable reference, and
@@ -287,7 +287,7 @@ proc expectUnresolvable(sub: EA7; label: string) =
   let got = (kind: r.kind, fault: ctx.fault, halted: ctx.halted)
   let wanted = (kind: erNone, fault: true, halted: true)
   check(got == wanted, label, $got, $wanted)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 proc expectDecode(word: uint16; want: Operation; label: string) =
   let got = decodeWord(word).op
