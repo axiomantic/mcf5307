@@ -1,9 +1,8 @@
-## `t_bus_fault_write` - the IMPRECISE stacked program counter of an operand
+## `t_bus_fault_write` - the imprecise stacked program counter of an operand
 ## write fault.
 ##
-## WHAT THIS SUITE ASSERTS, AND THE OMISSION IS THE POINT RATHER THAN A GAP.
-## It asserts that the fault was TAKEN and that the write instruction's
-## register write-back COMPLETED. It does NOT assert the stacked program
+## It asserts that the fault was taken and that the write instruction's
+## register write-back completed. It does not assert the stacked program
 ## counter, and no expected value in this file carries one.
 ##
 ## The write cycle may be decoupled from the processor's issuing of the
@@ -12,11 +11,10 @@
 ## programming model updates associated with the write instruction are
 ## completed.
 ##
-## SO A PINNED PROGRAM COUNTER WOULD BE A DEFECT IN THIS FILE AND NOT A
-## MEASUREMENT. The general rule stacks the PC of the instruction that caused
+## So a pinned program counter would be a defect in this file and not a
+## measurement. The general rule stacks the PC of the instruction that caused
 ## the exception, and the write direction withdraws exactly that. A case that
-## held the frame's second longword to any literal
-## would go red against a core that reported at a different point in the write
+## held the frame's second longword to any literal would go red against a core that reported at a different point in the write
 ## pipeline, which is behaviour the manual permits; the reader would then be
 ## told a correct core is broken.
 ##
@@ -70,7 +68,7 @@ template check(ok: bool; label: string; got: string; want: string) =
 # The board. One flat byte array, big-endian, which refuses exactly one
 # longword and reports `MCF5307_BUS_FAULT` for it.
 #
-# THE REFUSED ROW IS THE ONE THAT IS REAL SILICON. On this part an access error
+# The refused row is the one that is real silicon. On this part an access error
 # is reported only for an attempted store to write-protected space, so such a
 # store is the only access this suite can drive that a real MCF5307 would also
 # fault on.
@@ -195,11 +193,11 @@ proc runWrite(opcode: uint16; at: uint32; a0Init: uint32;
 # program counter in the second longword, which is the one this suite reads
 # outside its asserted tuple.
 #
-# THE LIVE STATUS REGISTER IS 0x2708 AND THE FRAME'S COPY IS 0x2700, AND THE
-# DIFFERENCE IS THE ASSERTION RATHER THAN A TOLERANCE. `takeException` copies
+# The live status register is 0x2708 and the frame's copy is 0x2700, and the
+# difference is the assertion rather than a tolerance. `takeException` copies
 # the status register before it changes it, so the frame carries 0x2700. The
 # write instruction then sets N from its source, which is negative here, and
-# that update lands AFTER the faulting access. That is the rule that every
+# that update lands after the faulting access. That is the rule that every
 # programming model update associated with the write instruction completes,
 # observed on the one register it reaches without an addressing mode.
 #

@@ -11,7 +11,7 @@
 # User's Manual Table 3-3, section 3.5.1, folio 3-14: the defined set for this
 # part. CFPRM Table 11-2, folio 11-5, adds codes tagged "V4 and beyond, if MMU"
 # that do not apply, and every other value of the field is reserved.
-# CONSTANTS AND NOT AN ENUM BECAUSE THE RESERVED VALUES ARE REAL: a frame read
+# Constants and not an enum because the reserved values are real: a frame read
 # back from memory can hold any value the field can carry, and converting one to
 # an enum with holes under `--panics:on` ends the process instead of reporting
 # it.

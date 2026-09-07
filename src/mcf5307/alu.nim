@@ -6,9 +6,8 @@
 ## register file, the board accesses and the effective-address evaluation are
 ## `mcf5307/machine`'s. The word forms are `execMulWord` and `execDivWord`.
 ##
-## This module is a sibling of `move.nim` and of `decode.nim`. It imports
-## neither, and neither imports it. An executor that reaches into another
-## executor for a helper inverts the layering one level down.
+## This module does not reach into another executor for a helper; that would
+## invert the layering one level down.
 ##
 ## Arithmetic on this part is 32-bit. `ADD.B`, `ADD.W`, `ADDA.W`, `ADDI.B`,
 ## `ADDQ.W`, `NEG.W`, `ADDX.W` and the rest of the byte and word forms are
