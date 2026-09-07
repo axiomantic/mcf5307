@@ -2559,7 +2559,7 @@ mcf5307_check_case_sites("t_bus_fault_write"
 # states at `mcf5307_check_case_total` why a TYPED figure is accepted here and
 # what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
 # CASE COUNT.
-mcf5307_check_case_total("t_bus_fault_write" "${bus_fault_write_run_out}" 5)
+mcf5307_check_case_total("t_bus_fault_write" "${bus_fault_write_run_out}" 6)
 
 ]==])
 
