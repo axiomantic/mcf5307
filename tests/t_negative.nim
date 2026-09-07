@@ -14,10 +14,10 @@ import std/json
 import std/strutils
 import std/tables
 
-import mcf5307/cpu
-import mcf5307/decode
-import mcf5307/decode_types
-import mcf5307/machine
+import mcf5407/cpu
+import mcf5407/decode
+import mcf5407/decode_types
+import mcf5407/machine
 
 var failures: seq[string]
 import ./case_sites
@@ -111,21 +111,21 @@ proc boardReadValue(b: TestBoard; address: uint32; size: int): uint32 =
     result = (result shl 8) or uint32(b.bytes[int(address) + i])
 
 proc bRead(user: pointer; address: uint32; size: cint;
-           status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+           status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return 0'u32
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardReadValue(b[], address, int(size))
 
 proc bWrite(user: pointer; address: uint32; size: cint; value: uint32;
-            status: ptr Mcf5307BusStatus) {.cdecl.} =
+            status: ptr Mcf5407BusStatus) {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardWrite(b[], address, int(size), value)
 
 proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
@@ -133,8 +133,8 @@ proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
 
 # ---------------------------------------------------------------------------
 # The runner. It is `tests/t_lines.nim`'s, for the reason that file gives: a
-# pass here has to be a pass of the shipped path - `mcf5307_reset`,
-# `mcf5307_set_reg`, `mcf5307_exec`, `mcf5307_get_reg` - and not of an
+# pass here has to be a pass of the shipped path - `mcf5407_reset`,
+# `mcf5407_set_reg`, `mcf5407_exec`, `mcf5407_get_reg` - and not of an
 # internal helper reached around the back.
 #
 # The address register points at real memory, and that is load-bearing rather
@@ -170,25 +170,25 @@ proc runCase(c: Case): Outcome =
   for index, word in c.words:
     boardWrite(board, execBase + uint32(index * 2), 2, uint32(word))
 
-  let ctx = mcf5307_create(addr board, bRead, bWrite, bIack)
-  mcf5307_reset(ctx, stackBase, execBase)
-  discard mcf5307_set_reg(ctx, 0, seedD0)
-  discard mcf5307_set_reg(ctx, 1, seedD1)
-  discard mcf5307_set_reg(ctx, 8, seedA0)
-  # The status register is set last: `mcf5307_reset` writes it, so an earlier
+  let ctx = mcf5407_create(addr board, bRead, bWrite, bIack)
+  mcf5407_reset(ctx, stackBase, execBase)
+  discard mcf5407_set_reg(ctx, 0, seedD0)
+  discard mcf5407_set_reg(ctx, 1, seedD1)
+  discard mcf5407_set_reg(ctx, 8, seedA0)
+  # The status register is set last: `mcf5407_reset` writes it, so an earlier
   # write would be overwritten.
-  discard mcf5307_set_reg(ctx, 16, srBase)
+  discard mcf5407_set_reg(ctx, 16, srBase)
 
-  result.cycles = mcf5307_exec(ctx, 1'u32)
+  result.cycles = mcf5407_exec(ctx, 1'u32)
   result.fault = ctx.fault
   result.halted = ctx.halted
-  result.d0 = mcf5307_get_reg(ctx, 0)
-  result.d1 = mcf5307_get_reg(ctx, 1)
-  result.a0 = mcf5307_get_reg(ctx, 8)
-  result.a7 = mcf5307_get_reg(ctx, 15)
-  result.sr = mcf5307_get_reg(ctx, 16)
-  result.pc = mcf5307_get_reg(ctx, 17)
-  mcf5307_destroy(ctx)
+  result.d0 = mcf5407_get_reg(ctx, 0)
+  result.d1 = mcf5407_get_reg(ctx, 1)
+  result.a0 = mcf5407_get_reg(ctx, 8)
+  result.a7 = mcf5407_get_reg(ctx, 15)
+  result.sr = mcf5407_get_reg(ctx, 16)
+  result.pc = mcf5407_get_reg(ctx, 17)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # The decoder's answer, asked of the legal encodings only. The asymmetry is

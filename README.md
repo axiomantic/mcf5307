@@ -1,4 +1,4 @@
-# mcf5307
+# mcf5407
 
 An emulator for the Motorola MCF5407 ColdFire processor, and a model of the
 Philips ISP1181 USB device controller.
@@ -23,11 +23,11 @@ core is not complete. Do not use it in a product.
 
 | Target | Content |
 |---|---|
-| `mcf5307` | The static library. It holds the core and the ISP1181 model. |
-| `mcf5307_tests` | The unit tests. |
-| `mcf5307_conformance` | The runner for the generated ColdFire conformance corpus. |
+| `mcf5407` | The static library. It holds the core and the ISP1181 model. |
+| `mcf5407_tests` | The unit tests. |
+| `mcf5407_conformance` | The runner for the generated ColdFire conformance corpus. |
 
-CMake exports `mcf5307::mcf5307` for a program that uses this library.
+CMake exports `mcf5407::mcf5407` for a program that uses this library.
 
 ## Requirements
 

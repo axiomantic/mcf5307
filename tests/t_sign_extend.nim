@@ -1,4 +1,4 @@
-## `t_sign_extend` - the sign-extension helpers of `mcf5307/machine`.
+## `t_sign_extend` - the sign-extension helpers of `mcf5407/machine`.
 ##
 ## The negative half is the point. Sign extension reinterprets the bits of
 ## an unsigned value as a two's-complement signed value of the same width. A
@@ -21,7 +21,7 @@
 ## copy carries the module's `exportc` register accessors, which is harmless
 ## here: this program is an executable and links nothing else.
 
-include mcf5307/machine
+include mcf5407/machine
 
 var failures: seq[string]
 import ./case_sites

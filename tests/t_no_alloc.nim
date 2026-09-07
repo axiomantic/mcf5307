@@ -1,8 +1,8 @@
-## `t_no_alloc` - the core allocates only inside `mcf5307_create`, and
-## `mcf5307_exec` allocates nothing however long it runs.
+## `t_no_alloc` - the core allocates only inside `mcf5407_create`, and
+## `mcf5407_exec` allocates nothing however long it runs.
 ##
 ## The delivery form is an audio plugin, so
-## `mcf5307_exec` may be entered from a real-time thread, where one call into
+## `mcf5407_exec` may be entered from a real-time thread, where one call into
 ## the system allocator is a missed buffer rather than a slow frame. Nothing
 ## about that failure is visible in an exit status, in a register comparison or
 ## in a cycle count, so no other suite in this directory can go red on it.
@@ -15,7 +15,7 @@
 ## that was never wired reads exactly like a zero from a core that does not
 ## allocate. The driver in `tests/tests_cpu.cmake` adds the define and states
 ## why it departs from the library's own flag set; the case below on
-## `mcf5307_create` is what makes the departure self-enforcing, because the
+## `mcf5407_create` is what makes the departure self-enforcing, because the
 ## define going missing turns that case red rather than turning this suite into
 ## a green mirage.
 ##
@@ -36,7 +36,7 @@
 ##
 ## Why the execution witnesses are here at all. A core that halted on its first
 ## instruction satisfies "allocates nothing" perfectly, and so does one whose
-## `mcf5307_exec` returns without executing. The fetch counter, the last fetch
+## `mcf5407_exec` returns without executing. The fetch counter, the last fetch
 ## address, the final program counter and the halt and fault flags are asserted
 ## beside every allocation figure so that a zero means the run happened.
 ##
@@ -46,9 +46,9 @@
 ## instruction inside the loop. Either shape alone passes against the other's
 ## defect.
 
-import mcf5307/cpu
-import mcf5307/decode_types
-import mcf5307/machine
+import mcf5407/cpu
+import mcf5407/decode_types
+import mcf5407/machine
 
 var failures: seq[string]
 import ./case_sites
@@ -114,8 +114,8 @@ var writeCount = 0
 var iackCount = 0
 
 proc bRead(user: pointer; address: uint32; size: cint;
-           status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
-  status[] = Mcf5307BusStatus.busOk
+           status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
+  status[] = Mcf5407BusStatus.busOk
   inc fetchCount
   lastFetchAddress = address
   let offset = int(address mod uint32(pageBytes))
@@ -123,8 +123,8 @@ proc bRead(user: pointer; address: uint32; size: cint;
     result = (result shl 8) or uint32(page[(offset + i) mod pageBytes])
 
 proc bWrite(user: pointer; address: uint32; size: cint; value: uint32;
-            status: ptr Mcf5307BusStatus) {.cdecl.} =
-  status[] = Mcf5307BusStatus.busOk
+            status: ptr Mcf5407BusStatus) {.cdecl.} =
+  status[] = Mcf5407BusStatus.busOk
   inc writeCount
 
 proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
@@ -145,41 +145,41 @@ let sampledByCast = cast[AllocCounts](sampled)
 # The lifecycle, one call per window.
 
 let beforeCreate = counts()
-let ctx = mcf5307_create(addr page, bRead, bWrite, bIack)
+let ctx = mcf5407_create(addr page, bRead, bWrite, bIack)
 let afterCreate = counts()
 
 let beforeReset = counts()
-mcf5307_reset(ctx, stackBase, execBase)
+mcf5407_reset(ctx, stackBase, execBase)
 let afterReset = counts()
 
 let beforeRegisters = counts()
-discard mcf5307_set_reg(ctx, 0, seedD0)
-let readBack = mcf5307_get_reg(ctx, 0)
+discard mcf5407_set_reg(ctx, 0, seedD0)
+let readBack = mcf5407_get_reg(ctx, 0)
 let afterRegisters = counts()
 
 # ---------------------------------------------------------------------------
 # One instruction per call.
 #
 # A budget of one cycle runs exactly one instruction whatever that instruction
-# costs, because `mcf5307_exec` tests the budget only before a step rather than
+# costs, because `mcf5407_exec` tests the budget only before a step rather than
 # declining to take one it cannot pay for. It is the budget
 # `conformance/runner.cpp` passes.
 
 let beforeExec = counts()
 for index in 1 .. instructions:
-  discard mcf5307_exec(ctx, 1'u32)
+  discard mcf5407_exec(ctx, 1'u32)
 let afterExec = counts()
 
 let executed = (fetches: fetchCount,
                 lastFetch: lastFetchAddress,
-                pc: mcf5307_get_reg(ctx, 17),
+                pc: mcf5407_get_reg(ctx, 17),
                 halted: ctx.halted,
                 fault: ctx.fault,
                 writes: writeCount,
                 iacks: iackCount)
 
 let beforeDestroy = counts()
-mcf5307_destroy(ctx)
+mcf5407_destroy(ctx)
 let afterDestroy = counts()
 
 # ---------------------------------------------------------------------------
@@ -199,26 +199,26 @@ let afterDestroy = counts()
 
 # ONE NOP'S COST, MEASURED THROUGH THE SHIPPED ENTRY POINT ON A CONTEXT THAT
 # IS THEN THROWN AWAY. This runs outside every allocation window, so the one
-# allocation `mcf5307_create` makes here is not counted by any case.
-let costContext = mcf5307_create(addr page, bRead, bWrite, bIack)
-mcf5307_reset(costContext, stackBase, execBase)
-let nopCycles = mcf5307_exec(costContext, 1'u32)
-mcf5307_destroy(costContext)
+# allocation `mcf5407_create` makes here is not counted by any case.
+let costContext = mcf5407_create(addr page, bRead, bWrite, bIack)
+mcf5407_reset(costContext, stackBase, execBase)
+let nopCycles = mcf5407_exec(costContext, 1'u32)
+mcf5407_destroy(costContext)
 
-let burstContext = mcf5307_create(addr page, bRead, bWrite, bIack)
-mcf5307_reset(burstContext, stackBase, execBase)
+let burstContext = mcf5407_create(addr page, bRead, bWrite, bIack)
+mcf5407_reset(burstContext, stackBase, execBase)
 let fetchesBeforeBurst = fetchCount
 
 let beforeBurst = counts()
-discard mcf5307_exec(burstContext, nopCycles * uint32(burstInstructions))
+discard mcf5407_exec(burstContext, nopCycles * uint32(burstInstructions))
 let afterBurst = counts()
 
 let bursted = (fetches: fetchCount - fetchesBeforeBurst,
                lastFetch: lastFetchAddress,
-               pc: mcf5307_get_reg(burstContext, 17),
+               pc: mcf5407_get_reg(burstContext, 17),
                halted: burstContext.halted,
                fault: burstContext.fault)
-mcf5307_destroy(burstContext)
+mcf5407_destroy(burstContext)
 
 # ---------------------------------------------------------------------------
 # The cases.
@@ -229,24 +229,24 @@ check(sampledText,
       "the cast reads the counter the public `$` prints")
 
 # The positive control, and the whole suite rests on it. Every case below
-# asserts a zero, and a zero is what a dead counter reports. `mcf5307_create`
+# asserts a zero, and a zero is what a dead counter reports. `mcf5407_create`
 # is the one entry point the design allows to allocate - it takes the context
 # out of the heap - so it is the call that proves the counter moves in the same
 # run that reports the zeros. The figure is one because the context is one
 # `ref` object and nothing else on that path reaches the allocator; a build
 # without `-d:nimAllocStats` reports zero here and is red.
 check(taken(beforeCreate, afterCreate), (allocCount: 1, deallocCount: 0),
-      "mcf5307_create takes the context out of the heap")
+      "mcf5407_create takes the context out of the heap")
 
 check(taken(beforeReset, afterReset), noneTaken,
-      "mcf5307_reset allocates nothing")
+      "mcf5407_reset allocates nothing")
 
 check((taken: taken(beforeRegisters, afterRegisters), readBack: readBack),
       (taken: noneTaken, readBack: seedD0),
-      "mcf5307_set_reg and mcf5307_get_reg allocate nothing")
+      "mcf5407_set_reg and mcf5407_get_reg allocate nothing")
 
 check(taken(beforeExec, afterExec), noneTaken,
-      "mcf5307_exec allocates nothing over ten million instructions")
+      "mcf5407_exec allocates nothing over ten million instructions")
 
 # The execution witness for the run above. Its fields are what separate a core
 # that ran ten million instructions from one that halted on the first and
@@ -267,10 +267,10 @@ check(executed,
       "ten million instructions ran, and only instruction fetches happened")
 
 check(taken(beforeDestroy, afterDestroy), noneTaken,
-      "mcf5307_destroy allocates nothing")
+      "mcf5407_destroy allocates nothing")
 
 check(taken(beforeBurst, afterBurst), noneTaken,
-      "one mcf5307_exec call allocates nothing however many instructions it runs")
+      "one mcf5407_exec call allocates nothing however many instructions it runs")
 
 check(bursted,
       (fetches: burstInstructions,

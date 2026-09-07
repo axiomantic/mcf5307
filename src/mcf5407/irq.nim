@@ -2,7 +2,7 @@
 ## interrupt exception.
 ##
 ## The core holds no pending set: the three `irqLevel*` fields of the context
-## are the board's last presentation and nothing more. `mcf5307_set_irq`
+## are the board's last presentation and nothing more. `mcf5407_set_irq`
 ## overwrites them whole, which is what makes the call idempotent without a
 ## comparison against a previous value.
 ##
@@ -38,9 +38,9 @@
 ## acknowledge happens after the 8-byte frame is on the stack and before the
 ## first handler instruction is fetched.
 
-import mcf5307/decode_types
-import mcf5307/exception
-import mcf5307/machine
+import mcf5407/decode_types
+import mcf5407/exception
+import mcf5407/machine
 
 # User's Manual section 2.2.2.1, "Status Register (SR)", Figure 2-5, folio
 # 2-11, prints the whole 16-bit status
@@ -65,9 +65,9 @@ proc vectorFor(level: int; vector: uint8; autovector: bool): uint8 =
   ## cannot fail.
   if autovector: autovectorFor(level) else: vector
 
-proc mcf5307_set_irq*(ctx: MCF5307Ctx; level: cint; vector: uint8;
+proc mcf5407_set_irq*(ctx: MCF5407Ctx; level: cint; vector: uint8;
                       autovector: cint)
-    {.exportc: "mcf5307_set_irq", cdecl, dynlib.} =
+    {.exportc: "mcf5407_set_irq", cdecl, dynlib.} =
   ## Present the board's current highest-priority pending interrupt.
   ##
   ## It is a whole-state write and therefore idempotent by construction: the
@@ -94,7 +94,7 @@ proc mcf5307_set_irq*(ctx: MCF5307Ctx; level: cint; vector: uint8;
   ctx.irqVector = vector
   ctx.irqAutovector = autovector != 0
 
-proc resetInterruptEdge*(ctx: MCF5307Ctx) =
+proc resetInterruptEdge*(ctx: MCF5407Ctx) =
   ## What a RESET does to the level-7 edge latch: clear it, then re-observe the
   ## pin.
   ##
@@ -167,9 +167,9 @@ proc resetInterruptEdge*(ctx: MCF5307Ctx) =
   # retype, and it would stop measuring the latch.
   ctx.irq7Armed = default(typeof(ctx.irq7Armed))
   ctx.irqLevel = 0
-  mcf5307_set_irq(ctx, level, vector, autovector)
+  mcf5407_set_irq(ctx, level, vector, autovector)
 
-proc pendingInterrupt*(ctx: MCF5307Ctx): tuple[take: bool, level: int,
+proc pendingInterrupt*(ctx: MCF5407Ctx): tuple[take: bool, level: int,
                                                vector: uint8] =
   ## The interrupt the core would take at this instruction boundary.
   ##
@@ -196,9 +196,9 @@ proc pendingInterrupt*(ctx: MCF5307Ctx): tuple[take: bool, level: int,
     return (true, level, vectorFor(level, ctx.irqVector, ctx.irqAutovector))
   (false, 0, 0'u8)
 
-proc takeInterrupt*(ctx: MCF5307Ctx): bool =
+proc takeInterrupt*(ctx: MCF5407Ctx): bool =
   ## Take the pending interrupt, if there is one. Returns true when one was
-  ## taken. `mcf5307_exec` calls this at every instruction boundary.
+  ## taken. `mcf5407_exec` calls this at every instruction boundary.
   let pending = pendingInterrupt(ctx)
   if not pending.take:
     return false

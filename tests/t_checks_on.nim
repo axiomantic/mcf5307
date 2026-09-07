@@ -7,7 +7,7 @@
 ## The two fault classes get different responses and this file drives one of
 ## them. A firmware fault - the emulated firmware reads unmapped space - goes
 ## through the decode path's own explicit range test and is reported as
-## `MCF5307_BUS_UNMAPPED` through the bus-status out-parameter. No language
+## `MCF5407_BUS_UNMAPPED` through the bus-status out-parameter. No language
 ## check fires there and nothing ends the process. An emulator defect - this
 ## project's own Nim code indexes outside an array - is what this file drives,
 ## and the language check is what ends the process. The decode path never uses

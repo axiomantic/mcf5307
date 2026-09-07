@@ -202,18 +202,18 @@ jobs:
           #    neither matches the pattern nor appears here fails this step, so
           #    "this does not run in CI" has to be a sentence somebody typed.
           #
-          #    `mcf5307_conformance_*` are the corpus runner's groups. They
+          #    `mcf5407_conformance_*` are the corpus runner's groups. They
           #    need no firmware and no cross assembler at RUN time -- the
           #    assembler regenerates the corpus, and these read the committed
           #    one -- so nothing about them is inherently T1. They are held out
           #    pending a decision about their place in this matrix, and this
           #    roster is where that open question is recorded.
           excluded=$(printf '%s\n' \
-              mcf5307_conformance_all \
-              mcf5307_conformance_alu \
-              mcf5307_conformance_control \
-              mcf5307_conformance_logic \
-              mcf5307_conformance_move | sort -u)
+              mcf5407_conformance_all \
+              mcf5407_conformance_alu \
+              mcf5407_conformance_control \
+              mcf5407_conformance_logic \
+              mcf5407_conformance_move | sort -u)
           unselected=$(comm -23 \
               <(printf '%s\n' "${listed}") <(printf '%s\n' "${selected}"))
           if [ "${unselected}" != "${excluded}" ]; then

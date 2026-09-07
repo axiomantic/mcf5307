@@ -552,8 +552,8 @@ isp1181_destroy(wrapping)
 # The selector C can reach.
 #
 # The two values below are hand-written literals and not the module's
-# constants. They are the numbers `include/mcf5307.h` publishes as
-# `MCF5307_ISP1181_BACKEND_STUB` and `MCF5307_ISP1181_BACKEND_FULL_MODEL`, and
+# constants. They are the numbers `include/mcf5407.h` publishes as
+# `MCF5407_ISP1181_BACKEND_STUB` and `MCF5407_ISP1181_BACKEND_FULL_MODEL`, and
 # a suite that imported them would agree with any renumbering at all - which
 # is exactly the change that would silently repoint every existing C caller.
 
@@ -1310,7 +1310,7 @@ check(sizeIsEnforced == wantSizeIsEnforced,
       $sizeIsEnforced, $wantSizeIsEnforced)
 
 # THE THREE STATES STAY APART, AND NEITHER CALL ALONE KEEPS THEM APART. The
-# pairs below are the table `include/mcf5307.h` prints beside this call, driven
+# pairs below are the table `include/mcf5407.h` prints beside this call, driven
 # rather than quoted. Slot 0 is written and its geometry is known, slot 5 is
 # written with no buffer here, and slot 4 is never written - so `config_slot`
 # alone cannot separate the first from the second and `slot_buffer` alone
@@ -1495,11 +1495,11 @@ check(reportTruncation == wantReportTruncation,
 # asked for.
 #
 # The two drives below are the same drive. The only difference between them is
-# whether `MCF5307_ISP1181_REPORT` is set, and every observable of the handle
+# whether `MCF5407_ISP1181_REPORT` is set, and every observable of the handle
 # is captured and compared across the pair, so the unset case is measured and
 # not assumed.
 
-const teardownPath = "mcf5307-isp1181-teardown-report.txt"
+const teardownPath = "mcf5407-isp1181-teardown-report.txt"
 
 type Teardown = tuple[report: string, written: uint, retained: uint,
                       irq: int, tx: int]

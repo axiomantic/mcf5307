@@ -1,10 +1,10 @@
 ## `cpu` - the core lifecycle and the instruction dispatch of the ColdFire
 ## ISA_A core.
 ##
-## This module is the top of the core. It owns the part of the `mcf5307_*`
-## ABI that runs the machine: the lifecycle calls `mcf5307_create`,
-## `mcf5307_destroy` and `mcf5307_reset`, the private `step` procedure, and
-## `mcf5307_exec` itself.
+## This module is the top of the core. It owns the part of the `mcf5407_*`
+## ABI that runs the machine: the lifecycle calls `mcf5407_create`,
+## `mcf5407_destroy` and `mcf5407_reset`, the private `step` procedure, and
+## `mcf5407_exec` itself.
 ##
 ## `step` decodes one word and then calls the executor of the
 ## instruction group that the word belongs to. It is therefore the one place
@@ -16,7 +16,7 @@
 ##        ^          ^
 ##            cpu               this module
 ##
-## A shared helper a second executor needs goes down into `mcf5307/machine`,
+## A shared helper a second executor needs goes down into `mcf5407/machine`,
 ## not sideways into another executor.
 ##
 ## There is no supervisor and user stack split on ISA_A, so the context holds
@@ -27,29 +27,29 @@
 ## Family Programmer's Reference Manual and the MCF5407 User's Manual, and
 ## from this project's own measurements.
 
-import mcf5307/decode_types
-import mcf5307/decode
+import mcf5407/decode_types
+import mcf5407/decode
 # `machine` is imported for one procedure, `takePendingWriteFault`, and adds no
 # import cycle: `machine` is below every executor and imports none of them.
 # `machine.nim`'s `writeMem` states why the take belongs at the instruction
 # boundary, which is here.
-import mcf5307/machine
-import mcf5307/move
-import mcf5307/alu
-import mcf5307/logic
-import mcf5307/control
-import mcf5307/movec
-import mcf5307/irq
-# The one-time runtime latch. `mcf5307_create` reads it and allocates nothing
-# behind an abandoned one; `mcf5307/latch.nim` states why that refusal is the
+import mcf5407/machine
+import mcf5407/move
+import mcf5407/alu
+import mcf5407/logic
+import mcf5407/control
+import mcf5407/movec
+import mcf5407/irq
+# The one-time runtime latch. `mcf5407_create` reads it and allocates nothing
+# behind an abandoned one; `mcf5407/latch.nim` states why that refusal is the
 # mechanism and the status return is only the advice.
-import mcf5307/latch
+import mcf5407/latch
 
 # ---------------------------------------------------------------------------
 # The cycle counts, and why nothing checks them. Stated once here; the
 # executor modules point at this block instead of repeating it.
 #
-# `mcf5307_exec` reports the cost of everything that ran, and may therefore
+# `mcf5407_exec` reports the cost of everything that ran, and may therefore
 # return more than the budget it was given. The loop tests the budget only
 # before a step, so the last instruction of a call has already retired when the
 # budget is found to be spent; there is nothing left to decline. A caller that
@@ -110,13 +110,13 @@ const
 # ---------------------------------------------------------------------------
 # Core lifecycle.
 #
-# The context is opaque to every caller: C sees `mcf5307_ctx` and never its
+# The context is opaque to every caller: C sees `mcf5407_ctx` and never its
 # layout. It is a Nim `ref` because allocation must happen only inside
-# `mcf5307_create`, never inside `mcf5307_exec`.
+# `mcf5407_create`, never inside `mcf5407_exec`.
 
-proc mcf5307_create*(user: pointer; rd: Mcf5307ReadFn; wr: Mcf5307WriteFn;
-                     iack: Mcf5307IackFn): MCF5307Ctx
-    {.exportc: "mcf5307_create", cdecl, dynlib.} =
+proc mcf5407_create*(user: pointer; rd: Mcf5407ReadFn; wr: Mcf5407WriteFn;
+                     iack: Mcf5407IackFn): MCF5407Ctx
+    {.exportc: "mcf5407_create", cdecl, dynlib.} =
   ## Allocate the context and store the board callbacks. This is the one
   ## place the core allocates.
   ##
@@ -125,7 +125,7 @@ proc mcf5307_create*(user: pointer; rd: Mcf5307ReadFn; wr: Mcf5307WriteFn;
   ## nobody is obliged to read cannot carry the guarantee the abort carried.
   ## This check does: `new(result)` needs the Nim
   ## allocator, the allocator needs the runtime, and a nil context is a value
-  ## every other call in `include/mcf5307.h` already documents an answer for.
+  ## every other call in `include/mcf5407.h` already documents an answer for.
   ## A caller that ignored the status gets a library that does nothing.
   if runtimeAbandoned(runtimeLatch):
     return nil
@@ -135,8 +135,8 @@ proc mcf5307_create*(user: pointer; rd: Mcf5307ReadFn; wr: Mcf5307WriteFn;
   result.writeFn = wr
   result.iackFn = iack
 
-proc mcf5307_destroy*(ctx: MCF5307Ctx)
-    {.exportc: "mcf5307_destroy", cdecl, dynlib.} =
+proc mcf5407_destroy*(ctx: MCF5407Ctx)
+    {.exportc: "mcf5407_destroy", cdecl, dynlib.} =
   ## Tear the context down. Under `--mm:arc` the object is reclaimed when the
   ## owning reference is dropped; this marks it dead so a later use faults
   ## instead of reading a live object.
@@ -147,13 +147,13 @@ proc mcf5307_destroy*(ctx: MCF5307Ctx)
     ctx.writeFn = nil
     ctx.iackFn = nil
 
-proc mcf5307_reset*(ctx: MCF5307Ctx; initialSp: uint32; initialPc: uint32)
-    {.exportc: "mcf5307_reset", cdecl, dynlib.} =
+proc mcf5407_reset*(ctx: MCF5407Ctx; initialSp: uint32; initialPc: uint32)
+    {.exportc: "mcf5407_reset", cdecl, dynlib.} =
   ## Reset the machine to a known state: the single A7 to `initial_sp`, the
   ## program counter to `initial_pc`, and the status register to the reset
   ## value. `0x2700` is the supervisor, full-mask reset value on this part.
   ##
-  ## This is a C ABI entry point (`include/mcf5307.h`), so the argument is
+  ## This is a C ABI entry point (`include/mcf5407.h`), so the argument is
   ## whatever the caller passed and not something the type system has vouched
   ## for. An entry point that faults on nil while its neighbour returns is a
   ## contract the header cannot state.
@@ -227,7 +227,7 @@ proc mcf5307_reset*(ctx: MCF5307Ctx; initialSp: uint32; initialPc: uint32)
   # retiring a single instruction.
   ctx.atHandlerEntry = true
   # The level-7 edge latch is cleared and the pin is then re-observed;
-  # `resetInterruptEdge` in `mcf5307/irq.nim` carries the argument. The board's
+  # `resetInterruptEdge` in `mcf5407/irq.nim` carries the argument. The board's
   # presentation survives - it is the board's state and this call has no newer
   # answer for it. What does not survive is the core's own edge history, which
   # is why a level 7 still asserted across this call is armed again and one
@@ -237,7 +237,7 @@ proc mcf5307_reset*(ctx: MCF5307Ctx; initialSp: uint32; initialPc: uint32)
 # ---------------------------------------------------------------------------
 # The instruction dispatch.
 
-proc step(ctx: MCF5307Ctx): uint32 =
+proc step(ctx: MCF5407Ctx): uint32 =
   ## Execute one instruction: fetch, decode, and either execute it or halt.
   ## Returns the cycles spent. Halts with `fault` set on a bus fault or an
   ## illegal instruction; halts without `fault` on a recognized opcode whose
@@ -246,9 +246,9 @@ proc step(ctx: MCF5307Ctx): uint32 =
     ctx.fault = true
     ctx.halted = true
     return 0
-  var status = Mcf5307BusStatus.busOk
+  var status = Mcf5407BusStatus.busOk
   let word = ctx.readFn(ctx.user, ctx.pc, 2, addr status)
-  if status != Mcf5307BusStatus.busOk:
+  if status != Mcf5407BusStatus.busOk:
     ctx.fault = true
     ctx.halted = true
     return 0
@@ -361,8 +361,8 @@ proc step(ctx: MCF5307Ctx): uint32 =
   # it. `machine.nim`'s `writeMem` carries the manual reading.
   takePendingWriteFault(ctx)
 
-proc mcf5307_exec*(ctx: MCF5307Ctx; maxCycles: uint32): uint32
-    {.exportc: "mcf5307_exec", cdecl, dynlib.} =
+proc mcf5407_exec*(ctx: MCF5407Ctx; maxCycles: uint32): uint32
+    {.exportc: "mcf5407_exec", cdecl, dynlib.} =
   ## Run until at least `max_cycles` cycles have been spent and return the
   ## cycles actually spent, which may exceed `max_cycles` by up to the cost of
   ## one instruction: no instruction is abandoned once it has started. The loop

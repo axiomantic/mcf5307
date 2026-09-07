@@ -1,9 +1,9 @@
 ## `t_system_control` - the ColdFire system-control instruction group: the SR
 ## and CCR transfers.
 
-import mcf5307/machine
-import mcf5307/cpu
-import mcf5307/decode_types
+import mcf5407/machine
+import mcf5407/cpu
+import mcf5407/decode_types
 
 var failures: seq[string]
 import ./case_sites
@@ -50,7 +50,7 @@ const dirtyD: array[8, uint32] = [
 const dirtyA: array[8, uint32] = [
   0x0BAD_C0DE'u32, 0x0A11_0A11'u32, 0x0B22_0B22'u32, 0x0C33_0C33'u32,
   0x0D44_0D44'u32, 0x0E55_0E55'u32, 0x0F66_0F66'u32, stackBase]
-  ## A7 IS `stackBase` AND NOT A DIRTY VALUE, because `mcf5307_reset` writes it
+  ## A7 IS `stackBase` AND NOT A DIRTY VALUE, because `mcf5407_reset` writes it
   ## and a seeded value would simply be overwritten.
 
 type TestBoard = object
@@ -68,21 +68,21 @@ proc boardReadValue(b: TestBoard; address: uint32; size: int): uint32 =
     result = (result shl 8) or uint32(b.bytes[int(address) + i])
 
 proc bRead(user: pointer; address: uint32; size: cint;
-           status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+           status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return 0'u32
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardReadValue(b[], address, int(size))
 
 proc bWrite(user: pointer; address: uint32; size: cint; value: uint32;
-            status: ptr Mcf5307BusStatus) {.cdecl.} =
+            status: ptr Mcf5407BusStatus) {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardWrite(b[], address, int(size), value)
 
 proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
@@ -90,7 +90,7 @@ proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
 
 type Outcome = object
   ran: bool
-    ## DID THE INSTRUCTION RUN? It is `mcf5307_exec(ctx, 1) > 0`, and it is a
+    ## DID THE INSTRUCTION RUN? It is `mcf5407_exec(ctx, 1) > 0`, and it is a
     ## BOOLEAN because that is all the call can tell this suite. The return is
     ## the whole retired cost of the instruction - `cpu.nim`'s header block is
     ## the contract - and that cost differs per encoding, so an expectation
@@ -112,7 +112,7 @@ type Outcome = object
 proc runIns(words: openArray[uint16]; sr: uint32;
             mem: seq[(uint32, uint32)] = @[]): Outcome =
   ## Place `words` at `execBase`, seed every data and address register, run
-  ## ONE `mcf5307_exec`, and report the whole machine state.
+  ## ONE `mcf5407_exec`, and report the whole machine state.
   for i in 0 ..< memSize:
     board.bytes[i] = 0'u8
   for i in 0 ..< words.len:
@@ -120,25 +120,25 @@ proc runIns(words: openArray[uint16]; sr: uint32;
   for (address, value) in mem:
     boardWrite(board, address, 4, value)
 
-  let ctx = mcf5307_create(addr board, bRead, bWrite, bIack)
-  mcf5307_reset(ctx, stackBase, execBase)
+  let ctx = mcf5407_create(addr board, bRead, bWrite, bIack)
+  mcf5407_reset(ctx, stackBase, execBase)
   for i in 0 ..< 8:
-    discard mcf5307_set_reg(ctx, cint(i), dirtyD[i])
+    discard mcf5407_set_reg(ctx, cint(i), dirtyD[i])
   for i in 0 ..< 8:
-    discard mcf5307_set_reg(ctx, cint(8 + i), dirtyA[i])
-  # The status register is set LAST, because `mcf5307_reset` writes it and an
+    discard mcf5407_set_reg(ctx, cint(8 + i), dirtyA[i])
+  # The status register is set LAST, because `mcf5407_reset` writes it and an
   # earlier write would be overwritten.
-  discard mcf5307_set_reg(ctx, 16, sr)
+  discard mcf5407_set_reg(ctx, 16, sr)
 
-  result.ran = mcf5307_exec(ctx, 1'u32) > 0'u32
+  result.ran = mcf5407_exec(ctx, 1'u32) > 0'u32
   result.fault = ctx.fault
   result.halted = ctx.halted
   for i in 0 ..< 8:
-    result.d[i] = mcf5307_get_reg(ctx, cint(i))
+    result.d[i] = mcf5407_get_reg(ctx, cint(i))
   for i in 0 ..< 8:
-    result.a[i] = mcf5307_get_reg(ctx, cint(8 + i))
-  result.sr = mcf5307_get_reg(ctx, 16)
-  result.pc = mcf5307_get_reg(ctx, 17)
+    result.a[i] = mcf5407_get_reg(ctx, cint(8 + i))
+  result.sr = mcf5407_get_reg(ctx, 16)
+  result.pc = mcf5407_get_reg(ctx, 17)
 
 proc whole(o: Outcome): auto =
   (ran: o.ran, fault: o.fault, halted: o.halted, pc: o.pc,

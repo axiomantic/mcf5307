@@ -2,10 +2,10 @@
 ##
 ## This module executes MOVE, MOVEA, MOVEQ, MOVEM, LEA, PEA, LINK and UNLK,
 ## and nothing else. The register file, the condition-code bits, the board
-## accesses and the effective-address evaluation live in `mcf5307/machine`,
+## accesses and the effective-address evaluation live in `mcf5407/machine`,
 ## which sits at the `decode_types` level.
 ##
-## The decoder (`mcf5307/decode`) recognizes the instruction words and supplies
+## The decoder (`mcf5407/decode`) recognizes the instruction words and supplies
 ## the effective address in bits 5..0 of the word; this module executes them.
 ## The extension words of an instruction (displacements, index words, immediate
 ## values, and the MOVEM register mask) live in the instruction stream after
@@ -32,14 +32,14 @@
 ## MCF5407 User's Manual, and from this project's own measurements.
 
 import std/bitops
-import mcf5307/decode_types
-import mcf5307/ea
-import mcf5307/machine
+import mcf5407/decode_types
+import mcf5407/ea
+import mcf5407/machine
 
 # ---------------------------------------------------------------------------
 # The instruction executors.
 
-proc execMove(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execMove(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## MOVE.<sz> <ea>,<ea> and MOVEA.<sz> <ea>,An. The source is read first
   ## and the destination second, so a memory-to-memory move observes the
   ## pre-instruction memory.
@@ -68,20 +68,20 @@ proc execMove(ctx: MCF5307Ctx; d: Decoded): uint32 =
     setNzClearVc(ctx, src, d.size)
   result = 4'u32
 
-proc execMoveq(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
+proc execMoveq(ctx: MCF5407Ctx; word: uint16; d: Decoded): uint32 =
   let v = uint32(s8(word and 0xFF'u16))
   setRegD(ctx, d.destReg, v)
   setNzClearVc(ctx, v, 4)
   result = 4'u32
 
-proc execLea(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execLea(ctx: MCF5407Ctx; d: Decoded): uint32 =
   let eaAddress = eaAddr(ctx, d.ea, 4)
   if ctx.halted:
     return 0
   setRegA(ctx, d.destReg, eaAddress)
   result = 6'u32
 
-proc execPea(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execPea(ctx: MCF5407Ctx; d: Decoded): uint32 =
   let eaAddress = eaAddr(ctx, d.ea, 4)
   if ctx.halted:
     return 0
@@ -89,7 +89,7 @@ proc execPea(ctx: MCF5307Ctx; d: Decoded): uint32 =
   writeMem(ctx, ctx.sp, 4, eaAddress)
   result = 6'u32
 
-proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execSwap(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## SWAP Dn: the upper and lower 16-bit halves of a data register exchange.
   ## Table 2-8, "User-Level Instruction Set Summary", folio 2-22:
   ## `MSW of Dx <-> LSW of Dx`.
@@ -156,7 +156,7 @@ proc execSwap(ctx: MCF5307Ctx; d: Decoded): uint32 =
   setNzClearVc(ctx, swapped, 4)
   result = 4'u32
 
-proc execLink(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execLink(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## LINK An,#<d16>: push An, set An to the new frame base, then add the
   ## signed displacement to the stack pointer.
   ctx.sp = ctx.sp - 4'u32
@@ -165,7 +165,7 @@ proc execLink(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ctx.sp = ctx.sp + uint32(s16(fetchExt(ctx)))
   result = 8'u32
 
-proc execUnlk(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execUnlk(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## UNLK An: the stack pointer becomes An, An is reloaded from the stack,
   ## and the pointer is advanced past the saved value.
   ctx.sp = regA(ctx, d.destReg)
@@ -173,7 +173,7 @@ proc execUnlk(ctx: MCF5307Ctx; d: Decoded): uint32 =
   ctx.sp = ctx.sp + 4'u32
   result = 6'u32
 
-proc execMovem(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execMovem(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## MOVEM.L reglist,<ea> and MOVEM.L <ea>,reglist. The register mask is
   ## the word that follows the opcode; the EA's own extension words follow
   ## the mask. Registers are stored/loaded in ascending order (d0 first).
@@ -208,9 +208,9 @@ proc execMovem(ctx: MCF5307Ctx; d: Decoded): uint32 =
 # ---------------------------------------------------------------------------
 # The dispatch entry `step` calls.
 
-proc moveFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
+proc moveFamily*(ctx: MCF5407Ctx; word: uint16; d: Decoded): uint32 =
   ## Execute one data-movement instruction. Called from `step` in
-  ## `mcf5307/cpu` with the opcode word and the decoded operation. Returns a
+  ## `mcf5407/cpu` with the opcode word and the decoded operation. Returns a
   ## placeholder cycle count excluding the fetch - see the cycle block in
   ## `cpu.nim` - and halts the context with `fault` set on an illegal encoding
   ## or an illegal effective address.

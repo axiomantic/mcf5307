@@ -21,16 +21,16 @@
 # the last command's status, and a build failure read through a pipe reads
 # exactly like a success.
 
-if(NOT DEFINED MCF5307_BUILD_DIR)
+if(NOT DEFINED MCF5407_BUILD_DIR)
     message(FATAL_ERROR
-        "run_build_gate.cmake: MCF5307_BUILD_DIR was not passed. "
+        "run_build_gate.cmake: MCF5407_BUILD_DIR was not passed. "
         "This file is not meant to be run by hand; "
         "cmake/BuildGate.cmake registers the test that runs it.")
 endif()
 
-if(NOT IS_DIRECTORY "${MCF5307_BUILD_DIR}")
+if(NOT IS_DIRECTORY "${MCF5407_BUILD_DIR}")
     message(FATAL_ERROR
-        "run_build_gate.cmake: MCF5307_BUILD_DIR=${MCF5307_BUILD_DIR} "
+        "run_build_gate.cmake: MCF5407_BUILD_DIR=${MCF5407_BUILD_DIR} "
         "is not a directory.")
 endif()
 
@@ -38,16 +38,16 @@ endif()
 # appear above the banner below and the reader sees which file failed. Both
 # test presets carry `--output-on-failure`, so a failing gate prints them.
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" --build "${MCF5307_BUILD_DIR}" --parallel
-    RESULT_VARIABLE mcf5307_build_rc)
+    COMMAND "${CMAKE_COMMAND}" --build "${MCF5407_BUILD_DIR}" --parallel
+    RESULT_VARIABLE mcf5407_build_rc)
 
-if(NOT mcf5307_build_rc STREQUAL "0")
+if(NOT mcf5407_build_rc STREQUAL "0")
     # The banner is printed in NOTICE mode and the abort carries one line.
     # `message(FATAL_ERROR)` reflows and re-indents its text, which turns a
     # banner into ragged prose; NOTICE mode prints what is written.
     message([[
 ================================================================
-mcf5307: THE BUILD FAILED.
+mcf5407: THE BUILD FAILED.
 
 THIS IS A BUILD FAILURE, NOT A TEST FAILURE. No test verdict in
 this run describes the current source. Every other test in this
@@ -57,8 +57,8 @@ is stale or missing.
 Fix the compile or link errors printed above this banner, then
 run the suite again.
 ================================================================]])
-    message("build tree:  ${MCF5307_BUILD_DIR}")
-    message("build exited with status ${mcf5307_build_rc}")
+    message("build tree:  ${MCF5407_BUILD_DIR}")
+    message("build exited with status ${mcf5407_build_rc}")
     message(FATAL_ERROR
         "t0_build_is_current: FAIL: the build failed; nothing below is graded.")
 endif()
@@ -71,4 +71,4 @@ endif()
 # false in exactly that case, and a build gate that overstates its own reach is
 # the shape it exists to refuse.
 message("t0_build_is_current: PASS: "
-    "${MCF5307_BUILD_DIR} built clean.")
+    "${MCF5407_BUILD_DIR} built clean.")

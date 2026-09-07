@@ -6,10 +6,10 @@
 #      mismatch and print both versions.
 #   2  Run the Nim compiler in compile-only mode with the C backend.
 #   3  Read the compile-unit list out of Nim's own JSON build file.
-#   4  Add the listed `.c` files to an OBJECT library `mcf5307_nim_objs`.
-#   5  Add a STATIC library `mcf5307` that carries those objects and the
+#   4  Add the listed `.c` files to an OBJECT library `mcf5407_nim_objs`.
+#   5  Add a STATIC library `mcf5407` that carries those objects and the
 #      hand-written public header.
-#   6  Export `mcf5307::mcf5307` for consumers.
+#   6  Export `mcf5407::mcf5407` for consumers.
 #
 # The steps run at configure time and not at build time. Steps 4 and 5 need the
 # unit list to declare their targets, and a CMake target's source list is fixed
@@ -22,24 +22,24 @@
 # that holds a space then prints as two arguments, and the printed line cannot
 # be run. This function quotes an argument that holds white space, a quotation
 # mark or nothing at all, so that the printed line stays runnable.
-function(mcf5307_render_command mcf5307_render_output)
-    set(mcf5307_render_text "")
-    foreach(mcf5307_render_argument IN LISTS ARGN)
-        if(mcf5307_render_argument STREQUAL ""
-                OR mcf5307_render_argument MATCHES "[ \t\r\n\"\\\\]")
+function(mcf5407_render_command mcf5407_render_output)
+    set(mcf5407_render_text "")
+    foreach(mcf5407_render_argument IN LISTS ARGN)
+        if(mcf5407_render_argument STREQUAL ""
+                OR mcf5407_render_argument MATCHES "[ \t\r\n\"\\\\]")
             string(REPLACE "\\" "\\\\"
-                mcf5307_render_argument "${mcf5307_render_argument}")
+                mcf5407_render_argument "${mcf5407_render_argument}")
             string(REPLACE "\"" "\\\""
-                mcf5307_render_argument "${mcf5307_render_argument}")
-            set(mcf5307_render_argument "\"${mcf5307_render_argument}\"")
+                mcf5407_render_argument "${mcf5407_render_argument}")
+            set(mcf5407_render_argument "\"${mcf5407_render_argument}\"")
         endif()
-        if(mcf5307_render_text STREQUAL "")
-            set(mcf5307_render_text "${mcf5307_render_argument}")
+        if(mcf5407_render_text STREQUAL "")
+            set(mcf5407_render_text "${mcf5407_render_argument}")
         else()
-            string(APPEND mcf5307_render_text " ${mcf5307_render_argument}")
+            string(APPEND mcf5407_render_text " ${mcf5407_render_argument}")
         endif()
     endforeach()
-    set(${mcf5307_render_output} "${mcf5307_render_text}" PARENT_SCOPE)
+    set(${mcf5407_render_output} "${mcf5407_render_text}" PARENT_SCOPE)
 endfunction()
 
 # ---------------------------------------------------------------------------
@@ -49,86 +49,86 @@ endfunction()
 # of its streams go into one failure message. A reader who has just been
 # stopped cannot read twenty kilobytes. This function keeps the head and says
 # how much it dropped, so that the whole amount stays in the message.
-function(mcf5307_clip mcf5307_clip_output mcf5307_clip_text mcf5307_clip_limit)
-    string(LENGTH "${mcf5307_clip_text}" mcf5307_clip_length)
-    if(mcf5307_clip_length GREATER mcf5307_clip_limit)
-        string(SUBSTRING "${mcf5307_clip_text}" 0 ${mcf5307_clip_limit}
-            mcf5307_clip_text)
-        string(APPEND mcf5307_clip_text
-            " [... ${mcf5307_clip_length} bytes in all,"
-            " ${mcf5307_clip_limit} shown]")
+function(mcf5407_clip mcf5407_clip_output mcf5407_clip_text mcf5407_clip_limit)
+    string(LENGTH "${mcf5407_clip_text}" mcf5407_clip_length)
+    if(mcf5407_clip_length GREATER mcf5407_clip_limit)
+        string(SUBSTRING "${mcf5407_clip_text}" 0 ${mcf5407_clip_limit}
+            mcf5407_clip_text)
+        string(APPEND mcf5407_clip_text
+            " [... ${mcf5407_clip_length} bytes in all,"
+            " ${mcf5407_clip_limit} shown]")
     endif()
-    set(${mcf5307_clip_output} "${mcf5307_clip_text}" PARENT_SCOPE)
+    set(${mcf5407_clip_output} "${mcf5407_clip_text}" PARENT_SCOPE)
 endfunction()
 
 # ---------------------------------------------------------------------------
 # Step 1. The version pin. It is exact, and a mismatch fails the configure step
 # instead of raising a warning.
 
-find_program(MCF5307_NIM_EXECUTABLE nim REQUIRED
-    DOC "The Nim compiler that builds the mcf5307 core")
+find_program(MCF5407_NIM_EXECUTABLE nim REQUIRED
+    DOC "The Nim compiler that builds the mcf5407 core")
 
-set(MCF5307_NIM_VERSION_FILE "${PROJECT_SOURCE_DIR}/.nim-version")
-if(NOT EXISTS "${MCF5307_NIM_VERSION_FILE}")
+set(MCF5407_NIM_VERSION_FILE "${PROJECT_SOURCE_DIR}/.nim-version")
+if(NOT EXISTS "${MCF5407_NIM_VERSION_FILE}")
     message(FATAL_ERROR
-        "mcf5307: step 1 failed: ${MCF5307_NIM_VERSION_FILE} does not exist. "
+        "mcf5407: step 1 failed: ${MCF5407_NIM_VERSION_FILE} does not exist. "
         "The pin is the file, and a build without one is not a pinned build.")
 endif()
 
-file(READ "${MCF5307_NIM_VERSION_FILE}" MCF5307_NIM_PIN_RAW)
-string(STRIP "${MCF5307_NIM_PIN_RAW}" MCF5307_NIM_PIN)
+file(READ "${MCF5407_NIM_VERSION_FILE}" MCF5407_NIM_PIN_RAW)
+string(STRIP "${MCF5407_NIM_PIN_RAW}" MCF5407_NIM_PIN)
 
 execute_process(
-    COMMAND "${MCF5307_NIM_EXECUTABLE}" --version
-    OUTPUT_VARIABLE MCF5307_NIM_VERSION_OUTPUT
-    ERROR_VARIABLE MCF5307_NIM_VERSION_ERROR
-    RESULT_VARIABLE MCF5307_NIM_VERSION_RESULT)
+    COMMAND "${MCF5407_NIM_EXECUTABLE}" --version
+    OUTPUT_VARIABLE MCF5407_NIM_VERSION_OUTPUT
+    ERROR_VARIABLE MCF5407_NIM_VERSION_ERROR
+    RESULT_VARIABLE MCF5407_NIM_VERSION_RESULT)
 
 # Both streams are printed on every failure path below. A compiler that fails
 # to start writes to one of them. A compiler that answers oddly writes to the
 # other. This file cannot tell in advance which one holds the evidence.
-if(NOT MCF5307_NIM_VERSION_RESULT EQUAL 0)
+if(NOT MCF5407_NIM_VERSION_RESULT EQUAL 0)
     message(FATAL_ERROR
-        "mcf5307: step 1 failed: `${MCF5307_NIM_EXECUTABLE} --version` exited "
-        "${MCF5307_NIM_VERSION_RESULT}.\n"
-        "  stdout : ${MCF5307_NIM_VERSION_OUTPUT}\n"
-        "  stderr : ${MCF5307_NIM_VERSION_ERROR}")
+        "mcf5407: step 1 failed: `${MCF5407_NIM_EXECUTABLE} --version` exited "
+        "${MCF5407_NIM_VERSION_RESULT}.\n"
+        "  stdout : ${MCF5407_NIM_VERSION_OUTPUT}\n"
+        "  stderr : ${MCF5407_NIM_VERSION_ERROR}")
 endif()
 
 # The version is read from the first line alone. That line reads
 # `Nim Compiler Version 2.2.10 [MacOSX: arm64]`. A match over the whole output
 # would take the first version-shaped number anywhere in it. That includes a
 # number in a later line, which this file does not control.
-string(REGEX REPLACE "\r?\n.*" "" MCF5307_NIM_VERSION_FIRST_LINE
-    "${MCF5307_NIM_VERSION_OUTPUT}")
+string(REGEX REPLACE "\r?\n.*" "" MCF5407_NIM_VERSION_FIRST_LINE
+    "${MCF5407_NIM_VERSION_OUTPUT}")
 
-if(NOT MCF5307_NIM_VERSION_FIRST_LINE MATCHES
+if(NOT MCF5407_NIM_VERSION_FIRST_LINE MATCHES
         "Version[ \t]+([0-9]+\\.[0-9]+\\.[0-9]+)")
     message(FATAL_ERROR
-        "mcf5307: step 1 failed: no version number was found in the first line "
-        "of the output of `${MCF5307_NIM_EXECUTABLE} --version`.\n"
-        "  first line : ${MCF5307_NIM_VERSION_FIRST_LINE}\n"
-        "  stdout     : ${MCF5307_NIM_VERSION_OUTPUT}\n"
-        "  stderr     : ${MCF5307_NIM_VERSION_ERROR}")
+        "mcf5407: step 1 failed: no version number was found in the first line "
+        "of the output of `${MCF5407_NIM_EXECUTABLE} --version`.\n"
+        "  first line : ${MCF5407_NIM_VERSION_FIRST_LINE}\n"
+        "  stdout     : ${MCF5407_NIM_VERSION_OUTPUT}\n"
+        "  stderr     : ${MCF5407_NIM_VERSION_ERROR}")
 endif()
-set(MCF5307_NIM_INSTALLED "${CMAKE_MATCH_1}")
+set(MCF5407_NIM_INSTALLED "${CMAKE_MATCH_1}")
 
 # Both versions are printed. The message names the file that holds the pin and
 # the compiler that answered, so that a mismatch is actionable without a second
 # command.
-if(NOT MCF5307_NIM_INSTALLED STREQUAL MCF5307_NIM_PIN)
+if(NOT MCF5407_NIM_INSTALLED STREQUAL MCF5407_NIM_PIN)
     message(FATAL_ERROR
-        "mcf5307: step 1 failed: the Nim version does not match the pin.\n"
-        "  pinned    : ${MCF5307_NIM_PIN}  (from ${MCF5307_NIM_VERSION_FILE})\n"
-        "  installed : ${MCF5307_NIM_INSTALLED}  (from ${MCF5307_NIM_EXECUTABLE})\n"
+        "mcf5407: step 1 failed: the Nim version does not match the pin.\n"
+        "  pinned    : ${MCF5407_NIM_PIN}  (from ${MCF5407_NIM_VERSION_FILE})\n"
+        "  installed : ${MCF5407_NIM_INSTALLED}  (from ${MCF5407_NIM_EXECUTABLE})\n"
         "A major-version migration is scheduled work with its own branch and "
         "its own full conformance run. A minor bump is allowed after the "
         "conformance corpus passes. To move the pin, edit "
-        "${MCF5307_NIM_VERSION_FILE} in the change that runs that corpus.")
+        "${MCF5407_NIM_VERSION_FILE} in the change that runs that corpus.")
 endif()
 
 message(STATUS
-    "mcf5307: step 1 the Nim version matches the pin: ${MCF5307_NIM_PIN}")
+    "mcf5407: step 1 the Nim version matches the pin: ${MCF5407_NIM_PIN}")
 
 # ---------------------------------------------------------------------------
 # Step 2. The compile-only run of the C backend.
@@ -137,40 +137,40 @@ message(STATUS
 # alone the run-time checks stay compiled in. Removing them turns a defect that
 # ends the process into a defect that returns a wrong value and exits 0.
 
-set(MCF5307_NIMCACHE "${PROJECT_BINARY_DIR}/nimcache")
-set(MCF5307_NIM_HEADER "mcf5307_nim.h")
+set(MCF5407_NIMCACHE "${PROJECT_BINARY_DIR}/nimcache")
+set(MCF5407_NIM_HEADER "mcf5407_nim.h")
 
 # The flags that govern the generated code. They are held apart from the
 # command for two reasons. A second Nim project repeats them unchanged, and a
 # Nim test program must be compiled with the same set. A test compiled with a
 # different set proves nothing about the library the set governs.
-set(MCF5307_NIM_FLAGS --mm:arc --panics:on -d:release)
+set(MCF5407_NIM_FLAGS --mm:arc --panics:on -d:release)
 
 # The Nim entry modules of this project. A second Nim library appends its name
 # here and writes its own command below, with its own `--nimMainPrefix:` value.
 # Step 2a reads this list.
-set(MCF5307_NIM_ENTRIES mcf5307)
+set(MCF5407_NIM_ENTRIES mcf5407)
 
 # Each entry module's source file and its command are written out, and neither
 # is derived from the entry name. A derived prefix cannot collide. It would
 # therefore make the duplicate half of step 2a unable to fail. A check that
 # cannot fail is worse than no check.
-set(MCF5307_NIM_SOURCE_mcf5307 "${PROJECT_SOURCE_DIR}/src/mcf5307.nim")
+set(MCF5407_NIM_SOURCE_mcf5407 "${PROJECT_SOURCE_DIR}/src/mcf5407.nim")
 # `--path:src` puts the package root on the Nim search path so that the
-# entry module's `import mcf5307/<sub>` resolves to `src/mcf5307/<sub>.nim`.
-# The submodules of the core live under `src/mcf5307/`, and
-# without the path an entry module at `src/mcf5307.nim` cannot import them.
-set(MCF5307_NIM_PATH "${PROJECT_SOURCE_DIR}/src")
-set(MCF5307_NIM_COMMAND_mcf5307
-    "${MCF5307_NIM_EXECUTABLE}" c
+# entry module's `import mcf5407/<sub>` resolves to `src/mcf5407/<sub>.nim`.
+# The submodules of the core live under `src/mcf5407/`, and
+# without the path an entry module at `src/mcf5407.nim` cannot import them.
+set(MCF5407_NIM_PATH "${PROJECT_SOURCE_DIR}/src")
+set(MCF5407_NIM_COMMAND_mcf5407
+    "${MCF5407_NIM_EXECUTABLE}" c
     --compileOnly
     --noMain
-    "--nimcache:${MCF5307_NIMCACHE}"
-    "--path:${MCF5307_NIM_PATH}"
-    ${MCF5307_NIM_FLAGS}
-    --nimMainPrefix:mcf5307_
-    "--header:${MCF5307_NIM_HEADER}"
-    "${MCF5307_NIM_SOURCE_mcf5307}")
+    "--nimcache:${MCF5407_NIMCACHE}"
+    "--path:${MCF5407_NIM_PATH}"
+    ${MCF5407_NIM_FLAGS}
+    --nimMainPrefix:mcf5407_
+    "--header:${MCF5407_NIM_HEADER}"
+    "${MCF5407_NIM_SOURCE_mcf5407}")
 
 # ---------------------------------------------------------------------------
 # Step 2a. The prefix check.
@@ -181,8 +181,8 @@ set(MCF5307_NIM_COMMAND_mcf5307
 #
 # With the flag deleted the configure step succeeds, the build succeeds and the
 # archive is written, all without one diagnostic: a static archive tolerates an
-# undefined symbol, so `libmcf5307.a` then carries an undefined
-# `mcf5307_NimMain` beside an unprefixed `NimMain`, and nothing fails until a
+# undefined symbol, so `libmcf5407.a` then carries an undefined
+# `mcf5407_NimMain` beside an unprefixed `NimMain`, and nothing fails until a
 # consumer's final link, in a different repository, at a later time. The
 # configure step is the last place at which the fault is still local to this
 # project.
@@ -200,36 +200,36 @@ set(MCF5307_NIM_COMMAND_mcf5307
 # over a command that had lost the flag.
 
 # Check step 1. The count.
-list(LENGTH MCF5307_NIM_ENTRIES MCF5307_NIM_ENTRY_COUNT)
-if(MCF5307_NIM_ENTRY_COUNT EQUAL 0)
+list(LENGTH MCF5407_NIM_ENTRIES MCF5407_NIM_ENTRY_COUNT)
+if(MCF5407_NIM_ENTRY_COUNT EQUAL 0)
     message(FATAL_ERROR
-        "mcf5307: step 2a failed: MCF5307_NIM_ENTRIES is empty. A build with "
+        "mcf5407: step 2a failed: MCF5407_NIM_ENTRIES is empty. A build with "
         "no entry module compiles no Nim code at all.")
 endif()
 
 # Check step 2. The flag, and the uniqueness of its value.
-set(MCF5307_NIM_SEEN_PREFIXES "")
-foreach(entry IN LISTS MCF5307_NIM_ENTRIES)
-    if(NOT DEFINED MCF5307_NIM_COMMAND_${entry})
+set(MCF5407_NIM_SEEN_PREFIXES "")
+foreach(entry IN LISTS MCF5407_NIM_ENTRIES)
+    if(NOT DEFINED MCF5407_NIM_COMMAND_${entry})
         message(FATAL_ERROR
-            "mcf5307: step 2a failed: the entry module `${entry}` is listed in "
-            "MCF5307_NIM_ENTRIES and MCF5307_NIM_COMMAND_${entry} is not set. "
+            "mcf5407: step 2a failed: the entry module `${entry}` is listed in "
+            "MCF5407_NIM_ENTRIES and MCF5407_NIM_COMMAND_${entry} is not set. "
             "An entry module without a command compiles nothing.")
     endif()
-    if(NOT DEFINED MCF5307_NIM_SOURCE_${entry})
+    if(NOT DEFINED MCF5407_NIM_SOURCE_${entry})
         message(FATAL_ERROR
-            "mcf5307: step 2a failed: the entry module `${entry}` is listed in "
-            "MCF5307_NIM_ENTRIES and MCF5307_NIM_SOURCE_${entry} is not set. "
+            "mcf5407: step 2a failed: the entry module `${entry}` is listed in "
+            "MCF5407_NIM_ENTRIES and MCF5407_NIM_SOURCE_${entry} is not set. "
             "Steps 3 and 4 read that path. Step 3 takes the name of Nim's own "
             "build file from it, and step 4 asks the compiler about it.")
     endif()
-    string(REPLACE ";" " " MCF5307_NIM_ENTRY_COMMAND_TEXT
-        "${MCF5307_NIM_COMMAND_${entry}}")
-    if(NOT MCF5307_NIM_ENTRY_COMMAND_TEXT MATCHES "--nimMainPrefix:([^ ]+)")
+    string(REPLACE ";" " " MCF5407_NIM_ENTRY_COMMAND_TEXT
+        "${MCF5407_NIM_COMMAND_${entry}}")
+    if(NOT MCF5407_NIM_ENTRY_COMMAND_TEXT MATCHES "--nimMainPrefix:([^ ]+)")
         message(FATAL_ERROR
-            "mcf5307: step 2a failed: the compile command of the entry module "
+            "mcf5407: step 2a failed: the compile command of the entry module "
             "`${entry}` carries no --nimMainPrefix: flag.\n"
-            "  command : ${MCF5307_NIM_ENTRY_COMMAND_TEXT}\n"
+            "  command : ${MCF5407_NIM_ENTRY_COMMAND_TEXT}\n"
             "Without the flag the Nim runtime keeps its default entry-point "
             "names, the archive still builds, and the fault surfaces at a "
             "consumer's final link. That is why it is refused here.")
@@ -237,25 +237,25 @@ foreach(entry IN LISTS MCF5307_NIM_ENTRIES)
     # The value is stored under the entry module's own name. A single loop
     # variable would hold the LAST entry module's prefix after the loop. Any
     # later reader of it would then read the wrong entry module's value.
-    set(MCF5307_NIM_PREFIX_${entry} "${CMAKE_MATCH_1}")
-    if(MCF5307_NIM_PREFIX_${entry} IN_LIST MCF5307_NIM_SEEN_PREFIXES)
+    set(MCF5407_NIM_PREFIX_${entry} "${CMAKE_MATCH_1}")
+    if(MCF5407_NIM_PREFIX_${entry} IN_LIST MCF5407_NIM_SEEN_PREFIXES)
         message(FATAL_ERROR
-            "mcf5307: step 2a failed: the entry module `${entry}` repeats the "
-            "--nimMainPrefix: value `${MCF5307_NIM_PREFIX_${entry}}`, which an "
-            "earlier entry module in MCF5307_NIM_ENTRIES already uses. Two "
+            "mcf5407: step 2a failed: the entry module `${entry}` repeats the "
+            "--nimMainPrefix: value `${MCF5407_NIM_PREFIX_${entry}}`, which an "
+            "earlier entry module in MCF5407_NIM_ENTRIES already uses. Two "
             "equal prefixes rename the two runtimes to the SAME names, and "
             "they then collide exactly as the default names do.")
     endif()
-    list(APPEND MCF5307_NIM_SEEN_PREFIXES "${MCF5307_NIM_PREFIX_${entry}}")
+    list(APPEND MCF5407_NIM_SEEN_PREFIXES "${MCF5407_NIM_PREFIX_${entry}}")
     message(STATUS
-        "mcf5307: step 2a the entry module ${entry} carries "
-        "--nimMainPrefix:${MCF5307_NIM_PREFIX_${entry}}")
+        "mcf5407: step 2a the entry module ${entry} carries "
+        "--nimMainPrefix:${MCF5407_NIM_PREFIX_${entry}}")
 endforeach()
 
 # Check step 3. A note and not a failure.
-if(MCF5307_NIM_ENTRY_COUNT GREATER 1)
+if(MCF5407_NIM_ENTRY_COUNT GREATER 1)
     message(STATUS
-        "mcf5307: step 2a NOTE: this build declares ${MCF5307_NIM_ENTRY_COUNT} "
+        "mcf5407: step 2a NOTE: this build declares ${MCF5407_NIM_ENTRY_COUNT} "
         "Nim entry modules and only the first is built. Each entry module "
         "beyond the first costs its own nimcache directory, its own "
         "compile-unit list, its own object library and its own "
@@ -264,31 +264,31 @@ if(MCF5307_NIM_ENTRY_COUNT GREATER 1)
 endif()
 
 # ---------------------------------------------------------------------------
-# Steps 2 to 6 build the FIRST entry module in MCF5307_NIM_ENTRIES, and the
+# Steps 2 to 6 build the FIRST entry module in MCF5407_NIM_ENTRIES, and the
 # note above says exactly that. A name written out here instead would make the
 # note false as soon as the list held a second name. The pass or the failure of
 # this file would then depend on the order of that list alone.
-list(GET MCF5307_NIM_ENTRIES 0 MCF5307_NIM_BUILT_ENTRY)
-set(MCF5307_NIM_COMMAND ${MCF5307_NIM_COMMAND_${MCF5307_NIM_BUILT_ENTRY}})
-set(MCF5307_NIM_ENTRY "${MCF5307_NIM_SOURCE_${MCF5307_NIM_BUILT_ENTRY}}")
-set(MCF5307_NIM_BUILT_PREFIX "${MCF5307_NIM_PREFIX_${MCF5307_NIM_BUILT_ENTRY}}")
+list(GET MCF5407_NIM_ENTRIES 0 MCF5407_NIM_BUILT_ENTRY)
+set(MCF5407_NIM_COMMAND ${MCF5407_NIM_COMMAND_${MCF5407_NIM_BUILT_ENTRY}})
+set(MCF5407_NIM_ENTRY "${MCF5407_NIM_SOURCE_${MCF5407_NIM_BUILT_ENTRY}}")
+set(MCF5407_NIM_BUILT_PREFIX "${MCF5407_NIM_PREFIX_${MCF5407_NIM_BUILT_ENTRY}}")
 
 # The command is printed in full, before it runs, so that a failing run leaves
 # the exact invocation in the log. The prefix and the two absent flags are then
 # a property of the configure log rather than a claim about this file.
 #
 # The line carries no step number. Each step reports itself exactly once.
-mcf5307_render_command(MCF5307_NIM_COMMAND_TEXT ${MCF5307_NIM_COMMAND})
-message(STATUS "mcf5307: nim invocation: ${MCF5307_NIM_COMMAND_TEXT}")
+mcf5407_render_command(MCF5407_NIM_COMMAND_TEXT ${MCF5407_NIM_COMMAND})
+message(STATUS "mcf5407: nim invocation: ${MCF5407_NIM_COMMAND_TEXT}")
 
 # The contract header. It is read here and it is never written here. The name is set at this point because the line below has to
 # name it, and step 4a reads the same variable.
-set(MCF5307_ABI_CONTRACT_FILE "${PROJECT_SOURCE_DIR}/include/mcf5307.h")
+set(MCF5407_ABI_CONTRACT_FILE "${PROJECT_SOURCE_DIR}/include/mcf5407.h")
 
 # The smoke test's symbol list. It is read here and it is never written here. Step 4a compares it against the published set of the
 # contract header above. It is named at this point for the same reason the
 # contract header is: the dependency list below has to carry it.
-set(MCF5307_ABI_SMOKE_LIST_FILE
+set(MCF5407_ABI_SMOKE_LIST_FILE
     "${PROJECT_SOURCE_DIR}/tests/abi_smoke_symbols.inc")
 
 # The link-partner stub of `t0_abi_header` cases 3 and 4. It is compiled here
@@ -296,7 +296,7 @@ set(MCF5307_ABI_SMOKE_LIST_FILE
 # the symbols its object defines and compares them against the same published
 # set. It is named at this point for the reason the two files above are: the
 # dependency list below has to carry it.
-set(MCF5307_ABI_STUB_FILE "${PROJECT_SOURCE_DIR}/tests/abi_stub.c")
+set(MCF5407_ABI_STUB_FILE "${PROJECT_SOURCE_DIR}/tests/abi_stub.c")
 
 # Editing a configure-time input must re-run the configure step. The inputs
 # are enumerated here, and the property below lists every one of them.
@@ -307,7 +307,7 @@ set(MCF5307_ABI_STUB_FILE "${PROJECT_SOURCE_DIR}/tests/abi_stub.c")
 #   `src/*.nim`        the unit list is read at configure time, and a new
 #                      module adds a unit to it.
 #   `.nim-version`     step 1 compares it against the compiler.
-#   `include/mcf5307.h` step 4a reads the published set out of it.
+#   `include/mcf5407.h` step 4a reads the published set out of it.
 #   `tests/abi_smoke_symbols.inc`
 #                      step 4a reads the EXPECTED ABI out of it and compares
 #                      it against the measured one. A list edited without a
@@ -319,28 +319,28 @@ set(MCF5307_ABI_STUB_FILE "${PROJECT_SOURCE_DIR}/tests/abi_stub.c")
 #                      defines. A definition added or removed without a re-run
 #                      would leave that comparison speaking about an object
 #                      this tree can no longer produce.
-file(GLOB_RECURSE MCF5307_NIM_SOURCES CONFIGURE_DEPENDS
+file(GLOB_RECURSE MCF5407_NIM_SOURCES CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/src/*.nim")
 set_property(DIRECTORY "${PROJECT_SOURCE_DIR}"
     APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    ${MCF5307_NIM_SOURCES} "${MCF5307_NIM_VERSION_FILE}"
-    "${MCF5307_ABI_CONTRACT_FILE}" "${MCF5307_ABI_SMOKE_LIST_FILE}"
-    "${MCF5307_ABI_STUB_FILE}")
+    ${MCF5407_NIM_SOURCES} "${MCF5407_NIM_VERSION_FILE}"
+    "${MCF5407_ABI_CONTRACT_FILE}" "${MCF5407_ABI_SMOKE_LIST_FILE}"
+    "${MCF5407_ABI_STUB_FILE}")
 
 execute_process(
-    COMMAND ${MCF5307_NIM_COMMAND}
+    COMMAND ${MCF5407_NIM_COMMAND}
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
-    OUTPUT_VARIABLE MCF5307_NIM_OUTPUT
-    ERROR_VARIABLE MCF5307_NIM_ERROR
-    RESULT_VARIABLE MCF5307_NIM_RESULT)
+    OUTPUT_VARIABLE MCF5407_NIM_OUTPUT
+    ERROR_VARIABLE MCF5407_NIM_ERROR
+    RESULT_VARIABLE MCF5407_NIM_RESULT)
 
-if(NOT MCF5307_NIM_RESULT EQUAL 0)
+if(NOT MCF5407_NIM_RESULT EQUAL 0)
     message(FATAL_ERROR
-        "mcf5307: step 2 failed: the Nim compiler exited "
-        "${MCF5307_NIM_RESULT}.\n${MCF5307_NIM_OUTPUT}\n${MCF5307_NIM_ERROR}")
+        "mcf5407: step 2 failed: the Nim compiler exited "
+        "${MCF5407_NIM_RESULT}.\n${MCF5407_NIM_OUTPUT}\n${MCF5407_NIM_ERROR}")
 endif()
 
-message(STATUS "mcf5307: step 2 the Nim compile-only run succeeded")
+message(STATUS "mcf5407: step 2 the Nim compile-only run succeeded")
 
 # ---------------------------------------------------------------------------
 # Step 3. The compile-unit list.
@@ -350,37 +350,37 @@ message(STATUS "mcf5307: step 2 the Nim compile-only run succeeded")
 # stale unit that still defines its module's symbols produces a duplicate
 # symbol at link. The JSON names exactly the units of the run that just ran.
 
-get_filename_component(MCF5307_NIM_PROJECT_NAME "${MCF5307_NIM_ENTRY}" NAME_WE)
-set(MCF5307_NIM_JSON "${MCF5307_NIMCACHE}/${MCF5307_NIM_PROJECT_NAME}.json")
+get_filename_component(MCF5407_NIM_PROJECT_NAME "${MCF5407_NIM_ENTRY}" NAME_WE)
+set(MCF5407_NIM_JSON "${MCF5407_NIMCACHE}/${MCF5407_NIM_PROJECT_NAME}.json")
 
-if(NOT EXISTS "${MCF5307_NIM_JSON}")
+if(NOT EXISTS "${MCF5407_NIM_JSON}")
     message(FATAL_ERROR
-        "mcf5307: step 3 failed: the Nim build file ${MCF5307_NIM_JSON} does "
+        "mcf5407: step 3 failed: the Nim build file ${MCF5407_NIM_JSON} does "
         "not exist. The unit list is read from that file and is never globbed "
         "out of the cache directory.")
 endif()
 
-file(READ "${MCF5307_NIM_JSON}" MCF5307_NIM_JSON_TEXT)
+file(READ "${MCF5407_NIM_JSON}" MCF5407_NIM_JSON_TEXT)
 
 # The schema of the build file belongs to the Nim release and not to this
 # project. `ERROR_VARIABLE` is what turns a schema change into a diagnostic
 # that names the step and the member. Without it CMake raises its own error,
 # the configure log holds no step number, and the reader has to find the step.
-string(JSON MCF5307_NIM_UNIT_COUNT
-    ERROR_VARIABLE MCF5307_NIM_JSON_ERROR
-    LENGTH "${MCF5307_NIM_JSON_TEXT}" compile)
-if(NOT MCF5307_NIM_JSON_ERROR STREQUAL "NOTFOUND")
+string(JSON MCF5407_NIM_UNIT_COUNT
+    ERROR_VARIABLE MCF5407_NIM_JSON_ERROR
+    LENGTH "${MCF5407_NIM_JSON_TEXT}" compile)
+if(NOT MCF5407_NIM_JSON_ERROR STREQUAL "NOTFOUND")
     message(FATAL_ERROR
-        "mcf5307: step 3 failed: ${MCF5307_NIM_JSON} carries no readable "
+        "mcf5407: step 3 failed: ${MCF5407_NIM_JSON} carries no readable "
         "`compile` array.\n"
-        "  error : ${MCF5307_NIM_JSON_ERROR}\n"
+        "  error : ${MCF5407_NIM_JSON_ERROR}\n"
         "The member is the unit list of the run that just ran. A Nim release "
         "that renames it needs this step read the new name.")
 endif()
 
-if(MCF5307_NIM_UNIT_COUNT EQUAL 0)
+if(MCF5407_NIM_UNIT_COUNT EQUAL 0)
     message(FATAL_ERROR
-        "mcf5307: step 3 failed: ${MCF5307_NIM_JSON} lists no compile unit. An "
+        "mcf5407: step 3 failed: ${MCF5407_NIM_JSON} lists no compile unit. An "
         "empty object library would link and would carry no Nim code at all.")
 endif()
 
@@ -388,29 +388,29 @@ endif()
 # Nim would have used to compile it. Element 0 is taken and element 1 is
 # discarded, because the consumer's own toolchain and flags compile these
 # sources. That is the whole point of shipping source plus integration.
-set(MCF5307_NIM_C_SOURCES "")
-math(EXPR MCF5307_NIM_LAST_UNIT "${MCF5307_NIM_UNIT_COUNT} - 1")
-foreach(index RANGE ${MCF5307_NIM_LAST_UNIT})
-    string(JSON MCF5307_NIM_UNIT
-        ERROR_VARIABLE MCF5307_NIM_JSON_ERROR
-        GET "${MCF5307_NIM_JSON_TEXT}" compile ${index} 0)
-    if(NOT MCF5307_NIM_JSON_ERROR STREQUAL "NOTFOUND")
+set(MCF5407_NIM_C_SOURCES "")
+math(EXPR MCF5407_NIM_LAST_UNIT "${MCF5407_NIM_UNIT_COUNT} - 1")
+foreach(index RANGE ${MCF5407_NIM_LAST_UNIT})
+    string(JSON MCF5407_NIM_UNIT
+        ERROR_VARIABLE MCF5407_NIM_JSON_ERROR
+        GET "${MCF5407_NIM_JSON_TEXT}" compile ${index} 0)
+    if(NOT MCF5407_NIM_JSON_ERROR STREQUAL "NOTFOUND")
         message(FATAL_ERROR
-            "mcf5307: step 3 failed: entry ${index} of the `compile` array of "
-            "${MCF5307_NIM_JSON} does not hold a file name at element 0.\n"
-            "  error : ${MCF5307_NIM_JSON_ERROR}")
+            "mcf5407: step 3 failed: entry ${index} of the `compile` array of "
+            "${MCF5407_NIM_JSON} does not hold a file name at element 0.\n"
+            "  error : ${MCF5407_NIM_JSON_ERROR}")
     endif()
-    if(NOT EXISTS "${MCF5307_NIM_UNIT}")
+    if(NOT EXISTS "${MCF5407_NIM_UNIT}")
         message(FATAL_ERROR
-            "mcf5307: step 3 failed: ${MCF5307_NIM_JSON} lists the compile "
-            "unit ${MCF5307_NIM_UNIT} and that file does not exist.")
+            "mcf5407: step 3 failed: ${MCF5407_NIM_JSON} lists the compile "
+            "unit ${MCF5407_NIM_UNIT} and that file does not exist.")
     endif()
-    list(APPEND MCF5307_NIM_C_SOURCES "${MCF5307_NIM_UNIT}")
+    list(APPEND MCF5407_NIM_C_SOURCES "${MCF5407_NIM_UNIT}")
 endforeach()
 
 message(STATUS
-    "mcf5307: step 3 read ${MCF5307_NIM_UNIT_COUNT} compile units from "
-    "${MCF5307_NIM_JSON}")
+    "mcf5407: step 3 read ${MCF5407_NIM_UNIT_COUNT} compile units from "
+    "${MCF5407_NIM_JSON}")
 
 # ---------------------------------------------------------------------------
 # Step 4. The object library.
@@ -436,57 +436,57 @@ message(STATUS
 # then covers the layout that keeps `lib` beside `bin`.
 
 execute_process(
-    COMMAND "${MCF5307_NIM_EXECUTABLE}" dump --dump.format:json
-            "${MCF5307_NIM_ENTRY}"
-    OUTPUT_VARIABLE MCF5307_NIM_DUMP_OUTPUT
-    ERROR_VARIABLE MCF5307_NIM_DUMP_ERROR
-    RESULT_VARIABLE MCF5307_NIM_DUMP_RESULT)
+    COMMAND "${MCF5407_NIM_EXECUTABLE}" dump --dump.format:json
+            "${MCF5407_NIM_ENTRY}"
+    OUTPUT_VARIABLE MCF5407_NIM_DUMP_OUTPUT
+    ERROR_VARIABLE MCF5407_NIM_DUMP_ERROR
+    RESULT_VARIABLE MCF5407_NIM_DUMP_RESULT)
 
-set(MCF5307_NIM_LIB_DIR "")
-set(MCF5307_NIM_LIB_DIR_SOURCE "")
-if(MCF5307_NIM_DUMP_RESULT EQUAL 0)
-    string(JSON MCF5307_NIM_DUMP_LIBPATH
-        ERROR_VARIABLE MCF5307_NIM_DUMP_JSON_ERROR
-        GET "${MCF5307_NIM_DUMP_OUTPUT}" libpath)
-    if(MCF5307_NIM_DUMP_JSON_ERROR STREQUAL "NOTFOUND"
-            AND NOT MCF5307_NIM_DUMP_LIBPATH STREQUAL "")
-        set(MCF5307_NIM_LIB_DIR "${MCF5307_NIM_DUMP_LIBPATH}")
-        set(MCF5307_NIM_LIB_DIR_SOURCE
-            "`${MCF5307_NIM_EXECUTABLE} dump --dump.format:json`")
+set(MCF5407_NIM_LIB_DIR "")
+set(MCF5407_NIM_LIB_DIR_SOURCE "")
+if(MCF5407_NIM_DUMP_RESULT EQUAL 0)
+    string(JSON MCF5407_NIM_DUMP_LIBPATH
+        ERROR_VARIABLE MCF5407_NIM_DUMP_JSON_ERROR
+        GET "${MCF5407_NIM_DUMP_OUTPUT}" libpath)
+    if(MCF5407_NIM_DUMP_JSON_ERROR STREQUAL "NOTFOUND"
+            AND NOT MCF5407_NIM_DUMP_LIBPATH STREQUAL "")
+        set(MCF5407_NIM_LIB_DIR "${MCF5407_NIM_DUMP_LIBPATH}")
+        set(MCF5407_NIM_LIB_DIR_SOURCE
+            "`${MCF5407_NIM_EXECUTABLE} dump --dump.format:json`")
     endif()
 endif()
 
 # The fallback. It runs when the compiler gave no usable answer, and also when
 # the answer it gave holds no `nimbase.h`.
-if(MCF5307_NIM_LIB_DIR STREQUAL ""
-        OR NOT EXISTS "${MCF5307_NIM_LIB_DIR}/nimbase.h")
-    get_filename_component(MCF5307_NIM_REAL_EXECUTABLE
-        "${MCF5307_NIM_EXECUTABLE}" REALPATH)
-    get_filename_component(MCF5307_NIM_BIN_DIR
-        "${MCF5307_NIM_REAL_EXECUTABLE}" DIRECTORY)
-    get_filename_component(MCF5307_NIM_PREFIX
-        "${MCF5307_NIM_BIN_DIR}" DIRECTORY)
-    if(EXISTS "${MCF5307_NIM_PREFIX}/lib/nimbase.h")
-        set(MCF5307_NIM_LIB_DIR "${MCF5307_NIM_PREFIX}/lib")
-        set(MCF5307_NIM_LIB_DIR_SOURCE
-            "a path walk from ${MCF5307_NIM_REAL_EXECUTABLE}")
+if(MCF5407_NIM_LIB_DIR STREQUAL ""
+        OR NOT EXISTS "${MCF5407_NIM_LIB_DIR}/nimbase.h")
+    get_filename_component(MCF5407_NIM_REAL_EXECUTABLE
+        "${MCF5407_NIM_EXECUTABLE}" REALPATH)
+    get_filename_component(MCF5407_NIM_BIN_DIR
+        "${MCF5407_NIM_REAL_EXECUTABLE}" DIRECTORY)
+    get_filename_component(MCF5407_NIM_PREFIX
+        "${MCF5407_NIM_BIN_DIR}" DIRECTORY)
+    if(EXISTS "${MCF5407_NIM_PREFIX}/lib/nimbase.h")
+        set(MCF5407_NIM_LIB_DIR "${MCF5407_NIM_PREFIX}/lib")
+        set(MCF5407_NIM_LIB_DIR_SOURCE
+            "a path walk from ${MCF5407_NIM_REAL_EXECUTABLE}")
     endif()
 endif()
 
 # The result is checked and never assumed, whichever route produced it.
-if(MCF5307_NIM_LIB_DIR STREQUAL ""
-        OR NOT EXISTS "${MCF5307_NIM_LIB_DIR}/nimbase.h")
-    mcf5307_clip(MCF5307_NIM_DUMP_OUTPUT_HEAD
-        "${MCF5307_NIM_DUMP_OUTPUT}" 400)
-    mcf5307_clip(MCF5307_NIM_DUMP_ERROR_HEAD "${MCF5307_NIM_DUMP_ERROR}" 400)
+if(MCF5407_NIM_LIB_DIR STREQUAL ""
+        OR NOT EXISTS "${MCF5407_NIM_LIB_DIR}/nimbase.h")
+    mcf5407_clip(MCF5407_NIM_DUMP_OUTPUT_HEAD
+        "${MCF5407_NIM_DUMP_OUTPUT}" 400)
+    mcf5407_clip(MCF5407_NIM_DUMP_ERROR_HEAD "${MCF5407_NIM_DUMP_ERROR}" 400)
     message(FATAL_ERROR
-        "mcf5307: step 4 failed: nimbase.h was not found. Every generated C "
+        "mcf5407: step 4 failed: nimbase.h was not found. Every generated C "
         "unit includes that header.\n"
-        "  compiler       : ${MCF5307_NIM_EXECUTABLE}\n"
-        "  dump exit      : ${MCF5307_NIM_DUMP_RESULT}\n"
-        "  dump stdout    : ${MCF5307_NIM_DUMP_OUTPUT_HEAD}\n"
-        "  dump stderr    : ${MCF5307_NIM_DUMP_ERROR_HEAD}\n"
-        "  directory tried: ${MCF5307_NIM_LIB_DIR}\n"
+        "  compiler       : ${MCF5407_NIM_EXECUTABLE}\n"
+        "  dump exit      : ${MCF5407_NIM_DUMP_RESULT}\n"
+        "  dump stdout    : ${MCF5407_NIM_DUMP_OUTPUT_HEAD}\n"
+        "  dump stderr    : ${MCF5407_NIM_DUMP_ERROR_HEAD}\n"
+        "  directory tried: ${MCF5407_NIM_LIB_DIR}\n"
         "The directory comes from the compiler's own `dump` report, and a path "
         "walk from the resolved executable is the fallback. Both streams are "
         "cut to their head. The full report is one JSON line of about ten "
@@ -495,10 +495,10 @@ if(MCF5307_NIM_LIB_DIR STREQUAL ""
 endif()
 
 message(STATUS
-    "mcf5307: step 4 the Nim library directory is ${MCF5307_NIM_LIB_DIR} "
-    "(from ${MCF5307_NIM_LIB_DIR_SOURCE})")
+    "mcf5407: step 4 the Nim library directory is ${MCF5407_NIM_LIB_DIR} "
+    "(from ${MCF5407_NIM_LIB_DIR_SOURCE})")
 
-add_library(mcf5307_nim_objs OBJECT ${MCF5307_NIM_C_SOURCES})
+add_library(mcf5407_nim_objs OBJECT ${MCF5407_NIM_C_SOURCES})
 
 # The generated C is a build product and is not this project's own source. Two
 # mechanisms hold it apart from this project's warning policy.
@@ -519,11 +519,11 @@ add_library(mcf5307_nim_objs OBJECT ${MCF5307_NIM_C_SOURCES})
 #
 # `tests/tests_cpu.cmake` already compiles with `-Wall -Wextra -pedantic
 # -Werror`.
-target_include_directories(mcf5307_nim_objs SYSTEM PRIVATE
-    "${MCF5307_NIM_LIB_DIR}")
-target_compile_options(mcf5307_nim_objs PRIVATE
+target_include_directories(mcf5407_nim_objs SYSTEM PRIVATE
+    "${MCF5407_NIM_LIB_DIR}")
+target_compile_options(mcf5407_nim_objs PRIVATE
     "$<IF:$<C_COMPILER_ID:MSVC>,/WX-,-Wno-error>")
-set_target_properties(mcf5307_nim_objs PROPERTIES
+set_target_properties(mcf5407_nim_objs PROPERTIES
     C_STANDARD 11
     POSITION_INDEPENDENT_CODE ON)
 
@@ -543,16 +543,16 @@ set_target_properties(mcf5307_nim_objs PROPERTIES
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads)
 if(TARGET Threads::Threads)
-    target_link_libraries(mcf5307_nim_objs PUBLIC Threads::Threads)
+    target_link_libraries(mcf5407_nim_objs PUBLIC Threads::Threads)
 endif()
 
-message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
+message(STATUS "mcf5407: step 4 the object library mcf5407_nim_objs is defined")
 
 # ---------------------------------------------------------------------------
 # Step 4a. The visibility gate.
 #
 # The delivery form is a JUCE plugin, and a plugin is a shared object. Every
-# symbol `include/mcf5307.h` publishes must leave that shared object with
+# symbol `include/mcf5407.h` publishes must leave that shared object with
 # default visibility. Nim decides that in the pragma set of the declaration.
 # Measured on Nim 2.2.10, `{.exportc, cdecl.}` alone gives a hidden symbol, and
 # `dynlib` added to the set gives a visible one.
@@ -583,7 +583,7 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # the result and never the macro. A Nim release that renames the macros changes
 # nothing here.
 #
-# `include/mcf5307.h` is read here and never written here.
+# `include/mcf5407.h` is read here and never written here.
 
 # ---------------------------------------------------------------------------
 # The escape hatch, and why it is loud.
@@ -593,7 +593,7 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # did not find, because a check that quietly does not run is the fault this
 # whole block exists to end.
 #
-# `-DMCF5307_ABI_GATE=OFF` configures such a host. It does not turn off one
+# `-DMCF5407_ABI_GATE=OFF` configures such a host. It does not turn off one
 # check: it skips all three parts of step 4a and all nine of step 4a's own
 # controls, and the warning it prints enumerates them by name rather than
 # naming the visibility gate alone.
@@ -607,7 +607,7 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # What that test reads is the record this branch writes, not only the switch.
 # The switch is a declaration and the branch is the work, and the two come
 # apart: a tree can read `ON` out of its cache with this branch deleted, and a
-# parent list file that sets `MCF5307_ABI_GATE` as a normal variable shadows
+# parent list file that sets `MCF5407_ABI_GATE` as a normal variable shadows
 # the cache entry from its second configure onward with no edit to this
 # repository at all. So the branch below leaves a token at its end carrying
 # what it measured and how many of its sites ran, `tests/tests_cpu.cmake`
@@ -623,7 +623,7 @@ message(STATUS "mcf5307: step 4 the object library mcf5307_nim_objs is defined")
 # `t0_abi_gate_on` point at it rather than restating it, because copies of one
 # enumeration are texts nothing holds in step, and the weaker copy is the one a
 # reader meets.
-set(MCF5307_ABI_GATE ON CACHE BOOL
+set(MCF5407_ABI_GATE ON CACHE BOOL
     "Run step 4a. cmake/Nim.cmake enumerates what OFF skips")
 
 # The record step 4a leaves when it runs. `tests/tests_cpu.cmake` moves this
@@ -634,16 +634,16 @@ set(MCF5307_ABI_GATE ON CACHE BOOL
 # leaves a token nothing consumed, and without this line the next configure
 # could hand that leftover to the consumer as though its own run had produced
 # it.
-set(MCF5307_ABI_GATE_TOKEN
-    "${CMAKE_CURRENT_BINARY_DIR}/mcf5307_abi_gate_ran.token")
-file(REMOVE "${MCF5307_ABI_GATE_TOKEN}")
+set(MCF5407_ABI_GATE_TOKEN
+    "${CMAKE_CURRENT_BINARY_DIR}/mcf5407_abi_gate_ran.token")
+file(REMOVE "${MCF5407_ABI_GATE_TOKEN}")
 
-if(NOT MCF5307_ABI_GATE)
+if(NOT MCF5407_ABI_GATE)
     message(WARNING
-        "mcf5307: step 4a IS TURNED OFF. MCF5307_ABI_GATE is OFF, and this "
+        "mcf5407: step 4a IS TURNED OFF. MCF5407_ABI_GATE is OFF, and this "
         "switch does not turn off one check. IT SKIPS ALL THREE PARTS:\n"
         "  PART ONE, THE VISIBILITY GATE. Nothing in this configure run "
-        "measured whether the symbols ${MCF5307_ABI_CONTRACT_FILE} publishes "
+        "measured whether the symbols ${MCF5407_ABI_CONTRACT_FILE} publishes "
         "leave the shared object with default visibility. A published symbol "
         "that reaches the shared object hidden makes a plugin that exports "
         "nothing, and this build would not report it.\n"
@@ -662,13 +662,13 @@ if(NOT MCF5307_ABI_GATE)
         "the gate off nothing reports a gate that has stopped working "
         "either.\n"
         "THIS MESSAGE IS NOT THE ENFORCEMENT. It fails neither cmake, nor the "
-        "build, nor ctest, and MCF5307_ABI_GATE is a CACHE entry: this build "
+        "build, nor ctest, and MCF5407_ABI_GATE is a CACHE entry: this build "
         "directory reads OFF back on every later configure without the switch "
         "being named again. The registered test `t0_abi_gate_on` is what "
         "fails. In THIS state it fails on the switch, which it reads back out "
         "of CMakeCache.txt; it has a SECOND way to fail, on the absent record, "
         "which covers a tree whose branch was skipped with the switch still "
-        "reading ON. Turn the gate back on with -DMCF5307_ABI_GATE=ON.")
+        "reading ON. Turn the gate back on with -DMCF5407_ABI_GATE=ON.")
 else()
 
 # ---------------------------------------------------------------------------
@@ -687,7 +687,7 @@ else()
 # Control A runs on both reads, so the total is thirteen executions of twelve
 # sites. The increments are written at the sites and never in one place at the
 # end.
-set(MCF5307_ABI_GATE_SITES 0)
+set(MCF5407_ABI_GATE_SITES 0)
 
 # ---------------------------------------------------------------------------
 # The two tools.
@@ -702,47 +702,47 @@ set(MCF5307_ABI_GATE_SITES 0)
 # library, so the toolchain that ships it is the one that must answer.
 
 if(CMAKE_C_COMPILER_ID MATCHES "^(Clang|AppleClang)$")
-    set(MCF5307_ABI_PARSER "${CMAKE_C_COMPILER}")
-    set(MCF5307_ABI_PARSER_SOURCE "the project's own C compiler")
+    set(MCF5407_ABI_PARSER "${CMAKE_C_COMPILER}")
+    set(MCF5407_ABI_PARSER_SOURCE "the project's own C compiler")
 else()
-    find_program(MCF5307_ABI_CLANG NAMES clang clang-cl
+    find_program(MCF5407_ABI_CLANG NAMES clang clang-cl
         DOC "A Clang that prints a JSON syntax tree for step 4a")
-    if(MCF5307_ABI_CLANG)
-        set(MCF5307_ABI_PARSER "${MCF5307_ABI_CLANG}")
-        set(MCF5307_ABI_PARSER_SOURCE "a separate Clang found on this host")
+    if(MCF5407_ABI_CLANG)
+        set(MCF5407_ABI_PARSER "${MCF5407_ABI_CLANG}")
+        set(MCF5407_ABI_PARSER_SOURCE "a separate Clang found on this host")
     else()
         message(FATAL_ERROR
-            "mcf5307: step 4a failed: no Clang was found.\n"
+            "mcf5407: step 4a failed: no Clang was found.\n"
             "  project C compiler : ${CMAKE_C_COMPILER} "
             "(${CMAKE_C_COMPILER_ID})\n"
-            "The published set of ${PROJECT_SOURCE_DIR}/include/mcf5307.h is "
+            "The published set of ${PROJECT_SOURCE_DIR}/include/mcf5407.h is "
             "read from a C syntax tree, which Clang prints with "
             "`-Xclang -ast-dump=json`. A regular expression over the header "
             "text is what this step replaced, and it was wrong in both "
             "directions. Install Clang, or configure with "
-            "-DMCF5307_ABI_GATE=OFF and accept a build whose published "
+            "-DMCF5407_ABI_GATE=OFF and accept a build whose published "
             "symbols nobody measured.")
     endif()
 endif()
 
 if(CMAKE_NM)
-    set(MCF5307_ABI_NM "${CMAKE_NM}")
+    set(MCF5407_ABI_NM "${CMAKE_NM}")
 else()
-    find_program(MCF5307_ABI_NM_PROGRAM NAMES nm llvm-nm
+    find_program(MCF5407_ABI_NM_PROGRAM NAMES nm llvm-nm
         DOC "The symbol lister that reads the measurement shared object")
-    set(MCF5307_ABI_NM "${MCF5307_ABI_NM_PROGRAM}")
+    set(MCF5407_ABI_NM "${MCF5407_ABI_NM_PROGRAM}")
 endif()
-if(NOT MCF5307_ABI_NM)
+if(NOT MCF5407_ABI_NM)
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: no `nm` was found.\n"
+        "mcf5407: step 4a failed: no `nm` was found.\n"
         "The exported set is read from the symbol table of a shared object. "
         "Nothing else reports whether a published symbol left that object. "
-        "Install binutils or LLVM, or configure with -DMCF5307_ABI_GATE=OFF "
+        "Install binutils or LLVM, or configure with -DMCF5407_ABI_GATE=OFF "
         "and accept a build whose published symbols nobody measured.")
 endif()
 
-set(MCF5307_ABI_DIR "${PROJECT_BINARY_DIR}/mcf5307_abi")
-file(MAKE_DIRECTORY "${MCF5307_ABI_DIR}")
+set(MCF5407_ABI_DIR "${PROJECT_BINARY_DIR}/mcf5407_abi")
+file(MAKE_DIRECTORY "${MCF5407_ABI_DIR}")
 
 # ---------------------------------------------------------------------------
 # The reader of a published set.
@@ -765,120 +765,120 @@ file(MAKE_DIRECTORY "${MCF5307_ABI_DIR}")
 # It keeps a `FunctionDecl` and a `VarDecl`, and it keeps nothing else. A
 # `typedef`, a `struct`, a `union` and an `enum` name a type and publish no
 # symbol. A `static` declaration publishes no symbol either.
-function(mcf5307_abi_read_published
-        mcf5307_read_names mcf5307_read_sentinels mcf5307_read_unattributed
-        mcf5307_read_label mcf5307_read_header)
-    set(mcf5307_read_unit "${MCF5307_ABI_DIR}/${mcf5307_read_label}_probe.c")
-    set(mcf5307_read_tree "${MCF5307_ABI_DIR}/${mcf5307_read_label}_ast.json")
-    file(WRITE "${mcf5307_read_unit}"
+function(mcf5407_abi_read_published
+        mcf5407_read_names mcf5407_read_sentinels mcf5407_read_unattributed
+        mcf5407_read_label mcf5407_read_header)
+    set(mcf5407_read_unit "${MCF5407_ABI_DIR}/${mcf5407_read_label}_probe.c")
+    set(mcf5407_read_tree "${MCF5407_ABI_DIR}/${mcf5407_read_label}_ast.json")
+    file(WRITE "${mcf5407_read_unit}"
         "/* GENERATED by cmake/Nim.cmake step 4a. Do not edit this copy. */\n"
-        "extern int mcf5307_abi_sentinel_alpha(void);\n"
-        "#include \"${mcf5307_read_header}\"\n"
-        "extern int mcf5307_abi_sentinel_omega(void);\n")
+        "extern int mcf5407_abi_sentinel_alpha(void);\n"
+        "#include \"${mcf5407_read_header}\"\n"
+        "extern int mcf5407_abi_sentinel_omega(void);\n")
 
     execute_process(
-        COMMAND "${MCF5307_ABI_PARSER}" -std=c11 -fsyntax-only
+        COMMAND "${MCF5407_ABI_PARSER}" -std=c11 -fsyntax-only
                 "-I${PROJECT_SOURCE_DIR}/include"
-                -Xclang -ast-dump=json "${mcf5307_read_unit}"
-        OUTPUT_FILE "${mcf5307_read_tree}"
-        ERROR_VARIABLE mcf5307_read_error
-        RESULT_VARIABLE mcf5307_read_result)
-    if(NOT mcf5307_read_result EQUAL 0)
-        mcf5307_clip(mcf5307_read_error_head "${mcf5307_read_error}" 2000)
+                -Xclang -ast-dump=json "${mcf5407_read_unit}"
+        OUTPUT_FILE "${mcf5407_read_tree}"
+        ERROR_VARIABLE mcf5407_read_error
+        RESULT_VARIABLE mcf5407_read_result)
+    if(NOT mcf5407_read_result EQUAL 0)
+        mcf5407_clip(mcf5407_read_error_head "${mcf5407_read_error}" 2000)
         message(FATAL_ERROR
-            "mcf5307: step 4a failed: the parser did not read "
-            "${mcf5307_read_header}.\n"
-            "  parser : ${MCF5307_ABI_PARSER}\n"
-            "  unit   : ${mcf5307_read_unit}\n"
-            "  exit   : ${mcf5307_read_result}\n"
-            "  stderr : ${mcf5307_read_error_head}\n"
+            "mcf5407: step 4a failed: the parser did not read "
+            "${mcf5407_read_header}.\n"
+            "  parser : ${MCF5407_ABI_PARSER}\n"
+            "  unit   : ${mcf5407_read_unit}\n"
+            "  exit   : ${mcf5407_read_result}\n"
+            "  stderr : ${mcf5407_read_error_head}\n"
             "A header the C compiler refuses is a header no consumer can "
             "include, and this step reports nothing about a file it could not "
             "parse.")
     endif()
 
-    file(READ "${mcf5307_read_tree}" mcf5307_read_text)
-    string(JSON mcf5307_read_count
-        ERROR_VARIABLE mcf5307_read_json_error
-        LENGTH "${mcf5307_read_text}" inner)
-    if(NOT mcf5307_read_json_error STREQUAL "NOTFOUND")
+    file(READ "${mcf5407_read_tree}" mcf5407_read_text)
+    string(JSON mcf5407_read_count
+        ERROR_VARIABLE mcf5407_read_json_error
+        LENGTH "${mcf5407_read_text}" inner)
+    if(NOT mcf5407_read_json_error STREQUAL "NOTFOUND")
         message(FATAL_ERROR
-            "mcf5307: step 4a failed: ${mcf5307_read_tree} carries no readable "
+            "mcf5407: step 4a failed: ${mcf5407_read_tree} carries no readable "
             "`inner` array.\n"
-            "  error : ${mcf5307_read_json_error}\n"
+            "  error : ${mcf5407_read_json_error}\n"
             "That member holds the declarations of the translation unit. A "
             "Clang release that renames it needs this step read the new name.")
     endif()
 
-    set(mcf5307_read_result_names "")
-    set(mcf5307_read_result_sentinels "")
-    set(mcf5307_read_result_lost "")
-    set(mcf5307_read_file "")
-    math(EXPR mcf5307_read_last "${mcf5307_read_count} - 1")
-    foreach(mcf5307_read_index RANGE ${mcf5307_read_last})
-        string(JSON mcf5307_read_node
-            GET "${mcf5307_read_text}" inner ${mcf5307_read_index})
+    set(mcf5407_read_result_names "")
+    set(mcf5407_read_result_sentinels "")
+    set(mcf5407_read_result_lost "")
+    set(mcf5407_read_file "")
+    math(EXPR mcf5407_read_last "${mcf5407_read_count} - 1")
+    foreach(mcf5407_read_index RANGE ${mcf5407_read_last})
+        string(JSON mcf5407_read_node
+            GET "${mcf5407_read_text}" inner ${mcf5407_read_index})
 
         # The file is sticky. It is updated whenever the node carries one, and
         # it is carried forward whenever the node does not.
-        string(JSON mcf5307_read_node_file
-            ERROR_VARIABLE mcf5307_read_file_error
-            GET "${mcf5307_read_node}" loc file)
-        if(mcf5307_read_file_error STREQUAL "NOTFOUND")
-            set(mcf5307_read_file "${mcf5307_read_node_file}")
+        string(JSON mcf5407_read_node_file
+            ERROR_VARIABLE mcf5407_read_file_error
+            GET "${mcf5407_read_node}" loc file)
+        if(mcf5407_read_file_error STREQUAL "NOTFOUND")
+            set(mcf5407_read_file "${mcf5407_read_node_file}")
         endif()
 
-        string(JSON mcf5307_read_kind
-            ERROR_VARIABLE mcf5307_read_kind_error
-            GET "${mcf5307_read_node}" kind)
-        if(NOT mcf5307_read_kind_error STREQUAL "NOTFOUND")
+        string(JSON mcf5407_read_kind
+            ERROR_VARIABLE mcf5407_read_kind_error
+            GET "${mcf5407_read_node}" kind)
+        if(NOT mcf5407_read_kind_error STREQUAL "NOTFOUND")
             continue()
         endif()
-        if(NOT mcf5307_read_kind STREQUAL "FunctionDecl"
-                AND NOT mcf5307_read_kind STREQUAL "VarDecl")
+        if(NOT mcf5407_read_kind STREQUAL "FunctionDecl"
+                AND NOT mcf5407_read_kind STREQUAL "VarDecl")
             continue()
         endif()
 
         # A compiler-supplied declaration is not part of any header's contract.
-        string(JSON mcf5307_read_implicit
-            ERROR_VARIABLE mcf5307_read_implicit_error
-            GET "${mcf5307_read_node}" isImplicit)
-        if(mcf5307_read_implicit_error STREQUAL "NOTFOUND"
-                AND mcf5307_read_implicit)
+        string(JSON mcf5407_read_implicit
+            ERROR_VARIABLE mcf5407_read_implicit_error
+            GET "${mcf5407_read_node}" isImplicit)
+        if(mcf5407_read_implicit_error STREQUAL "NOTFOUND"
+                AND mcf5407_read_implicit)
             continue()
         endif()
 
         # `static` gives the name internal linkage. No consumer can reach it,
         # so it publishes nothing and the gate says nothing about it.
-        string(JSON mcf5307_read_storage
-            ERROR_VARIABLE mcf5307_read_storage_error
-            GET "${mcf5307_read_node}" storageClass)
-        if(mcf5307_read_storage_error STREQUAL "NOTFOUND"
-                AND mcf5307_read_storage STREQUAL "static")
+        string(JSON mcf5407_read_storage
+            ERROR_VARIABLE mcf5407_read_storage_error
+            GET "${mcf5407_read_node}" storageClass)
+        if(mcf5407_read_storage_error STREQUAL "NOTFOUND"
+                AND mcf5407_read_storage STREQUAL "static")
             continue()
         endif()
 
-        string(JSON mcf5307_read_name
-            ERROR_VARIABLE mcf5307_read_name_error
-            GET "${mcf5307_read_node}" name)
-        if(NOT mcf5307_read_name_error STREQUAL "NOTFOUND")
+        string(JSON mcf5407_read_name
+            ERROR_VARIABLE mcf5407_read_name_error
+            GET "${mcf5407_read_node}" name)
+        if(NOT mcf5407_read_name_error STREQUAL "NOTFOUND")
             continue()
         endif()
 
-        if(mcf5307_read_file STREQUAL "")
-            list(APPEND mcf5307_read_result_lost "${mcf5307_read_name}")
-        elseif(mcf5307_read_file STREQUAL "${mcf5307_read_header}")
-            list(APPEND mcf5307_read_result_names "${mcf5307_read_name}")
-        elseif(mcf5307_read_file STREQUAL "${mcf5307_read_unit}")
-            list(APPEND mcf5307_read_result_sentinels "${mcf5307_read_name}")
+        if(mcf5407_read_file STREQUAL "")
+            list(APPEND mcf5407_read_result_lost "${mcf5407_read_name}")
+        elseif(mcf5407_read_file STREQUAL "${mcf5407_read_header}")
+            list(APPEND mcf5407_read_result_names "${mcf5407_read_name}")
+        elseif(mcf5407_read_file STREQUAL "${mcf5407_read_unit}")
+            list(APPEND mcf5407_read_result_sentinels "${mcf5407_read_name}")
         endif()
     endforeach()
 
-    list(REMOVE_DUPLICATES mcf5307_read_result_names)
-    set(${mcf5307_read_names} "${mcf5307_read_result_names}" PARENT_SCOPE)
-    set(${mcf5307_read_sentinels} "${mcf5307_read_result_sentinels}"
+    list(REMOVE_DUPLICATES mcf5407_read_result_names)
+    set(${mcf5407_read_names} "${mcf5407_read_result_names}" PARENT_SCOPE)
+    set(${mcf5407_read_sentinels} "${mcf5407_read_result_sentinels}"
         PARENT_SCOPE)
-    set(${mcf5307_read_unattributed} "${mcf5307_read_result_lost}"
+    set(${mcf5407_read_unattributed} "${mcf5407_read_result_lost}"
         PARENT_SCOPE)
 endfunction()
 
@@ -887,26 +887,26 @@ endfunction()
 # on the contract read, so the fold is calibrated on the very read whose answer
 # is used. The expected answer is written out here, so a blind fold cannot
 # produce it.
-function(mcf5307_abi_check_sentinels mcf5307_check_label mcf5307_check_seen
-        mcf5307_check_lost)
-    set(mcf5307_check_want
-        "mcf5307_abi_sentinel_alpha;mcf5307_abi_sentinel_omega")
-    if(NOT mcf5307_check_lost STREQUAL "")
+function(mcf5407_abi_check_sentinels mcf5407_check_label mcf5407_check_seen
+        mcf5407_check_lost)
+    set(mcf5407_check_want
+        "mcf5407_abi_sentinel_alpha;mcf5407_abi_sentinel_omega")
+    if(NOT mcf5407_check_lost STREQUAL "")
         message(FATAL_ERROR
-            "mcf5307: step 4a failed: control A (${mcf5307_check_label}): a "
+            "mcf5407: step 4a failed: control A (${mcf5407_check_label}): a "
             "declaration was read and no file covers it.\n"
-            "  unattributed : ${mcf5307_check_lost}\n"
+            "  unattributed : ${mcf5407_check_lost}\n"
             "The fold carries the last file Clang printed forward. A "
             "declaration before the first printed file means the fold no "
             "longer follows the printer, and every name it sorted afterwards "
             "is in doubt.")
     endif()
-    if(NOT "${mcf5307_check_seen}" STREQUAL "${mcf5307_check_want}")
+    if(NOT "${mcf5407_check_seen}" STREQUAL "${mcf5407_check_want}")
         message(FATAL_ERROR
-            "mcf5307: step 4a failed: control A (${mcf5307_check_label}): the "
+            "mcf5407: step 4a failed: control A (${mcf5407_check_label}): the "
             "sentinels of the generated translation unit were not read back.\n"
-            "  expected : ${mcf5307_check_want}\n"
-            "  read     : ${mcf5307_check_seen}\n"
+            "  expected : ${mcf5407_check_want}\n"
+            "  read     : ${mcf5407_check_seen}\n"
             "The unit declares one sentinel before the include and one after "
             "it. A fold that gave the whole unit to the header would report "
             "neither here and both in the published set. A fold that read "
@@ -916,8 +916,8 @@ function(mcf5307_abi_check_sentinels mcf5307_check_label mcf5307_check_seen
     # Site: control A. It is inside the function, so it counts EXECUTIONS - one
     # for the calibration read and one for the contract read - and a lost call
     # site is as short as a lost control.
-    math(EXPR mcf5307_check_sites "${MCF5307_ABI_GATE_SITES} + 1")
-    set(MCF5307_ABI_GATE_SITES ${mcf5307_check_sites} PARENT_SCOPE)
+    math(EXPR mcf5407_check_sites "${MCF5407_ABI_GATE_SITES} + 1")
+    set(MCF5407_ABI_GATE_SITES ${mcf5407_check_sites} PARENT_SCOPE)
 endfunction()
 
 # ---------------------------------------------------------------------------
@@ -935,36 +935,36 @@ endfunction()
 # `nm` prints `<address> <type> <name>`, and it prints `U`, `u`, `w` or `v` in
 # the type column for a symbol the object does not define. Those four are
 # dropped and every other type is a definition.
-function(mcf5307_abi_read_symbols mcf5307_symbols_out_defined
-        mcf5307_symbols_out_exported mcf5307_symbols_object)
-    foreach(mcf5307_symbols_pass all external)
-        if(mcf5307_symbols_pass STREQUAL "external")
-            set(mcf5307_symbols_flags -g)
+function(mcf5407_abi_read_symbols mcf5407_symbols_out_defined
+        mcf5407_symbols_out_exported mcf5407_symbols_object)
+    foreach(mcf5407_symbols_pass all external)
+        if(mcf5407_symbols_pass STREQUAL "external")
+            set(mcf5407_symbols_flags -g)
         else()
-            set(mcf5307_symbols_flags "")
+            set(mcf5407_symbols_flags "")
         endif()
         execute_process(
-            COMMAND "${MCF5307_ABI_NM}" ${mcf5307_symbols_flags}
-                    "${mcf5307_symbols_object}"
-            OUTPUT_VARIABLE mcf5307_symbols_output
-            ERROR_VARIABLE mcf5307_symbols_error
-            RESULT_VARIABLE mcf5307_symbols_result)
-        if(NOT mcf5307_symbols_result EQUAL 0)
-            mcf5307_clip(mcf5307_symbols_error_head
-                "${mcf5307_symbols_error}" 2000)
+            COMMAND "${MCF5407_ABI_NM}" ${mcf5407_symbols_flags}
+                    "${mcf5407_symbols_object}"
+            OUTPUT_VARIABLE mcf5407_symbols_output
+            ERROR_VARIABLE mcf5407_symbols_error
+            RESULT_VARIABLE mcf5407_symbols_result)
+        if(NOT mcf5407_symbols_result EQUAL 0)
+            mcf5407_clip(mcf5407_symbols_error_head
+                "${mcf5407_symbols_error}" 2000)
             message(FATAL_ERROR
-                "mcf5307: step 4a failed: `${MCF5307_ABI_NM}` exited "
-                "${mcf5307_symbols_result} over "
-                "${mcf5307_symbols_object}.\n"
-                "  stderr : ${mcf5307_symbols_error_head}")
+                "mcf5407: step 4a failed: `${MCF5407_ABI_NM}` exited "
+                "${mcf5407_symbols_result} over "
+                "${mcf5407_symbols_object}.\n"
+                "  stderr : ${mcf5407_symbols_error_head}")
         endif()
-        string(REPLACE "\r" "" mcf5307_symbols_output
-            "${mcf5307_symbols_output}")
-        string(REPLACE "\n" ";" mcf5307_symbols_lines
-            "${mcf5307_symbols_output}")
-        set(mcf5307_symbols_set_${mcf5307_symbols_pass} "")
-        foreach(mcf5307_symbols_line IN LISTS mcf5307_symbols_lines)
-            if(NOT mcf5307_symbols_line MATCHES
+        string(REPLACE "\r" "" mcf5407_symbols_output
+            "${mcf5407_symbols_output}")
+        string(REPLACE "\n" ";" mcf5407_symbols_lines
+            "${mcf5407_symbols_output}")
+        set(mcf5407_symbols_set_${mcf5407_symbols_pass} "")
+        foreach(mcf5407_symbols_line IN LISTS mcf5407_symbols_lines)
+            if(NOT mcf5407_symbols_line MATCHES
                     "^[0-9a-fA-F]*[ \t]+([A-Za-z])[ \t]+([^ \t]+)[ \t]*$")
                 continue()
             endif()
@@ -972,19 +972,19 @@ function(mcf5307_abi_read_symbols mcf5307_symbols_out_defined
             # A second `MATCHES` overwrites `CMAKE_MATCH_1` and `CMAKE_MATCH_2`
             # on a hit AND clears them on a miss. Reading them afterwards gives
             # every defined symbol the empty name.
-            set(mcf5307_symbols_type "${CMAKE_MATCH_1}")
-            set(mcf5307_symbols_name "${CMAKE_MATCH_2}")
-            if(mcf5307_symbols_type MATCHES "^[Uuwv]$")
+            set(mcf5407_symbols_type "${CMAKE_MATCH_1}")
+            set(mcf5407_symbols_name "${CMAKE_MATCH_2}")
+            if(mcf5407_symbols_type MATCHES "^[Uuwv]$")
                 continue()
             endif()
-            list(APPEND mcf5307_symbols_set_${mcf5307_symbols_pass}
-                "${mcf5307_symbols_name}")
+            list(APPEND mcf5407_symbols_set_${mcf5407_symbols_pass}
+                "${mcf5407_symbols_name}")
         endforeach()
-        list(REMOVE_DUPLICATES mcf5307_symbols_set_${mcf5307_symbols_pass})
+        list(REMOVE_DUPLICATES mcf5407_symbols_set_${mcf5407_symbols_pass})
     endforeach()
-    set(${mcf5307_symbols_out_defined} "${mcf5307_symbols_set_all}"
+    set(${mcf5407_symbols_out_defined} "${mcf5407_symbols_set_all}"
         PARENT_SCOPE)
-    set(${mcf5307_symbols_out_exported} "${mcf5307_symbols_set_external}"
+    set(${mcf5407_symbols_out_exported} "${mcf5407_symbols_set_external}"
         PARENT_SCOPE)
 endfunction()
 
@@ -996,8 +996,8 @@ endfunction()
 #
 # The check runs on every configure run.
 
-set(MCF5307_ABI_CALIBRATION "${MCF5307_ABI_DIR}/calibration.h")
-file(WRITE "${MCF5307_ABI_CALIBRATION}" [==[
+set(MCF5407_ABI_CALIBRATION "${MCF5407_ABI_DIR}/calibration.h")
+file(WRITE "${MCF5407_ABI_CALIBRATION}" [==[
 /* GENERATED by cmake/Nim.cmake step 4a. Do not edit this copy in the build
  * tree. It is the calibration input of the published-set reader.
  *
@@ -1008,55 +1008,55 @@ file(WRITE "${MCF5307_ABI_CALIBRATION}" [==[
 #include <stddef.h>
 #include <stdint.h>
 
-struct mcf5307_cal_ctx* mcf5307_cal_struct_return(void);
-struct mcf5307_cal_ctx *mcf5307_cal_pointer_spacing(void);
-enum mcf5307_cal_status mcf5307_cal_enum_return(void);
-union mcf5307_cal_word mcf5307_cal_union_return(void);
-__attribute__((visibility("default"))) void mcf5307_cal_attribute(void);
-uint32_t (*mcf5307_cal_function_pointer(int idx))(void*, uint32_t);
-extern uint32_t mcf5307_cal_first_object, mcf5307_cal_second_object;
+struct mcf5407_cal_ctx* mcf5407_cal_struct_return(void);
+struct mcf5407_cal_ctx *mcf5407_cal_pointer_spacing(void);
+enum mcf5407_cal_status mcf5407_cal_enum_return(void);
+union mcf5407_cal_word mcf5407_cal_union_return(void);
+__attribute__((visibility("default"))) void mcf5407_cal_attribute(void);
+uint32_t (*mcf5407_cal_function_pointer(int idx))(void*, uint32_t);
+extern uint32_t mcf5407_cal_first_object, mcf5407_cal_second_object;
 
-typedef struct mcf5307_cal_ctx mcf5307_cal_context;
-typedef enum { MCF5307_CAL_ZERO = 0 } mcf5307_cal_enumeration;
-typedef void (*mcf5307_cal_callback)(void* user, uint32_t address);
-static inline int mcf5307_cal_internal(void) { return 0; }
+typedef struct mcf5407_cal_ctx mcf5407_cal_context;
+typedef enum { MCF5407_CAL_ZERO = 0 } mcf5407_cal_enumeration;
+typedef void (*mcf5407_cal_callback)(void* user, uint32_t address);
+static inline int mcf5407_cal_internal(void) { return 0; }
 
 /* A declaration behind a false conditional. A reader with no preprocessor
  * publishes it, and it is not published. */
 #if 0
-void mcf5307_cal_dead_branch(void);
+void mcf5407_cal_dead_branch(void);
 #endif
 ]==])
 
 # The expected answer. It is sorted, because the comparison below sorts the
 # measurement too. The order of the declarations is a property of Clang's
 # printer and it is not the property under test.
-set(MCF5307_ABI_CALIBRATION_EXPECTED
-    mcf5307_cal_attribute
-    mcf5307_cal_enum_return
-    mcf5307_cal_first_object
-    mcf5307_cal_function_pointer
-    mcf5307_cal_pointer_spacing
-    mcf5307_cal_second_object
-    mcf5307_cal_struct_return
-    mcf5307_cal_union_return)
+set(MCF5407_ABI_CALIBRATION_EXPECTED
+    mcf5407_cal_attribute
+    mcf5407_cal_enum_return
+    mcf5407_cal_first_object
+    mcf5407_cal_function_pointer
+    mcf5407_cal_pointer_spacing
+    mcf5407_cal_second_object
+    mcf5407_cal_struct_return
+    mcf5407_cal_union_return)
 
-mcf5307_abi_read_published(MCF5307_ABI_CALIBRATION_READ
-    MCF5307_ABI_CALIBRATION_SENTINELS MCF5307_ABI_CALIBRATION_LOST
-    calibration "${MCF5307_ABI_CALIBRATION}")
-mcf5307_abi_check_sentinels("the calibration header"
-    "${MCF5307_ABI_CALIBRATION_SENTINELS}" "${MCF5307_ABI_CALIBRATION_LOST}")
+mcf5407_abi_read_published(MCF5407_ABI_CALIBRATION_READ
+    MCF5407_ABI_CALIBRATION_SENTINELS MCF5407_ABI_CALIBRATION_LOST
+    calibration "${MCF5407_ABI_CALIBRATION}")
+mcf5407_abi_check_sentinels("the calibration header"
+    "${MCF5407_ABI_CALIBRATION_SENTINELS}" "${MCF5407_ABI_CALIBRATION_LOST}")
 
-set(MCF5307_ABI_CALIBRATION_SORTED ${MCF5307_ABI_CALIBRATION_READ})
-list(SORT MCF5307_ABI_CALIBRATION_SORTED)
-if(NOT "${MCF5307_ABI_CALIBRATION_SORTED}" STREQUAL
-        "${MCF5307_ABI_CALIBRATION_EXPECTED}")
+set(MCF5407_ABI_CALIBRATION_SORTED ${MCF5407_ABI_CALIBRATION_READ})
+list(SORT MCF5407_ABI_CALIBRATION_SORTED)
+if(NOT "${MCF5407_ABI_CALIBRATION_SORTED}" STREQUAL
+        "${MCF5407_ABI_CALIBRATION_EXPECTED}")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control B: the published-set reader did not "
+        "mcf5407: step 4a failed: control B: the published-set reader did not "
         "read the calibration header correctly.\n"
-        "  header   : ${MCF5307_ABI_CALIBRATION}\n"
-        "  expected : ${MCF5307_ABI_CALIBRATION_EXPECTED}\n"
-        "  read     : ${MCF5307_ABI_CALIBRATION_SORTED}\n"
+        "  header   : ${MCF5407_ABI_CALIBRATION}\n"
+        "  expected : ${MCF5407_ABI_CALIBRATION_EXPECTED}\n"
+        "  read     : ${MCF5407_ABI_CALIBRATION_SORTED}\n"
         "That header carries a `struct`, a `union` and an `enum` return type, "
         "a pointer return written both ways, a GNU attribute in front of a "
         "declaration, a function that returns a function pointer, two "
@@ -1067,37 +1067,37 @@ if(NOT "${MCF5307_ABI_CALIBRATION_SORTED}" STREQUAL
 endif()
 
 message(STATUS
-    "mcf5307: step 4a control B the published-set reader answered the "
+    "mcf5407: step 4a control B the published-set reader answered the "
     "calibration header exactly (8 of 8 shapes, 5 negatives)")
-math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control B
+math(EXPR MCF5407_ABI_GATE_SITES "${MCF5407_ABI_GATE_SITES} + 1") # site: control B
 
 # ---------------------------------------------------------------------------
 # The published set. It comes from the contract header, through the same
-# reader and the same per-read control. `MCF5307_ABI_CONTRACT_FILE` is set
+# reader and the same per-read control. `MCF5407_ABI_CONTRACT_FILE` is set
 # beside the configure-time dependency list above, so the file this step reads
 # and the file that re-runs this step are one name.
 
-if(NOT EXISTS "${MCF5307_ABI_CONTRACT_FILE}")
+if(NOT EXISTS "${MCF5407_ABI_CONTRACT_FILE}")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: ${MCF5307_ABI_CONTRACT_FILE} does not exist. "
+        "mcf5407: step 4a failed: ${MCF5407_ABI_CONTRACT_FILE} does not exist. "
         "That header is the published set of this library, and the gate reads "
         "its names from there.")
 endif()
 
-mcf5307_abi_read_published(MCF5307_ABI_PUBLISHED MCF5307_ABI_SENTINELS
-    MCF5307_ABI_LOST contract "${MCF5307_ABI_CONTRACT_FILE}")
-mcf5307_abi_check_sentinels("the contract header"
-    "${MCF5307_ABI_SENTINELS}" "${MCF5307_ABI_LOST}")
+mcf5407_abi_read_published(MCF5407_ABI_PUBLISHED MCF5407_ABI_SENTINELS
+    MCF5407_ABI_LOST contract "${MCF5407_ABI_CONTRACT_FILE}")
+mcf5407_abi_check_sentinels("the contract header"
+    "${MCF5407_ABI_SENTINELS}" "${MCF5407_ABI_LOST}")
 
-if(MCF5307_ABI_PUBLISHED STREQUAL "")
+if(MCF5407_ABI_PUBLISHED STREQUAL "")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control C: ${MCF5307_ABI_CONTRACT_FILE} "
+        "mcf5407: step 4a failed: control C: ${MCF5407_ABI_CONTRACT_FILE} "
         "publishes no symbol at all.\n"
-        "This project publishes at least `mcf5307_runtime_init`. An empty "
+        "This project publishes at least `mcf5407_runtime_init`. An empty "
         "published set makes every verdict below it vacuous, and silence is "
         "not a pass.")
 endif()
-math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control C
+math(EXPR MCF5407_ABI_GATE_SITES "${MCF5407_ABI_GATE_SITES} + 1") # site: control C
 
 # ---------------------------------------------------------------------------
 # The measurement shared object.
@@ -1116,63 +1116,63 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: contro
 # THIS object and not into a separate one, so the calibration is a statement
 # about the artifact the verdict is read from.
 
-set(MCF5307_ABI_PROBE_SOURCE "${MCF5307_ABI_DIR}/visibility_probe.c")
-file(WRITE "${MCF5307_ABI_PROBE_SOURCE}" [==[
+set(MCF5407_ABI_PROBE_SOURCE "${MCF5407_ABI_DIR}/visibility_probe.c")
+file(WRITE "${MCF5407_ABI_PROBE_SOURCE}" [==[
 /* GENERATED by cmake/Nim.cmake step 4a. Do not edit this copy in the build
  * tree. It calibrates the symbol reader on the object the verdict is read
  * from.
  *
- * `mcf5307_abi_probe_visible` must be defined AND exported.
- * `mcf5307_abi_probe_hidden`  must be defined AND NOT exported.
- * `mcf5307_abi_probe_absent`  is defined nowhere and must be in neither set.
+ * `mcf5407_abi_probe_visible` must be defined AND exported.
+ * `mcf5407_abi_probe_hidden`  must be defined AND NOT exported.
+ * `mcf5407_abi_probe_absent`  is defined nowhere and must be in neither set.
  *
  * The three answers together prove that the reader separates the three
  * outcomes the verdict below depends on. */
-__attribute__((visibility("default"))) void mcf5307_abi_probe_visible(void) {}
-__attribute__((visibility("hidden"))) void mcf5307_abi_probe_hidden(void) {}
+__attribute__((visibility("default"))) void mcf5407_abi_probe_visible(void) {}
+__attribute__((visibility("hidden"))) void mcf5407_abi_probe_hidden(void) {}
 ]==])
 
-set(MCF5307_ABI_OBJECT
-    "${MCF5307_ABI_DIR}/libmcf5307_abi_measure${CMAKE_SHARED_LIBRARY_SUFFIX}")
+set(MCF5407_ABI_OBJECT
+    "${MCF5407_ABI_DIR}/libmcf5407_abi_measure${CMAKE_SHARED_LIBRARY_SUFFIX}")
 
 # Both variables hold a command fragment as ONE string with spaces in it, and
 # not a CMake list. `${VAR}` inside a COMMAND would pass the whole fragment as
 # a single argument. `separate_arguments` splits it the way a shell would.
-separate_arguments(MCF5307_ABI_SHARED_FLAGS NATIVE_COMMAND
+separate_arguments(MCF5407_ABI_SHARED_FLAGS NATIVE_COMMAND
     "${CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS}")
-separate_arguments(MCF5307_ABI_PIC_FLAGS NATIVE_COMMAND
+separate_arguments(MCF5407_ABI_PIC_FLAGS NATIVE_COMMAND
     "${CMAKE_C_COMPILE_OPTIONS_PIC}")
 
 execute_process(
     COMMAND "${CMAKE_C_COMPILER}"
-            ${MCF5307_ABI_SHARED_FLAGS}
-            ${MCF5307_ABI_PIC_FLAGS}
+            ${MCF5407_ABI_SHARED_FLAGS}
+            ${MCF5407_ABI_PIC_FLAGS}
             -std=c11
-            "-isystem" "${MCF5307_NIM_LIB_DIR}"
-            -o "${MCF5307_ABI_OBJECT}"
-            ${MCF5307_NIM_C_SOURCES}
-            "${MCF5307_ABI_PROBE_SOURCE}"
-    OUTPUT_VARIABLE MCF5307_ABI_LINK_OUTPUT
-    ERROR_VARIABLE MCF5307_ABI_LINK_ERROR
-    RESULT_VARIABLE MCF5307_ABI_LINK_RESULT)
+            "-isystem" "${MCF5407_NIM_LIB_DIR}"
+            -o "${MCF5407_ABI_OBJECT}"
+            ${MCF5407_NIM_C_SOURCES}
+            "${MCF5407_ABI_PROBE_SOURCE}"
+    OUTPUT_VARIABLE MCF5407_ABI_LINK_OUTPUT
+    ERROR_VARIABLE MCF5407_ABI_LINK_ERROR
+    RESULT_VARIABLE MCF5407_ABI_LINK_RESULT)
 
-if(NOT MCF5307_ABI_LINK_RESULT EQUAL 0)
-    mcf5307_clip(MCF5307_ABI_LINK_OUTPUT_HEAD "${MCF5307_ABI_LINK_OUTPUT}" 2000)
-    mcf5307_clip(MCF5307_ABI_LINK_ERROR_HEAD "${MCF5307_ABI_LINK_ERROR}" 2000)
+if(NOT MCF5407_ABI_LINK_RESULT EQUAL 0)
+    mcf5407_clip(MCF5407_ABI_LINK_OUTPUT_HEAD "${MCF5407_ABI_LINK_OUTPUT}" 2000)
+    mcf5407_clip(MCF5407_ABI_LINK_ERROR_HEAD "${MCF5407_ABI_LINK_ERROR}" 2000)
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: the measurement shared object did not "
+        "mcf5407: step 4a failed: the measurement shared object did not "
         "build.\n"
         "  compiler : ${CMAKE_C_COMPILER}\n"
-        "  object   : ${MCF5307_ABI_OBJECT}\n"
-        "  exit     : ${MCF5307_ABI_LINK_RESULT}\n"
-        "  stdout   : ${MCF5307_ABI_LINK_OUTPUT_HEAD}\n"
-        "  stderr   : ${MCF5307_ABI_LINK_ERROR_HEAD}\n"
+        "  object   : ${MCF5407_ABI_OBJECT}\n"
+        "  exit     : ${MCF5407_ABI_LINK_RESULT}\n"
+        "  stdout   : ${MCF5407_ABI_LINK_OUTPUT_HEAD}\n"
+        "  stderr   : ${MCF5407_ABI_LINK_ERROR_HEAD}\n"
         "The delivery form is a shared object, so the gate builds one and "
         "reads its symbol table. Without it nothing here measures visibility.")
 endif()
 
-mcf5307_abi_read_symbols(MCF5307_ABI_DEFINED_RAW MCF5307_ABI_EXPORTED_RAW
-    "${MCF5307_ABI_OBJECT}")
+mcf5407_abi_read_symbols(MCF5407_ABI_DEFINED_RAW MCF5407_ABI_EXPORTED_RAW
+    "${MCF5407_ABI_OBJECT}")
 
 # ---------------------------------------------------------------------------
 # Control D. The symbol reader, calibrated on the object it just read.
@@ -1180,20 +1180,20 @@ mcf5307_abi_read_symbols(MCF5307_ABI_DEFINED_RAW MCF5307_ABI_EXPORTED_RAW
 # The visible probe also measures the platform's symbol prefix. Mach-O puts one
 # underscore in front of every C name and ELF puts none. The prefix is read off
 # a name this file wrote, and it is never assumed.
-set(MCF5307_ABI_PREFIX "")
-set(MCF5307_ABI_PREFIX_FOUND FALSE)
-foreach(name IN LISTS MCF5307_ABI_EXPORTED_RAW)
-    if(name MATCHES "^(_*)mcf5307_abi_probe_visible$")
-        set(MCF5307_ABI_PREFIX "${CMAKE_MATCH_1}")
-        set(MCF5307_ABI_PREFIX_FOUND TRUE)
+set(MCF5407_ABI_PREFIX "")
+set(MCF5407_ABI_PREFIX_FOUND FALSE)
+foreach(name IN LISTS MCF5407_ABI_EXPORTED_RAW)
+    if(name MATCHES "^(_*)mcf5407_abi_probe_visible$")
+        set(MCF5407_ABI_PREFIX "${CMAKE_MATCH_1}")
+        set(MCF5407_ABI_PREFIX_FOUND TRUE)
     endif()
 endforeach()
-if(NOT MCF5307_ABI_PREFIX_FOUND)
+if(NOT MCF5407_ABI_PREFIX_FOUND)
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control D: the probe symbol "
-        "`mcf5307_abi_probe_visible` is not among the exported symbols of "
-        "${MCF5307_ABI_OBJECT}.\n"
-        "  exported : ${MCF5307_ABI_EXPORTED_RAW}\n"
+        "mcf5407: step 4a failed: control D: the probe symbol "
+        "`mcf5407_abi_probe_visible` is not among the exported symbols of "
+        "${MCF5407_ABI_OBJECT}.\n"
+        "  exported : ${MCF5407_ABI_EXPORTED_RAW}\n"
         "That probe carries `visibility(\"default\")` and this file compiled "
         "it into that object. A reader that cannot find it read the wrong "
         "file, read nothing, or cannot see an exported symbol at all. Every "
@@ -1201,59 +1201,59 @@ if(NOT MCF5307_ABI_PREFIX_FOUND)
         "verdict would be unearned.")
 endif()
 
-function(mcf5307_abi_strip mcf5307_strip_output)
-    set(mcf5307_strip_result "")
-    foreach(mcf5307_strip_name IN LISTS ARGN)
-        if(NOT MCF5307_ABI_PREFIX STREQUAL "")
-            string(REGEX REPLACE "^${MCF5307_ABI_PREFIX}" ""
-                mcf5307_strip_name "${mcf5307_strip_name}")
+function(mcf5407_abi_strip mcf5407_strip_output)
+    set(mcf5407_strip_result "")
+    foreach(mcf5407_strip_name IN LISTS ARGN)
+        if(NOT MCF5407_ABI_PREFIX STREQUAL "")
+            string(REGEX REPLACE "^${MCF5407_ABI_PREFIX}" ""
+                mcf5407_strip_name "${mcf5407_strip_name}")
         endif()
-        list(APPEND mcf5307_strip_result "${mcf5307_strip_name}")
+        list(APPEND mcf5407_strip_result "${mcf5407_strip_name}")
     endforeach()
-    set(${mcf5307_strip_output} "${mcf5307_strip_result}" PARENT_SCOPE)
+    set(${mcf5407_strip_output} "${mcf5407_strip_result}" PARENT_SCOPE)
 endfunction()
 
-mcf5307_abi_strip(MCF5307_ABI_DEFINED ${MCF5307_ABI_DEFINED_RAW})
-mcf5307_abi_strip(MCF5307_ABI_EXPORTED ${MCF5307_ABI_EXPORTED_RAW})
+mcf5407_abi_strip(MCF5407_ABI_DEFINED ${MCF5407_ABI_DEFINED_RAW})
+mcf5407_abi_strip(MCF5407_ABI_EXPORTED ${MCF5407_ABI_EXPORTED_RAW})
 
-if(NOT "mcf5307_abi_probe_hidden" IN_LIST MCF5307_ABI_DEFINED)
+if(NOT "mcf5407_abi_probe_hidden" IN_LIST MCF5407_ABI_DEFINED)
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control D: the probe symbol "
-        "`mcf5307_abi_probe_hidden` is not among the DEFINED symbols of "
-        "${MCF5307_ABI_OBJECT}.\n"
-        "  defined : ${MCF5307_ABI_DEFINED}\n"
+        "mcf5407: step 4a failed: control D: the probe symbol "
+        "`mcf5407_abi_probe_hidden` is not among the DEFINED symbols of "
+        "${MCF5407_ABI_OBJECT}.\n"
+        "  defined : ${MCF5407_ABI_DEFINED}\n"
         "This file compiled a definition of it into that object. A reader "
         "that cannot see a hidden definition cannot separate `hidden` from "
         "`not implemented yet`, and it would report every hidden symbol as an "
         "unwritten one. That is the report the gate must never give.")
 endif()
 
-if("mcf5307_abi_probe_hidden" IN_LIST MCF5307_ABI_EXPORTED)
+if("mcf5407_abi_probe_hidden" IN_LIST MCF5407_ABI_EXPORTED)
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control D: the probe symbol "
-        "`mcf5307_abi_probe_hidden` is among the EXPORTED symbols of "
-        "${MCF5307_ABI_OBJECT}.\n"
-        "  exported : ${MCF5307_ABI_EXPORTED}\n"
+        "mcf5407: step 4a failed: control D: the probe symbol "
+        "`mcf5407_abi_probe_hidden` is among the EXPORTED symbols of "
+        "${MCF5407_ABI_OBJECT}.\n"
+        "  exported : ${MCF5407_ABI_EXPORTED}\n"
         "It carries `visibility(\"hidden\")`. A reader that calls it exported "
         "calls every hidden symbol exported, and the whole gate then passes "
         "whatever it is given.")
 endif()
 
-if("mcf5307_abi_probe_absent" IN_LIST MCF5307_ABI_DEFINED
-        OR "mcf5307_abi_probe_absent" IN_LIST MCF5307_ABI_EXPORTED)
+if("mcf5407_abi_probe_absent" IN_LIST MCF5407_ABI_DEFINED
+        OR "mcf5407_abi_probe_absent" IN_LIST MCF5407_ABI_EXPORTED)
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control D: the name "
-        "`mcf5307_abi_probe_absent` was read out of ${MCF5307_ABI_OBJECT}.\n"
+        "mcf5407: step 4a failed: control D: the name "
+        "`mcf5407_abi_probe_absent` was read out of ${MCF5407_ABI_OBJECT}.\n"
         "Nothing defines it anywhere in this project. A reader that reports it "
         "reports names the object does not hold, and its `visible` verdicts "
         "are then worth nothing.")
 endif()
 
 message(STATUS
-    "mcf5307: step 4a control D the symbol reader separated visible, hidden "
-    "and absent on ${MCF5307_ABI_OBJECT} (symbol prefix: "
-    "`${MCF5307_ABI_PREFIX}`)")
-math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control D
+    "mcf5407: step 4a control D the symbol reader separated visible, hidden "
+    "and absent on ${MCF5407_ABI_OBJECT} (symbol prefix: "
+    "`${MCF5407_ABI_PREFIX}`)")
+math(EXPR MCF5407_ABI_GATE_SITES "${MCF5407_ABI_GATE_SITES} + 1") # site: control D
 
 # ---------------------------------------------------------------------------
 # The Nim runtime scaffolding.
@@ -1261,17 +1261,17 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: contro
 # Those names belong to the Nim runtime under `--nimMainPrefix:`. The contract
 # does not declare them, and the undeclared-export check below would otherwise
 # stop over them. They are reported instead.
-set(MCF5307_ABI_SCAFFOLDING "")
+set(MCF5407_ABI_SCAFFOLDING "")
 foreach(suffix
         NimMain NimMainInner NimMainModule
         PreMain PreMainInner NimDestroyGlobals)
-    list(APPEND MCF5307_ABI_SCAFFOLDING "${MCF5307_NIM_BUILT_PREFIX}${suffix}")
+    list(APPEND MCF5407_ABI_SCAFFOLDING "${MCF5407_NIM_BUILT_PREFIX}${suffix}")
 endforeach()
 
 # The two probe names are this file's own instrument. They are in the
 # measurement object and they are in no shipped artifact.
-set(MCF5307_ABI_INSTRUMENT
-    mcf5307_abi_probe_visible mcf5307_abi_probe_hidden)
+set(MCF5407_ABI_INSTRUMENT
+    mcf5407_abi_probe_visible mcf5407_abi_probe_hidden)
 
 # The section boundaries a linker script defines, not this project.
 #
@@ -1286,12 +1286,12 @@ set(MCF5307_ABI_INSTRUMENT
 # host where the names do not appear - which is every host today. It exempts
 # by name and not by origin, so a name this project exported itself as `end`,
 # `edata` or `etext` would pass here unreported. Every other exported name of
-# this project is `mcf5307_`-prefixed, and that is the whole of the margin.
+# this project is `mcf5407_`-prefixed, and that is the whole of the margin.
 #
 # The comparison is against the prefix-stripped set, so a Mach-O `_edata`
 # would arrive as `edata`. Mach-O supplies none of these, so that path is
 # reasoned, not measured.
-set(MCF5307_ABI_LINKER_PROVIDED
+set(MCF5407_ABI_LINKER_PROVIDED
     __bss_end__ __bss_start __bss_start__ __data_start __end__ __etext
     _bss_end__ _edata _end _etext edata end etext)
 
@@ -1308,35 +1308,35 @@ set(MCF5307_ABI_LINKER_PROVIDED
 # written yet` and `the reader could not see it` must never share a line. The
 # `defined` set is what separates them.
 
-set(MCF5307_ABI_VISIBLE "")
-set(MCF5307_ABI_HIDDEN "")
-set(MCF5307_ABI_UNIMPLEMENTED "")
-foreach(name IN LISTS MCF5307_ABI_PUBLISHED)
-    if(NOT name IN_LIST MCF5307_ABI_DEFINED)
-        list(APPEND MCF5307_ABI_UNIMPLEMENTED "${name}")
-    elseif(name IN_LIST MCF5307_ABI_EXPORTED)
-        list(APPEND MCF5307_ABI_VISIBLE "${name}")
+set(MCF5407_ABI_VISIBLE "")
+set(MCF5407_ABI_HIDDEN "")
+set(MCF5407_ABI_UNIMPLEMENTED "")
+foreach(name IN LISTS MCF5407_ABI_PUBLISHED)
+    if(NOT name IN_LIST MCF5407_ABI_DEFINED)
+        list(APPEND MCF5407_ABI_UNIMPLEMENTED "${name}")
+    elseif(name IN_LIST MCF5407_ABI_EXPORTED)
+        list(APPEND MCF5407_ABI_VISIBLE "${name}")
     else()
-        list(APPEND MCF5307_ABI_HIDDEN "${name}")
+        list(APPEND MCF5407_ABI_HIDDEN "${name}")
     endif()
 endforeach()
 
-if(NOT MCF5307_ABI_HIDDEN STREQUAL "")
+if(NOT MCF5407_ABI_HIDDEN STREQUAL "")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: ${MCF5307_ABI_CONTRACT_FILE} publishes a "
+        "mcf5407: step 4a failed: ${MCF5407_ABI_CONTRACT_FILE} publishes a "
         "symbol that the shared object DEFINES AND DOES NOT EXPORT.\n"
-        "  hidden          : ${MCF5307_ABI_HIDDEN}\n"
-        "  visible         : ${MCF5307_ABI_VISIBLE}\n"
-        "  measured object : ${MCF5307_ABI_OBJECT}\n"
-        "  symbol lister   : ${MCF5307_ABI_NM}\n"
+        "  hidden          : ${MCF5407_ABI_HIDDEN}\n"
+        "  visible         : ${MCF5407_ABI_VISIBLE}\n"
+        "  measured object : ${MCF5407_ABI_OBJECT}\n"
+        "  symbol lister   : ${MCF5407_ABI_NM}\n"
         "A consumer of the plugin cannot reach a name that is not exported. "
         "The static archive still builds and `nm` over the archive still "
         "reports the name, so this step is the only one that reports the "
         "fault.\n"
-        "THE USUAL CAUSE IS A PRAGMA SET WITHOUT `dynlib`. `src/mcf5307.nim` "
-        "defines `mcf5307Abi` as `cdecl, dynlib` together for exactly this "
+        "THE USUAL CAUSE IS A PRAGMA SET WITHOUT `dynlib`. `src/mcf5407.nim` "
+        "defines `mcf5407Abi` as `cdecl, dynlib` together for exactly this "
         "reason. A procedure declared `{.exportc: \"<c name>\", cdecl.}` "
-        "alone is hidden. Write `{.exportc: \"<c name>\", mcf5307Abi.}` "
+        "alone is hidden. Write `{.exportc: \"<c name>\", mcf5407Abi.}` "
         "instead. An exported VARIABLE needs `{.exportc: \"<c name>\", "
         "dynlib.}`.")
 endif()
@@ -1345,24 +1345,24 @@ endif()
 # The other direction. An exported name the contract does not declare.
 #
 # A consumer cannot call a symbol it cannot declare. This check also constrains
-# this project: no new exported symbol can be added in `src/mcf5307.nim` until
-# `include/mcf5307.h` declares it, because this step refuses an export the
+# this project: no new exported symbol can be added in `src/mcf5407.nim` until
+# `include/mcf5407.h` declares it, because this step refuses an export the
 # contract does not carry.
-set(MCF5307_ABI_UNDECLARED "")
-foreach(name IN LISTS MCF5307_ABI_EXPORTED)
-    if(name IN_LIST MCF5307_ABI_PUBLISHED
-            OR name IN_LIST MCF5307_ABI_SCAFFOLDING
-            OR name IN_LIST MCF5307_ABI_INSTRUMENT
-            OR name IN_LIST MCF5307_ABI_LINKER_PROVIDED)
+set(MCF5407_ABI_UNDECLARED "")
+foreach(name IN LISTS MCF5407_ABI_EXPORTED)
+    if(name IN_LIST MCF5407_ABI_PUBLISHED
+            OR name IN_LIST MCF5407_ABI_SCAFFOLDING
+            OR name IN_LIST MCF5407_ABI_INSTRUMENT
+            OR name IN_LIST MCF5407_ABI_LINKER_PROVIDED)
         continue()
     endif()
-    list(APPEND MCF5307_ABI_UNDECLARED "${name}")
+    list(APPEND MCF5407_ABI_UNDECLARED "${name}")
 endforeach()
-if(NOT MCF5307_ABI_UNDECLARED STREQUAL "")
+if(NOT MCF5407_ABI_UNDECLARED STREQUAL "")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: the shared object exports a name that "
-        "${MCF5307_ABI_CONTRACT_FILE} does not declare.\n"
-        "  undeclared : ${MCF5307_ABI_UNDECLARED}\n"
+        "mcf5407: step 4a failed: the shared object exports a name that "
+        "${MCF5407_ABI_CONTRACT_FILE} does not declare.\n"
+        "  undeclared : ${MCF5407_ABI_UNDECLARED}\n"
         "Either the contract lost the declaration, or this project exported "
         "something the contract never promised. A symbol a consumer cannot "
         "declare is a symbol a consumer cannot call.")
@@ -1371,41 +1371,41 @@ endif()
 # ---------------------------------------------------------------------------
 # The report.
 
-list(LENGTH MCF5307_ABI_PUBLISHED MCF5307_ABI_PUBLISHED_COUNT)
-list(LENGTH MCF5307_ABI_VISIBLE MCF5307_ABI_VISIBLE_COUNT)
-list(LENGTH MCF5307_ABI_UNIMPLEMENTED MCF5307_ABI_UNIMPLEMENTED_COUNT)
+list(LENGTH MCF5407_ABI_PUBLISHED MCF5407_ABI_PUBLISHED_COUNT)
+list(LENGTH MCF5407_ABI_VISIBLE MCF5407_ABI_VISIBLE_COUNT)
+list(LENGTH MCF5407_ABI_UNIMPLEMENTED MCF5407_ABI_UNIMPLEMENTED_COUNT)
 
 message(STATUS
-    "mcf5307: step 4a ${MCF5307_ABI_CONTRACT_FILE} publishes "
-    "${MCF5307_ABI_PUBLISHED_COUNT} symbol(s), read by ${MCF5307_ABI_PARSER} "
-    "(${MCF5307_ABI_PARSER_SOURCE})")
+    "mcf5407: step 4a ${MCF5407_ABI_CONTRACT_FILE} publishes "
+    "${MCF5407_ABI_PUBLISHED_COUNT} symbol(s), read by ${MCF5407_ABI_PARSER} "
+    "(${MCF5407_ABI_PARSER_SOURCE})")
 message(STATUS
-    "mcf5307: step 4a ${MCF5307_ABI_VISIBLE_COUNT} of them are DEFINED AND "
-    "EXPORTED by the measurement shared object: ${MCF5307_ABI_VISIBLE}")
+    "mcf5407: step 4a ${MCF5407_ABI_VISIBLE_COUNT} of them are DEFINED AND "
+    "EXPORTED by the measurement shared object: ${MCF5407_ABI_VISIBLE}")
 message(STATUS
-    "mcf5307: step 4a ${MCF5307_ABI_UNIMPLEMENTED_COUNT} of them are NOT YET "
+    "mcf5407: step 4a ${MCF5407_ABI_UNIMPLEMENTED_COUNT} of them are NOT YET "
     "IMPLEMENTED. No compilation unit defines them, and a later cpu task "
-    "writes them: ${MCF5307_ABI_UNIMPLEMENTED}")
+    "writes them: ${MCF5407_ABI_UNIMPLEMENTED}")
 
 # The scaffolding report. C++ never calls the runtime entry point directly.
-# `include/mcf5307.h` does not declare it, and that is the whole barrier. This
+# `include/mcf5407.h` does not declare it, and that is the whole barrier. This
 # line prints what the shared object actually exports, so the fact sits in the
 # configure log rather than nowhere. A mechanism would be a linker export list,
 # and that belongs to the build that makes the shipped shared object.
-set(MCF5307_ABI_REACHABLE "")
-foreach(name IN LISTS MCF5307_ABI_SCAFFOLDING)
-    if(name IN_LIST MCF5307_ABI_EXPORTED)
-        list(APPEND MCF5307_ABI_REACHABLE "${name}")
+set(MCF5407_ABI_REACHABLE "")
+foreach(name IN LISTS MCF5407_ABI_SCAFFOLDING)
+    if(name IN_LIST MCF5407_ABI_EXPORTED)
+        list(APPEND MCF5407_ABI_REACHABLE "${name}")
     endif()
 endforeach()
-if(NOT MCF5307_ABI_REACHABLE STREQUAL "")
+if(NOT MCF5407_ABI_REACHABLE STREQUAL "")
     message(STATUS
-        "mcf5307: step 4a NOTE: the runtime scaffolding a consumer can reach: "
-        "${MCF5307_ABI_REACHABLE}. A C++ consumer must not "
+        "mcf5407: step 4a NOTE: the runtime scaffolding a consumer can reach: "
+        "${MCF5407_ABI_REACHABLE}. A C++ consumer must not "
         "call it, the contract header does not declare it, and no mechanism "
         "here enforces that. This line is a report and not a check.")
 endif()
-math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part one
+math(EXPR MCF5407_ABI_GATE_SITES "${MCF5407_ABI_GATE_SITES} + 1") # site: part one
 
 # ---------------------------------------------------------------------------
 # Step 4a, part two. The smoke-test list gate.
@@ -1413,7 +1413,7 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part o
 # Two mechanisms, wired together, because each one alone fails silently.
 #
 #   The measured set is the fact. `tests/tests_cpu.cmake` generates the
-#   address set of `tests/abi_smoke.cpp` from `MCF5307_ABI_VISIBLE`, the set
+#   address set of `tests/abi_smoke.cpp` from `MCF5407_ABI_VISIBLE`, the set
 #   this step measured as defined and exported by the library. That is what
 #   makes the test buildable at all: most of the published surface has no
 #   definition yet, and taking the address of an undefined name is an
@@ -1450,7 +1450,7 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part o
 #
 # The whole published set has its own committed two-way roster, and it is not
 # this file. `tests/abi_stub.c` must define externally exactly the set
-# `include/mcf5307.h` declares, and part three below fails in both directions
+# `include/mcf5407.h` declares, and part three below fails in both directions
 # over it.
 #
 # The list is read and the test's C++ is not. `tests/abi_smoke_symbols.inc`
@@ -1458,7 +1458,7 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part o
 # reader below needs no C parser and no preprocessor. That is the whole reason
 # the list is a separate file. The grammar is total: every line lands in
 # exactly one of those three shapes or fails the configure step with its line
-# number. A line that carries `MCF5307_ABI_FN` in a shape the C++ side would
+# number. A line that carries `MCF5407_ABI_FN` in a shape the C++ side would
 # expand but this reader would not - a leading space, a trailing comment, a
 # semicolon - is a failure and never a skip.
 #
@@ -1473,31 +1473,31 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part o
 # two-way comparison may not be read by guesswork.
 #
 # When the gate is off this check does not run, because there is no measured
-# set to compare against. The warning that `-DMCF5307_ABI_GATE=OFF` prints
+# set to compare against. The warning that `-DMCF5407_ABI_GATE=OFF` prints
 # already says the configure run measured nothing.
 
-if(NOT EXISTS "${MCF5307_ABI_SMOKE_LIST_FILE}")
+if(NOT EXISTS "${MCF5407_ABI_SMOKE_LIST_FILE}")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: ${MCF5307_ABI_SMOKE_LIST_FILE} does not "
+        "mcf5407: step 4a failed: ${MCF5407_ABI_SMOKE_LIST_FILE} does not "
         "exist. That file is the symbol list of `tests/abi_smoke.cpp`, the "
         "test includes it twice, and this step compares it against the "
-        "published set of ${MCF5307_ABI_CONTRACT_FILE}.")
+        "published set of ${MCF5407_ABI_CONTRACT_FILE}.")
 endif()
 
-file(READ "${MCF5307_ABI_SMOKE_LIST_FILE}" MCF5307_ABI_SMOKE_TEXT)
-string(REPLACE "\r" "" MCF5307_ABI_SMOKE_TEXT "${MCF5307_ABI_SMOKE_TEXT}")
+file(READ "${MCF5407_ABI_SMOKE_LIST_FILE}" MCF5407_ABI_SMOKE_TEXT)
+string(REPLACE "\r" "" MCF5407_ABI_SMOKE_TEXT "${MCF5407_ABI_SMOKE_TEXT}")
 # A semicolon in the text would split one line into two list elements and the
 # line numbers below would drift. Escaping it keeps every line one element.
-string(REPLACE ";" "\\;" MCF5307_ABI_SMOKE_TEXT "${MCF5307_ABI_SMOKE_TEXT}")
-string(REPLACE "\n" ";" MCF5307_ABI_SMOKE_LINES "${MCF5307_ABI_SMOKE_TEXT}")
+string(REPLACE ";" "\\;" MCF5407_ABI_SMOKE_TEXT "${MCF5407_ABI_SMOKE_TEXT}")
+string(REPLACE "\n" ";" MCF5407_ABI_SMOKE_LINES "${MCF5407_ABI_SMOKE_TEXT}")
 
-set(MCF5307_ABI_SMOKE_NAMES "")
-set(MCF5307_ABI_SMOKE_LINE_NUMBER 0)
-foreach(MCF5307_ABI_SMOKE_LINE IN LISTS MCF5307_ABI_SMOKE_LINES)
-    math(EXPR MCF5307_ABI_SMOKE_LINE_NUMBER
-        "${MCF5307_ABI_SMOKE_LINE_NUMBER} + 1")
+set(MCF5407_ABI_SMOKE_NAMES "")
+set(MCF5407_ABI_SMOKE_LINE_NUMBER 0)
+foreach(MCF5407_ABI_SMOKE_LINE IN LISTS MCF5407_ABI_SMOKE_LINES)
+    math(EXPR MCF5407_ABI_SMOKE_LINE_NUMBER
+        "${MCF5407_ABI_SMOKE_LINE_NUMBER} + 1")
 
-    if(MCF5307_ABI_SMOKE_LINE MATCHES "^[ \t]*$")
+    if(MCF5407_ABI_SMOKE_LINE MATCHES "^[ \t]*$")
         continue()
     endif()
 
@@ -1505,25 +1505,25 @@ foreach(MCF5307_ABI_SMOKE_LINE IN LISTS MCF5307_ABI_SMOKE_LINES)
     # names the entry macro in its prose. The paragraph above says why a
     # comment may be skipped without opening a hole: a name this reader cannot
     # see is a name it reports as missing from the contract's published set.
-    if(MCF5307_ABI_SMOKE_LINE MATCHES "^[ \t]*(/\\*|\\*)")
+    if(MCF5407_ABI_SMOKE_LINE MATCHES "^[ \t]*(/\\*|\\*)")
         continue()
     endif()
 
     # The entry form, anchored at both ends. THE CAPTURE IS COPIED OUT BEFORE
     # THE NEXT `MATCHES` RUNS, for the reason the symbol reader above records.
-    if(MCF5307_ABI_SMOKE_LINE MATCHES
-            "^MCF5307_ABI_FN\\(([A-Za-z_][A-Za-z0-9_]*)\\)$")
-        set(MCF5307_ABI_SMOKE_NAME "${CMAKE_MATCH_1}")
-        if(MCF5307_ABI_SMOKE_NAME IN_LIST MCF5307_ABI_SMOKE_NAMES)
+    if(MCF5407_ABI_SMOKE_LINE MATCHES
+            "^MCF5407_ABI_FN\\(([A-Za-z_][A-Za-z0-9_]*)\\)$")
+        set(MCF5407_ABI_SMOKE_NAME "${CMAKE_MATCH_1}")
+        if(MCF5407_ABI_SMOKE_NAME IN_LIST MCF5407_ABI_SMOKE_NAMES)
             message(FATAL_ERROR
-                "mcf5307: step 4a failed: ${MCF5307_ABI_SMOKE_LIST_FILE} line "
-                "${MCF5307_ABI_SMOKE_LINE_NUMBER} repeats the entry "
-                "`${MCF5307_ABI_SMOKE_NAME}`, which an earlier line already "
+                "mcf5407: step 4a failed: ${MCF5407_ABI_SMOKE_LIST_FILE} line "
+                "${MCF5407_ABI_SMOKE_LINE_NUMBER} repeats the entry "
+                "`${MCF5407_ABI_SMOKE_NAME}`, which an earlier line already "
                 "carries. The test declares one pointer per entry, so a "
                 "repeat is a redefinition there. The list is a set and this "
                 "step compares it as one.")
         endif()
-        list(APPEND MCF5307_ABI_SMOKE_NAMES "${MCF5307_ABI_SMOKE_NAME}")
+        list(APPEND MCF5407_ABI_SMOKE_NAMES "${MCF5407_ABI_SMOKE_NAME}")
         continue()
     endif()
 
@@ -1533,31 +1533,31 @@ foreach(MCF5307_ABI_SMOKE_LINE IN LISTS MCF5307_ABI_SMOKE_LINES)
     # THE EXPECTATION THAT NOBODY WROTE, or drop one that somebody did, and
     # either way the comparison below would speak about a list that is not on
     # disk. It is refused rather than guessed at.
-    if(MCF5307_ABI_SMOKE_LINE MATCHES "MCF5307_ABI_FN")
+    if(MCF5407_ABI_SMOKE_LINE MATCHES "MCF5407_ABI_FN")
         message(FATAL_ERROR
-            "mcf5307: step 4a failed: ${MCF5307_ABI_SMOKE_LIST_FILE} line "
-            "${MCF5307_ABI_SMOKE_LINE_NUMBER} carries `MCF5307_ABI_FN` and is "
+            "mcf5407: step 4a failed: ${MCF5407_ABI_SMOKE_LIST_FILE} line "
+            "${MCF5407_ABI_SMOKE_LINE_NUMBER} carries `MCF5407_ABI_FN` and is "
             "neither an entry nor a comment.\n"
-            "  line : ${MCF5307_ABI_SMOKE_LINE}\n"
-            "An entry is exactly `MCF5307_ABI_FN(<identifier>)` with no "
+            "  line : ${MCF5407_ABI_SMOKE_LINE}\n"
+            "An entry is exactly `MCF5407_ABI_FN(<identifier>)` with no "
             "leading space, no trailing text and no semicolon. A line this "
             "step cannot classify is a line it would have to guess at, and "
             "the expectation half of a two-way comparison is not guessed.")
     endif()
 
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: ${MCF5307_ABI_SMOKE_LIST_FILE} line "
-        "${MCF5307_ABI_SMOKE_LINE_NUMBER} is neither blank, nor a comment, "
+        "mcf5407: step 4a failed: ${MCF5407_ABI_SMOKE_LIST_FILE} line "
+        "${MCF5407_ABI_SMOKE_LINE_NUMBER} is neither blank, nor a comment, "
         "nor an entry.\n"
-        "  line : ${MCF5307_ABI_SMOKE_LINE}\n"
+        "  line : ${MCF5407_ABI_SMOKE_LINE}\n"
         "That file is data and not C. It is the committed expectation this "
         "step compares against the measured exported set, and anything else "
         "in it has no meaning to either reader.")
 endforeach()
 
-if(MCF5307_ABI_SMOKE_NAMES STREQUAL "")
+if(MCF5407_ABI_SMOKE_NAMES STREQUAL "")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: ${MCF5307_ABI_SMOKE_LIST_FILE} holds no "
+        "mcf5407: step 4a failed: ${MCF5407_ABI_SMOKE_LIST_FILE} holds no "
         "entry at all. An empty expectation would report every symbol the "
         "library exports as an unintended addition, and an empty measured set "
         "is refused separately. Silence is not a pass.")
@@ -1567,44 +1567,44 @@ endif()
 # expectation. Two directions, two messages, and each one names the symbols
 # rather than reporting a count or the bare word `differ`, so a reviewer knows
 # which symbol to act on and which file to change.
-set(MCF5307_ABI_SMOKE_UNEXPECTED "")
-foreach(name IN LISTS MCF5307_ABI_VISIBLE)
-    if(NOT name IN_LIST MCF5307_ABI_SMOKE_NAMES)
-        list(APPEND MCF5307_ABI_SMOKE_UNEXPECTED "${name}")
+set(MCF5407_ABI_SMOKE_UNEXPECTED "")
+foreach(name IN LISTS MCF5407_ABI_VISIBLE)
+    if(NOT name IN_LIST MCF5407_ABI_SMOKE_NAMES)
+        list(APPEND MCF5407_ABI_SMOKE_UNEXPECTED "${name}")
     endif()
 endforeach()
 
-set(MCF5307_ABI_SMOKE_ABSENT "")
-foreach(name IN LISTS MCF5307_ABI_SMOKE_NAMES)
-    if(NOT name IN_LIST MCF5307_ABI_VISIBLE)
-        list(APPEND MCF5307_ABI_SMOKE_ABSENT "${name}")
+set(MCF5407_ABI_SMOKE_ABSENT "")
+foreach(name IN LISTS MCF5407_ABI_SMOKE_NAMES)
+    if(NOT name IN_LIST MCF5407_ABI_VISIBLE)
+        list(APPEND MCF5407_ABI_SMOKE_ABSENT "${name}")
     endif()
 endforeach()
 
-if(NOT MCF5307_ABI_SMOKE_UNEXPECTED STREQUAL "")
+if(NOT MCF5407_ABI_SMOKE_UNEXPECTED STREQUAL "")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: the library DEFINES AND EXPORTS a published "
-        "symbol that ${MCF5307_ABI_SMOKE_LIST_FILE} does not name.\n"
-        "  added to the ABI and not expected : ${MCF5307_ABI_SMOKE_UNEXPECTED}\n"
-        "  measured (defined and exported)   : ${MCF5307_ABI_VISIBLE}\n"
-        "  expected by the committed list    : ${MCF5307_ABI_SMOKE_NAMES}\n"
+        "mcf5407: step 4a failed: the library DEFINES AND EXPORTS a published "
+        "symbol that ${MCF5407_ABI_SMOKE_LIST_FILE} does not name.\n"
+        "  added to the ABI and not expected : ${MCF5407_ABI_SMOKE_UNEXPECTED}\n"
+        "  measured (defined and exported)   : ${MCF5407_ABI_VISIBLE}\n"
+        "  expected by the committed list    : ${MCF5407_ABI_SMOKE_NAMES}\n"
         "The measured set is the FACT and the list is the EXPECTATION. A "
         "measured set on its own would simply grow and this step would still "
         "pass, so an export nobody intended would be adopted in silence. If "
-        "the addition is intended, add one `MCF5307_ABI_FN(<name>)` line to "
+        "the addition is intended, add one `MCF5407_ABI_FN(<name>)` line to "
         "the list file for each name above and the diff is what a reviewer "
         "reads. If it is not intended, the library grew an export it should "
         "not have.")
 endif()
 
-if(NOT MCF5307_ABI_SMOKE_ABSENT STREQUAL "")
+if(NOT MCF5407_ABI_SMOKE_ABSENT STREQUAL "")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: ${MCF5307_ABI_SMOKE_LIST_FILE} names a "
+        "mcf5407: step 4a failed: ${MCF5407_ABI_SMOKE_LIST_FILE} names a "
         "symbol the library does NOT define and export.\n"
-        "  expected and missing from the ABI : ${MCF5307_ABI_SMOKE_ABSENT}\n"
-        "  measured (defined and exported)   : ${MCF5307_ABI_VISIBLE}\n"
-        "  expected by the committed list    : ${MCF5307_ABI_SMOKE_NAMES}\n"
-        "  not yet implemented               : ${MCF5307_ABI_UNIMPLEMENTED}\n"
+        "  expected and missing from the ABI : ${MCF5407_ABI_SMOKE_ABSENT}\n"
+        "  measured (defined and exported)   : ${MCF5407_ABI_VISIBLE}\n"
+        "  expected by the committed list    : ${MCF5407_ABI_SMOKE_NAMES}\n"
+        "  not yet implemented               : ${MCF5407_ABI_UNIMPLEMENTED}\n"
         "Either a definition was renamed or dropped, or its `exportc` name "
         "changed, or the list names something the library was never going to "
         "define. THE LINK OF `abi_smoke` CANNOT CATCH THIS: its address set is "
@@ -1613,13 +1613,13 @@ if(NOT MCF5307_ABI_SMOKE_ABSENT STREQUAL "")
         "exists beside the measurement.")
 endif()
 
-list(LENGTH MCF5307_ABI_SMOKE_NAMES MCF5307_ABI_SMOKE_COUNT)
+list(LENGTH MCF5407_ABI_SMOKE_NAMES MCF5407_ABI_SMOKE_COUNT)
 message(STATUS
-    "mcf5307: step 4a ${MCF5307_ABI_SMOKE_LIST_FILE} expects exactly the "
-    "${MCF5307_ABI_SMOKE_COUNT} symbol(s) the library defines and exports, so "
+    "mcf5407: step 4a ${MCF5407_ABI_SMOKE_LIST_FILE} expects exactly the "
+    "${MCF5407_ABI_SMOKE_COUNT} symbol(s) the library defines and exports, so "
     "`tests/abi_smoke.cpp` takes the address of every one of them and no ABI "
     "addition or loss can pass unnamed")
-math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part two
+math(EXPR MCF5407_ABI_GATE_SITES "${MCF5407_ABI_GATE_SITES} + 1") # site: part two
 
 # ---------------------------------------------------------------------------
 # Step 4a, part three. The link-partner stub gate.
@@ -1663,17 +1663,17 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part t
 #
 # `tests/abi_stub.c` is read here and never written here.
 
-if(NOT EXISTS "${MCF5307_ABI_STUB_FILE}")
+if(NOT EXISTS "${MCF5407_ABI_STUB_FILE}")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: ${MCF5307_ABI_STUB_FILE} does not exist. "
+        "mcf5407: step 4a failed: ${MCF5407_ABI_STUB_FILE} does not exist. "
         "That file is the link partner of cases 3 and 4 of the registered "
         "test `t0_abi_header`, and this step compiles it and compares the "
         "symbols it defines against the published set of "
-        "${MCF5307_ABI_CONTRACT_FILE}.")
+        "${MCF5407_ABI_CONTRACT_FILE}.")
 endif()
 
-set(MCF5307_ABI_STUB_OBJECT
-    "${MCF5307_ABI_DIR}/abi_stub_measure${CMAKE_C_OUTPUT_EXTENSION}")
+set(MCF5407_ABI_STUB_OBJECT
+    "${MCF5407_ABI_DIR}/abi_stub_measure${CMAKE_C_OUTPUT_EXTENSION}")
 
 # The probe unit of part three.
 #
@@ -1684,24 +1684,24 @@ set(MCF5307_ABI_STUB_OBJECT
 # `tests/abi_stub.c` is not touched, and this file only reads it. The
 # registered test `t0_abi_header` compiles that same source without this flag,
 # so no probe reaches a test executable or any shipped artifact.
-set(MCF5307_ABI_STUB_PROBE_SOURCE "${MCF5307_ABI_DIR}/stub_probe.h")
-file(WRITE "${MCF5307_ABI_STUB_PROBE_SOURCE}" [==[
+set(MCF5407_ABI_STUB_PROBE_SOURCE "${MCF5407_ABI_DIR}/stub_probe.h")
+file(WRITE "${MCF5407_ABI_STUB_PROBE_SOURCE}" [==[
 /* GENERATED by cmake/Nim.cmake step 4a part three. Do not edit this copy in
  * the build tree. It calibrates the symbol reader AND the verdict on the
  * relocatable object the verdict is read from.
  *
- * `mcf5307_abi_stub_probe_external` is defined with EXTERNAL linkage. It also
+ * `mcf5407_abi_stub_probe_external` is defined with EXTERNAL linkage. It also
  *                                   measures this artifact's symbol prefix.
- * `mcf5307_abi_stub_probe_internal` is defined with INTERNAL linkage.
- * `mcf5307_abi_stub_probe_absent`   is defined nowhere and must be in
+ * `mcf5407_abi_stub_probe_internal` is defined with INTERNAL linkage.
+ * `mcf5407_abi_stub_probe_absent`   is defined nowhere and must be in
  *                                   neither set.
  *
  * `used` IS LOAD-BEARING. An unreferenced `static` function is dropped from
  * the object, and a dropped internal probe would read as `absent`: it would
  * calibrate the wrong category and leave the internal one uncalibrated, which
  * is the exact hole these probes exist to close. */
-void mcf5307_abi_stub_probe_external(void) {}
-__attribute__((used)) static void mcf5307_abi_stub_probe_internal(void) {}
+void mcf5407_abi_stub_probe_external(void) {}
+__attribute__((used)) static void mcf5407_abi_stub_probe_internal(void) {}
 ]==])
 
 # The two probe names are this file's own instrument in that object. The
@@ -1712,8 +1712,8 @@ __attribute__((used)) static void mcf5307_abi_stub_probe_internal(void) {}
 # names, so a stub that defines either one is `error: redefinition` and the
 # compile below exits non-zero. No verdict runs on that translation unit at
 # all, so there is no set for the exemption to hide a name in.
-set(MCF5307_ABI_STUB_INSTRUMENT
-    mcf5307_abi_stub_probe_external mcf5307_abi_stub_probe_internal)
+set(MCF5407_ABI_STUB_INSTRUMENT
+    mcf5407_abi_stub_probe_external mcf5407_abi_stub_probe_internal)
 
 # ---------------------------------------------------------------------------
 # Two faults must never share a line, and the probe injection gives this
@@ -1724,13 +1724,13 @@ set(MCF5307_ABI_STUB_INSTRUMENT
 # The two are separated by the one thing that distinguishes them: whether the
 # compiler's own diagnostics name the generated probe header. `string(FIND)` is
 # literal, so a path with regex characters in it is still matched as a path.
-function(mcf5307_abi_stub_collided mcf5307_col_out mcf5307_col_text)
-    string(FIND "${mcf5307_col_text}" "${MCF5307_ABI_STUB_PROBE_SOURCE}"
-        mcf5307_col_at)
-    if(mcf5307_col_at EQUAL -1)
-        set(${mcf5307_col_out} FALSE PARENT_SCOPE)
+function(mcf5407_abi_stub_collided mcf5407_col_out mcf5407_col_text)
+    string(FIND "${mcf5407_col_text}" "${MCF5407_ABI_STUB_PROBE_SOURCE}"
+        mcf5407_col_at)
+    if(mcf5407_col_at EQUAL -1)
+        set(${mcf5407_col_out} FALSE PARENT_SCOPE)
     else()
-        set(${mcf5307_col_out} TRUE PARENT_SCOPE)
+        set(${mcf5407_col_out} TRUE PARENT_SCOPE)
     endif()
 endfunction()
 
@@ -1746,114 +1746,114 @@ endfunction()
 # detected is passed by a predicate that answers TRUE always - and such a
 # predicate would report every genuine stub fault as an instrument collision,
 # which is the same two-faults defect pointing the other way.
-function(mcf5307_abi_stub_compile_probe mcf5307_cp_out_result
-        mcf5307_cp_out_collided mcf5307_cp_name mcf5307_cp_text)
-    set(mcf5307_cp_src "${MCF5307_ABI_DIR}/${mcf5307_cp_name}.c")
-    file(WRITE "${mcf5307_cp_src}" "${mcf5307_cp_text}")
+function(mcf5407_abi_stub_compile_probe mcf5407_cp_out_result
+        mcf5407_cp_out_collided mcf5407_cp_name mcf5407_cp_text)
+    set(mcf5407_cp_src "${MCF5407_ABI_DIR}/${mcf5407_cp_name}.c")
+    file(WRITE "${mcf5407_cp_src}" "${mcf5407_cp_text}")
     execute_process(
         COMMAND "${CMAKE_C_COMPILER}"
                 -std=c11
                 "-I${PROJECT_SOURCE_DIR}/include"
-                "-include" "${MCF5307_ABI_STUB_PROBE_SOURCE}"
+                "-include" "${MCF5407_ABI_STUB_PROBE_SOURCE}"
                 -c
-                -o "${MCF5307_ABI_DIR}/${mcf5307_cp_name}${CMAKE_C_OUTPUT_EXTENSION}"
-                "${mcf5307_cp_src}"
-        OUTPUT_VARIABLE mcf5307_cp_stdout
-        ERROR_VARIABLE mcf5307_cp_stderr
-        RESULT_VARIABLE mcf5307_cp_result)
-    mcf5307_abi_stub_collided(mcf5307_cp_collided
-        "${mcf5307_cp_stdout}${mcf5307_cp_stderr}")
-    set(${mcf5307_cp_out_result} "${mcf5307_cp_result}" PARENT_SCOPE)
-    set(${mcf5307_cp_out_collided} "${mcf5307_cp_collided}" PARENT_SCOPE)
+                -o "${MCF5407_ABI_DIR}/${mcf5407_cp_name}${CMAKE_C_OUTPUT_EXTENSION}"
+                "${mcf5407_cp_src}"
+        OUTPUT_VARIABLE mcf5407_cp_stdout
+        ERROR_VARIABLE mcf5407_cp_stderr
+        RESULT_VARIABLE mcf5407_cp_result)
+    mcf5407_abi_stub_collided(mcf5407_cp_collided
+        "${mcf5407_cp_stdout}${mcf5407_cp_stderr}")
+    set(${mcf5407_cp_out_result} "${mcf5407_cp_result}" PARENT_SCOPE)
+    set(${mcf5407_cp_out_collided} "${mcf5407_cp_collided}" PARENT_SCOPE)
 endfunction()
 
 # Arm one. A stub that reuses a probe name. This is the shape the exemption
 # above would otherwise leave uncovered.
-mcf5307_abi_stub_compile_probe(MCF5307_ABI_STUB_COLLIDE_RESULT
-    MCF5307_ABI_STUB_COLLIDE_COLLIDED collide_probe
-    "#include \"mcf5307.h\"\nvoid mcf5307_abi_stub_probe_external(void) {}\n")
+mcf5407_abi_stub_compile_probe(MCF5407_ABI_STUB_COLLIDE_RESULT
+    MCF5407_ABI_STUB_COLLIDE_COLLIDED collide_probe
+    "#include \"mcf5407.h\"\nvoid mcf5407_abi_stub_probe_external(void) {}\n")
 
-if(MCF5307_ABI_STUB_COLLIDE_RESULT EQUAL 0
-        OR NOT MCF5307_ABI_STUB_COLLIDE_COLLIDED)
+if(MCF5407_ABI_STUB_COLLIDE_RESULT EQUAL 0
+        OR NOT MCF5407_ABI_STUB_COLLIDE_COLLIDED)
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control I: a translation unit that redefines "
-        "`mcf5307_abi_stub_probe_external` was not reported as an instrument "
+        "mcf5407: step 4a failed: control I: a translation unit that redefines "
+        "`mcf5407_abi_stub_probe_external` was not reported as an instrument "
         "collision.\n"
-        "  exit     : ${MCF5307_ABI_STUB_COLLIDE_RESULT}\n"
-        "  collided : ${MCF5307_ABI_STUB_COLLIDE_COLLIDED}\n"
-        "  probe    : ${MCF5307_ABI_STUB_PROBE_SOURCE}\n"
+        "  exit     : ${MCF5407_ABI_STUB_COLLIDE_RESULT}\n"
+        "  collided : ${MCF5407_ABI_STUB_COLLIDE_COLLIDED}\n"
+        "  probe    : ${MCF5407_ABI_STUB_PROBE_SOURCE}\n"
         "EXIT 0 means the probe header no longer defines that name, and the "
         "unpublished-export check below then EXEMPTS a name a stub can really "
         "define - the exemption's whole cover is that no such unit compiles. "
         "COLLIDED FALSE means the compile failed and this step would blame "
-        "`${MCF5307_ABI_STUB_FILE}` for a fault belonging to a header this "
+        "`${MCF5407_ABI_STUB_FILE}` for a fault belonging to a header this "
         "file generated.")
 endif()
 
 # Arm two. An ordinary fault in the stub, with no probe name anywhere in it.
-mcf5307_abi_stub_compile_probe(MCF5307_ABI_STUB_OWNFAULT_RESULT
-    MCF5307_ABI_STUB_OWNFAULT_COLLIDED ownfault_probe
-    "#include \"mcf5307.h\"\nvoid mcf5307_abi_stub_own_fault(void) { ? }\n")
+mcf5407_abi_stub_compile_probe(MCF5407_ABI_STUB_OWNFAULT_RESULT
+    MCF5407_ABI_STUB_OWNFAULT_COLLIDED ownfault_probe
+    "#include \"mcf5407.h\"\nvoid mcf5407_abi_stub_own_fault(void) { ? }\n")
 
-if(MCF5307_ABI_STUB_OWNFAULT_RESULT EQUAL 0
-        OR MCF5307_ABI_STUB_OWNFAULT_COLLIDED)
+if(MCF5407_ABI_STUB_OWNFAULT_RESULT EQUAL 0
+        OR MCF5407_ABI_STUB_OWNFAULT_COLLIDED)
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control I: a translation unit whose only "
+        "mcf5407: step 4a failed: control I: a translation unit whose only "
         "fault is its own was reported as an instrument collision.\n"
-        "  exit     : ${MCF5307_ABI_STUB_OWNFAULT_RESULT}\n"
-        "  collided : ${MCF5307_ABI_STUB_OWNFAULT_COLLIDED}\n"
-        "  probe    : ${MCF5307_ABI_STUB_PROBE_SOURCE}\n"
+        "  exit     : ${MCF5407_ABI_STUB_OWNFAULT_RESULT}\n"
+        "  collided : ${MCF5407_ABI_STUB_OWNFAULT_COLLIDED}\n"
+        "  probe    : ${MCF5407_ABI_STUB_PROBE_SOURCE}\n"
         "EXIT 0 means a unit this file wrote to be rejected was accepted, so "
         "arm one's failure proves nothing about failing compiles. COLLIDED "
         "TRUE means the split answers `collision` for everything, and a real "
-        "syntax error in ${MCF5307_ABI_STUB_FILE} would be reported as this "
+        "syntax error in ${MCF5407_ABI_STUB_FILE} would be reported as this "
         "step's own instrument getting in the way - the same two faults on one "
         "line, pointing the other way.")
 endif()
 
 message(STATUS
-    "mcf5307: step 4a control I the compile-fault split told an instrument "
+    "mcf5407: step 4a control I the compile-fault split told an instrument "
     "collision from a fault of the stub's own")
-math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control I
+math(EXPR MCF5407_ABI_GATE_SITES "${MCF5407_ABI_GATE_SITES} + 1") # site: control I
 
 # The object of an earlier configure run is removed before the compile, for
 # the reason every driver in `tests/tests_cpu.cmake` records: without it a
 # compile that failed would leave the earlier object in place, and the reader
 # below would then report a set this run never produced.
-file(REMOVE "${MCF5307_ABI_STUB_OBJECT}")
+file(REMOVE "${MCF5407_ABI_STUB_OBJECT}")
 
 execute_process(
     COMMAND "${CMAKE_C_COMPILER}"
             -std=c11
             "-I${PROJECT_SOURCE_DIR}/include"
-            "-include" "${MCF5307_ABI_STUB_PROBE_SOURCE}"
+            "-include" "${MCF5407_ABI_STUB_PROBE_SOURCE}"
             -c
-            -o "${MCF5307_ABI_STUB_OBJECT}"
-            "${MCF5307_ABI_STUB_FILE}"
-    OUTPUT_VARIABLE MCF5307_ABI_STUB_COMPILE_OUTPUT
-    ERROR_VARIABLE MCF5307_ABI_STUB_COMPILE_ERROR
-    RESULT_VARIABLE MCF5307_ABI_STUB_COMPILE_RESULT)
+            -o "${MCF5407_ABI_STUB_OBJECT}"
+            "${MCF5407_ABI_STUB_FILE}"
+    OUTPUT_VARIABLE MCF5407_ABI_STUB_COMPILE_OUTPUT
+    ERROR_VARIABLE MCF5407_ABI_STUB_COMPILE_ERROR
+    RESULT_VARIABLE MCF5407_ABI_STUB_COMPILE_RESULT)
 
-if(NOT MCF5307_ABI_STUB_COMPILE_RESULT EQUAL 0)
-    mcf5307_clip(MCF5307_ABI_STUB_COMPILE_OUTPUT_HEAD
-        "${MCF5307_ABI_STUB_COMPILE_OUTPUT}" 2000)
-    mcf5307_clip(MCF5307_ABI_STUB_COMPILE_ERROR_HEAD
-        "${MCF5307_ABI_STUB_COMPILE_ERROR}" 2000)
-    mcf5307_abi_stub_collided(MCF5307_ABI_STUB_COMPILE_COLLIDED
-        "${MCF5307_ABI_STUB_COMPILE_OUTPUT}${MCF5307_ABI_STUB_COMPILE_ERROR}")
+if(NOT MCF5407_ABI_STUB_COMPILE_RESULT EQUAL 0)
+    mcf5407_clip(MCF5407_ABI_STUB_COMPILE_OUTPUT_HEAD
+        "${MCF5407_ABI_STUB_COMPILE_OUTPUT}" 2000)
+    mcf5407_clip(MCF5407_ABI_STUB_COMPILE_ERROR_HEAD
+        "${MCF5407_ABI_STUB_COMPILE_ERROR}" 2000)
+    mcf5407_abi_stub_collided(MCF5407_ABI_STUB_COMPILE_COLLIDED
+        "${MCF5407_ABI_STUB_COMPILE_OUTPUT}${MCF5407_ABI_STUB_COMPILE_ERROR}")
 endif()
 
-if(NOT MCF5307_ABI_STUB_COMPILE_RESULT EQUAL 0
-        AND MCF5307_ABI_STUB_COMPILE_COLLIDED)
+if(NOT MCF5407_ABI_STUB_COMPILE_RESULT EQUAL 0
+        AND MCF5407_ABI_STUB_COMPILE_COLLIDED)
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: ${MCF5307_ABI_STUB_FILE} collides with a "
+        "mcf5407: step 4a failed: ${MCF5407_ABI_STUB_FILE} collides with a "
         "name THIS STEP injected into it.\n"
         "  compiler : ${CMAKE_C_COMPILER}\n"
-        "  injected : ${MCF5307_ABI_STUB_PROBE_SOURCE}\n"
-        "  names    : ${MCF5307_ABI_STUB_INSTRUMENT}\n"
-        "  exit     : ${MCF5307_ABI_STUB_COMPILE_RESULT}\n"
-        "  stdout   : ${MCF5307_ABI_STUB_COMPILE_OUTPUT_HEAD}\n"
-        "  stderr   : ${MCF5307_ABI_STUB_COMPILE_ERROR_HEAD}\n"
+        "  injected : ${MCF5407_ABI_STUB_PROBE_SOURCE}\n"
+        "  names    : ${MCF5407_ABI_STUB_INSTRUMENT}\n"
+        "  exit     : ${MCF5407_ABI_STUB_COMPILE_RESULT}\n"
+        "  stdout   : ${MCF5407_ABI_STUB_COMPILE_OUTPUT_HEAD}\n"
+        "  stderr   : ${MCF5407_ABI_STUB_COMPILE_ERROR_HEAD}\n"
         "THIS IS NOT A FAULT IN THAT FILE. The compile above carries "
         "`-include` of a header this file generates, and the diagnostics name "
         "it. That same file may compile clean under the registered test "
@@ -1864,37 +1864,37 @@ if(NOT MCF5307_ABI_STUB_COMPILE_RESULT EQUAL 0
         "the published set has no claim on either of them.")
 endif()
 
-if(NOT MCF5307_ABI_STUB_COMPILE_RESULT EQUAL 0)
+if(NOT MCF5407_ABI_STUB_COMPILE_RESULT EQUAL 0)
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: ${MCF5307_ABI_STUB_FILE} did not compile.\n"
+        "mcf5407: step 4a failed: ${MCF5407_ABI_STUB_FILE} did not compile.\n"
         "  compiler : ${CMAKE_C_COMPILER}\n"
-        "  object   : ${MCF5307_ABI_STUB_OBJECT}\n"
-        "  exit     : ${MCF5307_ABI_STUB_COMPILE_RESULT}\n"
-        "  stdout   : ${MCF5307_ABI_STUB_COMPILE_OUTPUT_HEAD}\n"
-        "  stderr   : ${MCF5307_ABI_STUB_COMPILE_ERROR_HEAD}\n"
+        "  object   : ${MCF5407_ABI_STUB_OBJECT}\n"
+        "  exit     : ${MCF5407_ABI_STUB_COMPILE_RESULT}\n"
+        "  stdout   : ${MCF5407_ABI_STUB_COMPILE_OUTPUT_HEAD}\n"
+        "  stderr   : ${MCF5407_ABI_STUB_COMPILE_ERROR_HEAD}\n"
         "A stub the C compiler refuses is a stub cases 3 and 4 of "
         "`t0_abi_header` cannot link against, and this step reports nothing "
         "about a file it could not compile.")
 endif()
 
-if(NOT EXISTS "${MCF5307_ABI_STUB_OBJECT}")
+if(NOT EXISTS "${MCF5407_ABI_STUB_OBJECT}")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: the compiler exited 0 and "
-        "${MCF5307_ABI_STUB_OBJECT} does not exist. The object of an earlier "
+        "mcf5407: step 4a failed: the compiler exited 0 and "
+        "${MCF5407_ABI_STUB_OBJECT} does not exist. The object of an earlier "
         "run was removed before the compile, so there is nothing here to "
         "read, and a comparison over an empty set would report every "
         "published symbol as missing.")
 endif()
 
-mcf5307_abi_read_symbols(MCF5307_ABI_STUB_DEFINED_RAW
-    MCF5307_ABI_STUB_EXTERNAL_RAW "${MCF5307_ABI_STUB_OBJECT}")
+mcf5407_abi_read_symbols(MCF5407_ABI_STUB_DEFINED_RAW
+    MCF5407_ABI_STUB_EXTERNAL_RAW "${MCF5407_ABI_STUB_OBJECT}")
 
 # ---------------------------------------------------------------------------
 # Control E. The symbol reader, calibrated on the relocatable object it just
 # read.
 #
 # Control D calibrates the reader on
-# `libmcf5307_abi_measure${CMAKE_SHARED_LIBRARY_SUFFIX}`, with a probe unit
+# `libmcf5407_abi_measure${CMAKE_SHARED_LIBRARY_SUFFIX}`, with a probe unit
 # compiled into that shared object. A relocatable object is a different
 # artifact type, and a calibration is a statement about the artifact the
 # verdict is read from, so this read gets probes of its own, compiled into
@@ -1902,32 +1902,32 @@ mcf5307_abi_read_symbols(MCF5307_ABI_STUB_DEFINED_RAW
 #
 # The probes are NAMED, so a wrong file fails HERE and says so.
 #
-#   `mcf5307_abi_stub_probe_external` defined, external linkage.
-#   `mcf5307_abi_stub_probe_internal` defined, internal linkage.
-#   `mcf5307_abi_stub_probe_absent`   defined nowhere.
+#   `mcf5407_abi_stub_probe_external` defined, external linkage.
+#   `mcf5407_abi_stub_probe_internal` defined, internal linkage.
+#   `mcf5407_abi_stub_probe_absent`   defined nowhere.
 #
-# The symbol prefix is measured here too, and not inherited. `MCF5307_ABI_
+# The symbol prefix is measured here too, and not inherited. `MCF5407_ABI_
 # PREFIX` above is read off the shared object. Applying it to this object
 # without measuring it here would be an assumption about an artifact type
 # nothing had measured. It is read off a name this file wrote into this
 # object, and the two answers must agree.
 
-set(MCF5307_ABI_STUB_PREFIX "")
-set(MCF5307_ABI_STUB_PREFIX_FOUND FALSE)
-foreach(name IN LISTS MCF5307_ABI_STUB_EXTERNAL_RAW)
-    if(name MATCHES "^(_*)mcf5307_abi_stub_probe_external$")
-        set(MCF5307_ABI_STUB_PREFIX "${CMAKE_MATCH_1}")
-        set(MCF5307_ABI_STUB_PREFIX_FOUND TRUE)
+set(MCF5407_ABI_STUB_PREFIX "")
+set(MCF5407_ABI_STUB_PREFIX_FOUND FALSE)
+foreach(name IN LISTS MCF5407_ABI_STUB_EXTERNAL_RAW)
+    if(name MATCHES "^(_*)mcf5407_abi_stub_probe_external$")
+        set(MCF5407_ABI_STUB_PREFIX "${CMAKE_MATCH_1}")
+        set(MCF5407_ABI_STUB_PREFIX_FOUND TRUE)
     endif()
 endforeach()
 
-if(NOT MCF5307_ABI_STUB_PREFIX_FOUND)
+if(NOT MCF5407_ABI_STUB_PREFIX_FOUND)
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control E: the probe symbol "
-        "`mcf5307_abi_stub_probe_external` is not among the external "
-        "definitions of ${MCF5307_ABI_STUB_OBJECT}.\n"
-        "  external : ${MCF5307_ABI_STUB_EXTERNAL_RAW}\n"
-        "  reader   : ${MCF5307_ABI_NM}\n"
+        "mcf5407: step 4a failed: control E: the probe symbol "
+        "`mcf5407_abi_stub_probe_external` is not among the external "
+        "definitions of ${MCF5407_ABI_STUB_OBJECT}.\n"
+        "  external : ${MCF5407_ABI_STUB_EXTERNAL_RAW}\n"
+        "  reader   : ${MCF5407_ABI_NM}\n"
         "This file compiled that probe into that object, with external "
         "linkage, on the compile line above. A reader that cannot find it "
         "read the wrong file, read nothing, or cannot see an external "
@@ -1935,13 +1935,13 @@ if(NOT MCF5307_ABI_STUB_PREFIX_FOUND)
         "then read from an artifact nothing measured.")
 endif()
 
-if(NOT "${MCF5307_ABI_STUB_PREFIX}" STREQUAL "${MCF5307_ABI_PREFIX}")
+if(NOT "${MCF5407_ABI_STUB_PREFIX}" STREQUAL "${MCF5407_ABI_PREFIX}")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control E: the symbol prefix of "
-        "${MCF5307_ABI_STUB_OBJECT} is not the prefix of "
-        "${MCF5307_ABI_OBJECT}.\n"
-        "  relocatable object : `${MCF5307_ABI_STUB_PREFIX}`\n"
-        "  shared object      : `${MCF5307_ABI_PREFIX}`\n"
+        "mcf5407: step 4a failed: control E: the symbol prefix of "
+        "${MCF5407_ABI_STUB_OBJECT} is not the prefix of "
+        "${MCF5407_ABI_OBJECT}.\n"
+        "  relocatable object : `${MCF5407_ABI_STUB_PREFIX}`\n"
+        "  shared object      : `${MCF5407_ABI_PREFIX}`\n"
         "Both were measured off a probe name this file wrote, one per "
         "artifact. The verdict below strips the SHARED object's prefix off "
         "the RELOCATABLE object's names, and that is only sound while the two "
@@ -1950,15 +1950,15 @@ if(NOT "${MCF5307_ABI_STUB_PREFIX}" STREQUAL "${MCF5307_ABI_PREFIX}")
         "it.")
 endif()
 
-mcf5307_abi_strip(MCF5307_ABI_STUB_DEFINED ${MCF5307_ABI_STUB_DEFINED_RAW})
-mcf5307_abi_strip(MCF5307_ABI_STUB_EXTERNAL ${MCF5307_ABI_STUB_EXTERNAL_RAW})
+mcf5407_abi_strip(MCF5407_ABI_STUB_DEFINED ${MCF5407_ABI_STUB_DEFINED_RAW})
+mcf5407_abi_strip(MCF5407_ABI_STUB_EXTERNAL ${MCF5407_ABI_STUB_EXTERNAL_RAW})
 
-if(NOT "mcf5307_abi_stub_probe_internal" IN_LIST MCF5307_ABI_STUB_DEFINED)
+if(NOT "mcf5407_abi_stub_probe_internal" IN_LIST MCF5407_ABI_STUB_DEFINED)
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control E: the probe symbol "
-        "`mcf5307_abi_stub_probe_internal` is not among the DEFINED symbols "
-        "of ${MCF5307_ABI_STUB_OBJECT}.\n"
-        "  defined : ${MCF5307_ABI_STUB_DEFINED}\n"
+        "mcf5407: step 4a failed: control E: the probe symbol "
+        "`mcf5407_abi_stub_probe_internal` is not among the DEFINED symbols "
+        "of ${MCF5407_ABI_STUB_OBJECT}.\n"
+        "  defined : ${MCF5407_ABI_STUB_DEFINED}\n"
         "This file compiled a `static` definition of it into that object and "
         "marked it `used` so it stays. A reader that cannot see an internal "
         "definition in a relocatable object cannot separate `defined with "
@@ -1967,33 +1967,33 @@ if(NOT "mcf5307_abi_stub_probe_internal" IN_LIST MCF5307_ABI_STUB_DEFINED)
         "is the report this step must never give.")
 endif()
 
-if("mcf5307_abi_stub_probe_internal" IN_LIST MCF5307_ABI_STUB_EXTERNAL)
+if("mcf5407_abi_stub_probe_internal" IN_LIST MCF5407_ABI_STUB_EXTERNAL)
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control E: the probe symbol "
-        "`mcf5307_abi_stub_probe_internal` is among the EXTERNAL definitions "
-        "of ${MCF5307_ABI_STUB_OBJECT}.\n"
-        "  external : ${MCF5307_ABI_STUB_EXTERNAL}\n"
+        "mcf5407: step 4a failed: control E: the probe symbol "
+        "`mcf5407_abi_stub_probe_internal` is among the EXTERNAL definitions "
+        "of ${MCF5407_ABI_STUB_OBJECT}.\n"
+        "  external : ${MCF5407_ABI_STUB_EXTERNAL}\n"
         "It is `static`. A reader that calls an internal definition external "
         "calls every `static` published name linkable, and the link of "
         "`t0_abi_header` would then fail on a name this step passed.")
 endif()
 
-if("mcf5307_abi_stub_probe_absent" IN_LIST MCF5307_ABI_STUB_DEFINED
-        OR "mcf5307_abi_stub_probe_absent" IN_LIST MCF5307_ABI_STUB_EXTERNAL)
+if("mcf5407_abi_stub_probe_absent" IN_LIST MCF5407_ABI_STUB_DEFINED
+        OR "mcf5407_abi_stub_probe_absent" IN_LIST MCF5407_ABI_STUB_EXTERNAL)
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control E: the name "
-        "`mcf5307_abi_stub_probe_absent` was read out of "
-        "${MCF5307_ABI_STUB_OBJECT}.\n"
+        "mcf5407: step 4a failed: control E: the name "
+        "`mcf5407_abi_stub_probe_absent` was read out of "
+        "${MCF5407_ABI_STUB_OBJECT}.\n"
         "Nothing defines it anywhere in this project. A reader that reports "
         "it reports names the object does not hold, and its `linkable` "
         "verdicts below are then worth nothing.")
 endif()
 
 message(STATUS
-    "mcf5307: step 4a control E the symbol reader separated external, "
-    "internal and absent on ${MCF5307_ABI_STUB_OBJECT} (symbol prefix: "
-    "`${MCF5307_ABI_STUB_PREFIX}`, the shared object's)")
-math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control E
+    "mcf5407: step 4a control E the symbol reader separated external, "
+    "internal and absent on ${MCF5407_ABI_STUB_OBJECT} (symbol prefix: "
+    "`${MCF5407_ABI_STUB_PREFIX}`, the shared object's)")
+math(EXPR MCF5407_ABI_GATE_SITES "${MCF5407_ABI_GATE_SITES} + 1") # site: control E
 
 # The verdict. Three categories over the published set, and each published
 # name lands in exactly one.
@@ -2013,36 +2013,36 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: contro
 # and the verdict then sort names out of ONE reading of ONE object. A control
 # that carried sets of its own would prove something about its own sets and
 # nothing about the object the verdict is read from.
-function(mcf5307_abi_stub_classify mcf5307_cls_out_linkable
-        mcf5307_cls_out_internal mcf5307_cls_out_absent)
-    set(mcf5307_cls_linkable "")
-    set(mcf5307_cls_internal "")
-    set(mcf5307_cls_absent "")
-    foreach(mcf5307_cls_name IN LISTS ARGN)
-        if(mcf5307_cls_name IN_LIST MCF5307_ABI_STUB_EXTERNAL)
-            list(APPEND mcf5307_cls_linkable "${mcf5307_cls_name}")
-        elseif(mcf5307_cls_name IN_LIST MCF5307_ABI_STUB_DEFINED)
-            list(APPEND mcf5307_cls_internal "${mcf5307_cls_name}")
+function(mcf5407_abi_stub_classify mcf5407_cls_out_linkable
+        mcf5407_cls_out_internal mcf5407_cls_out_absent)
+    set(mcf5407_cls_linkable "")
+    set(mcf5407_cls_internal "")
+    set(mcf5407_cls_absent "")
+    foreach(mcf5407_cls_name IN LISTS ARGN)
+        if(mcf5407_cls_name IN_LIST MCF5407_ABI_STUB_EXTERNAL)
+            list(APPEND mcf5407_cls_linkable "${mcf5407_cls_name}")
+        elseif(mcf5407_cls_name IN_LIST MCF5407_ABI_STUB_DEFINED)
+            list(APPEND mcf5407_cls_internal "${mcf5407_cls_name}")
         else()
-            list(APPEND mcf5307_cls_absent "${mcf5307_cls_name}")
+            list(APPEND mcf5407_cls_absent "${mcf5407_cls_name}")
         endif()
     endforeach()
-    set(${mcf5307_cls_out_linkable} "${mcf5307_cls_linkable}" PARENT_SCOPE)
-    set(${mcf5307_cls_out_internal} "${mcf5307_cls_internal}" PARENT_SCOPE)
-    set(${mcf5307_cls_out_absent} "${mcf5307_cls_absent}" PARENT_SCOPE)
+    set(${mcf5407_cls_out_linkable} "${mcf5407_cls_linkable}" PARENT_SCOPE)
+    set(${mcf5407_cls_out_internal} "${mcf5407_cls_internal}" PARENT_SCOPE)
+    set(${mcf5407_cls_out_absent} "${mcf5407_cls_absent}" PARENT_SCOPE)
 endfunction()
 
 # The other direction, also a function and for the same reason. It answers
 # every external definition of the object that the allowed set does not carry.
-function(mcf5307_abi_stub_unallowed mcf5307_una_out)
-    set(mcf5307_una_allowed ${ARGN})
-    set(mcf5307_una_result "")
-    foreach(mcf5307_una_name IN LISTS MCF5307_ABI_STUB_EXTERNAL)
-        if(NOT mcf5307_una_name IN_LIST mcf5307_una_allowed)
-            list(APPEND mcf5307_una_result "${mcf5307_una_name}")
+function(mcf5407_abi_stub_unallowed mcf5407_una_out)
+    set(mcf5407_una_allowed ${ARGN})
+    set(mcf5407_una_result "")
+    foreach(mcf5407_una_name IN LISTS MCF5407_ABI_STUB_EXTERNAL)
+        if(NOT mcf5407_una_name IN_LIST mcf5407_una_allowed)
+            list(APPEND mcf5407_una_result "${mcf5407_una_name}")
         endif()
     endforeach()
-    set(${mcf5307_una_out} "${mcf5307_una_result}" PARENT_SCOPE)
+    set(${mcf5407_una_out} "${mcf5407_una_result}" PARENT_SCOPE)
 endfunction()
 
 # ---------------------------------------------------------------------------
@@ -2058,28 +2058,28 @@ endfunction()
 # sorts a name the reader reported as internal-defined. It says nothing about
 # what C source makes a compiler produce such a name. Control H below compiles
 # one and measures it.
-mcf5307_abi_stub_classify(MCF5307_ABI_STUB_PROBE_LINKABLE
-    MCF5307_ABI_STUB_PROBE_INTERNAL MCF5307_ABI_STUB_PROBE_ABSENT
-    mcf5307_abi_stub_probe_external
-    mcf5307_abi_stub_probe_internal
-    mcf5307_abi_stub_probe_absent)
+mcf5407_abi_stub_classify(MCF5407_ABI_STUB_PROBE_LINKABLE
+    MCF5407_ABI_STUB_PROBE_INTERNAL MCF5407_ABI_STUB_PROBE_ABSENT
+    mcf5407_abi_stub_probe_external
+    mcf5407_abi_stub_probe_internal
+    mcf5407_abi_stub_probe_absent)
 
-if(NOT "${MCF5307_ABI_STUB_PROBE_LINKABLE}" STREQUAL
-            "mcf5307_abi_stub_probe_external"
-        OR NOT "${MCF5307_ABI_STUB_PROBE_INTERNAL}" STREQUAL
-            "mcf5307_abi_stub_probe_internal"
-        OR NOT "${MCF5307_ABI_STUB_PROBE_ABSENT}" STREQUAL
-            "mcf5307_abi_stub_probe_absent")
+if(NOT "${MCF5407_ABI_STUB_PROBE_LINKABLE}" STREQUAL
+            "mcf5407_abi_stub_probe_external"
+        OR NOT "${MCF5407_ABI_STUB_PROBE_INTERNAL}" STREQUAL
+            "mcf5407_abi_stub_probe_internal"
+        OR NOT "${MCF5407_ABI_STUB_PROBE_ABSENT}" STREQUAL
+            "mcf5407_abi_stub_probe_absent")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control F: the verdict did not sort the "
-        "three probes of ${MCF5307_ABI_STUB_OBJECT} into the three "
+        "mcf5407: step 4a failed: control F: the verdict did not sort the "
+        "three probes of ${MCF5407_ABI_STUB_OBJECT} into the three "
         "categories it reports.\n"
-        "  expected linkable : mcf5307_abi_stub_probe_external\n"
-        "  read     linkable : ${MCF5307_ABI_STUB_PROBE_LINKABLE}\n"
-        "  expected internal : mcf5307_abi_stub_probe_internal\n"
-        "  read     internal : ${MCF5307_ABI_STUB_PROBE_INTERNAL}\n"
-        "  expected absent   : mcf5307_abi_stub_probe_absent\n"
-        "  read     absent   : ${MCF5307_ABI_STUB_PROBE_ABSENT}\n"
+        "  expected linkable : mcf5407_abi_stub_probe_external\n"
+        "  read     linkable : ${MCF5407_ABI_STUB_PROBE_LINKABLE}\n"
+        "  expected internal : mcf5407_abi_stub_probe_internal\n"
+        "  read     internal : ${MCF5407_ABI_STUB_PROBE_INTERNAL}\n"
+        "  expected absent   : mcf5407_abi_stub_probe_absent\n"
+        "  read     absent   : ${MCF5407_ABI_STUB_PROBE_ABSENT}\n"
         "One probe per category, compiled into that object by this file, "
         "sorted by the same function that sorts the published set below. A "
         "category that cannot take its own probe cannot take a published "
@@ -2089,15 +2089,15 @@ if(NOT "${MCF5307_ABI_STUB_PROBE_LINKABLE}" STREQUAL
 endif()
 
 message(STATUS
-    "mcf5307: step 4a control F the stub verdict placed one probe in each of "
+    "mcf5407: step 4a control F the stub verdict placed one probe in each of "
     "its three categories (linkable, internal, absent) on "
-    "${MCF5307_ABI_STUB_OBJECT}")
-math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control F
+    "${MCF5407_ABI_STUB_OBJECT}")
+math(EXPR MCF5407_ABI_GATE_SITES "${MCF5407_ABI_GATE_SITES} + 1") # site: control F
 
 # ---------------------------------------------------------------------------
 # Control G. The other direction, entered on every configure run.
 #
-# `mcf5307_abi_stub_probe_external` is an external definition of that object,
+# `mcf5407_abi_stub_probe_external` is an external definition of that object,
 # planted by this file, and the shape the check below is for is exactly `an
 # external definition the allowed set does not carry`. Given an allowed set
 # that carries every external name of the object EXCEPT that probe, the answer
@@ -2111,26 +2111,26 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: contro
 # never take a production fault's message away from it. Holding the probe
 # against everything else the object exports keeps the answer exact whatever
 # the stub does, and leaves the real fault to the check below.
-set(MCF5307_ABI_STUB_PROBE_ALLOWED "")
-foreach(name IN LISTS MCF5307_ABI_STUB_EXTERNAL)
-    if(NOT name STREQUAL "mcf5307_abi_stub_probe_external")
-        list(APPEND MCF5307_ABI_STUB_PROBE_ALLOWED "${name}")
+set(MCF5407_ABI_STUB_PROBE_ALLOWED "")
+foreach(name IN LISTS MCF5407_ABI_STUB_EXTERNAL)
+    if(NOT name STREQUAL "mcf5407_abi_stub_probe_external")
+        list(APPEND MCF5407_ABI_STUB_PROBE_ALLOWED "${name}")
     endif()
 endforeach()
 
-mcf5307_abi_stub_unallowed(MCF5307_ABI_STUB_PROBE_EXTRA
-    ${MCF5307_ABI_STUB_PROBE_ALLOWED})
+mcf5407_abi_stub_unallowed(MCF5407_ABI_STUB_PROBE_EXTRA
+    ${MCF5407_ABI_STUB_PROBE_ALLOWED})
 
-if(NOT "${MCF5307_ABI_STUB_PROBE_EXTRA}" STREQUAL
-        "mcf5307_abi_stub_probe_external")
+if(NOT "${MCF5407_ABI_STUB_PROBE_EXTRA}" STREQUAL
+        "mcf5407_abi_stub_probe_external")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control G: the unpublished-export check did "
+        "mcf5407: step 4a failed: control G: the unpublished-export check did "
         "not answer with the one probe planted for it in "
-        "${MCF5307_ABI_STUB_OBJECT}.\n"
-        "  expected : mcf5307_abi_stub_probe_external\n"
-        "  read     : ${MCF5307_ABI_STUB_PROBE_EXTRA}\n"
-        "  allowed  : ${MCF5307_ABI_STUB_PROBE_ALLOWED}\n"
-        "  external : ${MCF5307_ABI_STUB_EXTERNAL}\n"
+        "${MCF5407_ABI_STUB_OBJECT}.\n"
+        "  expected : mcf5407_abi_stub_probe_external\n"
+        "  read     : ${MCF5407_ABI_STUB_PROBE_EXTRA}\n"
+        "  allowed  : ${MCF5407_ABI_STUB_PROBE_ALLOWED}\n"
+        "  external : ${MCF5407_ABI_STUB_EXTERNAL}\n"
         "Every external name of that object but that one probe was allowed, "
         "so the one name left over is the whole answer. A check that answers "
         "nothing here answers nothing for a real unpublished export either, "
@@ -2140,9 +2140,9 @@ if(NOT "${MCF5307_ABI_STUB_PROBE_EXTRA}" STREQUAL
 endif()
 
 message(STATUS
-    "mcf5307: step 4a control G the unpublished-export check answered with "
-    "its probe on ${MCF5307_ABI_STUB_OBJECT}")
-math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control G
+    "mcf5407: step 4a control G the unpublished-export check answered with "
+    "its probe on ${MCF5407_ABI_STUB_OBJECT}")
+math(EXPR MCF5407_ABI_GATE_SITES "${MCF5407_ABI_GATE_SITES} + 1") # site: control G
 
 # ---------------------------------------------------------------------------
 # Control H. The internal branch's two routes, compiled on every configure run.
@@ -2179,47 +2179,47 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: contro
 #
 # Arm two's label carries the measured symbol prefix. An `__asm__` label names
 # an assembler symbol, so it has to be written the way the assembler writes it -
-# `_mcf5307_runtime_init` on this host, `mcf5307_runtime_init` on a target with
-# no prefix. `MCF5307_ABI_PREFIX` is the prefix `mcf5307_abi_strip` removes, so
+# `_mcf5407_runtime_init` on this host, `mcf5407_runtime_init` on a target with
+# no prefix. `MCF5407_ABI_PREFIX` is the prefix `mcf5407_abi_strip` removes, so
 # using it here is what makes the stripped name the reader answers with the
 # route name the classifier is asked about. A literal underscore would be an
 # assumption about a target, and this file measures that one already.
 # The probe sources below spell this name's signature and not just its name.
-# Every arm includes `include/mcf5307.h`, so a probe declaring a different
+# Every arm includes `include/mcf5407.h`, so a probe declaring a different
 # return type than the contract does is a constraint violation and the arm
 # reports a compile fault rather than the category it exists to measure. A
 # signature change to the chosen name therefore has to be made here too. That
 # coupling is real and it is not hidden: an arm that goes stale fails the
 # configure step and names the file, which is the loud direction.
-set(MCF5307_ABI_STUB_ROUTE_NAME "mcf5307_runtime_init")
+set(MCF5407_ABI_STUB_ROUTE_NAME "mcf5407_runtime_init")
 
-if(NOT "${MCF5307_ABI_STUB_ROUTE_NAME}" IN_LIST MCF5307_ABI_PUBLISHED)
+if(NOT "${MCF5407_ABI_STUB_ROUTE_NAME}" IN_LIST MCF5407_ABI_PUBLISHED)
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control H: `${MCF5307_ABI_STUB_ROUTE_NAME}` "
-        "is not in the published set of ${MCF5307_ABI_CONTRACT_FILE}.\n"
-        "  published : ${MCF5307_ABI_PUBLISHED}\n"
+        "mcf5407: step 4a failed: control H: `${MCF5407_ABI_STUB_ROUTE_NAME}` "
+        "is not in the published set of ${MCF5407_ABI_CONTRACT_FILE}.\n"
+        "  published : ${MCF5407_ABI_PUBLISHED}\n"
         "This control drives the INTERNAL branch with a REAL published name, "
         "because that branch only ever reports one. Control C above states "
         "that this project publishes at least this name. Point this control at "
         "a name the contract still declares.")
 endif()
 
-# The same classifier, over another object's sets. `mcf5307_abi_stub_classify`
+# The same classifier, over another object's sets. `mcf5407_abi_stub_classify`
 # reads the two measured sets out of its calling scope, which is what lets the
 # verdict and control F share one reading of one object. This wrapper names its
 # two parameters after those two variables, so inside it they are function-local
 # and the nested call sorts the route object instead. It is the production
 # classifier that answers here - not a copy of it, and not a restatement of its
 # condition in this comment.
-function(mcf5307_abi_stub_classify_over
-        MCF5307_ABI_STUB_EXTERNAL MCF5307_ABI_STUB_DEFINED
-        mcf5307_over_out_linkable mcf5307_over_out_internal
-        mcf5307_over_out_absent)
-    mcf5307_abi_stub_classify(mcf5307_over_linkable mcf5307_over_internal
-        mcf5307_over_absent ${ARGN})
-    set(${mcf5307_over_out_linkable} "${mcf5307_over_linkable}" PARENT_SCOPE)
-    set(${mcf5307_over_out_internal} "${mcf5307_over_internal}" PARENT_SCOPE)
-    set(${mcf5307_over_out_absent} "${mcf5307_over_absent}" PARENT_SCOPE)
+function(mcf5407_abi_stub_classify_over
+        MCF5407_ABI_STUB_EXTERNAL MCF5407_ABI_STUB_DEFINED
+        mcf5407_over_out_linkable mcf5407_over_out_internal
+        mcf5407_over_out_absent)
+    mcf5407_abi_stub_classify(mcf5407_over_linkable mcf5407_over_internal
+        mcf5407_over_absent ${ARGN})
+    set(${mcf5407_over_out_linkable} "${mcf5407_over_linkable}" PARENT_SCOPE)
+    set(${mcf5407_over_out_internal} "${mcf5407_over_internal}" PARENT_SCOPE)
+    set(${mcf5407_over_out_absent} "${mcf5407_over_absent}" PARENT_SCOPE)
 endfunction()
 
 # One arm. It writes a unit, compiles it, reads the object with the same reader,
@@ -2237,58 +2237,58 @@ endfunction()
 #
 # The units are never linked into anything. They are compiled, read and left in
 # the instrument directory, and no target of this project names them.
-function(mcf5307_abi_stub_route_probe mcf5307_rp_out_category
-        mcf5307_rp_out_detail mcf5307_rp_name mcf5307_rp_text)
-    set(mcf5307_rp_src "${MCF5307_ABI_DIR}/${mcf5307_rp_name}.c")
-    set(mcf5307_rp_obj
-        "${MCF5307_ABI_DIR}/${mcf5307_rp_name}${CMAKE_C_OUTPUT_EXTENSION}")
-    file(WRITE "${mcf5307_rp_src}"
+function(mcf5407_abi_stub_route_probe mcf5407_rp_out_category
+        mcf5407_rp_out_detail mcf5407_rp_name mcf5407_rp_text)
+    set(mcf5407_rp_src "${MCF5407_ABI_DIR}/${mcf5407_rp_name}.c")
+    set(mcf5407_rp_obj
+        "${MCF5407_ABI_DIR}/${mcf5407_rp_name}${CMAKE_C_OUTPUT_EXTENSION}")
+    file(WRITE "${mcf5407_rp_src}"
 "/* GENERATED by cmake/Nim.cmake step 4a control H. Do not edit this copy in
  * the build tree. It is compiled and read, and it is linked into nothing. */
-${mcf5307_rp_text}")
-    file(REMOVE "${mcf5307_rp_obj}")
+${mcf5407_rp_text}")
+    file(REMOVE "${mcf5407_rp_obj}")
     execute_process(
         COMMAND "${CMAKE_C_COMPILER}"
                 -std=c11
                 "-I${PROJECT_SOURCE_DIR}/include"
                 -c
-                -o "${mcf5307_rp_obj}"
-                "${mcf5307_rp_src}"
-        OUTPUT_VARIABLE mcf5307_rp_stdout
-        ERROR_VARIABLE mcf5307_rp_stderr
-        RESULT_VARIABLE mcf5307_rp_result)
-    if(NOT mcf5307_rp_result EQUAL 0)
-        mcf5307_clip(mcf5307_rp_head "${mcf5307_rp_stderr}" 600)
-        set(${mcf5307_rp_out_category} "REJECTED" PARENT_SCOPE)
-        set(${mcf5307_rp_out_detail}
-            "exit ${mcf5307_rp_result}: ${mcf5307_rp_head}" PARENT_SCOPE)
+                -o "${mcf5407_rp_obj}"
+                "${mcf5407_rp_src}"
+        OUTPUT_VARIABLE mcf5407_rp_stdout
+        ERROR_VARIABLE mcf5407_rp_stderr
+        RESULT_VARIABLE mcf5407_rp_result)
+    if(NOT mcf5407_rp_result EQUAL 0)
+        mcf5407_clip(mcf5407_rp_head "${mcf5407_rp_stderr}" 600)
+        set(${mcf5407_rp_out_category} "REJECTED" PARENT_SCOPE)
+        set(${mcf5407_rp_out_detail}
+            "exit ${mcf5407_rp_result}: ${mcf5407_rp_head}" PARENT_SCOPE)
         return()
     endif()
-    if(NOT EXISTS "${mcf5307_rp_obj}")
-        string(CONCAT mcf5307_rp_none
-            "exit 0 and no ${mcf5307_rp_obj}. The object of an earlier run is "
+    if(NOT EXISTS "${mcf5407_rp_obj}")
+        string(CONCAT mcf5407_rp_none
+            "exit 0 and no ${mcf5407_rp_obj}. The object of an earlier run is "
             "removed before the compile, so there is nothing here to read.")
-        set(${mcf5307_rp_out_category} "NO-OBJECT" PARENT_SCOPE)
-        set(${mcf5307_rp_out_detail} "${mcf5307_rp_none}" PARENT_SCOPE)
+        set(${mcf5407_rp_out_category} "NO-OBJECT" PARENT_SCOPE)
+        set(${mcf5407_rp_out_detail} "${mcf5407_rp_none}" PARENT_SCOPE)
         return()
     endif()
-    mcf5307_abi_read_symbols(mcf5307_rp_defined_raw mcf5307_rp_external_raw
-        "${mcf5307_rp_obj}")
-    mcf5307_abi_strip(mcf5307_rp_defined ${mcf5307_rp_defined_raw})
-    mcf5307_abi_strip(mcf5307_rp_external ${mcf5307_rp_external_raw})
-    mcf5307_abi_stub_classify_over(
-        "${mcf5307_rp_external}" "${mcf5307_rp_defined}"
-        mcf5307_rp_linkable mcf5307_rp_internal mcf5307_rp_absent
-        "${MCF5307_ABI_STUB_ROUTE_NAME}")
-    if(NOT mcf5307_rp_internal STREQUAL "")
-        set(${mcf5307_rp_out_category} "INTERNAL" PARENT_SCOPE)
-    elseif(NOT mcf5307_rp_linkable STREQUAL "")
-        set(${mcf5307_rp_out_category} "LINKABLE" PARENT_SCOPE)
+    mcf5407_abi_read_symbols(mcf5407_rp_defined_raw mcf5407_rp_external_raw
+        "${mcf5407_rp_obj}")
+    mcf5407_abi_strip(mcf5407_rp_defined ${mcf5407_rp_defined_raw})
+    mcf5407_abi_strip(mcf5407_rp_external ${mcf5407_rp_external_raw})
+    mcf5407_abi_stub_classify_over(
+        "${mcf5407_rp_external}" "${mcf5407_rp_defined}"
+        mcf5407_rp_linkable mcf5407_rp_internal mcf5407_rp_absent
+        "${MCF5407_ABI_STUB_ROUTE_NAME}")
+    if(NOT mcf5407_rp_internal STREQUAL "")
+        set(${mcf5407_rp_out_category} "INTERNAL" PARENT_SCOPE)
+    elseif(NOT mcf5407_rp_linkable STREQUAL "")
+        set(${mcf5407_rp_out_category} "LINKABLE" PARENT_SCOPE)
     else()
-        set(${mcf5307_rp_out_category} "ABSENT" PARENT_SCOPE)
+        set(${mcf5407_rp_out_category} "ABSENT" PARENT_SCOPE)
     endif()
-    set(${mcf5307_rp_out_detail}
-        "defined: ${mcf5307_rp_defined} | external: ${mcf5307_rp_external}"
+    set(${mcf5407_rp_out_detail}
+        "defined: ${mcf5407_rp_defined} | external: ${mcf5407_rp_external}"
         PARENT_SCOPE)
 endfunction()
 
@@ -2296,30 +2296,30 @@ endfunction()
 # of the contract, and an anchor that keeps the definition from being dropped.
 # The anchor is `used` for the reason the probe header gives: without it the
 # anchor goes, the reference goes with it, and the definition goes with that.
-mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_ROUTE_CATEGORY
-    MCF5307_ABI_STUB_ROUTE_DETAIL internal_route
-"static int ${MCF5307_ABI_STUB_ROUTE_NAME}(void);
+mcf5407_abi_stub_route_probe(MCF5407_ABI_STUB_ROUTE_CATEGORY
+    MCF5407_ABI_STUB_ROUTE_DETAIL internal_route
+"static int ${MCF5407_ABI_STUB_ROUTE_NAME}(void);
 
-#include \"mcf5307.h\"
+#include \"mcf5407.h\"
 
-static int ${MCF5307_ABI_STUB_ROUTE_NAME}(void) { return 0; }
+static int ${MCF5407_ABI_STUB_ROUTE_NAME}(void) { return 0; }
 
-__attribute__((used)) static void mcf5307_abi_stub_route_anchor(void)
+__attribute__((used)) static void mcf5407_abi_stub_route_anchor(void)
 {
-    (void)${MCF5307_ABI_STUB_ROUTE_NAME}();
+    (void)${MCF5407_ABI_STUB_ROUTE_NAME}();
 }
 ")
 
-if(NOT MCF5307_ABI_STUB_ROUTE_CATEGORY STREQUAL "INTERNAL")
+if(NOT MCF5407_ABI_STUB_ROUTE_CATEGORY STREQUAL "INTERNAL")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control H arm one: the internal-linkage "
+        "mcf5407: step 4a failed: control H arm one: the internal-linkage "
         "route did not reach the INTERNAL category.\n"
-        "  name     : ${MCF5307_ABI_STUB_ROUTE_NAME}\n"
-        "  source   : ${MCF5307_ABI_DIR}/internal_route.c\n"
+        "  name     : ${MCF5407_ABI_STUB_ROUTE_NAME}\n"
+        "  source   : ${MCF5407_ABI_DIR}/internal_route.c\n"
         "  expected : INTERNAL\n"
-        "  read     : ${MCF5307_ABI_STUB_ROUTE_CATEGORY}\n"
-        "  detail   : ${MCF5307_ABI_STUB_ROUTE_DETAIL}\n"
-        "  reader   : ${MCF5307_ABI_NM}\n"
+        "  read     : ${MCF5407_ABI_STUB_ROUTE_CATEGORY}\n"
+        "  detail   : ${MCF5407_ABI_STUB_ROUTE_DETAIL}\n"
+        "  reader   : ${MCF5407_ABI_NM}\n"
         "READ AS `ABSENT`, the route no longer produces a SURVIVING internal "
         "definition, and the INTERNAL branch below loses one of its two "
         "demonstrated ways in. The anchor above is what keeps the definition "
@@ -2341,34 +2341,34 @@ endif()
 #
 # The label is built from the measured prefix and not from a literal underscore,
 # for the reason the comment above this control gives.
-mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_ASMLABEL_CATEGORY
-    MCF5307_ABI_STUB_ASMLABEL_DETAIL asm_label_route
-"#include \"mcf5307.h\"
+mcf5407_abi_stub_route_probe(MCF5407_ABI_STUB_ASMLABEL_CATEGORY
+    MCF5407_ABI_STUB_ASMLABEL_DETAIL asm_label_route
+"#include \"mcf5407.h\"
 
-__attribute__((used)) static void mcf5307_abi_stub_route_alias(void)
-    __asm__(\"${MCF5307_ABI_PREFIX}${MCF5307_ABI_STUB_ROUTE_NAME}\");
+__attribute__((used)) static void mcf5407_abi_stub_route_alias(void)
+    __asm__(\"${MCF5407_ABI_PREFIX}${MCF5407_ABI_STUB_ROUTE_NAME}\");
 
-static void mcf5307_abi_stub_route_alias(void) {}
+static void mcf5407_abi_stub_route_alias(void) {}
 ")
 
-if(NOT MCF5307_ABI_STUB_ASMLABEL_CATEGORY STREQUAL "INTERNAL")
+if(NOT MCF5407_ABI_STUB_ASMLABEL_CATEGORY STREQUAL "INTERNAL")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control H arm two: the `__asm__` label route "
+        "mcf5407: step 4a failed: control H arm two: the `__asm__` label route "
         "did not reach the INTERNAL category.\n"
-        "  name     : ${MCF5307_ABI_STUB_ROUTE_NAME}\n"
-        "  label    : ${MCF5307_ABI_PREFIX}${MCF5307_ABI_STUB_ROUTE_NAME}\n"
-        "  source   : ${MCF5307_ABI_DIR}/asm_label_route.c\n"
+        "  name     : ${MCF5407_ABI_STUB_ROUTE_NAME}\n"
+        "  label    : ${MCF5407_ABI_PREFIX}${MCF5407_ABI_STUB_ROUTE_NAME}\n"
+        "  source   : ${MCF5407_ABI_DIR}/asm_label_route.c\n"
         "  expected : INTERNAL\n"
-        "  read     : ${MCF5307_ABI_STUB_ASMLABEL_CATEGORY}\n"
-        "  detail   : ${MCF5307_ABI_STUB_ASMLABEL_DETAIL}\n"
-        "  reader   : ${MCF5307_ABI_NM}\n"
+        "  read     : ${MCF5407_ABI_STUB_ASMLABEL_CATEGORY}\n"
+        "  detail   : ${MCF5407_ABI_STUB_ASMLABEL_DETAIL}\n"
+        "  reader   : ${MCF5407_ABI_NM}\n"
         "THIS ARM EXISTS BECAUSE THE COMMENT ABOVE NAMES THIS SHAPE. It was "
         "named and asserted there from `677a88b` onward with no compile behind "
         "it, while the sentence beside it declared every named route compiled. "
         "READ AS `ABSENT`, either `used` stopped keeping the definition alive "
         "or the label no longer renames the symbol, and the name the reader "
         "answers with is not the one the classifier is asked about - check "
-        "`${MCF5307_ABI_PREFIX}` against what `${MCF5307_ABI_NM}` prints for "
+        "`${MCF5407_ABI_PREFIX}` against what `${MCF5407_ABI_NM}` prints for "
         "this object. READ AS `LINKABLE`, the label promoted the helper out of "
         "internal linkage, and the INTERNAL branch can no longer be reached "
         "this way. READ AS `REJECTED`, the toolchain does not accept an "
@@ -2381,25 +2381,25 @@ endif()
 # sees it. The shared-object verdict above is where `hidden` is a fault; here
 # it must read LINKABLE, and a run where it reads INTERNAL means the two
 # verdicts have swapped meanings.
-mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_HIDDEN_CATEGORY
-    MCF5307_ABI_STUB_HIDDEN_DETAIL hidden_route
-"#include \"mcf5307.h\"
+mcf5407_abi_stub_route_probe(MCF5407_ABI_STUB_HIDDEN_CATEGORY
+    MCF5407_ABI_STUB_HIDDEN_DETAIL hidden_route
+"#include \"mcf5407.h\"
 
-__attribute__((visibility(\"hidden\"))) int ${MCF5307_ABI_STUB_ROUTE_NAME}(void)
+__attribute__((visibility(\"hidden\"))) int ${MCF5407_ABI_STUB_ROUTE_NAME}(void)
 {
     return 0;
 }
 ")
 
-if(NOT MCF5307_ABI_STUB_HIDDEN_CATEGORY STREQUAL "LINKABLE")
+if(NOT MCF5407_ABI_STUB_HIDDEN_CATEGORY STREQUAL "LINKABLE")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control H arm three: `hidden` visibility on a "
+        "mcf5407: step 4a failed: control H arm three: `hidden` visibility on a "
         "published name did not stay LINKABLE.\n"
-        "  name     : ${MCF5307_ABI_STUB_ROUTE_NAME}\n"
-        "  source   : ${MCF5307_ABI_DIR}/hidden_route.c\n"
+        "  name     : ${MCF5407_ABI_STUB_ROUTE_NAME}\n"
+        "  source   : ${MCF5407_ABI_DIR}/hidden_route.c\n"
         "  expected : LINKABLE\n"
-        "  read     : ${MCF5307_ABI_STUB_HIDDEN_CATEGORY}\n"
-        "  detail   : ${MCF5307_ABI_STUB_HIDDEN_DETAIL}\n"
+        "  read     : ${MCF5407_ABI_STUB_HIDDEN_CATEGORY}\n"
+        "  detail   : ${MCF5407_ABI_STUB_HIDDEN_DETAIL}\n"
         "Visibility and linkage are different properties, and this step's two "
         "verdicts each own one of them. A `hidden` name that reads INTERNAL "
         "here would be reported as a `static` published definition by the "
@@ -2416,25 +2416,25 @@ endif()
 # IT ASKS FOR `REJECTED` AND NOT FOR `NO-OBJECT`. The claim this arm carries is
 # that the COMPILER REFUSES this shape. A toolchain that accepted it and wrote
 # no object would satisfy a combined answer and leave the claim false.
-mcf5307_abi_stub_route_probe(MCF5307_ABI_STUB_LATESTATIC_CATEGORY
-    MCF5307_ABI_STUB_LATESTATIC_DETAIL late_static_route
-"#include \"mcf5307.h\"
+mcf5407_abi_stub_route_probe(MCF5407_ABI_STUB_LATESTATIC_CATEGORY
+    MCF5407_ABI_STUB_LATESTATIC_DETAIL late_static_route
+"#include \"mcf5407.h\"
 
-static int ${MCF5307_ABI_STUB_ROUTE_NAME}(void)
+static int ${MCF5407_ABI_STUB_ROUTE_NAME}(void)
 {
     return 0;
 }
 ")
 
-if(NOT MCF5307_ABI_STUB_LATESTATIC_CATEGORY STREQUAL "REJECTED")
+if(NOT MCF5407_ABI_STUB_LATESTATIC_CATEGORY STREQUAL "REJECTED")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: control H arm four: `static` AFTER the "
+        "mcf5407: step 4a failed: control H arm four: `static` AFTER the "
         "contract include was not rejected by the compiler.\n"
-        "  name     : ${MCF5307_ABI_STUB_ROUTE_NAME}\n"
-        "  source   : ${MCF5307_ABI_DIR}/late_static_route.c\n"
+        "  name     : ${MCF5407_ABI_STUB_ROUTE_NAME}\n"
+        "  source   : ${MCF5407_ABI_DIR}/late_static_route.c\n"
         "  expected : REJECTED\n"
-        "  read     : ${MCF5307_ABI_STUB_LATESTATIC_CATEGORY}\n"
-        "  detail   : ${MCF5307_ABI_STUB_LATESTATIC_DETAIL}\n"
+        "  read     : ${MCF5407_ABI_STUB_LATESTATIC_CATEGORY}\n"
+        "  detail   : ${MCF5407_ABI_STUB_LATESTATIC_DETAIL}\n"
         "This file records that shape as a constraint violation - `static "
         "declaration follows non-static declaration` - and therefore as "
         "something the COMPILE branch reports rather than the verdict. A "
@@ -2444,37 +2444,37 @@ if(NOT MCF5307_ABI_STUB_LATESTATIC_CATEGORY STREQUAL "REJECTED")
 endif()
 
 message(STATUS
-    "mcf5307: step 4a control H compiled four shapes and asserted each "
-    "category: `${MCF5307_ABI_STUB_ROUTE_NAME}` reaches INTERNAL by two "
+    "mcf5407: step 4a control H compiled four shapes and asserted each "
+    "category: `${MCF5407_ABI_STUB_ROUTE_NAME}` reaches INTERNAL by two "
     "routes (`static`-with-anchor, `__asm__`-label-with-`used`), and does not "
     "reach it by two others (hidden is LINKABLE, late-`static` is REJECTED)")
-math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: control H
+math(EXPR MCF5407_ABI_GATE_SITES "${MCF5407_ABI_GATE_SITES} + 1") # site: control H
 
 # ---------------------------------------------------------------------------
 # The verdict itself, over the published set.
-mcf5307_abi_stub_classify(MCF5307_ABI_STUB_LINKABLE MCF5307_ABI_STUB_INTERNAL
-    MCF5307_ABI_STUB_ABSENT ${MCF5307_ABI_PUBLISHED})
+mcf5407_abi_stub_classify(MCF5407_ABI_STUB_LINKABLE MCF5407_ABI_STUB_INTERNAL
+    MCF5407_ABI_STUB_ABSENT ${MCF5407_ABI_PUBLISHED})
 
 # The stub's own external definitions. The two probe names above are this
 # file's instrument and they are in no shipped artifact and in no test
 # executable, so a message that says `defined by the stub` must not print
 # them.
-set(MCF5307_ABI_STUB_EXTERNAL_OWN "")
-foreach(name IN LISTS MCF5307_ABI_STUB_EXTERNAL)
-    if(NOT name IN_LIST MCF5307_ABI_STUB_INSTRUMENT)
-        list(APPEND MCF5307_ABI_STUB_EXTERNAL_OWN "${name}")
+set(MCF5407_ABI_STUB_EXTERNAL_OWN "")
+foreach(name IN LISTS MCF5407_ABI_STUB_EXTERNAL)
+    if(NOT name IN_LIST MCF5407_ABI_STUB_INSTRUMENT)
+        list(APPEND MCF5407_ABI_STUB_EXTERNAL_OWN "${name}")
     endif()
 endforeach()
 
-if(NOT MCF5307_ABI_STUB_ABSENT STREQUAL "")
+if(NOT MCF5407_ABI_STUB_ABSENT STREQUAL "")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: ${MCF5307_ABI_CONTRACT_FILE} publishes a "
-        "symbol that ${MCF5307_ABI_STUB_FILE} does not define.\n"
-        "  missing from the stub : ${MCF5307_ABI_STUB_ABSENT}\n"
-        "  published             : ${MCF5307_ABI_PUBLISHED}\n"
-        "  defined by the stub   : ${MCF5307_ABI_STUB_EXTERNAL_OWN}\n"
-        "  measured object       : ${MCF5307_ABI_STUB_OBJECT}\n"
-        "  symbol lister         : ${MCF5307_ABI_NM}\n"
+        "mcf5407: step 4a failed: ${MCF5407_ABI_CONTRACT_FILE} publishes a "
+        "symbol that ${MCF5407_ABI_STUB_FILE} does not define.\n"
+        "  missing from the stub : ${MCF5407_ABI_STUB_ABSENT}\n"
+        "  published             : ${MCF5407_ABI_PUBLISHED}\n"
+        "  defined by the stub   : ${MCF5407_ABI_STUB_EXTERNAL_OWN}\n"
+        "  measured object       : ${MCF5407_ABI_STUB_OBJECT}\n"
+        "  symbol lister         : ${MCF5407_ABI_NM}\n"
         "That file states its invariant as one definition, with an empty "
         "body, of EVERY function the contract declares, and it is the link "
         "partner of cases 3 and 4 of `t0_abi_header`. For a name it does not "
@@ -2485,12 +2485,12 @@ if(NOT MCF5307_ABI_STUB_ABSENT STREQUAL "")
         "real library.")
 endif()
 
-if(NOT MCF5307_ABI_STUB_INTERNAL STREQUAL "")
+if(NOT MCF5407_ABI_STUB_INTERNAL STREQUAL "")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: ${MCF5307_ABI_STUB_FILE} defines a "
+        "mcf5407: step 4a failed: ${MCF5407_ABI_STUB_FILE} defines a "
         "published symbol with INTERNAL linkage.\n"
-        "  internal        : ${MCF5307_ABI_STUB_INTERNAL}\n"
-        "  measured object : ${MCF5307_ABI_STUB_OBJECT}\n"
+        "  internal        : ${MCF5407_ABI_STUB_INTERNAL}\n"
+        "  measured object : ${MCF5407_ABI_STUB_OBJECT}\n"
         "A `static` definition is invisible to the link of `t0_abi_header`, "
         "so the reference there stays undefined and the definition here "
         "resolves nothing. This is a separate line from the missing-symbol "
@@ -2506,19 +2506,19 @@ endif()
 # control. What covers the exemption is control I, above the compile: a
 # stub that defines either probe name is `error: redefinition` and produces no
 # object, so no run reaches this line with such a name in the set.
-mcf5307_abi_stub_unallowed(MCF5307_ABI_STUB_EXTRA
-    ${MCF5307_ABI_PUBLISHED} ${MCF5307_ABI_STUB_INSTRUMENT})
+mcf5407_abi_stub_unallowed(MCF5407_ABI_STUB_EXTRA
+    ${MCF5407_ABI_PUBLISHED} ${MCF5407_ABI_STUB_INSTRUMENT})
 
-if(NOT MCF5307_ABI_STUB_EXTRA STREQUAL "")
+if(NOT MCF5407_ABI_STUB_EXTRA STREQUAL "")
     message(FATAL_ERROR
-        "mcf5307: step 4a failed: ${MCF5307_ABI_STUB_FILE} defines an "
-        "EXTERNAL symbol that ${MCF5307_ABI_CONTRACT_FILE} does not "
+        "mcf5407: step 4a failed: ${MCF5407_ABI_STUB_FILE} defines an "
+        "EXTERNAL symbol that ${MCF5407_ABI_CONTRACT_FILE} does not "
         "declare.\n"
         "  defined by the stub and not published : "
-        "${MCF5307_ABI_STUB_EXTRA}\n"
-        "  published                             : ${MCF5307_ABI_PUBLISHED}\n"
+        "${MCF5407_ABI_STUB_EXTRA}\n"
+        "  published                             : ${MCF5407_ABI_PUBLISHED}\n"
         "  defined by the stub                   : "
-        "${MCF5307_ABI_STUB_EXTERNAL_OWN}\n"
+        "${MCF5407_ABI_STUB_EXTERNAL_OWN}\n"
         "Either the contract lost the declaration, or the stub grew a name "
         "outside its one job. That file's whole job is the published set, so "
         "an external name outside that set is one of those two faults, and "
@@ -2540,22 +2540,22 @@ endif()
 # reader gets from the object. The internal probe is in the `all` pass and not
 # in this one, so naming both here would overstate by one in the other
 # direction.
-set(MCF5307_ABI_STUB_EXTERNAL_INSTRUMENT "")
-foreach(name IN LISTS MCF5307_ABI_STUB_EXTERNAL)
-    if(name IN_LIST MCF5307_ABI_STUB_INSTRUMENT)
-        list(APPEND MCF5307_ABI_STUB_EXTERNAL_INSTRUMENT "${name}")
+set(MCF5407_ABI_STUB_EXTERNAL_INSTRUMENT "")
+foreach(name IN LISTS MCF5407_ABI_STUB_EXTERNAL)
+    if(name IN_LIST MCF5407_ABI_STUB_INSTRUMENT)
+        list(APPEND MCF5407_ABI_STUB_EXTERNAL_INSTRUMENT "${name}")
     endif()
 endforeach()
 
-list(LENGTH MCF5307_ABI_STUB_EXTERNAL_OWN MCF5307_ABI_STUB_EXTERNAL_OWN_COUNT)
-list(LENGTH MCF5307_ABI_STUB_EXTERNAL MCF5307_ABI_STUB_EXTERNAL_COUNT)
+list(LENGTH MCF5407_ABI_STUB_EXTERNAL_OWN MCF5407_ABI_STUB_EXTERNAL_OWN_COUNT)
+list(LENGTH MCF5407_ABI_STUB_EXTERNAL MCF5407_ABI_STUB_EXTERNAL_COUNT)
 message(STATUS
-    "mcf5307: step 4a ${MCF5307_ABI_STUB_FILE} defines externally exactly the "
-    "${MCF5307_ABI_STUB_EXTERNAL_OWN_COUNT} published symbol(s). "
-    "${MCF5307_ABI_NM} answers ${MCF5307_ABI_STUB_EXTERNAL_COUNT} on "
-    "${MCF5307_ABI_STUB_OBJECT}: those, and this step's own "
-    "${MCF5307_ABI_STUB_EXTERNAL_INSTRUMENT}")
-math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part three
+    "mcf5407: step 4a ${MCF5407_ABI_STUB_FILE} defines externally exactly the "
+    "${MCF5407_ABI_STUB_EXTERNAL_OWN_COUNT} published symbol(s). "
+    "${MCF5407_ABI_NM} answers ${MCF5407_ABI_STUB_EXTERNAL_COUNT} on "
+    "${MCF5407_ABI_STUB_OBJECT}: those, and this step's own "
+    "${MCF5407_ABI_STUB_EXTERNAL_INSTRUMENT}")
+math(EXPR MCF5407_ABI_GATE_SITES "${MCF5407_ABI_GATE_SITES} + 1") # site: part three
 
 # ---------------------------------------------------------------------------
 # The record.
@@ -2584,16 +2584,16 @@ math(EXPR MCF5307_ABI_GATE_SITES "${MCF5307_ABI_GATE_SITES} + 1") # site: part t
 # reject is `-D`, and the consume step records that. The comparison is on the
 # whole record and the record is written down once, here, so the two sites
 # cannot drift into agreeing on a shorter one.
-set(MCF5307_ABI_GATE_RECORD
-"MCF5307_ABI_GATE_RAN
-CONTRACT=${MCF5307_ABI_CONTRACT_FILE}
-PUBLISHED=${MCF5307_ABI_PUBLISHED_COUNT}
-VISIBLE=${MCF5307_ABI_VISIBLE_COUNT}
-UNIMPLEMENTED=${MCF5307_ABI_UNIMPLEMENTED_COUNT}
-STUB_EXTERNAL_OWN=${MCF5307_ABI_STUB_EXTERNAL_OWN_COUNT}
-SITES=${MCF5307_ABI_GATE_SITES}
+set(MCF5407_ABI_GATE_RECORD
+"MCF5407_ABI_GATE_RAN
+CONTRACT=${MCF5407_ABI_CONTRACT_FILE}
+PUBLISHED=${MCF5407_ABI_PUBLISHED_COUNT}
+VISIBLE=${MCF5407_ABI_VISIBLE_COUNT}
+UNIMPLEMENTED=${MCF5407_ABI_UNIMPLEMENTED_COUNT}
+STUB_EXTERNAL_OWN=${MCF5407_ABI_STUB_EXTERNAL_OWN_COUNT}
+SITES=${MCF5407_ABI_GATE_SITES}
 ")
-file(WRITE "${MCF5307_ABI_GATE_TOKEN}" "${MCF5307_ABI_GATE_RECORD}")
+file(WRITE "${MCF5407_ABI_GATE_TOKEN}" "${MCF5407_ABI_GATE_RECORD}")
 
 endif()
 
@@ -2602,8 +2602,8 @@ endif()
 #
 # It carries the objects of step 4 and nothing else. The contract header
 # reaches a consumer through the include directory below, and it is in no
-# source list of this target. The generated `mcf5307_nim.h` is not the contract
-# and is not published. The contract is `include/mcf5307.h`, which is reviewed
+# source list of this target. The generated `mcf5407_nim.h` is not the contract
+# and is not published. The contract is `include/mcf5407.h`, which is reviewed
 # as one file.
 #
 # There is no `INSTALL_INTERFACE` expression and no `PUBLIC_HEADER` property
@@ -2611,30 +2611,30 @@ endif()
 # text that no run can check. They belong in the same change as an
 # `install(TARGETS ...)` rule, where they take effect.
 #
-# `include/mcf5307.h` is in no target's source list, and no build step compiles
+# `include/mcf5407.h` is in no target's source list, and no build step compiles
 # it. The compile check for the contract header is the registered test
 # `t0_abi_header`.
 
-add_library(mcf5307 STATIC $<TARGET_OBJECTS:mcf5307_nim_objs>)
+add_library(mcf5407 STATIC $<TARGET_OBJECTS:mcf5407_nim_objs>)
 
-target_include_directories(mcf5307 PUBLIC
+target_include_directories(mcf5407 PUBLIC
     "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>")
 if(TARGET Threads::Threads)
-    target_link_libraries(mcf5307 PUBLIC Threads::Threads)
+    target_link_libraries(mcf5407 PUBLIC Threads::Threads)
 endif()
-set_target_properties(mcf5307 PROPERTIES
+set_target_properties(mcf5407 PROPERTIES
     LINKER_LANGUAGE C)
 
-message(STATUS "mcf5307: step 5 the static library mcf5307 is defined")
+message(STATUS "mcf5407: step 5 the static library mcf5407 is defined")
 
 # ---------------------------------------------------------------------------
 # Step 6. The consumer-facing name.
 #
-# A consumer writes `mcf5307::mcf5307`, whether it brings this project in with
+# A consumer writes `mcf5407::mcf5407`, whether it brings this project in with
 # `FetchContent` or finds an installed one. The double-colon name is also what
 # makes a misspelling a CMake error. Without it a misspelled name reaches the
-# linker unchanged as `-lmcf5307`.
+# linker unchanged as `-lmcf5407`.
 
-add_library(mcf5307::mcf5307 ALIAS mcf5307)
+add_library(mcf5407::mcf5407 ALIAS mcf5407)
 
-message(STATUS "mcf5307: step 6 the target mcf5307::mcf5307 is exported")
+message(STATUS "mcf5407: step 6 the target mcf5407::mcf5407 is exported")

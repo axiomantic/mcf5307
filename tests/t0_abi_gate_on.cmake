@@ -25,25 +25,25 @@ if(NOT EXISTS "${GATE_CACHE}")
         "persisted cache entry, and there is nothing here to read.")
 endif()
 
-file(STRINGS "${GATE_CACHE}" gate_lines REGEX "^MCF5307_ABI_GATE:")
+file(STRINGS "${GATE_CACHE}" gate_lines REGEX "^MCF5407_ABI_GATE:")
 list(LENGTH gate_lines gate_count)
 if(NOT gate_count EQUAL 1)
     message(FATAL_ERROR
         "t0_abi_gate_on: ${GATE_CACHE} carries ${gate_count} "
-        "MCF5307_ABI_GATE entr(y/ies) and exactly 1 is expected: "
+        "MCF5407_ABI_GATE entr(y/ies) and exactly 1 is expected: "
         "`${gate_lines}`. Zero means cmake/Nim.cmake no longer declares the "
         "switch, and step 4a is then unreachable rather than off.")
 endif()
 
-string(REGEX REPLACE "^MCF5307_ABI_GATE:[A-Z]+=" "" gate_value "${gate_lines}")
+string(REGEX REPLACE "^MCF5407_ABI_GATE:[A-Z]+=" "" gate_value "${gate_lines}")
 if(NOT gate_value)
     message(FATAL_ERROR
-        "t0_abi_gate_on: MCF5307_ABI_GATE is `${gate_value}` in ${GATE_CACHE}. "
+        "t0_abi_gate_on: MCF5407_ABI_GATE is `${gate_value}` in ${GATE_CACHE}. "
         "THE SWITCH IS OFF IN THIS BUILD TREE. The configure-time warning "
-        "`mcf5307: step 4a IS TURNED OFF` in cmake/Nim.cmake enumerates what a "
+        "`mcf5407: step 4a IS TURNED OFF` in cmake/Nim.cmake enumerates what a "
         "run without step 4a did not measure; that warning is the one "
         "statement of it. The entry is a CACHE entry and it persists: "
-        "reconfigure this tree with -DMCF5307_ABI_GATE=ON, or configure a "
+        "reconfigure this tree with -DMCF5407_ABI_GATE=ON, or configure a "
         "fresh tree.")
 endif()
 
@@ -54,7 +54,7 @@ get_filename_component(GATE_STAMP "${GATE_STAMP_OFFSET}" ABSOLUTE
 
 if(NOT EXISTS "${GATE_STAMP}")
     message(FATAL_ERROR
-        "t0_abi_gate_on: MCF5307_ABI_GATE reads `${gate_value}` in "
+        "t0_abi_gate_on: MCF5407_ABI_GATE reads `${gate_value}` in "
         "${GATE_CACHE} AND STEP 4a'S BRANCH STILL DID NOT RUN IN THE MOST "
         "RECENT CONFIGURE OF THIS TREE THAT REACHED tests/. There is no "
         "${GATE_STAMP}. "
@@ -63,9 +63,9 @@ if(NOT EXISTS "${GATE_STAMP}")
         "so a tree whose branch ran has one and a tree whose branch did not "
         "has none. Two ways to reach this state: the branch was deleted from "
         "cmake/Nim.cmake while the `set()` that declares the switch was kept, "
-        "or a parent list file set MCF5307_ABI_GATE as a NORMAL variable "
+        "or a parent list file set MCF5407_ABI_GATE as a NORMAL variable "
         "before add_subdirectory() and it shadows the cache entry from the "
-        "second configure onward. The configure-time warning `mcf5307: step "
+        "second configure onward. The configure-time warning `mcf5407: step "
         "4a IS TURNED OFF` enumerates what an unmeasured build does not know "
         "about itself.")
 endif()
@@ -81,10 +81,10 @@ if(NOT stamp_line_count EQUAL 7)
 endif()
 
 list(GET stamp_lines 0 stamp_head)
-if(NOT stamp_head STREQUAL "MCF5307_ABI_GATE_RAN")
+if(NOT stamp_head STREQUAL "MCF5407_ABI_GATE_RAN")
     message(FATAL_ERROR
         "t0_abi_gate_on: ${GATE_STAMP} opens with `${stamp_head}` and "
-        "`MCF5307_ABI_GATE_RAN` is expected. The file in that place is not the "
+        "`MCF5407_ABI_GATE_RAN` is expected. The file in that place is not the "
         "record step 4a writes.")
 endif()
 
@@ -118,7 +118,7 @@ if(NOT stamp_SITES EQUAL 13)
     message(FATAL_ERROR
         "t0_abi_gate_on: ${GATE_STAMP} records SITES=${stamp_SITES} and 13 are "
         "expected. Step 4a's three parts and nine controls each increment "
-        "MCF5307_ABI_GATE_SITES where they finish, and control A increments on "
+        "MCF5407_ABI_GATE_SITES where they finish, and control A increments on "
         "the calibration read and again on the contract read. A count below 13 "
         "is a part or a control that is no longer in cmake/Nim.cmake; a count "
         "above it is a site counted twice. Either way the branch that ran is "
@@ -157,7 +157,7 @@ if(NOT stamp_STUB_EXTERNAL_OWN EQUAL stamp_PUBLISHED)
         "set, so the two counts are the same count when it has run.")
 endif()
 
-message("t0_abi_gate_on: MCF5307_ABI_GATE is `${gate_value}` in ${GATE_CACHE}, "
+message("t0_abi_gate_on: MCF5407_ABI_GATE is `${gate_value}` in ${GATE_CACHE}, "
     "and step 4a's BRANCH RAN THROUGH - no fault fired and all "
     "${stamp_SITES} sites ran - in the most recent configure of this tree "
     "THAT REACHED tests/. ${GATE_STAMP} records CONTRACT=${stamp_CONTRACT} "

@@ -5,7 +5,7 @@
 ## CMPA, CMPI and TRAP, and nothing else. NOP has no work to do and `cpu.nim`
 ## answers it without entering this module. The register file, the board
 ## accesses, the effective-address evaluation and the exception frame are
-## `mcf5307/machine`'s.
+## `mcf5407/machine`'s.
 ##
 ## Its whole import list is `{decode_types, ea, machine}`. An executor that
 ## reaches into another executor for a helper rebuilds the decoder-under-
@@ -254,14 +254,14 @@
 ##      illegal size and illegal operand in every group uses; `alu.nim`'s
 ##      header makes the identical statement about a divide by zero.
 
-import mcf5307/decode_types
-import mcf5307/ea
-import mcf5307/machine
+import mcf5407/decode_types
+import mcf5407/ea
+import mcf5407/machine
 
 # ---------------------------------------------------------------------------
 # Trapping.
 
-proc trap(ctx: MCF5307Ctx): uint32 =
+proc trap(ctx: MCF5407Ctx): uint32 =
   ## Halt the context with `fault`. Every illegal size, illegal operand mode,
   ## 32-bit branch displacement and malformed exception frame in this module
   ## ends here, so that "the core refused" is one observable and not several.
@@ -304,7 +304,7 @@ proc conditionHolds(sr: uint32; cond: uint8): bool =
 # ---------------------------------------------------------------------------
 # The condition codes of a comparison.
 
-proc setCompareCc(ctx: MCF5307Ctx; src, dst, res: uint32; borrow: bool) =
+proc setCompareCc(ctx: MCF5407Ctx; src, dst, res: uint32; borrow: bool) =
   ## N and Z from the difference, V the signed overflow, C the borrow, and X
   ## left alone.
   ##
@@ -323,7 +323,7 @@ proc setCompareCc(ctx: MCF5307Ctx; src, dst, res: uint32; borrow: bool) =
 # ---------------------------------------------------------------------------
 # BRA, BSR and Bcc.
 
-proc execBranch(ctx: MCF5307Ctx; word: uint16; d: Decoded;
+proc execBranch(ctx: MCF5407Ctx; word: uint16; d: Decoded;
                 insnPc: uint32): uint32 =
   ## One branch. `d.size` carries the FORM the decoder read out of the
   ## displacement byte: 1 is the byte displacement in the opcode word, 2 the
@@ -384,7 +384,7 @@ proc execBranch(ctx: MCF5307Ctx; word: uint16; d: Decoded;
 # ---------------------------------------------------------------------------
 # Scc.
 
-proc execScc(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execScc(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## `Scc Dx`: ones or zeros into the LOW BYTE of a data register.
   ##
   ## The write goes through `eaWrite`, which applies `mergeSized`, so the other
@@ -404,7 +404,7 @@ proc execScc(ctx: MCF5307Ctx; d: Decoded): uint32 =
 # ---------------------------------------------------------------------------
 # TST.
 
-proc execTst(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execTst(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## `TST.<sz> <ea>`: set N and Z from the operand, clear V and C, leave X.
   ##
   ## A byte operand may not be an address register, and that is a rule about
@@ -434,7 +434,7 @@ proc execTst(ctx: MCF5307Ctx; d: Decoded): uint32 =
 # ---------------------------------------------------------------------------
 # CMP, CMPA and CMPI.
 
-proc execCompare(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execCompare(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## One comparison. The difference is computed and discarded; only the
   ## condition codes survive.
   ##
@@ -474,7 +474,7 @@ proc execCompare(ctx: MCF5307Ctx; d: Decoded): uint32 =
 # ---------------------------------------------------------------------------
 # JMP and JSR.
 
-proc execJump(ctx: MCF5307Ctx; d: Decoded; insnPc: uint32): uint32 =
+proc execJump(ctx: MCF5407Ctx; d: Decoded; insnPc: uint32): uint32 =
   ## `JMP <ea>` and `JSR <ea>`. The operand is a CONTROL address and the
   ## instruction jumps to the ADDRESS ITSELF and never to what is at it -
   ## Table 2-8, folio 2-20, gives JMP as "Address of <ea> -> PC".
@@ -504,7 +504,7 @@ proc execJump(ctx: MCF5307Ctx; d: Decoded; insnPc: uint32): uint32 =
 # ---------------------------------------------------------------------------
 # RTS and RTE.
 
-proc execRts(ctx: MCF5307Ctx; insnPc: uint32): uint32 =
+proc execRts(ctx: MCF5407Ctx; insnPc: uint32): uint32 =
   ## "(SP) -> PC; SP + 4 -> SP" - Table 2-8, folio 2-22. The pop is read BEFORE
   ## the stack pointer moves, and the pointer moves only when the read
   ## succeeded.
@@ -517,7 +517,7 @@ proc execRts(ctx: MCF5307Ctx; insnPc: uint32): uint32 =
     return 0'u32
   8'u32
 
-proc execRte(ctx: MCF5307Ctx; insnPc: uint32): uint32 =
+proc execRte(ctx: MCF5407Ctx; insnPc: uint32): uint32 =
   ## The inverse of `takeException`.
   ##
   ## The format field is validated first. Table 2-22's "RTE and Format Error
@@ -563,7 +563,7 @@ proc execRte(ctx: MCF5307Ctx; insnPc: uint32): uint32 =
 # ---------------------------------------------------------------------------
 # TRAP.
 
-proc execTrap(ctx: MCF5307Ctx; d: Decoded): uint32 =
+proc execTrap(ctx: MCF5407Ctx; d: Decoded): uint32 =
   ## `TRAP #<vector>`, the four-bit field in the low bits of the opcode.
   ##
   ## THE VECTOR NUMBER IS 32 PLUS THE FIELD. MCF5407 User's Manual Table 2-19,
@@ -587,9 +587,9 @@ proc execTrap(ctx: MCF5307Ctx; d: Decoded): uint32 =
 # ---------------------------------------------------------------------------
 # The dispatch entry `step` calls.
 
-proc controlFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
+proc controlFamily*(ctx: MCF5407Ctx; word: uint16; d: Decoded): uint32 =
   ## Execute one control-flow or comparison instruction. Called from `step` in
-  ## `mcf5307/cpu` with the opcode word and the decoded operation. Returns a
+  ## `mcf5407/cpu` with the opcode word and the decoded operation. Returns a
   ## placeholder cycle count excluding the fetch - see the cycle block in
   ## `cpu.nim` - and halts the context with `fault` set on an illegal size, an
   ## illegal effective address, a 32-bit branch displacement or an exception

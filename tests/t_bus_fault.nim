@@ -1,4 +1,4 @@
-## `t_bus_fault` - the bus-fault channel of `mcf5307/bus`.
+## `t_bus_fault` - the bus-fault channel of `mcf5407/bus`.
 ##
 ## The documents this file cites are outside this repository and are named in
 ## full, so that a citation can be checked without knowing this project.
@@ -25,10 +25,10 @@
 
 import std/strutils
 
-import mcf5307/bus
-import mcf5307/cpu
-import mcf5307/decode_types
-import mcf5307/machine
+import mcf5407/bus
+import mcf5407/cpu
+import mcf5407/decode_types
+import mcf5407/machine
 
 var failures: seq[string]
 import ./case_sites
@@ -84,24 +84,24 @@ template checkEq(got: uint32; want: uint32; label: string) =
 # THE MAPPING TABLE assigns codes to the non-OK bus statuses, and each expected
 # value below is the code that table's own row prints.
 
-checkEq(faultStatusFor(Mcf5307BusStatus.busFault, operandWrite),
+checkEq(faultStatusFor(Mcf5407BusStatus.busFault, operandWrite),
         0b1001'u32,
         "mapping: a device fault on a write is 1001")
-checkEq(faultStatusFor(Mcf5307BusStatus.busFault, operandRead),
+checkEq(faultStatusFor(Mcf5407BusStatus.busFault, operandRead),
         0b1001'u32,
         "mapping: a device fault on a read is 1001")
 
-checkEq(faultStatusFor(Mcf5307BusStatus.busUnmapped, operandRead),
+checkEq(faultStatusFor(Mcf5407BusStatus.busUnmapped, operandRead),
         0b1100'u32,
         "mapping: unmapped on a read is 1100")
-checkEq(faultStatusFor(Mcf5307BusStatus.busUnmapped, operandWrite),
+checkEq(faultStatusFor(Mcf5407BusStatus.busUnmapped, operandWrite),
         0b1000'u32,
         "mapping: unmapped on a write is 1000")
 
-checkEq(faultStatusFor(Mcf5307BusStatus.busSizeIllegal, operandRead),
+checkEq(faultStatusFor(Mcf5407BusStatus.busSizeIllegal, operandRead),
         0b1100'u32,
         "mapping: an illegal width on a read is 1100")
-checkEq(faultStatusFor(Mcf5307BusStatus.busSizeIllegal, operandWrite),
+checkEq(faultStatusFor(Mcf5407BusStatus.busSizeIllegal, operandWrite),
         0b1000'u32,
         "mapping: an illegal width on a write is 1000")
 
@@ -109,10 +109,10 @@ checkEq(faultStatusFor(Mcf5307BusStatus.busSizeIllegal, operandWrite),
 # the procedure is total over the enumeration. Table 2-21's own `0000` is the
 # code for "not an access or address error nor an interrupted debug service
 # routine", which is what a completed access is.
-checkEq(faultStatusFor(Mcf5307BusStatus.busOk, operandRead),
+checkEq(faultStatusFor(Mcf5407BusStatus.busOk, operandRead),
         0b0000'u32,
         "mapping: a completed read is 0000")
-checkEq(faultStatusFor(Mcf5307BusStatus.busOk, operandWrite),
+checkEq(faultStatusFor(Mcf5407BusStatus.busOk, operandWrite),
         0b0000'u32,
         "mapping: a completed write is 0000")
 
@@ -124,18 +124,18 @@ checkEq(faultStatusFor(Mcf5307BusStatus.busOk, operandWrite),
 # reader who mistakes an extension for hardware behaviour is contradicted by a
 # case rather than by a comment.
 
-check(isEmulatorExtension(Mcf5307BusStatus.busFault) == false,
+check(isEmulatorExtension(Mcf5407BusStatus.busFault) == false,
       "class: a write-protect fault is real MCF5307 behaviour",
-      $isEmulatorExtension(Mcf5307BusStatus.busFault), "false")
-check(isEmulatorExtension(Mcf5307BusStatus.busUnmapped) == true,
+      $isEmulatorExtension(Mcf5407BusStatus.busFault), "false")
+check(isEmulatorExtension(Mcf5407BusStatus.busUnmapped) == true,
       "class: unmapped is this emulator's own extension",
-      $isEmulatorExtension(Mcf5307BusStatus.busUnmapped), "true")
-check(isEmulatorExtension(Mcf5307BusStatus.busSizeIllegal) == true,
+      $isEmulatorExtension(Mcf5407BusStatus.busUnmapped), "true")
+check(isEmulatorExtension(Mcf5407BusStatus.busSizeIllegal) == true,
       "class: an illegal width is this emulator's own extension",
-      $isEmulatorExtension(Mcf5307BusStatus.busSizeIllegal), "true")
-check(isEmulatorExtension(Mcf5307BusStatus.busOk) == false,
+      $isEmulatorExtension(Mcf5407BusStatus.busSizeIllegal), "true")
+check(isEmulatorExtension(Mcf5407BusStatus.busOk) == false,
       "class: a completed access is not a fault of any class",
-      $isEmulatorExtension(Mcf5307BusStatus.busOk), "false")
+      $isEmulatorExtension(Mcf5407BusStatus.busOk), "false")
 
 # ---------------------------------------------------------------------------
 # The two boards. One flat byte array, big-endian, reached through TWO pairs of
@@ -179,25 +179,25 @@ proc boardReadValue(b: TestBoard; address: uint32; size: int): uint32 =
     result = (result shl 8) or uint32(b.bytes[int(address) + i])
 
 proc silentRead(user: pointer; address: uint32; size: cint;
-                status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+                status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   boardReadValue(b[], address, int(size))
 
 proc silentWrite(user: pointer; address: uint32; size: cint; value: uint32;
-                 status: ptr Mcf5307BusStatus) {.cdecl.} =
+                 status: ptr Mcf5407BusStatus) {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   boardWrite(b[], address, int(size), value)
 
 proc explicitRead(user: pointer; address: uint32; size: cint;
-                  status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+                  status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   let b = cast[ptr TestBoard](user)
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardReadValue(b[], address, int(size))
 
 proc explicitWrite(user: pointer; address: uint32; size: cint; value: uint32;
-                   status: ptr Mcf5307BusStatus) {.cdecl.} =
+                   status: ptr Mcf5407BusStatus) {.cdecl.} =
   let b = cast[ptr TestBoard](user)
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardWrite(b[], address, int(size), value)
 
 proc bIack(user: pointer; level: cint; vector: uint8) {.cdecl.} =
@@ -210,15 +210,15 @@ proc freshBoard() =
 # ---------------------------------------------------------------------------
 # BLOCK 3. Silence means success, through the published entry points.
 #
-# The core writes `MCF5307_BUS_OK` into `*status` before every call, so a board
+# The core writes `MCF5407_BUS_OK` into `*status` before every call, so a board
 # that never writes it behaves exactly as it did before the parameter existed.
 # The two pairs of callbacks differ in nothing else, and each run is held
 # against the same hand-stated outcome
 # rather than against the other run: two runs compared only with each other
 # would agree just as well if the core had stopped executing altogether.
 #
-# The path is the published one - `mcf5307_create`, `mcf5307_reset`,
-# `mcf5307_exec` - and not an internal helper reached around the back. `trap #0`
+# The path is the published one - `mcf5407_create`, `mcf5407_reset`,
+# `mcf5407_exec` - and not an internal helper reached around the back. `trap #0`
 # then `rte` is chosen because exception entry reads the vector table, writes
 # both longwords of the frame and fetches, so one program exercises the read,
 # the write and the fetch call sites together.
@@ -234,23 +234,23 @@ proc freshBoard() =
 type Outcome = tuple[sp: uint32, pc: uint32, sr: uint32, halted: bool,
                      fault: bool, frame: uint32, framePc: uint32]
 
-proc runTrap(rd: Mcf5307ReadFn; wr: Mcf5307WriteFn): Outcome =
+proc runTrap(rd: Mcf5407ReadFn; wr: Mcf5407WriteFn): Outcome =
   freshBoard()
   boardWrite(board, execBase, 2, uint32(opTrap0))
   boardWrite(board, trapHandler, 2, uint32(opRteWord))
   boardWrite(board, 4'u32 * uint32(trapVector), 4, trapHandler)
 
-  let ctx = mcf5307_create(addr board, rd, wr, bIack)
-  mcf5307_reset(ctx, 0x800'u32, execBase)
-  discard mcf5307_exec(ctx, 1'u32)
-  result = (sp: mcf5307_get_reg(ctx, 15),
-            pc: mcf5307_get_reg(ctx, 17),
-            sr: mcf5307_get_reg(ctx, 16),
+  let ctx = mcf5407_create(addr board, rd, wr, bIack)
+  mcf5407_reset(ctx, 0x800'u32, execBase)
+  discard mcf5407_exec(ctx, 1'u32)
+  result = (sp: mcf5407_get_reg(ctx, 15),
+            pc: mcf5407_get_reg(ctx, 17),
+            sr: mcf5407_get_reg(ctx, 16),
             halted: ctx.halted,
             fault: ctx.fault,
             frame: boardReadValue(board, frameBase, 4),
             framePc: boardReadValue(board, frameBase + 4'u32, 4))
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # THE EXPECTED OUTCOME IS HAND-DERIVED. A7 is 0x800 with its low two bits 00,
 # so Table 2-20, folio 2-33, gives FORMAT 4 and a frame at 0x800 - 8. `trap #0`
@@ -270,13 +270,13 @@ check(silent == wantTrap,
 
 let explicit = runTrap(explicitRead, explicitWrite)
 check(explicit == wantTrap,
-      "an explicit MCF5307_BUS_OK is the same run",
+      "an explicit MCF5407_BUS_OK is the same run",
       $explicit, $wantTrap)
 
 # ---------------------------------------------------------------------------
 # BLOCK 4. The core originates no bus status of its own.
 #
-# `MCF5307_BUS_UNMAPPED` and `MCF5307_BUS_SIZE_ILLEGAL` have no producer on
+# `MCF5407_BUS_UNMAPPED` and `MCF5407_BUS_SIZE_ILLEGAL` have no producer on
 # this part - User's Manual section 2.8.2, Table 2-22, "Access Error", folio
 # 2-34, holds that an access error is reported only for a store to
 # write-protected memory - so the only thing that can raise one is a board's
@@ -301,8 +301,8 @@ const sweep: array[7, Access] = [
   (address: 0xFFF'u32, size: 1'u8, want: 0x78'u32)]
 
 freshBoard()
-let sweepCtx = mcf5307_create(addr board, silentRead, silentWrite, bIack)
-mcf5307_reset(sweepCtx, 0x800'u32, execBase)
+let sweepCtx = mcf5407_create(addr board, silentRead, silentWrite, bIack)
+mcf5407_reset(sweepCtx, 0x800'u32, execBase)
 for access in sweep:
   writeMem(sweepCtx, access.address, access.size, 0x12345678'u32)
   let seen = (value: readMem(sweepCtx, access.address, access.size),
@@ -313,7 +313,7 @@ for access in sweep:
         "no core-originated status: " & $access.size & " bytes at 0x" &
           toHex(access.address),
         $seen, $wantSeen)
-mcf5307_destroy(sweepCtx)
+mcf5407_destroy(sweepCtx)
 
 # ---------------------------------------------------------------------------
 # BLOCK 5. A non-OK bus status becomes an access fault, and the frame carries a
@@ -331,7 +331,7 @@ mcf5307_destroy(sweepCtx)
 # only in conjunction with an attempted store to write-protected memory. Thus,
 # access errors associated with instruction fetch or operand read accesses are
 # not possible." The board below refuses exactly one longword and reports
-# `MCF5307_BUS_FAULT` for it.
+# `MCF5407_BUS_FAULT` for it.
 #
 # THE THIRD BOARD REPORTS A NON-OK STATUS, which is what separates it from the
 # two above: those two exist to show that silence is success, and this one
@@ -352,25 +352,25 @@ const
 var offBoardWrites = 0
 
 proc protectedRead(user: pointer; address: uint32; size: cint;
-                   status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+                   status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return 0'u32
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardReadValue(b[], address, int(size))
 
 proc protectedWrite(user: pointer; address: uint32; size: cint; value: uint32;
-                    status: ptr Mcf5307BusStatus) {.cdecl.} =
+                    status: ptr Mcf5407BusStatus) {.cdecl.} =
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
     inc offBoardWrites
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return
   if address == protectedWord:
-    status[] = Mcf5307BusStatus.busFault
+    status[] = Mcf5407BusStatus.busFault
     return
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   boardWrite(b[], address, int(size), value)
 
 type FaultOutcome = tuple[sp: uint32, pc: uint32, sr: uint32, halted: bool,
@@ -385,18 +385,18 @@ proc runProtectedStore(startSp: uint32; readFrameAt: uint32): FaultOutcome =
   boardWrite(board, accessHandler, 2, uint32(opRteWord))
   boardWrite(board, 4'u32 * uint32(vecAccess), 4, accessHandler)
 
-  let ctx = mcf5307_create(addr board, protectedRead, protectedWrite, bIack)
-  mcf5307_reset(ctx, startSp, execBase)
-  discard mcf5307_exec(ctx, 1'u32)
-  result = (sp: mcf5307_get_reg(ctx, 15),
-            pc: mcf5307_get_reg(ctx, 17),
-            sr: mcf5307_get_reg(ctx, 16),
+  let ctx = mcf5407_create(addr board, protectedRead, protectedWrite, bIack)
+  mcf5407_reset(ctx, startSp, execBase)
+  discard mcf5407_exec(ctx, 1'u32)
+  result = (sp: mcf5407_get_reg(ctx, 15),
+            pc: mcf5407_get_reg(ctx, 17),
+            sr: mcf5407_get_reg(ctx, 16),
             halted: ctx.halted,
             fault: ctx.fault,
             frame: boardReadValue(board, readFrameAt, 4),
             framePc: boardReadValue(board, readFrameAt + 4'u32, 4),
             offBoard: offBoardWrites)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # The expected frame is hand-derived from the bit positions and not from a
 # second call of the encoder. A7 is 0x800 with its low two bits 00, so Table
@@ -436,7 +436,7 @@ check(protectedStore == wantProtected,
 # does not recurse.
 #
 # A fault inside the exception-entry stacking itself is a double fault: the
-# core halts, sets its own fault field, and returns from `mcf5307_exec` with the
+# core halts, sets its own fault field, and returns from `mcf5407_exec` with the
 # cycles it spent. It does not recurse.
 #
 # A7 is 0x1008, so the frame base is 0x1000 and is off the board. The same
@@ -484,8 +484,8 @@ check(doubleFault == wantDoubleFault,
 # sentinel, and the frame itself was correct - `0x4C082700`, `FS` `1100`.
 #
 # THE FIX IS NOT WRITABLE FROM THE FILES THIS SUITE COVERS. It needs a
-# pending-fault field on `MCF5307Ctx` in `src/mcf5307/decode_types.nim`, or a
-# check after the executor returns in `src/mcf5307/cpu.nim`'s `step`.
+# pending-fault field on `MCF5407Ctx` in `src/mcf5407/decode_types.nim`, or a
+# check after the executor returns in `src/mcf5407/cpu.nim`'s `step`.
 #
 # SO THIS CASE ASSERTS WHAT THE CORE DOES AND SAYS WHY IT IS NOT WHAT THE CORE
 # SHOULD DO. It goes RED the moment the read path is wired, which is the point:
@@ -511,17 +511,17 @@ proc runFaultingRead(): ReadOutcome =
   boardWrite(board, accessHandler, 2, uint32(opRteWord))
   boardWrite(board, 4'u32 * uint32(vecAccess), 4, accessHandler)
 
-  let ctx = mcf5307_create(addr board, protectedRead, protectedWrite, bIack)
-  mcf5307_reset(ctx, 0x800'u32, execBase)
-  discard mcf5307_set_reg(ctx, 1, sentinelD1)
-  discard mcf5307_exec(ctx, 1'u32)
-  result = (d1: mcf5307_get_reg(ctx, 1),
-            pc: mcf5307_get_reg(ctx, 17),
+  let ctx = mcf5407_create(addr board, protectedRead, protectedWrite, bIack)
+  mcf5407_reset(ctx, 0x800'u32, execBase)
+  discard mcf5407_set_reg(ctx, 1, sentinelD1)
+  discard mcf5407_exec(ctx, 1'u32)
+  result = (d1: mcf5407_get_reg(ctx, 1),
+            pc: mcf5407_get_reg(ctx, 17),
             halted: ctx.halted,
             fault: ctx.fault,
             frame: boardReadValue(board, frameBase, 4),
             framePc: boardReadValue(board, frameBase + 4'u32, 4))
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # NOTHING IS STACKED, so both frame longwords read back as the zeroed board.
 # The program counter stays where the opcode word and the one `(xxx).W`
@@ -610,18 +610,18 @@ proc runFaultingPush(words: openArray[uint16]; frameAt: uint32): PushOutcome =
   boardWrite(board, accessHandler, 2, uint32(opRteWord))
   boardWrite(board, 4'u32 * uint32(vecAccess), 4, accessHandler)
 
-  let ctx = mcf5307_create(addr board, protectedRead, protectedWrite, bIack)
-  mcf5307_reset(ctx, linkSp, execBase)
-  discard mcf5307_set_reg(ctx, 8, a0Sentinel)
-  discard mcf5307_exec(ctx, 1'u32)
-  result = (pc: mcf5307_get_reg(ctx, 17),
-            sp: mcf5307_get_reg(ctx, 15),
-            a0: mcf5307_get_reg(ctx, 8),
+  let ctx = mcf5407_create(addr board, protectedRead, protectedWrite, bIack)
+  mcf5407_reset(ctx, linkSp, execBase)
+  discard mcf5407_set_reg(ctx, 8, a0Sentinel)
+  discard mcf5407_exec(ctx, 1'u32)
+  result = (pc: mcf5407_get_reg(ctx, 17),
+            sp: mcf5407_get_reg(ctx, 15),
+            a0: mcf5407_get_reg(ctx, 8),
             halted: ctx.halted,
             fault: ctx.fault,
             frame: boardReadValue(board, frameAt, 4),
             framePc: boardReadValue(board, frameAt + 4'u32, 4))
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # JSR. Table 2-8, "User-Level Instruction Set Summary", folio 2-20, gives it
 # "SP - 4 -> SP; next sequential PC -> (SP); <ea> -> PC". A7 goes 0x0C04 to

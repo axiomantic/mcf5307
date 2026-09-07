@@ -9,7 +9,7 @@
 ## constants, and in a runtime prefix test on `"Table 2-15 folio "`; the two
 ## boundary constants are additionally compared at compile time against
 ## `table215LastRowOnFolio227` and `table215LastRowOnFolio228` in
-## `src/mcf5307/decode_types.nim`, so moving a break needs an edit in both
+## `src/mcf5407/decode_types.nim`, so moving a break needs an edit in both
 ## files and cannot be done silently in one.
 ##
 ## The correspondence this file was moved across, verified folio by folio
@@ -191,7 +191,7 @@
 ## The remaining assertions are kept.
 ##
 ##   (5) The first non-zero cycle return, driven through the real ABI with a
-##       board that returns `MCF5307_BUS_OK` and a `NOP` for every fetch. A
+##       board that returns `MCF5407_BUS_OK` and a `NOP` for every fetch. A
 ##       core that returns zero cycles cannot loop at all, so this separates
 ##       "the decoder ran" from "the decoder is not wired in".
 ##
@@ -210,15 +210,15 @@
 ## single `sp`.
 
 import std/[options, strutils]
-import mcf5307/cpu
-import mcf5307/decode
-import mcf5307/decode_types
-import mcf5307/ea
-import mcf5307/move
-import mcf5307/alu
-import mcf5307/logic
-import mcf5307/control
-import mcf5307/machine
+import mcf5407/cpu
+import mcf5407/decode
+import mcf5407/decode_types
+import mcf5407/ea
+import mcf5407/move
+import mcf5407/alu
+import mcf5407/logic
+import mcf5407/control
+import mcf5407/machine
 
 var failures: seq[string]
 import ./case_sites
@@ -305,16 +305,16 @@ template checkDetail(cond: bool; label: string; got: string) =
   static: declaredSites.add(site)
   checkDetailImpl(site, cond, label, got)
 # ---------------------------------------------------------------------------
-# The board for the non-zero-cycle run: `MCF5307_BUS_OK` and a NOP for every
+# The board for the non-zero-cycle run: `MCF5407_BUS_OK` and a NOP for every
 # fetch.
 
 proc readNop(user: pointer; address: uint32; size: cint;
-             status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
-  status[] = Mcf5307BusStatus.busOk
+             status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
+  status[] = Mcf5407BusStatus.busOk
   result = 0x4E71'u32   # NOP
 
 proc writeNoop(user: pointer; address: uint32; size: cint; value: uint32;
-               status: ptr Mcf5307BusStatus) {.cdecl.} =
+               status: ptr Mcf5407BusStatus) {.cdecl.} =
   discard
 
 proc iackNoop(user: pointer; level: cint; vector: uint8) {.cdecl.} =
@@ -324,11 +324,11 @@ proc iackNoop(user: pointer; level: cint; vector: uint8) {.cdecl.} =
 # (5) The first non-zero cycle return, driven through the real ABI.
 
 block:
-  let ctx = mcf5307_create(nil, readNop, writeNoop, iackNoop)
-  mcf5307_reset(ctx, 0x4000000'u32, 0x100'u32)
-  let cycles = mcf5307_exec(ctx, 64'u32)
+  let ctx = mcf5407_create(nil, readNop, writeNoop, iackNoop)
+  mcf5407_reset(ctx, 0x4000000'u32, 0x100'u32)
+  let cycles = mcf5407_exec(ctx, 64'u32)
   check(cycles > 0'u32, "exec runs a NOP fetch and returns non-zero cycles")
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 # ---------------------------------------------------------------------------
 # The board the executor assertions run on. One flat byte array, big-endian,
@@ -345,24 +345,24 @@ var board: TestBoard
 var busAccesses = 0
 
 proc bRead(user: pointer; address: uint32; size: cint;
-           status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
+           status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
   inc busAccesses
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return 0'u32
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   for i in 0 ..< int(size):
     result = (result shl 8) or uint32(b.bytes[int(address) + i])
 
 proc bWrite(user: pointer; address: uint32; size: cint; value: uint32;
-            status: ptr Mcf5307BusStatus) {.cdecl.} =
+            status: ptr Mcf5407BusStatus) {.cdecl.} =
   inc busAccesses
   let b = cast[ptr TestBoard](user)
   if int(address) + int(size) > memSize:
-    status[] = Mcf5307BusStatus.busUnmapped
+    status[] = Mcf5407BusStatus.busUnmapped
     return
-  status[] = Mcf5307BusStatus.busOk
+  status[] = Mcf5407BusStatus.busOk
   for i in 0 ..< int(size):
     b.bytes[int(address) + i] =
       uint8((value shr ((int(size) - 1 - i) * 8)) and 0xFF'u32)
@@ -377,8 +377,8 @@ const
   dRegSeedMustBeNonZero = 0x00000007'u32
   aRegSeedStrideMustBeNonZero = 0x4'u32
   srAfterResetMustMatchCpuNim = 0x2700'u32
-    ## What `mcf5307_reset` leaves in the status register - `cpu.nim`'s
-    ## `mcf5307_reset` writes `ctx.sr = 0x2700'u32` - from the G2 reset
+    ## What `mcf5407_reset` leaves in the status register - `cpu.nim`'s
+    ## `mcf5407_reset` writes `ctx.sr = 0x2700'u32` - from the G2 reset
     ## vector's `move.w #$2700,%sr`. `runFamily` seeds every other
     ## register `pristine` reads, so this is its one copy of PRODUCTION state.
     ## Not imported from `cpu.nim`: one shared symbol would hide a wrong value.
@@ -789,8 +789,8 @@ proc runFamily(c: Coverage; operand: EA; imm: uint8 = 1'u8): RunResult =
   # `ramBase` or widened a run's write would carry a previous entry's bytes
   # into the next run with nothing to say so.
   zeroMem(addr board, sizeof(TestBoard))
-  let ctx = mcf5307_create(addr board, bRead, bWrite, bIack)
-  mcf5307_reset(ctx, stackBase, execBase)
+  let ctx = mcf5407_create(addr board, bRead, bWrite, bIack)
+  mcf5407_reset(ctx, stackBase, execBase)
   for i in 0 .. 7:
     ctx.dRegs[i] = dRegSeedMustBeNonZero + uint32(i)
   for i in 0 .. 6:
@@ -808,7 +808,7 @@ proc runFamily(c: Coverage; operand: EA; imm: uint8 = 1'u8): RunResult =
   result = RunResult(cycles: cycles, fault: ctx.fault, halted: ctx.halted,
                      accesses: busAccesses, dRegs: ctx.dRegs,
                      aRegs: ctx.aRegs, sp: ctx.sp, pc: ctx.pc, sr: ctx.sr)
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 proc pristine(r: RunResult): bool =
   ## The register file exactly as `runFamily` seeded it. A refusal writes
@@ -1293,7 +1293,7 @@ block:
 # block (19) does not, so neither is reachable only through the other.
 #
 # The CFPRM provenance the deleted block carried is on the `eaControl7`
-# declaration in `src/mcf5307/ea.nim`, beside the value it cites.
+# declaration in `src/mcf5407/ea.nim`, beside the value it cites.
 
 # ---------------------------------------------------------------------------
 # (16) The ADDQ and SUBQ mask, enumerated cell by cell. This block closes a
@@ -1321,7 +1321,7 @@ block:
 #
 # The assembler transcript behind these twelve cells, and the CFPRM
 # `Alterable` column that disagrees with it on two of them, are recorded once -
-# on the `eaAlterable7` declaration in `src/mcf5307/ea.nim`. That is the site
+# on the `eaAlterable7` declaration in `src/mcf5407/ea.nim`. That is the site
 # whose value the evidence establishes; this block only pins it. The
 # disagreement is not settled there and is not settled here: a reader who
 # narrows the mask to follow the column reds the two `(xxx).W` and `(xxx).L`
@@ -1377,7 +1377,7 @@ block:
 #
 # What the deletion does not lose: the manual citations the three cases carried
 # - CFPRM Rev. 3 Table 2-3 folio 2-10 for all three - are on the declarations
-# in `src/mcf5307/ea.nim`, beside the values that evidence establishes.
+# in `src/mcf5407/ea.nim`, beside the values that evidence establishes.
 
 # ---------------------------------------------------------------------------
 # (19) Every mask in the domain, held against its literal value. One case per
@@ -1648,8 +1648,8 @@ var absLSawSwapped = false
 # size. Assembled by hand from the encoding in the manual, and the two
 # extension words below are the manual's order: high first.
 proc readAbsL(user: pointer; address: uint32; size: cint;
-              status: ptr Mcf5307BusStatus): uint32 {.cdecl.} =
-  status[] = Mcf5307BusStatus.busOk
+              status: ptr Mcf5407BusStatus): uint32 {.cdecl.} =
+  status[] = Mcf5407BusStatus.busOk
   if address == absLSwappedAddr:
     absLSawSwapped = true
     return absLDecoyValue
@@ -1661,17 +1661,17 @@ proc readAbsL(user: pointer; address: uint32; size: cint;
   else: 0'u32
 
 block:
-  let ctx = mcf5307_create(nil, readAbsL, writeNoop, iackNoop)
-  discard mcf5307_set_reg(ctx, 0, 0'u32)
-  mcf5307_reset(ctx, 0x4000000'u32, absLProgramBase)
-  discard mcf5307_exec(ctx, 64'u32)
-  let d0 = mcf5307_get_reg(ctx, 0)
+  let ctx = mcf5407_create(nil, readAbsL, writeNoop, iackNoop)
+  discard mcf5407_set_reg(ctx, 0, 0'u32)
+  mcf5407_reset(ctx, 0x4000000'u32, absLProgramBase)
+  discard mcf5407_exec(ctx, 64'u32)
+  let d0 = mcf5407_get_reg(ctx, 0)
   check(d0 == absLTargetValue,
     "move.l (0x00123456).L,%d0 reads the address whose HIGH half is the " &
     "first extension word (got 0x" & d0.toHex(8) & ")")
   check(not absLSawSwapped,
     "the word-swapped address 0x34560012 is never presented to the board")
-  mcf5307_destroy(ctx)
+  mcf5407_destroy(ctx)
 
 
 # (18) This file's own case total, held against the one figure the other sites

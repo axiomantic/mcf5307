@@ -3,8 +3,8 @@
 # THE RULE. A test whose name the T0 pattern selects, and whose `COMMAND` names
 # a CMake executable target, is run by `ctest --preset t0` and must therefore be
 # BUILT by `cmake --build --preset t0`. That build preset carries
-# `--target mcf5307_tests` and nothing else, so the only way a target reaches it
-# is an `add_dependencies(mcf5307_tests <target>)` line. The root `CMakeLists.txt`
+# `--target mcf5407_tests` and nothing else, so the only way a target reaches it
+# is an `add_dependencies(mcf5407_tests <target>)` line. The root `CMakeLists.txt`
 # states that convention where it creates the aggregate; this check is what makes
 # a list file that forgets it fail.
 #

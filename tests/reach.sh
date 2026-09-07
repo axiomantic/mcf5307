@@ -38,7 +38,7 @@
 #   remaining thing that can change the generated C is the source. A
 #   zero-change run must produce byte-identical C.
 #
-#   Do not change `MCF5307_REACH_ROOT` between building the reference and
+#   Do not change `MCF5407_REACH_ROOT` between building the reference and
 #   running a mutation. That reintroduces exactly that confound.
 #
 #   The gate's whole value is that it can fail, so prove that it still can:
@@ -56,7 +56,7 @@
 #   reach.sh null                      the null control on its own
 #   reach.sh selftest                  ref + the controls, with verdicts
 #
-#   FILE is repository-relative, e.g. `src/mcf5307/control.nim`. OLD must occur
+#   FILE is repository-relative, e.g. `src/mcf5407/control.nim`. OLD must occur
 #   exactly once in it or the run aborts rather than mutate the wrong line.
 #
 #   Exit status of `run`:  0 = REACHED,  2 = NOT REACHED,  1 = harness error.
@@ -67,7 +67,7 @@ set -u
 
 SELF=${0:A}
 SRC=${${0:A:h}:h}
-REACH_ROOT=${MCF5307_REACH_ROOT:-/tmp/mcf5307-reach}
+REACH_ROOT=${MCF5407_REACH_ROOT:-/tmp/mcf5407-reach}
 R=$REACH_ROOT
 W=$R/w
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
@@ -75,7 +75,7 @@ export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer
 # The suites the measurement reports on. `t0_abi_smoke` is left out on purpose:
 # it takes the address of every published symbol and asserts no core behaviour.
 # That is a property of what it asserts, not of whether it builds.
-SUITES='^(t_control|t_logic|t_alu|t_move|t_ea_masks|t_sign_extend|mcf5307_conformance_all)$'
+SUITES='^(t_control|t_logic|t_alu|t_move|t_ea_masks|t_sign_extend|mcf5407_conformance_all)$'
 
 if command -v md5 > /dev/null 2>&1; then
   hashof () { md5 -r "$@" }
@@ -97,7 +97,7 @@ configure () {  # $1 = log file
 
 hashc () {  # $1 = output file. One line per generated C unit: "hash name".
   cd $W/build/nimcache || return 1
-  local units=( @mmcf5307@s*.nim.c(N) )
+  local units=( @mmcf5407@s*.nim.c(N) )
   if (( ${#units} == 0 )); then
     echo "NO GENERATED C UNITS FOUND in $W/build/nimcache" >&2; return 1
   fi
@@ -121,7 +121,7 @@ ref)
   configure $R/ref.cfg.log || {
     echo "REF CONFIGURE FAILED"; tail -25 $R/ref.cfg.log; exit 1; }
   hashc $R/ref.md5 || exit 1
-  cp $W/build/nimcache/"@mmcf5307@scontrol.nim.c" $R/ref.control.c
+  cp $W/build/nimcache/"@mmcf5407@scontrol.nim.c" $R/ref.control.c
   echo "REFERENCE BUILT at $W"; cat $R/ref.md5
   ;;
 run)
@@ -155,7 +155,7 @@ PY
   awk 'NR==FNR {h[$2] = $1; next} h[$2] != $1 {print "    " $2}' \
     $R/ref.md5 $D/mut.md5
   # A second, independent reach signal: the mutated text itself in the C.
-  diff $R/ref.control.c $W/build/nimcache/"@mmcf5307@scontrol.nim.c" \
+  diff $R/ref.control.c $W/build/nimcache/"@mmcf5407@scontrol.nim.c" \
     > $D/control.c.diff
   echo "  control.nim.c diff lines: $(wc -l < $D/control.c.diff)"
   # REACHED only says the C changed. What follows says whether anything noticed.
@@ -167,7 +167,7 @@ PY
   # The conformance runner prints "N cases, M failed" per group when it is
   # clean and "N cases run, failures above" when it is not, so both forms have
   # to be matched or a failing conformance group reports as silence.
-  grep -E "mcf5307_conformance_[a-z]+: [0-9]+ cases, [0-9]+ failed|runner: [0-9]+ cases" \
+  grep -E "mcf5407_conformance_[a-z]+: [0-9]+ cases, [0-9]+ failed|runner: [0-9]+ cases" \
     $D/ctest.log | sed 's/^[0-9]*: //' | sort -u
   grep -E "^[0-9]+: +FAILED" $D/ctest.log | sed 's/^[0-9]*: //' | head -10
   echo "  (REACHED means the C changed, NOT that the edit is behavioural."
@@ -190,11 +190,11 @@ selftest)
   [ $s -eq 2 ] && echo "SELFTEST NULL: PASS (NOT REACHED, as required)" \
                || { echo "SELFTEST NULL: FAIL (expected NOT REACHED)"; rc=1 }
   echo
-  $SELF run COMMENT_ONLY src/mcf5307/control.nim "$CMT_OLD" "$CMT_NEW"; s=$?
+  $SELF run COMMENT_ONLY src/mcf5407/control.nim "$CMT_OLD" "$CMT_NEW"; s=$?
   [ $s -eq 2 ] && echo "SELFTEST COMMENT_ONLY: PASS (NOT REACHED, as required)" \
                || { echo "SELFTEST COMMENT_ONLY: FAIL (expected NOT REACHED)"; rc=1 }
   echo
-  $SELF run POSITIVE src/mcf5307/control.nim "$POS_OLD" "$POS_NEW"; s=$?
+  $SELF run POSITIVE src/mcf5407/control.nim "$POS_OLD" "$POS_NEW"; s=$?
   [ $s -eq 0 ] && echo "SELFTEST POSITIVE: PASS (REACHED, as required)" \
                || { echo "SELFTEST POSITIVE: FAIL (expected REACHED)"; rc=1 }
   echo

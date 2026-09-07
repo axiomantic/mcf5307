@@ -22,8 +22,8 @@
 ## which is what makes them the family's rule rather than one part's. The map
 ## itself is the MCF5407's alone - see `controlRegisterFor`.
 
-import mcf5307/decode_types
-import mcf5307/machine
+import mcf5407/decode_types
+import mcf5407/machine
 
 # The opcode word is an equality and not a mask: line 4 is dense here, and
 # `0x4E7A` is a word this part must refuse rather than a `MOVEC` variant.
@@ -100,7 +100,7 @@ const
     ## this return, so this constant carries the execution part alone. The
     ## decomposition is this core's and not the manual's.
 
-proc movecFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
+proc movecFamily*(ctx: MCF5407Ctx; word: uint16; d: Decoded): uint32 =
   ## Execute one `MOVEC`. Returns the cycles the execution pipe spent, 0 for an
   ## instruction that did not run.
   ##
@@ -170,7 +170,7 @@ const
 
   systemControlCycles = 1'u32
 
-proc systemControlFamily*(ctx: MCF5307Ctx; word: uint16; d: Decoded): uint32 =
+proc systemControlFamily*(ctx: MCF5407Ctx; word: uint16; d: Decoded): uint32 =
   ## Execute one SR or CCR transfer. Returns the cycles the execution pipe
   ## spent, 0 for an instruction that did not run.
   case d.op

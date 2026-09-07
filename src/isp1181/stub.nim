@@ -14,8 +14,8 @@ import std/syncio
 import ./isp1181
 import ./report
 # The one-time runtime latch. `isp1181_create` reads it for the reason
-# `mcf5307/cpu.nim` gives at its own `create`.
-import mcf5307/latch
+# `mcf5407/cpu.nim` gives at its own `create`.
+import mcf5407/latch
 export Isp1181IrqFn, Isp1181TxFn
 
 type
@@ -56,8 +56,8 @@ proc advanceFrames*(ctx: ISP1181Ctx; frames: int) =
 proc isp1181_create*(user: pointer; irq: Isp1181IrqFn;
                      tx: Isp1181TxFn): ISP1181Ctx
     {.exportc: "isp1181_create", cdecl, dynlib.} =
-  ## It refuses when the runtime was abandoned. See `mcf5307_create` in
-  ## `mcf5307/cpu.nim`: the two allocate, the allocator needs the runtime, and
+  ## It refuses when the runtime was abandoned. See `mcf5407_create` in
+  ## `mcf5407/cpu.nim`: the two allocate, the allocator needs the runtime, and
   ## a nil handle is a value every `isp1181_*` call already answers for.
   if runtimeAbandoned(runtimeLatch):
     return nil
@@ -66,7 +66,7 @@ proc isp1181_create*(user: pointer; irq: Isp1181IrqFn;
   result.frameNumber = 0'u16
   result.model = newISP1181(user, irq, tx)
 
-const reportEnvVar* = "MCF5307_ISP1181_REPORT"
+const reportEnvVar* = "MCF5407_ISP1181_REPORT"
   ## The variable that names a file to append the teardown report to. A
   ## variable rather than a call so an existing binary emits the account with
   ## no edit of its own.
@@ -152,7 +152,7 @@ proc isp1181_rx*(ctx: ISP1181Ctx; endpoint: cint; data: ptr uint8;
   ## fill a single-buffered endpoint and NAK the next real packet.
   ##
   ## `deliver` says in the log which reason it refused a packet for.
-  ## `include/mcf5307.h` states the contract; 1 means an OUT buffer holds the
+  ## `include/mcf5407.h` states the contract; 1 means an OUT buffer holds the
   ## packet.
   if ctx.isNil:
     return 0
@@ -171,7 +171,7 @@ proc isp1181_rx*(ctx: ISP1181Ctx; endpoint: cint; data: ptr uint8;
 proc isp1181_setup*(ctx: ISP1181Ctx; data: ptr uint8;
                     length: csize_t): cint
     {.exportc: "isp1181_setup", cdecl, dynlib.} =
-  ## A SET-UP packet from the host. `include/mcf5307.h` states the contract;
+  ## A SET-UP packet from the host. `include/mcf5407.h` states the contract;
   ## 1 means the control OUT buffer took it.
   ##
   ## A nil pointer or a zero length delivers nothing at all, for the reason
@@ -196,7 +196,7 @@ proc isp1181_setup*(ctx: ISP1181Ctx; data: ptr uint8;
 
 proc isp1181_in_token*(ctx: ISP1181Ctx; endpoint: cint): cint
     {.exportc: "isp1181_in_token", cdecl, dynlib.} =
-  ## The host asking the device for a packet. `include/mcf5307.h` states the
+  ## The host asking the device for a packet. `include/mcf5407.h` states the
   ## contract; 1 means the transmit callback was called before this returned.
   ##
   ## The stub answers zero and calls nothing: it is a device present in the CS3
@@ -297,7 +297,7 @@ proc isp1181_slot_buffer*(ctx: ISP1181Ctx; slot: csize_t;
   ## isochronous endpoint - is a buffer whose geometry cannot be stated. The
   ## caller separates the two causes by the pair: a slot inside
   ## `isp1181_config_slots` on a live handle can only be the configuration one.
-  ## `include/mcf5307.h` prints the table.
+  ## `include/mcf5407.h` prints the table.
   ##
   ## It does not answer "was the slot written" - `isp1181_config_slot` answers
   ## that, and that state is reached by asking both calls.
@@ -347,9 +347,9 @@ proc isp1181_report*(ctx: ISP1181Ctx; dst: ptr cchar;
 
 const
   backendStubValue = 0'i32
-    ## `MCF5307_ISP1181_BACKEND_STUB` in `include/mcf5307.h`.
+    ## `MCF5407_ISP1181_BACKEND_STUB` in `include/mcf5407.h`.
   backendFullModelValue = 1'i32
-    ## `MCF5307_ISP1181_BACKEND_FULL_MODEL` in `include/mcf5307.h`.
+    ## `MCF5407_ISP1181_BACKEND_FULL_MODEL` in `include/mcf5407.h`.
 
 # The numbers above are the contract's and not the enum's. The `case` below
 # names each backend explicitly rather than converting the argument to
