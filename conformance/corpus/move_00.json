@@ -1,0 +1,1229 @@
+{
+  "binutils": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cases": [
+    {
+      "encoding": [
+        "2200"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 2864434397,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 2864434397,
+          "d1": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "move.l %d0,%d1",
+      "mnemonic": "move.l",
+      "name": "move_l_d0_to_d1"
+    },
+    {
+      "encoding": [
+        "2248"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "a1": 4096,
+          "sr": 10015
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a0": 4096,
+          "a1": 195936478,
+          "sr": 10015
+        }
+      },
+      "instruction": "move.l %a0,%a1",
+      "mnemonic": "move.l",
+      "name": "move_l_a0_to_a1"
+    },
+    {
+      "encoding": [
+        "203c",
+        "1234",
+        "5678"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 4294967295,
+          "sr": 10015
+        }
+      },
+      "instruction": "move.l #0x12345678,%d0",
+      "mnemonic": "move.l",
+      "name": "move_l_imm_to_d0"
+    },
+    {
+      "encoding": [
+        "7005"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 5,
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "moveq #5,%d0",
+      "mnemonic": "moveq",
+      "name": "moveq_5_to_d0"
+    },
+    {
+      "encoding": [
+        "43e8",
+        "0004"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "a1": 4100,
+          "sr": 10015
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a0": 4096,
+          "a1": 195936478,
+          "sr": 10015
+        }
+      },
+      "instruction": "lea (4,%a0),%a1",
+      "mnemonic": "lea",
+      "name": "lea_4_a0_to_a1"
+    },
+    {
+      "encoding": [
+        "3200"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 305402420,
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 4294906420,
+          "d1": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "move.w %d0,%d1",
+      "mnemonic": "move.w",
+      "name": "move_w_d0_to_d1"
+    },
+    {
+      "encoding": [
+        "1200"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 305419946,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d0": 4294967210,
+          "d1": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "move.b %d0,%d1",
+      "mnemonic": "move.b",
+      "name": "move_b_d0_to_d1"
+    },
+    {
+      "encoding": [
+        "2029",
+        "0004"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10000
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 516,
+            "size": 4,
+            "value": 305419896
+          }
+        ],
+        "regs": {
+          "a1": 512,
+          "d0": 4294967295,
+          "sr": 10015
+        }
+      },
+      "instruction": "move.l (4,%a1),%d0",
+      "mnemonic": "move.l",
+      "name": "move_l_mem_to_d0"
+    },
+    {
+      "encoding": [
+        "2340",
+        "0004"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 516,
+            "size": 4,
+            "value": 3735928559
+          }
+        ],
+        "regs": {
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a1": 512,
+          "d0": 3735928559,
+          "sr": 10015
+        }
+      },
+      "instruction": "move.l %d0,(4,%a1)",
+      "mnemonic": "move.l",
+      "name": "move_l_d0_to_mem"
+    },
+    {
+      "encoding": [
+        "1210"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d1": 305419947,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 768,
+            "size": 1,
+            "value": 171
+          }
+        ],
+        "regs": {
+          "a0": 768,
+          "d1": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "move.b (0,%a0),%d1",
+      "mnemonic": "move.b",
+      "name": "move_b_mem_to_d1"
+    },
+    {
+      "encoding": [
+        "307c",
+        "8000"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "a0": 4294934528,
+          "sr": 10015
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a0": 195936478,
+          "sr": 10015
+        }
+      },
+      "instruction": "movea.w #0x8000,%a0",
+      "mnemonic": "movea.w",
+      "name": "movea_w_imm_signext"
+    },
+    {
+      "encoding": [
+        "3240"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "a1": 4660,
+          "sr": 10015
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a1": 195936478,
+          "d0": 4660,
+          "sr": 10015
+        }
+      },
+      "instruction": "movea.w %d0,%a1",
+      "mnemonic": "movea.w",
+      "name": "movea_w_d0_signext"
+    },
+    {
+      "encoding": [
+        "76ff"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "d3": -1,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "d3": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "moveq #-1,%d3",
+      "mnemonic": "moveq",
+      "name": "moveq_neg1_to_d3"
+    },
+    {
+      "encoding": [
+        "48d1",
+        "000f"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 768,
+            "size": 4,
+            "value": 286331153
+          },
+          {
+            "addr": 772,
+            "size": 4,
+            "value": 572662306
+          },
+          {
+            "addr": 776,
+            "size": 4,
+            "value": 858993459
+          },
+          {
+            "addr": 780,
+            "size": 4,
+            "value": 1145324612
+          }
+        ],
+        "regs": {
+          "sr": 10015
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a1": 768,
+          "d0": 286331153,
+          "d1": 572662306,
+          "d2": 858993459,
+          "d3": 1145324612,
+          "sr": 10015
+        }
+      },
+      "instruction": "movem.l %d0-%d3,(%a1)",
+      "mnemonic": "movem.l",
+      "name": "movem_l_d0_d3_to_mem"
+    },
+    {
+      "encoding": [
+        "4cd1",
+        "0f00"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "a0": 1431655765,
+          "a1": 1717986918,
+          "a2": 2004318071,
+          "a3": 2290649224,
+          "sr": 10015
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 768,
+            "size": 4,
+            "value": 1431655765
+          },
+          {
+            "addr": 772,
+            "size": 4,
+            "value": 1717986918
+          },
+          {
+            "addr": 776,
+            "size": 4,
+            "value": 2004318071
+          },
+          {
+            "addr": 780,
+            "size": 4,
+            "value": 2290649224
+          }
+        ],
+        "regs": {
+          "a0": 195936478,
+          "a1": 768,
+          "a2": 523124044,
+          "a3": 1516993677,
+          "sr": 10015
+        }
+      },
+      "instruction": "movem.l (%a1),%a0-%a3",
+      "mnemonic": "movem.l",
+      "name": "movem_l_mem_to_a0_a3"
+    },
+    {
+      "encoding": [
+        "4868",
+        "0004"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 4092,
+            "size": 4,
+            "value": 1028
+          }
+        ],
+        "regs": {
+          "a7": 4092,
+          "sr": 10015
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a0": 1024,
+          "a7": 4096,
+          "sr": 10015
+        }
+      },
+      "instruction": "pea (4,%a0)",
+      "mnemonic": "pea",
+      "name": "pea_4_a0"
+    },
+    {
+      "encoding": [
+        "4e55",
+        "fff8"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 4092,
+            "size": 4,
+            "value": 1280
+          }
+        ],
+        "regs": {
+          "a5": 4092,
+          "a7": 4084,
+          "sr": 10015
+        }
+      },
+      "initial": {
+        "mem": [],
+        "regs": {
+          "a5": 1280,
+          "a7": 4096,
+          "sr": 10015
+        }
+      },
+      "instruction": "link %a5,#-8",
+      "mnemonic": "link",
+      "name": "link_a5_neg8"
+    },
+    {
+      "encoding": [
+        "4e5d"
+      ],
+      "expected": {
+        "mem": [],
+        "regs": {
+          "a5": 1280,
+          "a7": 4096,
+          "sr": 10015
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 4092,
+            "size": 4,
+            "value": 1280
+          }
+        ],
+        "regs": {
+          "a5": 4092,
+          "a7": 4084,
+          "sr": 10015
+        }
+      },
+      "instruction": "unlk %a5",
+      "mnemonic": "unlk",
+      "name": "unlk_a5"
+    },
+    {
+      "encoding": [
+        "2038",
+        "2000"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 8193,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 8194,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 8195,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 8196,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 8197,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 8198,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 8199,
+            "size": 1,
+            "value": 119
+          }
+        ],
+        "regs": {
+          "d0": 2148606515,
+          "pc": 65540,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 8192,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 8193,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 8194,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 8195,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 8196,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 8197,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 8198,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 8199,
+            "size": 1,
+            "value": 119
+          }
+        ],
+        "regs": {
+          "d0": 305419896,
+          "pc": 65536,
+          "sr": 10015
+        }
+      },
+      "instruction": "move.l 0x2000.w,%d0",
+      "mnemonic": "move.l",
+      "name": "move_l_abs_w_to_d0"
+    },
+    {
+      "encoding": [
+        "2039",
+        "0003",
+        "0004"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 196612,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 196613,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 196614,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 196615,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 196616,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 196617,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 196618,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 196619,
+            "size": 1,
+            "value": 119
+          },
+          {
+            "addr": 262147,
+            "size": 1,
+            "value": 11
+          },
+          {
+            "addr": 262148,
+            "size": 1,
+            "value": 173
+          },
+          {
+            "addr": 262149,
+            "size": 1,
+            "value": 192
+          },
+          {
+            "addr": 262150,
+            "size": 1,
+            "value": 222
+          },
+          {
+            "addr": 262151,
+            "size": 1,
+            "value": 31
+          },
+          {
+            "addr": 262152,
+            "size": 1,
+            "value": 46
+          },
+          {
+            "addr": 262153,
+            "size": 1,
+            "value": 61
+          },
+          {
+            "addr": 262154,
+            "size": 1,
+            "value": 76
+          }
+        ],
+        "regs": {
+          "d0": 2148606515,
+          "pc": 65542,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 196612,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 196613,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 196614,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 196615,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 196616,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 196617,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 196618,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 196619,
+            "size": 1,
+            "value": 119
+          },
+          {
+            "addr": 262147,
+            "size": 1,
+            "value": 11
+          },
+          {
+            "addr": 262148,
+            "size": 1,
+            "value": 173
+          },
+          {
+            "addr": 262149,
+            "size": 1,
+            "value": 192
+          },
+          {
+            "addr": 262150,
+            "size": 1,
+            "value": 222
+          },
+          {
+            "addr": 262151,
+            "size": 1,
+            "value": 31
+          },
+          {
+            "addr": 262152,
+            "size": 1,
+            "value": 46
+          },
+          {
+            "addr": 262153,
+            "size": 1,
+            "value": 61
+          },
+          {
+            "addr": 262154,
+            "size": 1,
+            "value": 76
+          }
+        ],
+        "regs": {
+          "d0": 305419896,
+          "sr": 10015
+        }
+      },
+      "instruction": "move.l 0x00030004,%d0",
+      "mnemonic": "move.l",
+      "name": "move_l_abs_l_to_d0"
+    },
+    {
+      "encoding": [
+        "23c0",
+        "0003",
+        "0004"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 196612,
+            "size": 4,
+            "value": 3735928559
+          },
+          {
+            "addr": 196616,
+            "size": 4,
+            "value": 195936478
+          },
+          {
+            "addr": 262147,
+            "size": 1,
+            "value": 11
+          },
+          {
+            "addr": 262148,
+            "size": 1,
+            "value": 173
+          },
+          {
+            "addr": 262149,
+            "size": 1,
+            "value": 192
+          },
+          {
+            "addr": 262150,
+            "size": 1,
+            "value": 222
+          },
+          {
+            "addr": 262151,
+            "size": 1,
+            "value": 31
+          },
+          {
+            "addr": 262152,
+            "size": 1,
+            "value": 46
+          },
+          {
+            "addr": 262153,
+            "size": 1,
+            "value": 61
+          },
+          {
+            "addr": 262154,
+            "size": 1,
+            "value": 76
+          }
+        ],
+        "regs": {
+          "pc": 65542,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 196612,
+            "size": 4,
+            "value": 2148606515
+          },
+          {
+            "addr": 196616,
+            "size": 4,
+            "value": 195936478
+          },
+          {
+            "addr": 262147,
+            "size": 1,
+            "value": 11
+          },
+          {
+            "addr": 262148,
+            "size": 1,
+            "value": 173
+          },
+          {
+            "addr": 262149,
+            "size": 1,
+            "value": 192
+          },
+          {
+            "addr": 262150,
+            "size": 1,
+            "value": 222
+          },
+          {
+            "addr": 262151,
+            "size": 1,
+            "value": 31
+          },
+          {
+            "addr": 262152,
+            "size": 1,
+            "value": 46
+          },
+          {
+            "addr": 262153,
+            "size": 1,
+            "value": 61
+          },
+          {
+            "addr": 262154,
+            "size": 1,
+            "value": 76
+          }
+        ],
+        "regs": {
+          "d0": 3735928559,
+          "sr": 10015
+        }
+      },
+      "instruction": "move.l %d0,0x00030004",
+      "mnemonic": "move.l",
+      "name": "move_l_d0_to_abs_l"
+    },
+    {
+      "encoding": [
+        "103a",
+        "001e"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 65568,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 65569,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 65570,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 65571,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 65572,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 65573,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 65574,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 65575,
+            "size": 1,
+            "value": 119
+          }
+        ],
+        "regs": {
+          "d0": 305419904,
+          "pc": 65540,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 65568,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 65569,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 65570,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 65571,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 65572,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 65573,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 65574,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 65575,
+            "size": 1,
+            "value": 119
+          }
+        ],
+        "regs": {
+          "d0": 305419896,
+          "pc": 65536,
+          "sr": 10015
+        }
+      },
+      "instruction": "move.b (0x1e,%pc),%d0",
+      "mnemonic": "move.b",
+      "name": "move_b_pc_disp_to_d0"
+    },
+    {
+      "encoding": [
+        "103b",
+        "2804"
+      ],
+      "expected": {
+        "mem": [
+          {
+            "addr": 131062,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 131063,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 131064,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 131065,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 131066,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 131067,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 131068,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 131069,
+            "size": 1,
+            "value": 119
+          },
+          {
+            "addr": 65526,
+            "size": 1,
+            "value": 11
+          },
+          {
+            "addr": 65527,
+            "size": 1,
+            "value": 173
+          },
+          {
+            "addr": 65528,
+            "size": 1,
+            "value": 192
+          },
+          {
+            "addr": 65529,
+            "size": 1,
+            "value": 222
+          },
+          {
+            "addr": 65530,
+            "size": 1,
+            "value": 31
+          },
+          {
+            "addr": 65531,
+            "size": 1,
+            "value": 46
+          },
+          {
+            "addr": 65532,
+            "size": 1,
+            "value": 61
+          },
+          {
+            "addr": 65533,
+            "size": 1,
+            "value": 76
+          }
+        ],
+        "regs": {
+          "d0": 305419904,
+          "d2": 65520,
+          "pc": 65540,
+          "sr": 10008
+        }
+      },
+      "initial": {
+        "mem": [
+          {
+            "addr": 131062,
+            "size": 1,
+            "value": 128
+          },
+          {
+            "addr": 131063,
+            "size": 1,
+            "value": 17
+          },
+          {
+            "addr": 131064,
+            "size": 1,
+            "value": 34
+          },
+          {
+            "addr": 131065,
+            "size": 1,
+            "value": 51
+          },
+          {
+            "addr": 131066,
+            "size": 1,
+            "value": 68
+          },
+          {
+            "addr": 131067,
+            "size": 1,
+            "value": 85
+          },
+          {
+            "addr": 131068,
+            "size": 1,
+            "value": 102
+          },
+          {
+            "addr": 131069,
+            "size": 1,
+            "value": 119
+          },
+          {
+            "addr": 65526,
+            "size": 1,
+            "value": 11
+          },
+          {
+            "addr": 65527,
+            "size": 1,
+            "value": 173
+          },
+          {
+            "addr": 65528,
+            "size": 1,
+            "value": 192
+          },
+          {
+            "addr": 65529,
+            "size": 1,
+            "value": 222
+          },
+          {
+            "addr": 65530,
+            "size": 1,
+            "value": 31
+          },
+          {
+            "addr": 65531,
+            "size": 1,
+            "value": 46
+          },
+          {
+            "addr": 65532,
+            "size": 1,
+            "value": 61
+          },
+          {
+            "addr": 65533,
+            "size": 1,
+            "value": 76
+          }
+        ],
+        "regs": {
+          "d0": 305419896,
+          "d2": 65520,
+          "pc": 65536,
+          "sr": 10015
+        }
+      },
+      "instruction": "move.b (4,%pc,%d2),%d0",
+      "mnemonic": "move.b",
+      "name": "move_b_pc_index_to_d0"
+    }
+  ],
+  "format": 1,
+  "group": "move"
+}
