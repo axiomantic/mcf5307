@@ -369,7 +369,9 @@ static:
 ##
 ## SO THE PAGE IS DERIVED AND THE DECLARED ONE IS CHECKED AGAINST IT. The
 ## derivation rests on a property of the table that was read from the RENDERED
-## p.3-28 and p.3-29 and NOT from any text extraction of them:
+## p.3-28 and p.3-29 and NOT from `pdftotext` and NOT from the markdown
+## conversion under `datasheets/MCF5307UM-md/`, whose Table 3-13 is known
+## wrong:
 ##
 ##   - The p.3-28 half runs `add.l` to `mulu.l`; the p.3-29 half opens `or.l`
 ##     and ends `subx.l`, after which section 3.12 begins.
@@ -516,9 +518,9 @@ type
     destReg: uint8
 
 # The addressing modes the entries below name. `ea7Unused5` is the reserved
-# mode-7 encoding: the manual prints REG. FIELD values 000, 001, 010, 011 and
-# 100 under MODE FIELD 111 and no others, so 101 is not an addressing mode at
-# all.
+# mode-7 encoding: Table 3-5 p.3-21 prints REG. FIELD values 000, 001, 010,
+# 011 and 100 under MODE FIELD 111 and no others, so 101 is not an addressing
+# mode at all.
 const
   mDn = EA(mode: eaDn, reg: 0)
   mAn = EA(mode: eaAn, reg: 0)
@@ -528,7 +530,8 @@ const
   mReserved = EA(mode: eaMode7, reg: uint8(ord(ea7Unused5)))
 
 # The citations, named once each so that the entries sharing a manual row
-# cannot drift into as many wordings of it.
+# cannot drift into as many wordings of it. Every one was read from a RENDERED
+# page of the MCF5307 User's Manual.
 const
   whyReserved =
     "Table 3-5 p.3-21 prints no REG. FIELD 101 under MODE FIELD 111, so the " &
@@ -546,9 +549,10 @@ const
     "Table 3-5 p.3-21, CONTROL column, -(An) row: a dash; Table 3-14 p.3-29 " &
     "times both movem.l rows under (An) and (d16,An) alone"
   # TABLE 3-12 DOES NOT SPAN, WHICH IS THE WHOLE REASON THIS ONE IS A SHARED
-  # CONSTANT WHILE `whyDashMemory313` IS A FUNCTION OF THE PAGE. Table 3-12
-  # opens and ends on one page. There is therefore NO page for a further 3-12
-  # entry to pick wrongly,
+  # CONSTANT WHILE `whyDashMemory313` IS A FUNCTION OF THE PAGE. Verified on
+  # the RENDERED page: section 3.10 opens Table 3-12 on p.3-27, its last row
+  # `tst.l` is on that same page, and p.3-28 opens section 3.11 with Table
+  # 3-13. There is therefore NO page for a further 3-12 entry to pick wrongly,
   # and the asymmetry between the two is a property of the MANUAL and not a
   # lapse in this file.
   #
@@ -669,8 +673,9 @@ let coverage: seq[Coverage] = @[
   cov(opScc, famControl, mDn, mAnInd, whyDashMemory312),
   cov313(opCmpi, famControl, p313Start, imm313Dashed),
 
-  # SWAP's mask is `{eaDn}`: the operand syntax is `Dn` and the `swap Dx` row
-  # is timed 1(0/0) under Rn with a dash in every other column.
+  # SWAP's mask is `{eaDn}` on Table 3-7 p.3-25's `Dn` operand syntax and
+  # Table 3-12 p.3-27's `swap Dx` row, timed 1(0/0) under Rn with a dash in
+  # every other column, both read from RENDERED pages.
   cov(opSwap, famMove, mDn, mAnInd, whyDashMemory312),
 
   # --- control addressing: a register is not a control address.
@@ -960,9 +965,14 @@ block:
 # because both sides of that equality read whatever single mask the arm
 # returns.
 #
-# THE MANUAL AND THE ASSEMBLER AGREE ON EVERY CELL. Each operation carries an
-# "Instruction Fields (Word)" addressing-mode table and an "Instruction Fields
-# (Longword)" one:
+# THE MANUAL AND THE ASSEMBLER AGREE ON EVERY CELL. The source is the CFPRM.
+# The "Instruction Fields (Word)" addressing-mode table is on folios 4-32
+# (DIVS), 4-34 (DIVU), 4-55 (MULS) and 4-57 (MULU); the "Instruction Fields
+# (Longword)" one is on folios 4-32, 4-34, 4-56 (MULS) and 4-58 (MULU). The
+# DIVS and DIVU entries carry both tables on one continuation folio; the MULS
+# and MULU entries split them, the word table under the WORD instruction
+# format on the first folio and the longword table alone on the continuation
+# page. Read as RENDERED IMAGES:
 #
 #   WORD     every mode but `Ay` - `(xxx).W`, `(xxx).L`, `#<data>`,
 #            `(d16,PC)` and `(d8,PC,Xi)` all carry a mode and register value.
@@ -1069,7 +1079,12 @@ block:
 # The source is the CFPRM and both directions agree, read as rendered images
 # (`pdftoppm -r 200`) and not from any OCR text:
 #
-# EACH PRINTS A MODE AND REGISTER VALUE FOR EXACTLY TWO ROWS - `(Ax)`
+#   folio 4-50, "Effective Address field ... for register-to-memory transfers,
+#                use the following table for <ea>x"
+#   folio 4-51, "Effective Address field (continued) - For memory-to-register
+#                transfers, use the following table for <ea>y"
+#
+# EACH FOLIO PRINTS A MODE AND REGISTER VALUE FOR EXACTLY TWO ROWS - `(Ax)`
 # 010 and `(d16,Ax)` 101 - AND A DASH FOR THE OTHER TEN: `Dx`, `Ax`, `(Ax)+`,
 # `-(Ax)`, `(d8,Ax,Xi)`, `(xxx).W`, `(xxx).L`, `#<data>`, `(d16,PC)` and
 # `(d8,PC,Xi)`. The two tables are the same shape cell for cell, so the mask
@@ -1151,8 +1166,9 @@ block:
 #
 # The source. `m68k-elf-as -mcpu=5307` rejects `lea (%a0)+,%a1`, `lea #4,%a1`,
 # `pea (%a0)+` and `pea #4`, all four with "operands mismatch", and accepts
-# every mode named in the positive control below. The manual dashes the
-# `lea | <ea>,Ax` row and the `pea | <ea>` row under `(An)+` and `#xxx`.
+# every mode named in the positive control below. MCF5307 User's Manual Table
+# 3-13 p.3-28 dashes the `lea | <ea>,Ax` row under `(An)+` and `#xxx`, and
+# Table 3-14 p.3-29 dashes the `pea | <ea>` row under the same two columns.
 #
 # The positive control includes `(xxx).W`, which is the cell `eaLeaPeaTarget`
 # was created to admit and the one MOVEM must not have. A repair of block (13)
