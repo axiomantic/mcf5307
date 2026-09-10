@@ -271,7 +271,7 @@ because that is the invocation that produced those bytes.
 of the 204 conformance cases changes acceptance between the two flags - a
 negative case that ISA_B accepts - so a switch to `-mcpu=5407` would turn a
 case this core correctly refuses into one the assembler will build. None of the
-196 positive cases change.
+185 positive cases change.
 
 Change the flag on the day Revision B is implemented, and regenerate the corpus
 in the same change. Not before, and never as part of a rename.
