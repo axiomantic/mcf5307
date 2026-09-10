@@ -400,6 +400,12 @@ foreach(index RANGE ${MCF5307_NIM_LAST_UNIT})
             "${MCF5307_NIM_JSON} does not hold a file name at element 0.\n"
             "  error : ${MCF5307_NIM_JSON_ERROR}")
     endif()
+    # Nim writes the path in the host's own spelling, and on Windows that is
+    # `D:\a\...`. `if(EXISTS)` accepts a backslash, so an unconverted path
+    # reaches the source list intact and `add_library()` re-parses it as CMake
+    # code, where `\a` is an invalid escape. The conversion happens here rather
+    # than at the point of use, so every later reader gets the one spelling.
+    file(TO_CMAKE_PATH "${MCF5307_NIM_UNIT}" MCF5307_NIM_UNIT)
     if(NOT EXISTS "${MCF5307_NIM_UNIT}")
         message(FATAL_ERROR
             "mcf5307: step 3 failed: ${MCF5307_NIM_JSON} lists the compile "
@@ -450,7 +456,10 @@ if(MCF5307_NIM_DUMP_RESULT EQUAL 0)
         GET "${MCF5307_NIM_DUMP_OUTPUT}" libpath)
     if(MCF5307_NIM_DUMP_JSON_ERROR STREQUAL "NOTFOUND"
             AND NOT MCF5307_NIM_DUMP_LIBPATH STREQUAL "")
-        set(MCF5307_NIM_LIB_DIR "${MCF5307_NIM_DUMP_LIBPATH}")
+        # `dump` reports the directory in the host's own spelling, for the same
+        # reason the compile-unit list is written in it, and this value ends up
+        # in `target_include_directories()`, which re-parses it as CMake code.
+        file(TO_CMAKE_PATH "${MCF5307_NIM_DUMP_LIBPATH}" MCF5307_NIM_LIB_DIR)
         set(MCF5307_NIM_LIB_DIR_SOURCE
             "`${MCF5307_NIM_EXECUTABLE} dump --dump.format:json`")
     endif()
