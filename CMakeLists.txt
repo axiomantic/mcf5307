@@ -20,7 +20,7 @@ cmake_minimum_required(VERSION 3.26)
 
 project(mcf5407
     VERSION 0.1.0
-    DESCRIPTION "An MCF5307 ColdFire core and an ISP1181 USB device model"
+    DESCRIPTION "An MCF5407 ColdFire core and an ISP1181 USB device model"
     LANGUAGES C CXX)
 
 # `enable_testing()` is what makes the test tree reachable. Without it CTest

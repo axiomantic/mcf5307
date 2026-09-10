@@ -1,4 +1,4 @@
-/* mcf5407.h - the C application binary interface of the MCF5307 ColdFire core
+/* mcf5407.h - the C application binary interface of the MCF5407 ColdFire core
  * and the ISP1181 USB device model.
  *
  * The Nim implementation exports these symbols with
