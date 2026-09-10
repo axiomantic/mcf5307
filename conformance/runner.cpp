@@ -392,7 +392,13 @@ Group loadGroup(const std::string& path, const std::string& expectedGroup) {
     failCheck(path + ".group is '" + groupField->s + "', expected '" +
               expectedGroup + "'");
   }
-  const Value& cases = requireArray(r.find("cases"), path + ".cases");
+  // The path is named rather than built in the argument list so that no
+  // temporary is alive in the expression that binds `cases`. `requireArray`
+  // returns a reference into the parse tree `root` owns and never into this
+  // string, but -Wdangling-reference cannot see that and fires on the
+  // temporary.
+  const std::string cases_at = path + ".cases";
+  const Value& cases = requireArray(r.find("cases"), cases_at);
 
   Group g;
   g.name = expectedGroup;
@@ -411,7 +417,8 @@ Group loadGroup(const std::string& path, const std::string& expectedGroup) {
     requireString(instruction, where + ".instruction");
     cs.instruction = instruction->s;
 
-    const Value& enc = requireArray(c.find("encoding"), where + ".encoding");
+    const std::string enc_at = where + ".encoding";
+    const Value& enc = requireArray(c.find("encoding"), enc_at);
     for (std::size_t w = 0; w < enc.array.size(); ++w) {
       const std::string at = where + ".encoding[" + std::to_string(w) + "]";
       const Value& word = requireString(enc.array[w].get(), at);
