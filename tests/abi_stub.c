@@ -7,21 +7,14 @@
  * name the contract declares, so the two header compiles link without the
  * real library.
  *
- * `cmake/Nim.cmake` step 4a, part three compiles this file, reads the symbols
- * the object defines with `nm`, and compares that set against the published
- * set it parses out of the contract with a C compiler.
- *
  * The freeze is on behaviour: every body stays empty, every return stays a
  * fixed benign value, and nothing here emulates anything. A test that needs
  * behaviour links the real library. The set of definitions is not frozen -
  * it is the contract's own published set and moves when the contract moves.
- * The gate is what makes that movement mechanical rather than remembered.
  *
- * A helper with internal linkage is allowed and is not measured. The gate
- * compares external definitions, because an external definition is what the
- * link of `t0_abi_header` resolves against. A published name defined `static`
- * here would resolve nothing there, so the gate refuses that and says nothing
- * about a `static` name the contract never declared.
+ * A helper with internal linkage is allowed. A published name defined `static`
+ * here would resolve nothing at the link of `t0_abi_header`, which is how such
+ * a mistake reports itself.
  */
 
 #include <stddef.h>

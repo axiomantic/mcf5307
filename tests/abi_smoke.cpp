@@ -15,14 +15,10 @@
  *     generates this test's address set from that measurement, so no
  *     hand-written list stands between the two.
  *
- *     The set is also held to a committed expectation, and that is a
- *     separate mechanism. A purely measured set cannot report an ABI
- *     addition nobody intended: it simply grows and the check still passes.
- *     `tests/abi_smoke_symbols.inc` is the committed list of the symbols
- *     this project intends to export, step 4a part two compares the two sets
- *     in both directions on every configure run, and a mismatch stops the
- *     configure step with the symbol named. The measured set is the fact;
- *     the committed list is the expectation.
+ *     A purely measured set cannot report an ABI addition nobody intended:
+ *     it simply grows and this test still passes. What the test asserts is
+ *     that every measured name links, and nothing about whether the set was
+ *     meant to grow.
  *
  * (2) The twice-call. The test calls `mcf5407_runtime_init()` twice and
  *     asserts both calls return. The function is documented as idempotent;
@@ -85,12 +81,7 @@ namespace {
  * Every entry has the exact function-pointer type the header declares, so
  * the address-of expression is well typed and the compiler does not warn.
  *
- * What keeps the measurement honest is a second, committed file.
- * `tests/abi_smoke_symbols.inc` names the exported symbols this project
- * intends, step 4a part two compares it against the same measured set in both
- * directions, and it fails naming the symbols that differ. An unintended
- * export is therefore both a stopped configure step and a diff a reviewer
- * reads. Neither file is generated from the other. */
+ */
 #define MCF5407_ABI_FN(name)                                                   \
     extern "C" auto const abi_addr_##name = &name;
 

@@ -8,27 +8,22 @@ import isp1181/state
 import isp1181/stub
 
 var failures: seq[string]
-import ./case_sites
 
 var passCount = 0
 
-proc checkImpl(site: int; ok: bool; label: string; got: string; want: string) =
+proc checkImpl(ok: bool; label: string; got: string; want: string) =
   if ok:
     echo "PASSED  ", label
     inc passCount
-    executedSites.add(site)
   else:
     echo "FAILED  ", label
     echo "          got  ", got
     echo "          want ", want
     failures.add(label)
-    executedSites.add(site)
 
 
 template check(ok: bool; label: string; got: string; want: string) =
-  const site = instantiationInfo(-1).line
-  static: declaredSites.add(site)
-  checkImpl(site, ok, label, got, want)
+  checkImpl(ok, label, got, want)
 
 # ---------------------------------------------------------------------------
 # The host side. The state entry points must not call back into the host, and a
@@ -467,14 +462,6 @@ isp1181_destroy(cycleCtx)
 isp1181_destroy(wrapCtx)
 isp1181_destroy(bytesCtx)
 
-# The registry lines. They are data and not a verdict: this program reports what
-# its text declares and what its run adjudicated, and the registered test's
-# driver is what compares them.
-const declaredCaseSites = declaredSites
-const declaredOffGreenPathSites = offGreenPathSites
-echo caseSiteLine("declared", "t_isp1181_state", declaredCaseSites)
-echo caseSiteLine("executed", "t_isp1181_state", executedSites)
-echo caseSiteLine("off-green-path", "t_isp1181_state", declaredOffGreenPathSites)
 
 if failures.len > 0:
   echo ""

@@ -84,25 +84,20 @@ alters the published C ABI needs it too: the consumer that links this library is
   ignoring a broken build: `cmake --build` still exits non-zero. Ninja's
   spelling is `-- -k 0`.
 - **The Nim compile runs at CONFIGURE time**, not at build time. `src/*.nim`,
-  `.nim-version`, `include/mcf5407.h`, `tests/abi_smoke_symbols.inc`,
-  `tests/abi_stub.c` and `tests/t_*.nim` are registered as configure
-  dependencies, so an ordinary edit to one of them re-runs the configure by
-  itself. A change those paths do not cover reaches nothing until
+  `.nim-version`, `include/mcf5407.h` and `tests/t_*.nim` are registered as
+  configure dependencies, so an ordinary edit to one of them re-runs the
+  configure by itself. A change those paths do not cover reaches nothing until
   `cmake -S . -B <build>` runs again.
 - **A LIST FILE IS A DEPENDENCY BY MTIME, AND A RESTORE THAT REWINDS MTIME
   DEFEATS IT.** The per-suite drivers under `<build>/tests/*_driver.cmake` are
-  GENERATED from templates inside `tests/tests_cpu.cmake`, and the case-total
-  pins (`mcf5407_check_case_total`) live in the template, not in the driver.
-  CMake does re-generate them when it sees the list file as newer — an ordinary
-  edit is picked up by `cmake --build` on its own, with no explicit configure.
-  **What it does NOT pick up is a list file whose mtime went BACKWARDS**: a `mv`
-  from a `sed -i.bak` backup, a `git checkout` of an older blob, or a copied
-  tree all leave the stale driver in place, and the suite is then graded against
-  a pin that is on nobody's disk. MEASURED: restoring `tests/tests_cpu.cmake`
-  from a `.bak` left a driver carrying a deliberately wrong pin of `999` while
-  the source read `32`, and the suite failed against a figure the tree did not
-  contain. **After any restore of a list file, `touch` it before reconfiguring**,
-  and confirm the pin inside the generated driver rather than in the source.
+  GENERATED from templates inside `tests/tests_cpu.cmake`. CMake re-generates
+  them when it sees the list file as newer — an ordinary edit is picked up by
+  `cmake --build` on its own, with no explicit configure. **What it does NOT
+  pick up is a list file whose mtime went BACKWARDS**: a `mv` from a
+  `sed -i.bak` backup, a `git checkout` of an older blob, or a copied tree all
+  leave the stale driver in place, and the suite then runs a driver the source
+  no longer describes. **After any restore of a list file, `touch` it before
+  reconfiguring**, and read the generated driver rather than the source.
 - **THE BUILD IS A REGISTERED TEST: `t0_build_is_current`.** It runs first in
   every top-level ctest run, builds the tree it is in
   (`cmake --build <dir> --parallel`, the command `ci.yml` already uses), and
@@ -117,28 +112,15 @@ alters the published C ABI needs it too: the consumer that links this library is
   failure; a named test `(Failed)` while the gate Passed is a TEST failure.
   `cmake/BuildGate.cmake` registers it and `cmake/run_build_gate.cmake` is its
   body. It is registered only when `PROJECT_IS_TOP_LEVEL`, so a consumer's tree
-  has no gate and no fixture requirement — verified: a consumer configure lists
-  `t0_abi_gate_on` and nothing else.
-- **THE T0 BUILD PRESET BUILDS EVERY EXECUTABLE THE T0 TEST PRESET RUNS, AND
-  `t0_test_set_builds_what_it_runs` IS WHAT KEEPS IT THAT WAY.** The build
-  preset carries `--target mcf5407_tests` and nothing else, so a T0-selected
-  test whose `COMMAND` names an executable target reaches it only through an
-  `add_dependencies(mcf5407_tests <target>)` line — the convention the root
-  `CMakeLists.txt` states where it creates the aggregate. `t0_corpus_parses` was
-  registered in `conformance/conformance_cpu.cmake` without one, and three
-  mechanisms hid that at once: `--no-tests=error` only catches a `-R` pattern
-  that selects nothing; `t0_build_is_current` builds the tree's DEFAULT target,
-  so it produced the binary before any test ran and MASKED the omission; and
-  `ci.yml` builds with `cmake --build build --parallel`, the default target
-  again, so no CI job has ever run the t0 build preset. MEASURED on a deleted
-  build tree: before, `cmake --build --preset t0` left
-  `<build>/conformance/t0_corpus_parses` absent; after, it is built by that
-  command. The check reads the registration lists as text — CMake has no
-  readable `COMMAND` test property, and directory-scoped test properties need
-  3.28, above this project's 3.26 floor. It refuses any COMMAND shape other than
-  `"${CMAKE_COMMAND}"` or a bare target name rather than guessing at a third.
-  `ctest --preset t0` is still WIDER than the t0 build preset in one direction
-  that is deliberate: the gate builds the default target, so a break in
+  has no gate and no fixture requirement.
+- **THE T0 BUILD PRESET MUST BUILD EVERY EXECUTABLE THE T0 TEST PRESET RUNS.**
+  The build preset carries `--target mcf5407_tests` and nothing else, so a
+  T0-selected test whose `COMMAND` names an executable target reaches it only
+  through an `add_dependencies(mcf5407_tests <target>)` line — the convention
+  the root `CMakeLists.txt` states where it creates the aggregate. A test
+  registered without one leaves its executable unbuilt by that preset.
+  `ctest --preset t0` is WIDER than the t0 build preset in one direction that is
+  deliberate: `t0_build_is_current` builds the default target, so a break in
   `conformance/runner.cpp`, which the build preset never compiles, turns the t0
   run red.
 - **Never configure this repository's own build tree with

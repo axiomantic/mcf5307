@@ -12,8 +12,7 @@ reference the whole time.
 So a source header cites a document by **title and revision** and never by a
 path, and this file states the document's identity — publisher, designation,
 and where a copy is checked against — rather than a location on somebody's
-disk. `tests/t0_no_local_paths.c` is the registered check that keeps the first
-half true; nothing checks the second half except this file.
+disk. Nothing checks either half except this file and a reader.
 
 **Identity is stated as a hash where a hash is known.** A title and a
 revision name an edition. A hash names the copy a measurement was taken

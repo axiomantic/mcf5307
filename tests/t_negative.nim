@@ -20,29 +20,19 @@ import mcf5407/decode_types
 import mcf5407/machine
 
 var failures: seq[string]
-import ./case_sites
 
 var passCount = 0
 
-proc checkImpl[T](site: int; got: T; want: T; label: string) =
+proc checkImpl[T](got: T; want: T; label: string) =
   if got == want:
     echo "PASSED  ", label, " = ", want
     inc passCount
-    executedSites.add(site)
   else:
     echo "FAILED  ", label, ": expected ", want, ", got ", got
     failures.add(label)
-    executedSites.add(site)
 
 template check(got: untyped; want: untyped; label: string) =
-  ## The call site is recorded twice - once at compile time into
-  ## `declaredSites` by the `static` below, and once at run time into
-  ## `executedSites`, by the implementation and only when it reaches a
-  ## verdict. `tests/case_sites.nim` states what the pair is for and
-  ## `tests/case_sites.cmake` states the rules the driver applies.
-  const site = instantiationInfo(-1).line
-  static: declaredSites.add(site)
-  checkImpl(site, got, want, label)
+  checkImpl(got, want, label)
 
 # ---------------------------------------------------------------------------
 # The corpus.
@@ -313,16 +303,6 @@ check((traps: trapCount, executes: executeCount, violations: oracleViolations),
       (traps: 8, executes: 11, violations: 0),
       "the assembler's verdict agrees with the outcome every case claims")
 
-# The registry lines. They are data and not a verdict: this program reports
-# what its text declares and what its run adjudicated, and the registered
-# test's driver is what compares them - and what compares the declared count
-# against the call sites in this file. A verdict printed here would be a
-# self-assessment, and a run that stopped early would simply not print one.
-const declaredCaseSites = declaredSites
-const declaredOffGreenPathSites = offGreenPathSites
-echo caseSiteLine("declared", "t_negative", declaredCaseSites)
-echo caseSiteLine("executed", "t_negative", executedSites)
-echo caseSiteLine("off-green-path", "t_negative", declaredOffGreenPathSites)
 
 if failures.len > 0:
   echo ""

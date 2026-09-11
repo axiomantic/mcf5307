@@ -81,5 +81,5 @@ comment, and this one has no mechanism.
 
 - `AGENTS.md` — the comment rules, including the one that sends a claim about
   the rest of the tree out of a comment and into a check.
-- `tests/t0_no_local_paths.c` — the guard that keeps a citation of this
-  document from naming a path that exists on one machine.
+- `docs/sources.md` — why a citation names a document by title and revision
+  rather than by a path that exists on one machine.
