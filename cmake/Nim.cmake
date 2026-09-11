@@ -1011,6 +1011,13 @@ function(mcf5407_abi_read_symbols_coff mcf5407_coff_out_defined
 
     # An export-directory line is `<ordinal> <hint> <RVA> <name>`, and the
     # three leading columns are what separate it from the prose around it.
+    #
+    # The name is not the end of the line. An incrementally linked image -- the
+    # default in a Debug configuration, which is what `try_compile` builds --
+    # prints ` = @ILT+960(name)` after it, naming the thunk the export points
+    # at. Measured on windows-2022: anchoring the name to end-of-line matched
+    # not one of 33 exports, and the empty answer read exactly like an image
+    # that exports nothing.
     set(mcf5407_coff_exported "")
     string(REPLACE "\r" "" mcf5407_coff_exports_out
         "${mcf5407_coff_exports_out}")
@@ -1018,7 +1025,7 @@ function(mcf5407_abi_read_symbols_coff mcf5407_coff_out_defined
         "${mcf5407_coff_exports_out}")
     foreach(mcf5407_coff_line IN LISTS mcf5407_coff_exports_lines)
         if(mcf5407_coff_line MATCHES
-                "^[ \t]+[0-9]+[ \t]+[0-9A-Fa-f]+[ \t]+[0-9A-Fa-f]+[ \t]+([^ \t]+)[ \t]*$")
+                "^[ \t]+[0-9]+[ \t]+[0-9A-Fa-f]+[ \t]+[0-9A-Fa-f]+[ \t]+([^ \t]+)")
             list(APPEND mcf5407_coff_exported "${CMAKE_MATCH_1}")
         endif()
     endforeach()
