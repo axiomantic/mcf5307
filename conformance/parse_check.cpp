@@ -303,11 +303,16 @@ void validateRegs(const Value& regs, const std::string& where) {
       failCheck(what + " names '" + kv.first + "', which is not a register this "
                 "corpus addresses (d0..d7, a0..a7, sr, pc)");
     }
-    const Value& v = requireInt(kv.second.get(), what + "['" + kv.first + "']");
+    // The path is named rather than built in the argument list so that no
+    // temporary is alive in the expression that binds `v`. `requireInt`
+    // returns a reference into the parse tree and never into this string, but
+    // -Wdangling-reference cannot see that and fires on the temporary.
+    const std::string at = what + "['" + kv.first + "']";
+    const Value& v = requireInt(kv.second.get(), at);
     // A register value is written signed or unsigned, so the accepted range
     // is the union of the two 32-bit ranges.
     if (v.i < -2147483648LL || v.i > 0xFFFFFFFF) {
-      failCheck(what + "['" + kv.first + "'] does not fit in 32 bits");
+      failCheck(at + " does not fit in 32 bits");
     }
   }
 }
@@ -333,17 +338,17 @@ void validateEncoding(const Value& enc, const std::string& where) {
               "instruction was never assembled");
   }
   for (std::size_t k = 0; k < enc.array.size(); ++k) {
-    const Value& w = requireString(
-        enc.array[k].get(), where + ".encoding[" + std::to_string(k) + "]");
+    // Named for the same reason as in `validateRegs`: it keeps the binding
+    // of `w` free of a temporary.
+    const std::string at = where + ".encoding[" + std::to_string(k) + "]";
+    const Value& w = requireString(enc.array[k].get(), at);
     if (w.s.size() != 4) {
-      failCheck(where + ".encoding[" + std::to_string(k) + "] is '" + w.s +
-                "', not a 4-hex-digit word");
+      failCheck(at + " is '" + w.s + "', not a 4-hex-digit word");
     }
     for (char c : w.s) {
       bool ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
       if (!ok) {
-        failCheck(where + ".encoding[" + std::to_string(k) + "] is '" + w.s +
-                  "', not lower-case hex");
+        failCheck(at + " is '" + w.s + "', not lower-case hex");
       }
     }
   }
@@ -430,8 +435,8 @@ int main(int argc, char** argv) {
         failCheck(path + ".group is '" + group_field->s + "', expected '" +
                   group + "'");
       }
-      const Value& cases = requireArray(root->find("cases"),
-                                     path + ".cases");
+      const std::string cases_at = path + ".cases";
+      const Value& cases = requireArray(root->find("cases"), cases_at);
       if (cases.array.empty()) {
         failCheck(path + " has no cases: every group must be present with at "
                   "least one case");
