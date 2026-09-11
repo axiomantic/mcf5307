@@ -61,6 +61,24 @@ function(mcf5407_clip mcf5407_clip_output mcf5407_clip_text mcf5407_clip_limit)
     set(${mcf5407_clip_output} "${mcf5407_clip_text}" PARENT_SCOPE)
 endfunction()
 
+# The same, from the other end. A tool that prints its progress and then fails
+# puts the reason LAST, so a head clip of a build log shows the part nobody
+# needs and drops the line the reader came for.
+function(mcf5407_clip_tail mcf5407_tail_output mcf5407_tail_text
+        mcf5407_tail_limit)
+    string(LENGTH "${mcf5407_tail_text}" mcf5407_tail_length)
+    if(mcf5407_tail_length GREATER mcf5407_tail_limit)
+        math(EXPR mcf5407_tail_start
+            "${mcf5407_tail_length} - ${mcf5407_tail_limit}")
+        string(SUBSTRING "${mcf5407_tail_text}" ${mcf5407_tail_start}
+            ${mcf5407_tail_limit} mcf5407_tail_text)
+        string(PREPEND mcf5407_tail_text
+            "[... ${mcf5407_tail_length} bytes in all,"
+            " the last ${mcf5407_tail_limit} shown] ")
+    endif()
+    set(${mcf5407_tail_output} "${mcf5407_tail_text}" PARENT_SCOPE)
+endfunction()
+
 # ---------------------------------------------------------------------------
 # Step 1. The version pin. It is exact, and a mismatch fails the configure step
 # instead of raising a warning.
@@ -145,6 +163,46 @@ set(MCF5407_NIM_HEADER "mcf5407_nim.h")
 # Nim test program must be compiled with the same set. A test compiled with a
 # different set proves nothing about the library the set governs.
 set(MCF5407_NIM_FLAGS --mm:arc --panics:on -d:release)
+
+# The C compiler family Nim writes its output FOR.
+#
+# Nim does not emit one dialect of C. It selects atomic builtins, calling
+# convention spellings and inline assembly by its own `cc` setting, and that
+# setting defaults to the host's usual compiler and not to the one this project
+# was configured with. Measured on windows-2022 with Nim 2.2.10: left at the
+# default, `system.nim.c` comes out carrying `__ATOMIC_RELAXED` and a
+# `<stdatomic.h>` include, which MSVC answers with `error C2065:
+# '__ATOMIC_RELAXED': undeclared identifier` and `error C1189: "C atomic
+# support is not enabled"`. The C is not wrong; it was written for a compiler
+# that is not the one compiling it.
+#
+# So the family is derived from `CMAKE_C_COMPILER_ID` and handed to Nim. A
+# compiler id with no Nim counterpart leaves Nim's own default in place and
+# says so in the log, because that is the behaviour this project had before the
+# mapping existed and a host it already served must keep working.
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+    set(MCF5407_NIM_CC vcc)
+elseif(CMAKE_C_COMPILER_ID MATCHES "^(Clang|AppleClang|IntelLLVM|ARMClang)$")
+    set(MCF5407_NIM_CC clang)
+elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    set(MCF5407_NIM_CC gcc)
+else()
+    set(MCF5407_NIM_CC "")
+endif()
+
+if(MCF5407_NIM_CC STREQUAL "")
+    message(STATUS
+        "mcf5407: step 2 no Nim `--cc` counterpart is known for "
+        "${CMAKE_C_COMPILER_ID}, so Nim selects its own default. The "
+        "generated C is then written for whichever compiler Nim assumes, and "
+        "step 4 compiles it with ${CMAKE_C_COMPILER}.")
+else()
+    list(APPEND MCF5407_NIM_FLAGS "--cc:${MCF5407_NIM_CC}")
+    message(STATUS
+        "mcf5407: step 2 the generated C is written for `--cc:"
+        "${MCF5407_NIM_CC}`, from CMAKE_C_COMPILER_ID "
+        "${CMAKE_C_COMPILER_ID}")
+endif()
 
 # The Nim entry modules of this project. A second Nim library appends its name
 # here and writes its own command below, with its own `--nimMainPrefix:` value.
@@ -487,8 +545,8 @@ message(STATUS "mcf5407: step 4 the object library mcf5407_nim_objs is defined")
 # ---------------------------------------------------------------------------
 # The escape hatch, and why it is loud.
 #
-# The gate needs a Clang-compatible C parser and an `nm`. A host without both
-# cannot run it. The gate then FAILS the configure step and names the tool it
+# The gate needs a Clang-compatible C parser and a symbol lister -- `nm` on
+# ELF and Mach-O, MSVC's COFF dumper on PE. A host without both cannot run it. The gate then FAILS the configure step and names the tool it
 # did not find, because a check that quietly does not run is the fault this
 # whole block exists to end.
 #
@@ -563,20 +621,93 @@ else()
     endif()
 endif()
 
-if(CMAKE_NM)
-    set(MCF5407_ABI_NM "${CMAKE_NM}")
+# The symbol lister is chosen by object format and not by preference, because
+# the two formats keep the answer in different places. An ELF or Mach-O shared
+# object carries the defined set and the external set in ONE symbol table, and
+# `nm` reads both from the one file. A PE image keeps the exported set in an
+# export directory that no symbol table holds, and it keeps nothing about a
+# symbol it defines and does not export, so the two sets come from two
+# artifacts there. `MCF5407_ABI_SYMBOL_READER` is what the reader below
+# branches on, and `MCF5407_ABI_LISTER` is the tool path the reports name.
+if(MSVC)
+    set(MCF5407_ABI_SYMBOL_READER coff)
+
+    # `link.exe /DUMP` IS `dumpbin.exe`; the two are one program behind two
+    # names. CMake already resolved the linker of the toolchain it selected, so
+    # asking CMake keeps the dumper and the compiler on one installation. A
+    # `dumpbin` found on PATH can belong to a different Visual Studio, and a
+    # dumper from another toolchain is exactly the kind of instrument whose
+    # wrong answer looks like a right one.
+    if(CMAKE_LINKER AND EXISTS "${CMAKE_LINKER}")
+        set(MCF5407_ABI_DUMPBIN "${CMAKE_LINKER}")
+        set(MCF5407_ABI_DUMPBIN_LEAD /DUMP)
+        set(MCF5407_ABI_DUMPBIN_SOURCE
+            "`${CMAKE_LINKER} /DUMP`, the linker CMake selected")
+    else()
+        get_filename_component(MCF5407_ABI_MSVC_BIN
+            "${CMAKE_C_COMPILER}" DIRECTORY)
+        find_program(MCF5407_ABI_DUMPBIN_PROGRAM NAMES dumpbin
+            HINTS "${MCF5407_ABI_MSVC_BIN}"
+            DOC "The COFF dumper that reads the measurement DLL and archive")
+        set(MCF5407_ABI_DUMPBIN "${MCF5407_ABI_DUMPBIN_PROGRAM}")
+        set(MCF5407_ABI_DUMPBIN_LEAD "")
+        set(MCF5407_ABI_DUMPBIN_SOURCE
+            "a `dumpbin` found beside ${CMAKE_C_COMPILER} or on PATH")
+    endif()
+
+    if(NOT MCF5407_ABI_DUMPBIN)
+        message(FATAL_ERROR
+            "mcf5407: step 4a failed: no COFF dumper was found.\n"
+            "  C compiler : ${CMAKE_C_COMPILER}\n"
+            "  CMAKE_LINKER : ${CMAKE_LINKER}\n"
+            "The exported set of a PE image is read from its export directory, "
+            "and `link.exe /DUMP /EXPORTS` is what prints it. Nothing else "
+            "reports whether a published symbol left the DLL. Repair the "
+            "Visual Studio installation, or configure with "
+            "-DMCF5407_ABI_GATE=OFF and accept a build whose published "
+            "symbols nobody measured.")
+    endif()
+
+    set(MCF5407_ABI_LISTER "${MCF5407_ABI_DUMPBIN}")
+    set(MCF5407_ABI_LISTER_SOURCE "${MCF5407_ABI_DUMPBIN_SOURCE}")
 else()
-    find_program(MCF5407_ABI_NM_PROGRAM NAMES nm llvm-nm
-        DOC "The symbol lister that reads the measurement shared object")
-    set(MCF5407_ABI_NM "${MCF5407_ABI_NM_PROGRAM}")
+    set(MCF5407_ABI_SYMBOL_READER nm)
+
+    if(CMAKE_NM)
+        set(MCF5407_ABI_NM "${CMAKE_NM}")
+    else()
+        find_program(MCF5407_ABI_NM_PROGRAM NAMES nm llvm-nm
+            DOC "The symbol lister that reads the measurement shared object")
+        set(MCF5407_ABI_NM "${MCF5407_ABI_NM_PROGRAM}")
+    endif()
+    if(NOT MCF5407_ABI_NM)
+        message(FATAL_ERROR
+            "mcf5407: step 4a failed: no `nm` was found.\n"
+            "The exported set is read from the symbol table of a shared "
+            "object. Nothing else reports whether a published symbol left "
+            "that object. Install binutils or LLVM, or configure with "
+            "-DMCF5407_ABI_GATE=OFF and accept a build whose published "
+            "symbols nobody measured.")
+    endif()
+
+    set(MCF5407_ABI_LISTER "${MCF5407_ABI_NM}")
+    set(MCF5407_ABI_LISTER_SOURCE "`${MCF5407_ABI_NM}`")
 endif()
-if(NOT MCF5407_ABI_NM)
-    message(FATAL_ERROR
-        "mcf5407: step 4a failed: no `nm` was found.\n"
-        "The exported set is read from the symbol table of a shared object. "
-        "Nothing else reports whether a published symbol left that object. "
-        "Install binutils or LLVM, or configure with -DMCF5407_ABI_GATE=OFF "
-        "and accept a build whose published symbols nobody measured.")
+
+# The spelling of `this symbol leaves the shared object` is the platform's too,
+# and the probe below is written in it. A GNU visibility attribute decides the
+# question for ELF and Mach-O. It decides NOTHING on PE, where the export
+# directory is driven by `__declspec(dllexport)` alone -- which is also what
+# Nim`s own `nimbase.h` emits for `N_LIB_EXPORT` on Windows, so the gate still
+# measures the property the delivery form actually has. These two strings are
+# carried into the diagnostics, so a failure names the attribute the probe was
+# really compiled with rather than the one this file was first written for.
+if(MSVC)
+    set(MCF5407_ABI_EXPORT_ATTRIBUTE "__declspec(dllexport)")
+    set(MCF5407_ABI_HIDDEN_ATTRIBUTE "no `__declspec(dllexport)`")
+else()
+    set(MCF5407_ABI_EXPORT_ATTRIBUTE "visibility(\"default\")")
+    set(MCF5407_ABI_HIDDEN_ATTRIBUTE "visibility(\"hidden\")")
 endif()
 
 set(MCF5407_ABI_DIR "${PROJECT_BINARY_DIR}/mcf5407_abi")
@@ -768,7 +899,7 @@ endfunction()
 # `nm` prints `<address> <type> <name>`, and it prints `U`, `u`, `w` or `v` in
 # the type column for a symbol the object does not define. Those four are
 # dropped and every other type is a definition.
-function(mcf5407_abi_read_symbols mcf5407_symbols_out_defined
+function(mcf5407_abi_read_symbols_nm mcf5407_symbols_out_defined
         mcf5407_symbols_out_exported mcf5407_symbols_object)
     foreach(mcf5407_symbols_pass all external)
         if(mcf5407_symbols_pass STREQUAL "external")
@@ -819,6 +950,158 @@ function(mcf5407_abi_read_symbols mcf5407_symbols_out_defined
         PARENT_SCOPE)
     set(${mcf5407_symbols_out_exported} "${mcf5407_symbols_set_external}"
         PARENT_SCOPE)
+endfunction()
+
+# ---------------------------------------------------------------------------
+# The same two sets, read out of PE/COFF.
+#
+# A PE image is asymmetric where an ELF or Mach-O object is not, and that is
+# the whole reason this is a second function rather than a second flag.
+#
+#   `exported` is the image's EXPORT DIRECTORY. `/EXPORTS` over the DLL prints
+#   it. It is the delivery-form property itself: a name in that directory is a
+#   name a consumer of the DLL can bind to, and a name outside it is not.
+#
+#   `defined` cannot come from the same file. A PE image keeps no record of a
+#   symbol it defines and does not export -- the linker resolves the reference
+#   and the name is gone. So the defined set is read from an ARCHIVE of the
+#   same objects, where every external definition is still named. `/SYMBOLS`
+#   prints them, and the pair `SECTn ... External` is what marks a definition:
+#   `UNDEF` marks a reference the archive does not define, and `Static` marks a
+#   name that is not external at all.
+#
+# The archive and the DLL are built from ONE object set in one nested build, so
+# the two sets describe the same compilation and not two of them.
+function(mcf5407_abi_read_symbols_coff mcf5407_coff_out_defined
+        mcf5407_coff_out_exported mcf5407_coff_image mcf5407_coff_archive)
+
+    execute_process(
+        COMMAND "${MCF5407_ABI_DUMPBIN}" ${MCF5407_ABI_DUMPBIN_LEAD} /EXPORTS
+                "${mcf5407_coff_image}"
+        OUTPUT_VARIABLE mcf5407_coff_exports_out
+        ERROR_VARIABLE mcf5407_coff_exports_err
+        RESULT_VARIABLE mcf5407_coff_exports_result)
+    if(NOT mcf5407_coff_exports_result EQUAL 0)
+        mcf5407_clip(mcf5407_coff_exports_err_head
+            "${mcf5407_coff_exports_err}" 2000)
+        message(FATAL_ERROR
+            "mcf5407: step 4a failed: the COFF dumper exited "
+            "${mcf5407_coff_exports_result} over "
+            "${mcf5407_coff_image}.\n"
+            "  dumper : ${MCF5407_ABI_DUMPBIN} ${MCF5407_ABI_DUMPBIN_LEAD}\n"
+            "  stderr : ${mcf5407_coff_exports_err_head}")
+    endif()
+
+    execute_process(
+        COMMAND "${MCF5407_ABI_DUMPBIN}" ${MCF5407_ABI_DUMPBIN_LEAD} /SYMBOLS
+                "${mcf5407_coff_archive}"
+        OUTPUT_VARIABLE mcf5407_coff_symbols_out
+        ERROR_VARIABLE mcf5407_coff_symbols_err
+        RESULT_VARIABLE mcf5407_coff_symbols_result)
+    if(NOT mcf5407_coff_symbols_result EQUAL 0)
+        mcf5407_clip(mcf5407_coff_symbols_err_head
+            "${mcf5407_coff_symbols_err}" 2000)
+        message(FATAL_ERROR
+            "mcf5407: step 4a failed: the COFF dumper exited "
+            "${mcf5407_coff_symbols_result} over "
+            "${mcf5407_coff_archive}.\n"
+            "  dumper : ${MCF5407_ABI_DUMPBIN} ${MCF5407_ABI_DUMPBIN_LEAD}\n"
+            "  stderr : ${mcf5407_coff_symbols_err_head}")
+    endif()
+
+    # An export-directory line is `<ordinal> <hint> <RVA> <name>`, and the
+    # three leading columns are what separate it from the prose around it.
+    #
+    # The name is not the end of the line. An incrementally linked image -- the
+    # default in a Debug configuration, which is what `try_compile` builds --
+    # prints ` = @ILT+960(name)` after it, naming the thunk the export points
+    # at. Measured on windows-2022: anchoring the name to end-of-line matched
+    # not one of 33 exports, and the empty answer read exactly like an image
+    # that exports nothing.
+    set(mcf5407_coff_exported "")
+    string(REPLACE "\r" "" mcf5407_coff_exports_out
+        "${mcf5407_coff_exports_out}")
+    string(REPLACE "\n" ";" mcf5407_coff_exports_lines
+        "${mcf5407_coff_exports_out}")
+    foreach(mcf5407_coff_line IN LISTS mcf5407_coff_exports_lines)
+        if(mcf5407_coff_line MATCHES
+                "^[ \t]+[0-9]+[ \t]+[0-9A-Fa-f]+[ \t]+[0-9A-Fa-f]+[ \t]+([^ \t]+)")
+            list(APPEND mcf5407_coff_exported "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+    list(REMOVE_DUPLICATES mcf5407_coff_exported)
+
+    # A DUMP that succeeded and a PARSE that produced nothing are two
+    # different facts, and an empty list reports them identically. This
+    # measurement object always carries the visible probe, so zero names can
+    # only mean the parse missed -- a dumper whose column layout this regular
+    # expression does not match, or an image whose exports are somewhere else.
+    # The raw head is printed because the layout is the thing in question.
+    if(mcf5407_coff_exported STREQUAL "")
+        mcf5407_clip(mcf5407_coff_exports_head
+            "${mcf5407_coff_exports_out}" 2500)
+        message(FATAL_ERROR
+            "mcf5407: step 4a failed: the export directory of "
+            "${mcf5407_coff_image} parsed to NO names.\n"
+            "  dumper : ${MCF5407_ABI_DUMPBIN} ${MCF5407_ABI_DUMPBIN_LEAD} "
+            "(${MCF5407_ABI_DUMPBIN_SOURCE})\n"
+            "  raw    : ${mcf5407_coff_exports_head}\n"
+            "That image carries `mcf5407_abi_probe_visible`, which this file "
+            "compiled with `__declspec(dllexport)`, so an empty answer is this "
+            "reader failing and not an image with nothing in it. An empty list "
+            "would otherwise travel on into the verdict, where it reads as a "
+            "contract nothing exports.")
+    endif()
+
+    set(mcf5407_coff_defined "")
+    string(REPLACE "\r" "" mcf5407_coff_symbols_out
+        "${mcf5407_coff_symbols_out}")
+    string(REPLACE "\n" ";" mcf5407_coff_symbols_lines
+        "${mcf5407_coff_symbols_out}")
+    foreach(mcf5407_coff_line IN LISTS mcf5407_coff_symbols_lines)
+        if(mcf5407_coff_line MATCHES
+                "[ \t]SECT[0-9A-Fa-f]+[ \t].*[ \t]External[ \t]*\\|[ \t]*([^ \t]+)[ \t]*$")
+            list(APPEND mcf5407_coff_defined "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+    list(REMOVE_DUPLICATES mcf5407_coff_defined)
+
+    # The same argument for the other set.
+    if(mcf5407_coff_defined STREQUAL "")
+        mcf5407_clip(mcf5407_coff_symbols_head
+            "${mcf5407_coff_symbols_out}" 2500)
+        message(FATAL_ERROR
+            "mcf5407: step 4a failed: the symbol table of "
+            "${mcf5407_coff_archive} parsed to NO defined names.\n"
+            "  dumper : ${MCF5407_ABI_DUMPBIN} ${MCF5407_ABI_DUMPBIN_LEAD} "
+            "(${MCF5407_ABI_DUMPBIN_SOURCE})\n"
+            "  raw    : ${mcf5407_coff_symbols_head}\n"
+            "That archive carries every object of the measurement, so an empty "
+            "answer is this reader failing. A `defined` set that is empty puts "
+            "every published name into the NOT IMPLEMENTED column, which is "
+            "the one verdict this gate must never give by accident.")
+    endif()
+
+    set(${mcf5407_coff_out_defined} "${mcf5407_coff_defined}" PARENT_SCOPE)
+    set(${mcf5407_coff_out_exported} "${mcf5407_coff_exported}" PARENT_SCOPE)
+endfunction()
+
+# The one entry point the gate calls. It takes both artifacts, because the PE
+# reader needs both and the `nm` reader needs one; a caller that passed only
+# what its own platform uses would be a caller that has to know which platform
+# it is on.
+function(mcf5407_abi_read_symbols mcf5407_read_out_defined
+        mcf5407_read_out_exported mcf5407_read_image mcf5407_read_archive)
+    if(MCF5407_ABI_SYMBOL_READER STREQUAL "coff")
+        mcf5407_abi_read_symbols_coff(mcf5407_read_defined
+            mcf5407_read_exported
+            "${mcf5407_read_image}" "${mcf5407_read_archive}")
+    else()
+        mcf5407_abi_read_symbols_nm(mcf5407_read_defined
+            mcf5407_read_exported "${mcf5407_read_image}")
+    endif()
+    set(${mcf5407_read_out_defined} "${mcf5407_read_defined}" PARENT_SCOPE)
+    set(${mcf5407_read_out_exported} "${mcf5407_read_exported}" PARENT_SCOPE)
 endfunction()
 
 # ---------------------------------------------------------------------------
@@ -946,11 +1229,61 @@ endif()
 # The probe unit is what calibrates the symbol reader. It is compiled into
 # THIS object and not into a separate one, so the calibration is a statement
 # about the artifact the verdict is read from.
+#
+# CMAKE BUILDS IT, AND THIS FILE DOES NOT SPELL A SINGLE COMPILER FLAG.
+# A hand-written compiler command was what this step used to carry, and it
+# carried `-shared`, `-std=c11`, `-isystem` and `-o` -- four GNU spellings, all
+# four of which MSVC ignores while warning. Worse than the spellings: `cl.exe`
+# invoked from `execute_process` inherits NO `%INCLUDE%`, because the
+# environment that holds it is set up by `vcvarsall.bat` and CMake does not put
+# it in its own. The result was `fatal error C1034: nimbase.h: no include path
+# set` on every generated unit, and no `/I` repairs it -- the next header to go
+# missing is `<stdio.h>`. The flag spellings could be translated; the empty
+# include environment cannot be, short of reimplementing what CMake already
+# knows.
+#
+# So the artifact is built by a nested CMake project through `try_compile`.
+# That is the CMake-sanctioned way to produce an arbitrary artifact at
+# configure time, and it buys the whole toolchain at once: the include
+# environment, the shared-library link line, the position-independent-code
+# flag, the language standard and the output naming, each in the spelling the
+# selected compiler actually wants. The three flags this file used to spell are
+# now three target properties.
+#
+# On PE the nested project builds a SECOND artifact, a static archive of the
+# same objects. The reader above states why: a PE image keeps no record of a
+# symbol it defines and does not export, so `defined` has to be read from an
+# archive. It is not built elsewhere, because an artifact nothing reads is one
+# more thing to keep correct.
 
 set(MCF5407_ABI_PROBE_SOURCE "${MCF5407_ABI_DIR}/visibility_probe.c")
-file(WRITE "${MCF5407_ABI_PROBE_SOURCE}" [==[
+
+# The probe is written in the platform's own spelling of `this symbol leaves
+# the shared object`. On ELF and Mach-O that is a GNU visibility attribute. On
+# PE it is `__declspec(dllexport)`, and its opposite is the ABSENCE of one --
+# there is no `hidden` to write, because a PE symbol without the attribute is
+# already unexported. Both spellings are the ones Nim's `nimbase.h` emits for
+# `N_LIB_EXPORT` on the same platform, so the probe and the code under
+# measurement answer to the same mechanism.
+if(MSVC)
+    file(WRITE "${MCF5407_ABI_PROBE_SOURCE}" [==[
 /* GENERATED by cmake/Nim.cmake step 4a. Do not edit this copy in the build
- * tree. It calibrates the symbol reader on the object the verdict is read
+ * tree. It calibrates the symbol reader on the artifacts the verdict is read
+ * from.
+ *
+ * `mcf5407_abi_probe_visible` must be defined AND exported.
+ * `mcf5407_abi_probe_hidden`  must be defined AND NOT exported.
+ * `mcf5407_abi_probe_absent`  is defined nowhere and must be in neither set.
+ *
+ * The three answers together prove that the reader separates the three
+ * outcomes the verdict below depends on. */
+__declspec(dllexport) void mcf5407_abi_probe_visible(void) {}
+void mcf5407_abi_probe_hidden(void) {}
+]==])
+else()
+    file(WRITE "${MCF5407_ABI_PROBE_SOURCE}" [==[
+/* GENERATED by cmake/Nim.cmake step 4a. Do not edit this copy in the build
+ * tree. It calibrates the symbol reader on the artifacts the verdict is read
  * from.
  *
  * `mcf5407_abi_probe_visible` must be defined AND exported.
@@ -962,48 +1295,221 @@ file(WRITE "${MCF5407_ABI_PROBE_SOURCE}" [==[
 __attribute__((visibility("default"))) void mcf5407_abi_probe_visible(void) {}
 __attribute__((visibility("hidden"))) void mcf5407_abi_probe_hidden(void) {}
 ]==])
+endif()
 
-set(MCF5407_ABI_OBJECT
-    "${MCF5407_ABI_DIR}/libmcf5407_abi_measure${CMAKE_SHARED_LIBRARY_SUFFIX}")
+set(MCF5407_ABI_MEASURE_SRC_DIR "${MCF5407_ABI_DIR}/measure")
+set(MCF5407_ABI_MEASURE_BIN_DIR "${MCF5407_ABI_DIR}/measure-build")
+set(MCF5407_ABI_MEASURE_OUT_DIR "${MCF5407_ABI_DIR}/measure-out")
+file(MAKE_DIRECTORY "${MCF5407_ABI_MEASURE_SRC_DIR}")
+file(MAKE_DIRECTORY "${MCF5407_ABI_MEASURE_OUT_DIR}")
 
-# Both variables hold a command fragment as ONE string with spaces in it, and
-# not a CMake list. `${VAR}` inside a COMMAND would pass the whole fragment as
-# a single argument. `separate_arguments` splits it the way a shell would.
-separate_arguments(MCF5407_ABI_SHARED_FLAGS NATIVE_COMMAND
-    "${CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS}")
-separate_arguments(MCF5407_ABI_PIC_FLAGS NATIVE_COMMAND
-    "${CMAKE_C_COMPILE_OPTIONS_PIC}")
+set(MCF5407_ABI_OBJECT "${MCF5407_ABI_MEASURE_OUT_DIR}/\
+${CMAKE_SHARED_LIBRARY_PREFIX}mcf5407_abi_measure\
+${CMAKE_SHARED_LIBRARY_SUFFIX}")
+set(MCF5407_ABI_ARCHIVE "${MCF5407_ABI_MEASURE_OUT_DIR}/\
+${CMAKE_STATIC_LIBRARY_PREFIX}mcf5407_abi_defines\
+${CMAKE_STATIC_LIBRARY_SUFFIX}")
 
-execute_process(
-    COMMAND "${CMAKE_C_COMPILER}"
-            ${MCF5407_ABI_SHARED_FLAGS}
-            ${MCF5407_ABI_PIC_FLAGS}
-            -std=c11
-            "-isystem" "${MCF5407_NIM_LIB_DIR}"
-            -o "${MCF5407_ABI_OBJECT}"
-            ${MCF5407_NIM_C_SOURCES}
-            "${MCF5407_ABI_PROBE_SOURCE}"
-    OUTPUT_VARIABLE MCF5407_ABI_LINK_OUTPUT
-    ERROR_VARIABLE MCF5407_ABI_LINK_ERROR
-    RESULT_VARIABLE MCF5407_ABI_LINK_RESULT)
+# One source per line, each quoted. An unquoted `;`-joined list would also
+# expand, and it would break on the first path holding a space.
+set(MCF5407_ABI_MEASURE_SOURCE_LINES "")
+foreach(MCF5407_ABI_MEASURE_SOURCE IN LISTS MCF5407_NIM_C_SOURCES)
+    string(APPEND MCF5407_ABI_MEASURE_SOURCE_LINES
+        "    \"${MCF5407_ABI_MEASURE_SOURCE}\"\n")
+endforeach()
+string(APPEND MCF5407_ABI_MEASURE_SOURCE_LINES
+    "    \"${MCF5407_ABI_PROBE_SOURCE}\"\n")
 
-if(NOT MCF5407_ABI_LINK_RESULT EQUAL 0)
-    mcf5407_clip(MCF5407_ABI_LINK_OUTPUT_HEAD "${MCF5407_ABI_LINK_OUTPUT}" 2000)
-    mcf5407_clip(MCF5407_ABI_LINK_ERROR_HEAD "${MCF5407_ABI_LINK_ERROR}" 2000)
+set(MCF5407_ABI_MEASURE_TARGETS mcf5407_abi_measure)
+set(MCF5407_ABI_MEASURE_ARCHIVE_TEXT "")
+if(MCF5407_ABI_SYMBOL_READER STREQUAL "coff")
+    list(APPEND MCF5407_ABI_MEASURE_TARGETS mcf5407_abi_defines)
+    set(MCF5407_ABI_MEASURE_ARCHIVE_TEXT
+"add_library(mcf5407_abi_defines STATIC
+    $<TARGET_OBJECTS:mcf5407_abi_units>)
+set_target_properties(mcf5407_abi_defines PROPERTIES LINKER_LANGUAGE C)
+")
+endif()
+
+# `@ONLY` is what lets this template hold generator expressions. `$<...>` and
+# `${...}` are left alone and only `@NAME@` is substituted, so the two lines
+# that must be evaluated by the NESTED project survive into it unexpanded.
+set(MCF5407_ABI_MEASURE_TEMPLATE [==[
+# GENERATED by cmake/Nim.cmake step 4a. Do not edit this copy in the build
+# tree. It exists so that CMake, and not this project, spells the compiler
+# flags that build the measurement artifacts.
+
+cmake_minimum_required(VERSION 3.26)
+project(mcf5407_abi_measure C)
+
+# Every configuration writes to ONE directory, so the caller can name the
+# artifact path without knowing which configuration a multi-configuration
+# generator chose for it.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "@MCF5407_ABI_MEASURE_OUT_DIR@")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "@MCF5407_ABI_MEASURE_OUT_DIR@")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "@MCF5407_ABI_MEASURE_OUT_DIR@")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "@MCF5407_ABI_MEASURE_OUT_DIR@")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG "@MCF5407_ABI_MEASURE_OUT_DIR@")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG "@MCF5407_ABI_MEASURE_OUT_DIR@")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "@MCF5407_ABI_MEASURE_OUT_DIR@")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE "@MCF5407_ABI_MEASURE_OUT_DIR@")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE "@MCF5407_ABI_MEASURE_OUT_DIR@")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "@MCF5407_ABI_MEASURE_OUT_DIR@")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "@MCF5407_ABI_MEASURE_OUT_DIR@")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO "@MCF5407_ABI_MEASURE_OUT_DIR@")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "@MCF5407_ABI_MEASURE_OUT_DIR@")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "@MCF5407_ABI_MEASURE_OUT_DIR@")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "@MCF5407_ABI_MEASURE_OUT_DIR@")
+
+# The compiler this project detected is reported back to the caller, which
+# refuses a toolchain other than its own. The exported set is a property of the
+# toolchain that ships the library, so a measurement taken with a different one
+# would be an accurate answer to the wrong question.
+file(WRITE "@MCF5407_ABI_MEASURE_OUT_DIR@/toolchain.txt"
+    "${CMAKE_C_COMPILER}
+${CMAKE_C_COMPILER_ID}
+")
+
+add_library(mcf5407_abi_units OBJECT
+@MCF5407_ABI_MEASURE_SOURCE_LINES@)
+
+# These three properties are the whole of what the hand-written compiler
+# command used to spell, and each is now spelled by the compiler that reads it.
+set_target_properties(mcf5407_abi_units PROPERTIES
+    C_STANDARD 11
+    POSITION_INDEPENDENT_CODE ON)
+target_include_directories(mcf5407_abi_units SYSTEM PRIVATE
+    "@MCF5407_NIM_LIB_DIR@")
+
+# The generated C is not this project's source and is not reviewed here, so a
+# warning in it must not stop a measurement. This mirrors `mcf5407_nim_objs`.
+target_compile_options(mcf5407_abi_units PRIVATE
+    "$<IF:$<C_COMPILER_ID:MSVC>,/WX-,-Wno-error>")
+
+add_library(mcf5407_abi_measure SHARED
+    $<TARGET_OBJECTS:mcf5407_abi_units>)
+set_target_properties(mcf5407_abi_measure PROPERTIES LINKER_LANGUAGE C)
+
+@MCF5407_ABI_MEASURE_ARCHIVE_TEXT@
+]==])
+string(CONFIGURE "${MCF5407_ABI_MEASURE_TEMPLATE}"
+    MCF5407_ABI_MEASURE_TEXT @ONLY)
+file(WRITE "${MCF5407_ABI_MEASURE_SRC_DIR}/CMakeLists.txt"
+    "${MCF5407_ABI_MEASURE_TEXT}")
+
+# The nested project detects its own compiler under a multi-configuration
+# generator, where forcing one fights the generator's toolset selection. Under
+# every other generator the caller's compiler is handed over, and either way
+# the answer is checked against `toolchain.txt` below rather than assumed.
+set(MCF5407_ABI_MEASURE_FLAGS "")
+if(NOT CMAKE_GENERATOR MATCHES "^(Visual Studio|Xcode)")
+    list(APPEND MCF5407_ABI_MEASURE_FLAGS
+        "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}")
+endif()
+
+# No optimization level is passed, for the same reason none was passed before:
+# a symbol's export status is decided by its declaration and by the link, and
+# no `-O` changes either.
+try_compile(MCF5407_ABI_MEASURE_BUILT
+    PROJECT mcf5407_abi_measure
+    SOURCE_DIR "${MCF5407_ABI_MEASURE_SRC_DIR}"
+    BINARY_DIR "${MCF5407_ABI_MEASURE_BIN_DIR}"
+    TARGETS ${MCF5407_ABI_MEASURE_TARGETS}
+    CMAKE_FLAGS ${MCF5407_ABI_MEASURE_FLAGS}
+    OUTPUT_VARIABLE MCF5407_ABI_MEASURE_OUTPUT)
+
+set(MCF5407_ABI_MEASURE_LOG "${MCF5407_ABI_DIR}/measure-build.log")
+file(WRITE "${MCF5407_ABI_MEASURE_LOG}" "${MCF5407_ABI_MEASURE_OUTPUT}")
+
+if(NOT MCF5407_ABI_MEASURE_BUILT)
+    mcf5407_clip_tail(MCF5407_ABI_MEASURE_OUTPUT_TAIL
+        "${MCF5407_ABI_MEASURE_OUTPUT}" 3000)
     message(FATAL_ERROR
-        "mcf5407: step 4a failed: the measurement shared object did not "
-        "build.\n"
-        "  compiler : ${CMAKE_C_COMPILER}\n"
-        "  object   : ${MCF5407_ABI_OBJECT}\n"
-        "  exit     : ${MCF5407_ABI_LINK_RESULT}\n"
-        "  stdout   : ${MCF5407_ABI_LINK_OUTPUT_HEAD}\n"
-        "  stderr   : ${MCF5407_ABI_LINK_ERROR_HEAD}\n"
+        "mcf5407: step 4a failed: the measurement artifacts did not build.\n"
+        "  compiler  : ${CMAKE_C_COMPILER} (${CMAKE_C_COMPILER_ID})\n"
+        "  generator : ${CMAKE_GENERATOR}\n"
+        "  project   : ${MCF5407_ABI_MEASURE_SRC_DIR}/CMakeLists.txt\n"
+        "  targets   : ${MCF5407_ABI_MEASURE_TARGETS}\n"
+        "  full log  : ${MCF5407_ABI_MEASURE_LOG}\n"
+        "  log tail  : ${MCF5407_ABI_MEASURE_OUTPUT_TAIL}\n"
         "The delivery form is a shared object, so the gate builds one and "
         "reads its symbol table. Without it nothing here measures visibility.")
 endif()
 
+# The nested build succeeding is not the same fact as the artifact existing. A
+# generator that put it somewhere this file did not expect would leave a
+# successful build and an unreadable measurement, and every verdict below would
+# then be about a file that is not there.
+set(MCF5407_ABI_MEASURE_ARTIFACTS "${MCF5407_ABI_OBJECT}")
+if(MCF5407_ABI_SYMBOL_READER STREQUAL "coff")
+    list(APPEND MCF5407_ABI_MEASURE_ARTIFACTS "${MCF5407_ABI_ARCHIVE}")
+endif()
+foreach(MCF5407_ABI_MEASURE_ARTIFACT IN LISTS MCF5407_ABI_MEASURE_ARTIFACTS)
+    if(NOT EXISTS "${MCF5407_ABI_MEASURE_ARTIFACT}")
+        file(GLOB_RECURSE MCF5407_ABI_MEASURE_FOUND
+            "${MCF5407_ABI_MEASURE_BIN_DIR}/*"
+            "${MCF5407_ABI_MEASURE_OUT_DIR}/*")
+        message(FATAL_ERROR
+            "mcf5407: step 4a failed: the nested build reported success and "
+            "${MCF5407_ABI_MEASURE_ARTIFACT} is not there.\n"
+            "  generator : ${CMAKE_GENERATOR}\n"
+            "  full log  : ${MCF5407_ABI_MEASURE_LOG}\n"
+            "  produced  : ${MCF5407_ABI_MEASURE_FOUND}\n"
+            "The path is composed from CMAKE_SHARED_LIBRARY_PREFIX, "
+            "CMAKE_STATIC_LIBRARY_PREFIX and their suffixes, and the nested "
+            "project pins every configuration's output directory to one place. "
+            "A generator that disagrees with either needs this step told about "
+            "it.")
+    endif()
+endforeach()
+
+# The toolchain check. It is the reason the flag list above may leave the
+# compiler unset without that becoming an assumption.
+set(MCF5407_ABI_MEASURE_TOOLCHAIN_FILE
+    "${MCF5407_ABI_MEASURE_OUT_DIR}/toolchain.txt")
+if(NOT EXISTS "${MCF5407_ABI_MEASURE_TOOLCHAIN_FILE}")
+    message(FATAL_ERROR
+        "mcf5407: step 4a failed: the nested measurement project wrote no "
+        "${MCF5407_ABI_MEASURE_TOOLCHAIN_FILE}.\n"
+        "That file is how this step learns which compiler took the "
+        "measurement. Without it the toolchain the verdict describes is "
+        "unknown, and an unknown toolchain makes every verdict below a "
+        "statement about nothing in particular.")
+endif()
+file(STRINGS "${MCF5407_ABI_MEASURE_TOOLCHAIN_FILE}"
+    MCF5407_ABI_MEASURE_TOOLCHAIN)
+list(GET MCF5407_ABI_MEASURE_TOOLCHAIN 0 MCF5407_ABI_MEASURE_COMPILER)
+list(GET MCF5407_ABI_MEASURE_TOOLCHAIN 1 MCF5407_ABI_MEASURE_COMPILER_ID)
+if(NOT MCF5407_ABI_MEASURE_COMPILER STREQUAL CMAKE_C_COMPILER)
+    message(FATAL_ERROR
+        "mcf5407: step 4a failed: the measurement was taken with a different "
+        "C compiler than this project builds with.\n"
+        "  this project : ${CMAKE_C_COMPILER} (${CMAKE_C_COMPILER_ID})\n"
+        "  measurement  : ${MCF5407_ABI_MEASURE_COMPILER} "
+        "(${MCF5407_ABI_MEASURE_COMPILER_ID})\n"
+        "  generator    : ${CMAKE_GENERATOR}\n"
+        "The exported set is a property of the toolchain that ships the "
+        "library, so a measurement taken with another toolchain is an accurate "
+        "answer to a question nobody asked. Configure the nested project's "
+        "compiler to match, or configure with -DMCF5407_ABI_GATE=OFF and "
+        "accept a build whose published symbols nobody measured.")
+endif()
+
+message(STATUS
+    "mcf5407: step 4a the measurement artifacts were built by "
+    "${MCF5407_ABI_MEASURE_COMPILER} (${MCF5407_ABI_MEASURE_COMPILER_ID}) "
+    "through a nested CMake project under the ${CMAKE_GENERATOR} generator")
+
 mcf5407_abi_read_symbols(MCF5407_ABI_DEFINED_RAW MCF5407_ABI_EXPORTED_RAW
-    "${MCF5407_ABI_OBJECT}")
+    "${MCF5407_ABI_OBJECT}" "${MCF5407_ABI_ARCHIVE}")
+
+# Which file each of the two sets came from. The diagnostics below name it, and
+# on PE the two are not the same file.
+if(MCF5407_ABI_SYMBOL_READER STREQUAL "coff")
+    set(MCF5407_ABI_DEFINED_FROM "${MCF5407_ABI_ARCHIVE}")
+else()
+    set(MCF5407_ABI_DEFINED_FROM "${MCF5407_ABI_OBJECT}")
+endif()
 
 # ---------------------------------------------------------------------------
 # Control D. The symbol reader, calibrated on the object it just read.
@@ -1025,8 +1531,9 @@ if(NOT MCF5407_ABI_PREFIX_FOUND)
         "`mcf5407_abi_probe_visible` is not among the exported symbols of "
         "${MCF5407_ABI_OBJECT}.\n"
         "  exported : ${MCF5407_ABI_EXPORTED_RAW}\n"
-        "That probe carries `visibility(\"default\")` and this file compiled "
-        "it into that object. A reader that cannot find it read the wrong "
+        "That probe carries ${MCF5407_ABI_EXPORT_ATTRIBUTE} and this file "
+        "compiled it into that object. A reader that cannot find it read the "
+        "wrong "
         "file, read nothing, or cannot see an exported symbol at all. Every "
         "`hidden` verdict below would then be false, and every `visible` "
         "verdict would be unearned.")
@@ -1051,7 +1558,7 @@ if(NOT "mcf5407_abi_probe_hidden" IN_LIST MCF5407_ABI_DEFINED)
     message(FATAL_ERROR
         "mcf5407: step 4a failed: control D: the probe symbol "
         "`mcf5407_abi_probe_hidden` is not among the DEFINED symbols of "
-        "${MCF5407_ABI_OBJECT}.\n"
+        "${MCF5407_ABI_DEFINED_FROM}.\n"
         "  defined : ${MCF5407_ABI_DEFINED}\n"
         "This file compiled a definition of it into that object. A reader "
         "that cannot see a hidden definition cannot separate `hidden` from "
@@ -1065,7 +1572,8 @@ if("mcf5407_abi_probe_hidden" IN_LIST MCF5407_ABI_EXPORTED)
         "`mcf5407_abi_probe_hidden` is among the EXPORTED symbols of "
         "${MCF5407_ABI_OBJECT}.\n"
         "  exported : ${MCF5407_ABI_EXPORTED}\n"
-        "It carries `visibility(\"hidden\")`. A reader that calls it exported "
+        "It carries ${MCF5407_ABI_HIDDEN_ATTRIBUTE}. A reader that calls it "
+        "exported "
         "calls every hidden symbol exported, and the whole gate then passes "
         "whatever it is given.")
 endif()
@@ -1074,7 +1582,8 @@ if("mcf5407_abi_probe_absent" IN_LIST MCF5407_ABI_DEFINED
         OR "mcf5407_abi_probe_absent" IN_LIST MCF5407_ABI_EXPORTED)
     message(FATAL_ERROR
         "mcf5407: step 4a failed: control D: the name "
-        "`mcf5407_abi_probe_absent` was read out of ${MCF5407_ABI_OBJECT}.\n"
+        "`mcf5407_abi_probe_absent` was read out of "
+        "${MCF5407_ABI_OBJECT} or ${MCF5407_ABI_DEFINED_FROM}.\n"
         "Nothing defines it anywhere in this project. A reader that reports it "
         "reports names the object does not hold, and its `visible` verdicts "
         "are then worth nothing.")
@@ -1082,8 +1591,9 @@ endif()
 
 message(STATUS
     "mcf5407: step 4a control D the symbol reader separated visible, hidden "
-    "and absent on ${MCF5407_ABI_OBJECT} (symbol prefix: "
-    "`${MCF5407_ABI_PREFIX}`)")
+    "and absent on ${MCF5407_ABI_OBJECT} (defined set from "
+    "${MCF5407_ABI_DEFINED_FROM}, read by ${MCF5407_ABI_LISTER_SOURCE}, "
+    "symbol prefix: `${MCF5407_ABI_PREFIX}`)")
 
 # ---------------------------------------------------------------------------
 # The Nim runtime scaffolding.
@@ -1158,7 +1668,7 @@ if(NOT MCF5407_ABI_HIDDEN STREQUAL "")
         "  hidden          : ${MCF5407_ABI_HIDDEN}\n"
         "  visible         : ${MCF5407_ABI_VISIBLE}\n"
         "  measured object : ${MCF5407_ABI_OBJECT}\n"
-        "  symbol lister   : ${MCF5407_ABI_NM}\n"
+        "  symbol lister   : ${MCF5407_ABI_LISTER}\n"
         "A consumer of the plugin cannot reach a name that is not exported. "
         "The static archive still builds and `nm` over the archive still "
         "reports the name, so this step is the only one that reports the "

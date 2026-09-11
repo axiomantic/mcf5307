@@ -106,7 +106,12 @@ jobs:
             # by the pin this file reads rather than by a version written here.
             curl -fsSL "https://nim-lang.org/download/nim-${version}_x64.zip" -o nim.zip
             unzip -q nim.zip
-            echo "${PWD}/nim-${version}/bin" >> "$GITHUB_PATH"
+            # `$PWD` under the runner's Git bash reads `/d/a/...`. The runner
+            # hands a GITHUB_PATH line to Windows, which resolves no such path,
+            # so the entry lands on PATH and finds nothing -- and the configure
+            # step then stops at `find_program(MCF5407_NIM_EXECUTABLE nim)`.
+            # `cygpath -w` is the conversion Git bash ships for this boundary.
+            echo "$(cygpath -w "${PWD}")\\nim-${version}\\bin" >> "$GITHUB_PATH"
           else
             curl -fsSL https://nim-lang.org/choosenim/init.sh -o init.sh
             sh init.sh -y
@@ -142,16 +147,28 @@ jobs:
           sudo apt-get install -y binutils-m68k-linux-gnu
           m68k-linux-gnu-as --version | head -1
 
+      # THE CONFIGURATION IS NAMED THREE TIMES, AND ALL THREE ARE NEEDED.
+      # `CMAKE_BUILD_TYPE` is what a single-configuration generator reads, and
+      # a multi-configuration generator ignores it: the Visual Studio generator
+      # decides the configuration at BUILD time, so `--config` is what reaches
+      # it, and CTest needs `-C` to know which of the configurations a
+      # registered test's command refers to. Measured on windows-2022 without
+      # the last two: the build produced Debug while the configure line asked
+      # for Release, and all 30 selected tests reported `Test not available
+      # without configuration.  (Missing "-C <config>"?)` and ran nothing --
+      # CTest exited 8 over a suite that had been built and never started.
+      # `--config` and `-C` are inert on a single-configuration generator, so
+      # the Linux job reads exactly as it did.
       - name: Configure and build
         shell: bash
         run: |
           set -euo pipefail
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --parallel
+          cmake --build build --config Release --parallel
 
       - name: Run the T0 suite
         shell: bash
-        run: ctest --test-dir build --no-tests=error -R "${T0_PATTERN}" --output-on-failure
+        run: ctest --test-dir build -C Release --no-tests=error -R "${T0_PATTERN}" --output-on-failure
 
   sanitizer-t0:
     name: sanitizer-t0

@@ -16,6 +16,16 @@
  * Each pointer also carries the EXACT declared signature, so a changed
  * parameter type or a changed return type is an initialisation diagnostic
  * under `-Werror` rather than a silent pass.
+ *
+ * Each pointer is `volatile`. A read of a volatile object must happen, which
+ * is what forces the initialiser to be materialised and the relocation
+ * against the named function to survive into the link. Without it the
+ * comparisons below are `&function != NULL`, which an optimising compiler
+ * folds to true: measured at `-O2`, all eighteen address-of expressions were
+ * eliminated and the executable linked with no reference to any of them, so a
+ * renamed declaration -- the fault cases 3 and 4 exist to catch -- linked
+ * clean. The check then held only at `-O0` and reported a pass at every other
+ * optimisation level.
  */
 
 #include <stddef.h>
@@ -66,28 +76,28 @@ _Static_assert(sizeof(isp1181_tx_fn) == sizeof(void (*)(void)),
 
 int main(void)
 {
-    int (*const p01)(void) = &mcf5407_runtime_init;
-    mcf5407_ctx* (*const p02)(void*, mcf5407_read_fn, mcf5407_write_fn,
+    int (*const volatile p01)(void) = &mcf5407_runtime_init;
+    mcf5407_ctx* (*const volatile p02)(void*, mcf5407_read_fn, mcf5407_write_fn,
                               mcf5407_iack_fn) = &mcf5407_create;
-    void (*const p03)(mcf5407_ctx*) = &mcf5407_destroy;
-    void (*const p04)(mcf5407_ctx*, uint32_t, uint32_t) = &mcf5407_reset;
-    uint32_t (*const p05)(mcf5407_ctx*, uint32_t) = &mcf5407_exec;
-    void (*const p06)(mcf5407_ctx*, int, uint8_t, int) = &mcf5407_set_irq;
-    size_t (*const p07)(void) = &mcf5407_state_size;
-    void (*const p08)(const mcf5407_ctx*, void*) = &mcf5407_state_save;
-    void (*const p09)(mcf5407_ctx*, const void*) = &mcf5407_state_load;
+    void (*const volatile p03)(mcf5407_ctx*) = &mcf5407_destroy;
+    void (*const volatile p04)(mcf5407_ctx*, uint32_t, uint32_t) = &mcf5407_reset;
+    uint32_t (*const volatile p05)(mcf5407_ctx*, uint32_t) = &mcf5407_exec;
+    void (*const volatile p06)(mcf5407_ctx*, int, uint8_t, int) = &mcf5407_set_irq;
+    size_t (*const volatile p07)(void) = &mcf5407_state_size;
+    void (*const volatile p08)(const mcf5407_ctx*, void*) = &mcf5407_state_save;
+    void (*const volatile p09)(mcf5407_ctx*, const void*) = &mcf5407_state_load;
 
-    isp1181_ctx* (*const p10)(void*, isp1181_irq_fn,
+    isp1181_ctx* (*const volatile p10)(void*, isp1181_irq_fn,
                               isp1181_tx_fn) = &isp1181_create;
-    void (*const p11)(isp1181_ctx*) = &isp1181_destroy;
-    uint8_t (*const p12)(isp1181_ctx*, uint32_t) = &isp1181_read;
-    void (*const p13)(isp1181_ctx*, uint32_t, uint8_t) = &isp1181_write;
-    int (*const p14)(isp1181_ctx*, int, const uint8_t*,
+    void (*const volatile p11)(isp1181_ctx*) = &isp1181_destroy;
+    uint8_t (*const volatile p12)(isp1181_ctx*, uint32_t) = &isp1181_read;
+    void (*const volatile p13)(isp1181_ctx*, uint32_t, uint8_t) = &isp1181_write;
+    int (*const volatile p14)(isp1181_ctx*, int, const uint8_t*,
                      size_t) = &isp1181_rx;
-    void (*const p15)(isp1181_ctx*, uint32_t) = &isp1181_tick;
-    size_t (*const p16)(void) = &isp1181_state_size;
-    void (*const p17)(const isp1181_ctx*, void*) = &isp1181_state_save;
-    void (*const p18)(isp1181_ctx*, const void*) = &isp1181_state_load;
+    void (*const volatile p15)(isp1181_ctx*, uint32_t) = &isp1181_tick;
+    size_t (*const volatile p16)(void) = &isp1181_state_size;
+    void (*const volatile p17)(const isp1181_ctx*, void*) = &isp1181_state_save;
+    void (*const volatile p18)(isp1181_ctx*, const void*) = &isp1181_state_load;
 
     /* Every one is counted, so that no declaration can be
      * dropped from the list above without changing the result. The
