@@ -106,7 +106,12 @@ jobs:
             # by the pin this file reads rather than by a version written here.
             curl -fsSL "https://nim-lang.org/download/nim-${version}_x64.zip" -o nim.zip
             unzip -q nim.zip
-            echo "${PWD}/nim-${version}/bin" >> "$GITHUB_PATH"
+            # `$PWD` under the runner's Git bash reads `/d/a/...`. The runner
+            # hands a GITHUB_PATH line to Windows, which resolves no such path,
+            # so the entry lands on PATH and finds nothing -- and the configure
+            # step then stops at `find_program(MCF5407_NIM_EXECUTABLE nim)`.
+            # `cygpath -w` is the conversion Git bash ships for this boundary.
+            echo "$(cygpath -w "${PWD}")\\nim-${version}\\bin" >> "$GITHUB_PATH"
           else
             curl -fsSL https://nim-lang.org/choosenim/init.sh -o init.sh
             sh init.sh -y
