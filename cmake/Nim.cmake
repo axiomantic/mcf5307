@@ -1024,6 +1024,28 @@ function(mcf5407_abi_read_symbols_coff mcf5407_coff_out_defined
     endforeach()
     list(REMOVE_DUPLICATES mcf5407_coff_exported)
 
+    # A DUMP that succeeded and a PARSE that produced nothing are two
+    # different facts, and an empty list reports them identically. This
+    # measurement object always carries the visible probe, so zero names can
+    # only mean the parse missed -- a dumper whose column layout this regular
+    # expression does not match, or an image whose exports are somewhere else.
+    # The raw head is printed because the layout is the thing in question.
+    if(mcf5407_coff_exported STREQUAL "")
+        mcf5407_clip(mcf5407_coff_exports_head
+            "${mcf5407_coff_exports_out}" 2500)
+        message(FATAL_ERROR
+            "mcf5407: step 4a failed: the export directory of "
+            "${mcf5407_coff_image} parsed to NO names.\n"
+            "  dumper : ${MCF5407_ABI_DUMPBIN} ${MCF5407_ABI_DUMPBIN_LEAD} "
+            "(${MCF5407_ABI_DUMPBIN_SOURCE})\n"
+            "  raw    : ${mcf5407_coff_exports_head}\n"
+            "That image carries `mcf5407_abi_probe_visible`, which this file "
+            "compiled with `__declspec(dllexport)`, so an empty answer is this "
+            "reader failing and not an image with nothing in it. An empty list "
+            "would otherwise travel on into the verdict, where it reads as a "
+            "contract nothing exports.")
+    endif()
+
     set(mcf5407_coff_defined "")
     string(REPLACE "\r" "" mcf5407_coff_symbols_out
         "${mcf5407_coff_symbols_out}")
@@ -1036,6 +1058,22 @@ function(mcf5407_abi_read_symbols_coff mcf5407_coff_out_defined
         endif()
     endforeach()
     list(REMOVE_DUPLICATES mcf5407_coff_defined)
+
+    # The same argument for the other set.
+    if(mcf5407_coff_defined STREQUAL "")
+        mcf5407_clip(mcf5407_coff_symbols_head
+            "${mcf5407_coff_symbols_out}" 2500)
+        message(FATAL_ERROR
+            "mcf5407: step 4a failed: the symbol table of "
+            "${mcf5407_coff_archive} parsed to NO defined names.\n"
+            "  dumper : ${MCF5407_ABI_DUMPBIN} ${MCF5407_ABI_DUMPBIN_LEAD} "
+            "(${MCF5407_ABI_DUMPBIN_SOURCE})\n"
+            "  raw    : ${mcf5407_coff_symbols_head}\n"
+            "That archive carries every object of the measurement, so an empty "
+            "answer is this reader failing. A `defined` set that is empty puts "
+            "every published name into the NOT IMPLEMENTED column, which is "
+            "the one verdict this gate must never give by accident.")
+    endif()
 
     set(${mcf5407_coff_out_defined} "${mcf5407_coff_defined}" PARENT_SCOPE)
     set(${mcf5407_coff_out_exported} "${mcf5407_coff_exported}" PARENT_SCOPE)
