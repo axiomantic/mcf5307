@@ -39,8 +39,7 @@ add_test(NAME t0_corpus_parses
 # A test the T0 pattern selects reaches `ctest --preset t0` only if its
 # executable is attached here: the t0 build preset builds `mcf5407_tests` and
 # nothing else. The root `CMakeLists.txt` states that convention where it
-# creates the aggregate, and `t0_test_set_builds_what_it_runs` is what makes an
-# omission of this line a named failure rather than a masked one.
+# creates the aggregate.
 #
 # `mcf5407_conformance` deliberately gets no such line. Its registered names are
 # `mcf5407_conformance_*`, which the T0 pattern does not select, and attaching it

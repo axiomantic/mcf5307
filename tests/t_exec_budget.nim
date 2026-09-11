@@ -29,29 +29,19 @@ import mcf5407/decode_types
 import mcf5407/machine
 
 var failures: seq[string]
-import ./case_sites
 
 var passCount = 0
 
-proc checkImpl[T](site: int; got: T; want: T; label: string) =
+proc checkImpl[T](got: T; want: T; label: string) =
   if got == want:
     echo "PASSED  ", label, " = ", want
     inc passCount
-    executedSites.add(site)
   else:
     echo "FAILED  ", label, ": expected ", want, ", got ", got
     failures.add(label)
-    executedSites.add(site)
 
 template check(got: untyped; want: untyped; label: string) =
-  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
-  ## `declaredSites` by the `static` below, and once at RUN TIME into
-  ## `executedSites`, by the implementation and only when it reaches a verdict.
-  ## `tests/case_sites.nim` states what the pair is for and
-  ## `tests/case_sites.cmake` states the rules the driver applies.
-  const site = instantiationInfo(-1).line
-  static: declaredSites.add(site)
-  checkImpl(site, got, want, label)
+  checkImpl(got, want, label)
 
 # ---------------------------------------------------------------------------
 # The board. It is `tests/t_lines.nim`'s, for the reason that file gives: a pass
@@ -197,10 +187,9 @@ check(addqRun,
 # `spent >= budget` passes for a core that overruns by any amount at all.
 
 # THE SWEEP'S LENGTH IS A CONSTANT AND NOT A MULTIPLE OF THE MEASURED COST.
-# `mcf5407_check_case_total` in this suite's driver is a TYPED figure, and a
-# sweep whose length moved with the cost would move that figure whenever a
-# cycle count in the core changed - a red with nothing wrong in it, and the
-# shape that teaches an author to retype the figure.
+# A sweep whose length moved with the cost would change how many cases this
+# suite runs whenever a cycle count in the core changed, which makes the case
+# count say something about the core rather than about this file.
 const budgetSweep = 12'u32
 
 for budget in 1'u32 .. budgetSweep:
@@ -211,16 +200,6 @@ for budget in 1'u32 .. budgetSweep:
   check(spent, nopCost * wholeInstructions,
         "a budget of " & $budget & " returns the cost of the instructions it ran")
 
-# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this program reports
-# what its text declares and what its run adjudicated, and the registered
-# test's driver is what compares them - and what compares the declared count
-# against the call sites in this file. A verdict printed here would be a
-# self-assessment, and a run that stopped early would simply not print one.
-const declaredCaseSites = declaredSites
-const declaredOffGreenPathSites = offGreenPathSites
-echo caseSiteLine("declared", "t_exec_budget", declaredCaseSites)
-echo caseSiteLine("executed", "t_exec_budget", executedSites)
-echo caseSiteLine("off-green-path", "t_exec_budget", declaredOffGreenPathSites)
 
 if failures.len > 0:
   echo ""

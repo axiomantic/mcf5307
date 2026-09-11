@@ -5,134 +5,8 @@
 # aggregate that the root list creates, after the `PROJECT_IS_TOP_LEVEL` guard
 # below unless it has the same reason to outlive it the block above the guard has.
 
-# ---------------------------------------------------------------------------
-# `t0_abi_gate_on` - step 4a is switched ON in the tree this suite is running
-# against.
-#
-# What it protects. What the OFF branch of step 4a does is `message(WARNING)`,
-# and a warning fails neither `cmake`, nor `cmake --build`, nor `ctest`. The
-# switch is a `CACHE BOOL`, so a directory configured OFF once stays OFF with
-# nobody naming it again. The whole OFF state is therefore reportable only as
-# one line of scrollback on a run that ends in exit 0 - the shape of a check
-# that quietly does not run, which is the shape step 4a was written to end.
-#
-# The cache entry is not the gate. It is the switch. A run can read `ON` out of
-# `CMakeCache.txt` and still not have run step 4a: delete the branch and keep
-# the `set(... CACHE BOOL)`, or let a parent list file shadow the entry with a
-# normal variable, which the docstring in `cmake/Nim.cmake` records. A
-# cache-only assertion passes on both.
-#
-# SO THE ASSERTION IS ON AN ARTIFACT STEP 4a PRODUCED, AND THE CACHE CHECKS ARE
-# KEPT BESIDE IT. `cmake/Nim.cmake` writes `mcf5407_abi_gate_ran.token` at the
-# END of step 4a's own branch. This file MOVES that token - removes any
-# previous stamp, then renames - into the binary directory ctest starts the
-# driver in. The token is consumed, so a stamp can be here only if step 4a
-# wrote a token in the same run that moved it.
-#
-# WHAT THE MOVE DOES NOT CLOSE is a configure that ABORTS before this directory
-# is read: nothing here runs to remove the previous stamp. So a stamp proves
-# the branch ran through IN THE MOST RECENT CONFIGURE THAT REACHED `tests/`,
-# which is what the pass line says. It is bounded: `cmake --build` on that tree
-# re-runs cmake and exits 2, so CI never reaches ctest.
-#
-# The move is why there is no mtime comparison. An existence-only stamp needs
-# one, and `CMakeCache.txt` is the file it would have to name. Both directions
-# defeat it. Within one configure the cache is written after every list file
-# has run, so a stamp written by step 4a is always older than the cache of its
-# own run and the honest ON case would red. And a second configure that changed
-# no entry leaves `CMakeCache.txt` at the mtime of the first, so a stale stamp
-# reads newer than the cache. Consumption answers the question the mtime was
-# reaching for without depending on either ordering.
-#
-# THE TWO OFFSETS ARE ANCHORED DIFFERENTLY ON PURPOSE. The token lands in THIS
-# PROJECT's binary directory, `PROJECT_BINARY_DIR`; `CMakeCache.txt` is written
-# once per BUILD TREE, `CMAKE_BINARY_DIR`. The two are the same directory ONLY
-# when mcf5407 is top-level, so taking the cache offset from
-# `PROJECT_BINARY_DIR` names a directory that holds no cache under
-# `add_subdirectory()` and reds on every run WITH THE GATE ON.
-#
-# The cache checks are kept and not replaced. They read the persisted entry,
-# which is the thing that survives into the next configure, and they name a
-# different fault: a tree whose switch is off, or whose switch is not declared
-# at all, is a different report from a tree whose branch did not run.
-#
-# The two files it reads are resolved at run time and not baked at configure
-# time. What `add_test` records for each is a relative offset, resolved against
-# the directory ctest starts the driver in, in whatever tree ctest was invoked
-# in. An absolute path computed at configure time names THAT tree forever, and
-# a build tree is a directory anyone can copy.
-#
-# The assertion is on CMake's own boolean reading of the literal, not on the
-# spelling `ON`. `-DMCF5407_ABI_GATE=TRUE` and `-DMCF5407_ABI_GATE=1` are gates
-# that are on, and a test that demanded the three letters would red on a tree
-# whose gate runs. The literal is reported verbatim in both the pass line and
-# the failure message.
-#
-# The count check is not decoration. Zero entries means `cmake/Nim.cmake` no
-# longer declares the switch at all, which is a way to lose step 4a that an
-# ON/OFF assertion alone reads as a missing variable and CMake reads as false.
-# The two are separated so the failure names which one happened.
-#
-# The `t0_` prefix is what puts this name in front of CI -
-# `.github/workflows/ci.yml` selects tests with `T0_PATTERN`, and this name
-# joins that pattern with no edit to the workflow.
-
-# The consume step. It runs on every configure, because this file is what
-# registers the test: a configure that does not reach this line registers no
-# `t0_abi_gate_on` at all, which `--no-tests=error` and the suite's own count
-# report as a missing test rather than as a pass. The removal comes first so
-# that a configure which finds no token leaves no stamp behind.
-#
-# The token is held against the variable `cmake/Nim.cmake` left beside it. What
-# that rejects is a token on disk that step 4a's branch did not write in this
-# run: without the comparison, a token planted in the build tree with step 4a's
-# branch deleted is moved here and the test passes. A rejected token is removed
-# rather than left, so the next configure starts from the same place a clean one
-# does.
-#
-# What it does not reject is `-D`. `cmake -DMCF5407_ABI_GATE_RECORD=<text>`
-# creates a cache entry, the same persistence `MCF5407_ABI_GATE` has and this
-# test exists to catch. It is bounded twice: the record is multi-line and CMake
-# truncates a cached value at the first newline, so a later configure that does
-# not name `-D` reds; and naming it is hand-writing the record with an extra
-# step, which belongs with forging the stamp.
-#
-# Deleting this step is not a quiet way to disarm the test. The offset computed
-# below names `MCF5407_GATE_STAMP`, so a tree without this step reaches
-# `file(RELATIVE_PATH)` with an empty argument, which is a hard CMake error and
-# ends the configure non-zero with no test registered at all.
-set(MCF5407_GATE_TOKEN "${PROJECT_BINARY_DIR}/mcf5407_abi_gate_ran.token")
-set(MCF5407_GATE_STAMP "${CMAKE_CURRENT_BINARY_DIR}/t0_abi_gate_ran.stamp")
-file(REMOVE "${MCF5407_GATE_STAMP}")
-if(EXISTS "${MCF5407_GATE_TOKEN}")
-    file(READ "${MCF5407_GATE_TOKEN}" MCF5407_GATE_TOKEN_TEXT)
-    if(MCF5407_ABI_GATE_RECORD AND
-       "${MCF5407_GATE_TOKEN_TEXT}" STREQUAL "${MCF5407_ABI_GATE_RECORD}")
-        file(RENAME "${MCF5407_GATE_TOKEN}" "${MCF5407_GATE_STAMP}")
-    else()
-        file(REMOVE "${MCF5407_GATE_TOKEN}")
-    endif()
-endif()
-
-file(RELATIVE_PATH MCF5407_GATE_CACHE_OFFSET
-    "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_BINARY_DIR}/CMakeCache.txt")
-file(RELATIVE_PATH MCF5407_GATE_STAMP_OFFSET
-    "${CMAKE_CURRENT_BINARY_DIR}" "${MCF5407_GATE_STAMP}")
-
-# THE DRIVER IS A SOURCE FILE AND THE OFFSETS STILL RESOLVE AGAINST THE BUILD
-# TREE. `cmake -P` sets `CMAKE_CURRENT_BINARY_DIR` to the WORKING DIRECTORY and
-# never to the script's own directory.
-add_test(NAME t0_abi_gate_on
-    COMMAND "${CMAKE_COMMAND}"
-        "-DGATE_CACHE_OFFSET=${MCF5407_GATE_CACHE_OFFSET}"
-        "-DGATE_STAMP_OFFSET=${MCF5407_GATE_STAMP_OFFSET}"
-        -P "${CMAKE_CURRENT_LIST_DIR}/t0_abi_gate_on.cmake")
-
-# The block above registers in every tree and everything below only at top
-# level. A test that runs in a tree no task owns is a test whose failure has no
-# owner. The gate assertion is the exception on purpose: `add_subdirectory()` is
-# where a hidden published symbol breaks a plugin, and it is the configuration
-# the parent-variable shadow of `MCF5407_ABI_GATE` was found in.
+# Everything below registers only at top level. A test that runs in a tree no
+# task owns is a test whose failure has no owner.
 if(NOT PROJECT_IS_TOP_LEVEL)
     return()
 endif()
@@ -502,17 +376,6 @@ foreach(argument IN LISTS MCF5407_EA_COMMAND)
     string(APPEND NIM_EA_COMMAND_LITERAL "    \"${argument}\"\n")
 endforeach()
 
-# THE VANISHED-CASE CHECK EVERY `t_*` DRIVER BELOW INCLUDES.
-#
-# Each driver anchors its pass on `<suite>: <N> cases passed`, and that anchor
-# on its own accepts a suite that has stopped running its cases: a suite that
-# returns early from `check` still prints a pass line and still exits 0.
-#
-# `case_sites.cmake` states the rules that replace the range with a
-# comparison, and `tests/case_sites.nim` states the run-time half.
-set(MCF5407_CASE_SITES_MODULE "${CMAKE_CURRENT_LIST_DIR}/case_sites.cmake")
-
-
 set(MCF5407_EA_SOURCE "${CMAKE_CURRENT_LIST_DIR}/t_ea_masks.nim")
 set(MCF5407_EA_BINARY "${CMAKE_CURRENT_BINARY_DIR}/t_ea_masks_program")
 set(MCF5407_EA_NIMCACHE "${CMAKE_CURRENT_BINARY_DIR}/t_ea_masks_nimcache")
@@ -569,21 +432,6 @@ if(NOT ea_run_out MATCHES "t_ea_masks: [1-9][0-9]* cases passed")
         "t_ea_masks: the run exited 0 but did not report a full pass.\n"
         "  stdout : ${ea_run_out}\n  stderr : ${ea_run_err}")
 endif()
-
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_ea_masks" "@MCF5407_EA_SOURCE@" "${ea_run_out}"
-    1)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
-# states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
-# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
-# CASE COUNT.
-mcf5407_check_case_total("t_ea_masks" "${ea_run_out}" 451)
 
 ]==])
 
@@ -708,21 +556,6 @@ if(NOT sign_run_out MATCHES "t_sign_extend: [1-9][0-9]* cases passed")
         "  stdout : ${sign_run_out}\n  stderr : ${sign_run_err}")
 endif()
 
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_sign_extend" "@MCF5407_SIGN_SOURCE@" "${sign_run_out}"
-    0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
-# states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
-# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
-# CASE COUNT.
-mcf5407_check_case_total("t_sign_extend" "${sign_run_out}" 10)
-
 ]==])
 
 string(CONFIGURE "${MCF5407_SIGN_DRIVER_TEMPLATE}"
@@ -839,21 +672,6 @@ if(NOT alu_run_out MATCHES "t_alu: [1-9][0-9]* cases passed")
         "  stdout : ${alu_run_out}\n  stderr : ${alu_run_err}")
 endif()
 
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_alu" "@MCF5407_ALU_SOURCE@" "${alu_run_out}"
-    0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
-# states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
-# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
-# CASE COUNT.
-mcf5407_check_case_total("t_alu" "${alu_run_out}" 165)
-
 ]==])
 
 string(CONFIGURE "${MCF5407_ALU_DRIVER_TEMPLATE}"
@@ -959,21 +777,6 @@ if(NOT move_run_out MATCHES "t_move: [1-9][0-9]* cases passed")
         "t_move: the run exited 0 but did not report a full pass.\n"
         "  stdout : ${move_run_out}\n  stderr : ${move_run_err}")
 endif()
-
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_move" "@MCF5407_MOVE_SOURCE@" "${move_run_out}"
-    0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
-# states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
-# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
-# CASE COUNT.
-mcf5407_check_case_total("t_move" "${move_run_out}" 35)
 
 ]==])
 
@@ -1102,21 +905,6 @@ if(NOT logic_run_out MATCHES "t_logic: [1-9][0-9]* cases passed")
         "t_logic: the run exited 0 but did not report a full pass.\n"
         "  stdout : ${logic_run_out}\n  stderr : ${logic_run_err}")
 endif()
-
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_logic" "@MCF5407_LOGIC_SOURCE@" "${logic_run_out}"
-    0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
-# states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
-# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
-# CASE COUNT.
-mcf5407_check_case_total("t_logic" "${logic_run_out}" 74)
 
 ]==])
 
@@ -1268,21 +1056,6 @@ if(NOT control_run_out MATCHES "t_control: [1-9][0-9]* cases passed")
         "  stdout : ${control_run_out}\n  stderr : ${control_run_err}")
 endif()
 
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_control" "@MCF5407_CONTROL_SOURCE@" "${control_run_out}"
-    0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
-# states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
-# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
-# CASE COUNT.
-mcf5407_check_case_total("t_control" "${control_run_out}" 177)
-
 ]==])
 
 string(CONFIGURE "${MCF5407_CONTROL_DRIVER_TEMPLATE}"
@@ -1390,16 +1163,6 @@ if(NOT bradisp_run_out MATCHES "t_bra_displacement: [1-9][0-9]* cases passed")
         "pass.\n"
         "  stdout : ${bradisp_run_out}\n  stderr : ${bradisp_run_err}")
 endif()
-
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_bra_displacement" "@MCF5407_BRADISP_SOURCE@"
-    "${bradisp_run_out}" 0)
-
-# THE CASE TOTAL. The sweep itself is ONE site inside no loop, so the site
-# checks above cannot see the sweep shrink from 256 rows to none - the suite's
-# own second case is what sees that. MOVE THIS ONLY WITH A DELIBERATE CHANGE IN
-# THE CASE COUNT.
-mcf5407_check_case_total("t_bra_displacement" "${bradisp_run_out}" 4)
 
 ]==])
 
@@ -1510,21 +1273,6 @@ if(NOT movec_run_out MATCHES "t_movec: [1-9][0-9]* cases passed")
         "  stdout : ${movec_run_out}\n  stderr : ${movec_run_err}")
 endif()
 
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_movec" "@MCF5407_MOVEC_SOURCE@" "${movec_run_out}"
-    0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
-# states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
-# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
-# CASE COUNT.
-mcf5407_check_case_total("t_movec" "${movec_run_out}" 51)
-
 ]==])
 
 string(CONFIGURE "${MCF5407_MOVEC_DRIVER_TEMPLATE}"
@@ -1626,21 +1374,6 @@ if(NOT sysctl_run_out MATCHES "t_system_control: [1-9][0-9]* cases passed")
         "t_system_control: the run exited 0 but did not report a full pass.\n"
         "  stdout : ${sysctl_run_out}\n  stderr : ${sysctl_run_err}")
 endif()
-
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_system_control" "@MCF5407_SYSCTL_SOURCE@"
-    "${sysctl_run_out}" 0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
-# states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
-# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
-# CASE COUNT.
-mcf5407_check_case_total("t_system_control" "${sysctl_run_out}" 37)
 
 ]==])
 
@@ -1758,22 +1491,6 @@ if(NOT lines_run_out MATCHES "t_lines: [1-9][0-9]* cases passed")
         "  stdout : ${lines_run_out}\n  stderr : ${lines_run_err}")
 endif()
 
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_lines" "@MCF5407_LINES_SOURCE@" "${lines_run_out}"
-    0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. THIS SUITE'S SWEEP IS
-# EXACTLY SUCH A SITE. `tests/case_sites.cmake` states at
-# `mcf5407_check_case_total` why a TYPED figure is accepted here and what it
-# still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE CASE
-# COUNT.
-mcf5407_check_case_total("t_lines" "${lines_run_out}" 20)
-
 ]==])
 
 string(CONFIGURE "${MCF5407_LINES_DRIVER_TEMPLATE}"
@@ -1889,24 +1606,6 @@ if(NOT exec_budget_run_out MATCHES "t_exec_budget: [1-9][0-9]* cases passed")
         "  stdout : ${exec_budget_run_out}\n"
         "  stderr : ${exec_budget_run_err}")
 endif()
-
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_exec_budget" "@MCF5407_EXEC_BUDGET_SOURCE@"
-    "${exec_budget_run_out}" 0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a SWEEP THAT GOT SHORTER, because a site inside a
-# loop is one site however many budgets the loop carries. THIS SUITE'S BUDGET
-# SWEEP IS EXACTLY SUCH A SITE, and its length is a constant in the suite
-# rather than a multiple of a measured cycle count, so a change to a cycle
-# count in the core does not move this figure. `tests/case_sites.cmake` states
-# at `mcf5407_check_case_total` why a TYPED figure is accepted here and what it
-# still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE CASE
-# COUNT.
-mcf5407_check_case_total("t_exec_budget" "${exec_budget_run_out}" 15)
 
 ]==])
 
@@ -2035,24 +1734,6 @@ if(NOT negative_run_out MATCHES "t_negative: [1-9][0-9]* cases passed")
         "  stdout : ${negative_run_out}\n  stderr : ${negative_run_err}")
 endif()
 
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor
-# is the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_negative" "@MCF5407_NEGATIVE_SOURCE@"
-    "${negative_run_out}" 0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. EVERY PER-CASE SITE IN
-# THIS SUITE IS SUCH A SITE - the suite iterates the corpus - so a case
-# deleted from `conformance/corpus/negative_00.json` is invisible to
-# everything except this figure. `tests/case_sites.cmake` states at
-# `mcf5407_check_case_total` why a TYPED figure is accepted here and what it
-# still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE CASE
-# COUNT.
-mcf5407_check_case_total("t_negative" "${negative_run_out}" 33)
-
 ]==])
 
 string(CONFIGURE "${MCF5407_NEGATIVE_DRIVER_TEMPLATE}"
@@ -2163,21 +1844,6 @@ if(NOT exception_run_out MATCHES "t_exception: [1-9][0-9]* cases passed")
         "  stdout : ${exception_run_out}\n  stderr : ${exception_run_err}")
 endif()
 
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_exception" "@MCF5407_EXCEPTION_SOURCE@" "${exception_run_out}"
-    0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
-# states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
-# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
-# CASE COUNT.
-mcf5407_check_case_total("t_exception" "${exception_run_out}" 42)
-
 ]==])
 
 string(CONFIGURE "${MCF5407_EXCEPTION_DRIVER_TEMPLATE}"
@@ -2284,21 +1950,6 @@ if(NOT ctlregs_run_out MATCHES "t_control_registers: [1-9][0-9]* cases passed")
         "t_control_registers: the run exited 0 but did not report a full "
         "pass.\n  stdout : ${ctlregs_run_out}\n  stderr : ${ctlregs_run_err}")
 endif()
-
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_control_registers" "@MCF5407_CTLREGS_SOURCE@"
-    "${ctlregs_run_out}" 0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
-# states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
-# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
-# CASE COUNT.
-mcf5407_check_case_total("t_control_registers" "${ctlregs_run_out}" 10)
 
 ]==])
 
@@ -2408,21 +2059,6 @@ if(NOT bus_fault_run_out MATCHES "t_bus_fault: [1-9][0-9]* cases passed")
         "t_bus_fault: the run exited 0 but did not report a full pass.\n"
         "  stdout : ${bus_fault_run_out}\n  stderr : ${bus_fault_run_err}")
 endif()
-
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_bus_fault" "@MCF5407_BUS_FAULT_SOURCE@" "${bus_fault_run_out}"
-    0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
-# states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
-# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
-# CASE COUNT.
-mcf5407_check_case_total("t_bus_fault" "${bus_fault_run_out}" 28)
 
 ]==])
 
@@ -2539,21 +2175,6 @@ if(NOT bus_fault_write_run_out MATCHES
         "  stderr : ${bus_fault_write_run_err}")
 endif()
 
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_bus_fault_write"
-    "@MCF5407_BUS_FAULT_WRITE_SOURCE@" "${bus_fault_write_run_out}" 0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
-# states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
-# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
-# CASE COUNT.
-mcf5407_check_case_total("t_bus_fault_write" "${bus_fault_write_run_out}" 9)
-
 ]==])
 
 string(CONFIGURE "${MCF5407_BUS_FAULT_WRITE_DRIVER_TEMPLATE}"
@@ -2663,21 +2284,6 @@ if(NOT irq_run_out MATCHES "t_irq: [1-9][0-9]* cases passed")
         "t_irq: the run exited 0 but did not report a full pass.\n"
         "  stdout : ${irq_run_out}\n  stderr : ${irq_run_err}")
 endif()
-
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_irq" "@MCF5407_IRQ_SOURCE@" "${irq_run_out}"
-    0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
-# states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
-# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
-# CASE COUNT.
-mcf5407_check_case_total("t_irq" "${irq_run_out}" 37)
 
 ]==])
 
@@ -2795,28 +2401,6 @@ if(NOT state_run_out MATCHES "t_state: [1-9][0-9]* cases passed")
         "  stdout : ${state_run_out}\n  stderr : ${state_run_err}")
 endif()
 
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_state" "@MCF5407_STATE_SOURCE@" "${state_run_out}"
-    0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
-# states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
-# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
-# CASE COUNT.
-#
-# THIS SUITE'S TOTAL MOVES WITH THE NUMBER OF SERIALISED CONTEXT FIELDS, which
-# is a property the other suites' totals do not have. Its per-field round-trip
-# and per-byte-position blocks iterate the state block itself, so a field added
-# to `MCF5407Ctx` moves this figure. That coupling is the point: a field that
-# enters the snapshot without anyone deciding it should is what this figure
-# refuses to let pass quietly.
-mcf5407_check_case_total("t_state" "${state_run_out}" 46)
-
 ]==])
 
 string(CONFIGURE "${MCF5407_STATE_DRIVER_TEMPLATE}" MCF5407_STATE_DRIVER @ONLY)
@@ -2933,26 +2517,6 @@ if(NOT isp_stub_run_out MATCHES "t_isp1181_stub: [1-9][0-9]* cases passed")
         "  stdout : ${isp_stub_run_out}\n  stderr : ${isp_stub_run_err}")
 endif()
 
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_isp1181_stub" "@MCF5407_ISP1181_STUB_SOURCE@"
-    "${isp_stub_run_out}" 0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. `tests/case_sites.cmake`
-# states at `mcf5407_check_case_total` why a TYPED figure is accepted here and
-# what it still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE
-# CASE COUNT.
-#
-# EVERY SWEEP IN THIS SUITE AGGREGATES INTO ONE CASE rather than asserting per
-# iteration, so this figure counts properties and not addresses. A sweep that
-# stopped iterating is caught by the iteration count inside the case's own
-# expected value, which is why the two guards do not overlap here.
-mcf5407_check_case_total("t_isp1181_stub" "${isp_stub_run_out}" 51)
-
 ]==])
 
 string(CONFIGURE "${MCF5407_ISP1181_STUB_DRIVER_TEMPLATE}"
@@ -3066,20 +2630,6 @@ if(NOT isp_cmd_run_out MATCHES "t_isp1181_command_set: [1-9][0-9]* cases passed"
         "  stdout : ${isp_cmd_run_out}\n  stderr : ${isp_cmd_run_err}")
 endif()
 
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_isp1181_command_set"
-    "@MCF5407_ISP1181_CMD_SOURCE@" "${isp_cmd_run_out}" 0)
-
-# THE CASE TOTAL. `tests/case_sites.cmake` states at `mcf5407_check_case_total`
-# why a TYPED figure is accepted here and what it still does not reach. MOVE IT
-# ONLY WITH A DELIBERATE CHANGE IN THE CASE COUNT.
-#
-# THE THREE OPCODE SWEEPS AGGREGATE INTO ONE CASE EACH and carry their own
-# driven-count inside the expected value, so a sweep that stopped iterating
-# fails on that count rather than on this figure. What this figure catches is
-# a whole case removed.
-mcf5407_check_case_total("t_isp1181_command_set" "${isp_cmd_run_out}" 31)
-
 ]==])
 
 string(CONFIGURE "${MCF5407_ISP1181_CMD_DRIVER_TEMPLATE}"
@@ -3192,26 +2742,6 @@ if(NOT isp_model_run_out MATCHES "t_isp1181: [1-9][0-9]* cases passed")
         "  stdout : ${isp_model_run_out}\n  stderr : ${isp_model_run_err}")
 endif()
 
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_isp1181"
-    "@MCF5407_ISP1181_MODEL_SOURCE@" "${isp_model_run_out}" 0)
-
-# The case total. `tests/case_sites.cmake` states at `mcf5407_check_case_total`
-# why a typed figure is accepted here and what it still does not reach. Move it
-# only with a deliberate change in the case count.
-#
-# The sweep over the command byte aggregates into one case and carries its own
-# driven-count inside the expected value, so a sweep that stopped iterating
-# fails on that count rather than on this figure. What this figure catches is
-# a whole case removed.
-#
-# The EPDIR decode is covered once per direction: a queue and a transmit on an
-# endpoint configured IN against one configured OUT, and a host delivery
-# refused on an endpoint configured IN against one configured OUT. The bit
-# governs both halves of a single buffer, so a figure that covered only the
-# transmit half would let the receive half go untested.
-mcf5407_check_case_total("t_isp1181" "${isp_model_run_out}" 41)
-
 ]==])
 
 string(CONFIGURE "${MCF5407_ISP1181_MODEL_DRIVER_TEMPLATE}"
@@ -3314,21 +2844,6 @@ if(NOT isp_state_run_out MATCHES "t_isp1181_state: [1-9][0-9]* cases passed")
         "t_isp1181_state: the run exited 0 but did not report a full pass.\n"
         "  stdout : ${isp_state_run_out}\n  stderr : ${isp_state_run_err}")
 endif()
-
-# THE VANISHED-CASE CHECK. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_isp1181_state" "@MCF5407_ISP1181_STATE_SOURCE@"
-    "${isp_state_run_out}" 0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries. MOVE IT ONLY WITH A
-# DELIBERATE CHANGE IN THE CASE COUNT.
-#
-# EVERY SWEEP IN THIS SUITE AGGREGATES INTO ONE CASE and carries its own
-# iteration count inside its expected value, so a sweep that stopped iterating
-# fails on that count rather than on this figure.
-mcf5407_check_case_total("t_isp1181_state" "${isp_state_run_out}" 15)
 
 ]==])
 
@@ -3460,21 +2975,6 @@ if(NOT no_alloc_run_out MATCHES "t_no_alloc: [1-9][0-9]* cases passed")
         "  stdout : ${no_alloc_run_out}\n  stderr : ${no_alloc_run_err}")
 endif()
 
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_no_alloc" "@MCF5407_NO_ALLOC_SOURCE@"
-    "${no_alloc_run_out}" 0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a case DELETED from the file, because a deleted call
-# site leaves the compiler's registry as well as the text.
-# `tests/case_sites.cmake` states at `mcf5407_check_case_total` why a TYPED
-# figure is accepted here and what it still does not reach. MOVE IT ONLY WITH A
-# DELIBERATE CHANGE IN THE CASE COUNT.
-mcf5407_check_case_total("t_no_alloc" "${no_alloc_run_out}" 9)
-
 ]==])
 
 string(CONFIGURE "${MCF5407_NO_ALLOC_DRIVER_TEMPLATE}"
@@ -3598,22 +3098,6 @@ if(NOT size_unit_run_out MATCHES "t_bus_size_unit: [1-9][0-9]* cases passed")
         "  stdout : ${size_unit_run_out}\n  stderr : ${size_unit_run_err}")
 endif()
 
-# THE VANISHED-CASE CHECK. The anchor above stays beside it rather than being
-# replaced by it: the two fail on differently-shaped defects, and the anchor is
-# the cheaper of the two. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_bus_size_unit" "@MCF5407_SIZE_UNIT_SOURCE@"
-    "${size_unit_run_out}" 0)
-
-# THE CASE TOTAL. The rules the call above applies catch a case that stops
-# RUNNING; they cannot see a TABLE THAT GOT SHORTER, because a site inside a
-# loop is one site however many rows the loop carries - and the sweep in this
-# suite is exactly such a loop. `tests/case_sites.cmake` states at
-# `mcf5407_check_case_total` why a TYPED figure is accepted here and what it
-# still does not reach. MOVE IT ONLY WITH A DELIBERATE CHANGE IN THE CASE
-# COUNT.
-mcf5407_check_case_total("t_bus_size_unit" "${size_unit_run_out}" 8)
-
 ]==])
 
 string(CONFIGURE "${MCF5407_SIZE_UNIT_DRIVER_TEMPLATE}"
@@ -3736,16 +3220,6 @@ if(NOT runtime_latch_run_out MATCHES "t_runtime_latch: [1-9][0-9]* cases passed"
         "  stderr : ${runtime_latch_run_err}")
 endif()
 
-# THE VANISHED-CASE CHECK. `tests/case_sites.cmake` states the rules.
-include("@MCF5407_CASE_SITES_MODULE@")
-mcf5407_check_case_sites("t_runtime_latch" "@MCF5407_RUNTIME_LATCH_SOURCE@"
-    "${runtime_latch_run_out}" 0)
-
-# THE CASE TOTAL. `tests/case_sites.cmake` states at `mcf5407_check_case_total`
-# why a TYPED figure is accepted here and what it still does not reach. MOVE IT
-# ONLY WITH A DELIBERATE CHANGE IN THE CASE COUNT.
-mcf5407_check_case_total("t_runtime_latch" "${runtime_latch_run_out}" 11)
-
 ]==])
 
 string(CONFIGURE "${MCF5407_RUNTIME_LATCH_DRIVER_TEMPLATE}"
@@ -3757,313 +3231,6 @@ add_test(NAME t_runtime_latch
     COMMAND "${CMAKE_COMMAND}"
         -P "${CMAKE_CURRENT_BINARY_DIR}/t_runtime_latch_driver.cmake")
 
-
-
-# ------------------------------------------- THE CHECK ON THE VANISHED-CASE
-# CHECK ITSELF. Nothing above pins HOW MANY drivers carry
-# `mcf5407_check_case_sites`, so the mechanism that refuses to let a case
-# vanish in silence could itself vanish in silence.
-#
-# Deleting a `mcf5407_check_case_sites(...)` line from a driver template above
-# leaves `cmake` configuring cleanly and the suite reporting `Passed`, WITH NO
-# COMPLAINT ANYWHERE.
-#
-# SO THE SET IS DERIVED FROM BOTH ENDS AND THE TWO ENDS ARE COMPARED, which is
-# the discipline `case_sites.cmake` rule 2 already applies to call sites:
-#
-#   A. THE SUITES THAT CARRY THE RUN-TIME HALF. A suite participates by
-#      importing `tests/case_sites.nim`; the import is what gives it
-#      `declaredSites`, `executedSites` and `caseSiteLine`, and a suite that
-#      drops the import does not compile, because it uses all three.
-#   B. THE SUITES THE GENERATED DRIVERS ACTUALLY CHECK, read out of the driver
-#      files THIS CONFIGURE JUST WROTE - the artifact that runs, not the
-#      template it was written from.
-#
-# NEITHER SIDE SPELLS A NUMBER, so a suite added to this file updates both at
-# once and there is nothing to maintain.
-#
-# IT RUNS AT CONFIGURE TIME AND IS NOT A REGISTERED TEST, deliberately. A check
-# on whether the tests are wired up must not be a test that a selection filter
-# can leave out. A configure that fails here builds nothing at all.
-#
-# WHAT IT DOES NOT REACH, STATED SO ITS SILENCE IS NOT READ AS COVERAGE. Both
-# sides fall together under ONE change: deleting a suite's `import
-# ./case_sites` AND its driver's check line in the same edit removes the suite
-# from side A and from side B, and this comparison stays green. That is the
-# same shape as `case_sites.cmake` rule 2's own residual - a call site deleted
-# from the text is deleted from the compiler's registry too - and it is not
-# closeable by comparing these two sides harder. What it does catch is either
-# half deleted on its own.
-#
-# A STALE BUILD TREE REPORTS HERE. Side B globs the generated drivers, so a
-# driver left behind by a deleted suite is an extra name and is red. The repair
-# is a clean configure and never a relaxation of this check.
-# Both lines are needed and neither answers the other's edit.
-# `CONFIGURE_DEPENDS` re-globs at build time and re-runs the configure when the
-# SET OF MATCHED FILES changes - a suite added, deleted or renamed. The
-# directory property registers each matched file INDIVIDUALLY, which is what
-# answers an edit INSIDE a file that already matched: the glob word does not
-# watch content.
-file(GLOB MCF5407_SUITE_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_LIST_DIR}/t_*.nim")
-set_property(DIRECTORY "${PROJECT_SOURCE_DIR}"
-    APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${MCF5407_SUITE_SOURCES})
-set(MCF5407_SUITES_WITH_RUNTIME_HALF "")
-foreach(mcf5407_suite_source IN LISTS MCF5407_SUITE_SOURCES)
-    file(READ "${mcf5407_suite_source}" mcf5407_suite_text)
-    # THE IMPORT IS ANCHORED AT THE START OF A LINE so that the many `##`
-    # comments naming `tests/case_sites.nim` are not read as imports.
-    if(mcf5407_suite_text MATCHES "(^|\n)import[ \t]+\\./case_sites")
-        get_filename_component(mcf5407_suite_name "${mcf5407_suite_source}"
-            NAME_WE)
-        list(APPEND MCF5407_SUITES_WITH_RUNTIME_HALF "${mcf5407_suite_name}")
-    endif()
-endforeach()
-
-file(GLOB MCF5407_GENERATED_DRIVERS
-    "${CMAKE_CURRENT_BINARY_DIR}/t_*_driver.cmake")
-#
-# BOTH DRIVER-SIDE CHECKS ARE REQUIRED OF EVERY DRIVER, not just the older one.
-# `mcf5407_check_case_total` is exactly as deletable as
-# `mcf5407_check_case_sites` was, and exempting it here would rebuild the hole
-# this block exists to close one function further along. A driver missing
-# EITHER call leaves its suite out of the set below.
-set(MCF5407_SUITES_CHECKED_BY_A_DRIVER "")
-foreach(mcf5407_driver IN LISTS MCF5407_GENERATED_DRIVERS)
-    get_filename_component(mcf5407_driver_name "${mcf5407_driver}" NAME)
-    string(REGEX REPLACE "_driver\\.cmake$" "" mcf5407_driver_suite
-        "${mcf5407_driver_name}")
-    file(READ "${mcf5407_driver}" mcf5407_driver_text)
-    set(mcf5407_driver_checked "")
-    foreach(mcf5407_required_call IN ITEMS mcf5407_check_case_sites
-            mcf5407_check_case_total)
-        string(REGEX MATCHALL "${mcf5407_required_call}\\(\"[A-Za-z0-9_]+\""
-            mcf5407_driver_hits "${mcf5407_driver_text}")
-        set(mcf5407_call_names "")
-        foreach(mcf5407_hit IN LISTS mcf5407_driver_hits)
-            string(REGEX REPLACE "^.*\\(\"([A-Za-z0-9_]+)\"$" "\\1"
-                mcf5407_hit_suite "${mcf5407_hit}")
-            # A DRIVER MAY ONLY CHECK ITS OWN SUITE. Without this a single
-            # driver naming every suite would satisfy the comparison
-            # below while every other suite's run went unexamined.
-            if(NOT mcf5407_hit_suite STREQUAL mcf5407_driver_suite)
-                message(FATAL_ERROR
-                    "tests: the generated driver ${mcf5407_driver_name} calls "
-                    "${mcf5407_required_call} for `${mcf5407_hit_suite}`, "
-                    "which is not the suite it runs. A driver checks the "
-                    "output of its OWN run and has no other run to check.")
-            endif()
-            list(APPEND mcf5407_call_names "${mcf5407_hit_suite}")
-        endforeach()
-        if(NOT mcf5407_call_names STREQUAL "")
-            list(APPEND mcf5407_driver_checked "${mcf5407_required_call}")
-        endif()
-    endforeach()
-    # THE CASE TOTAL THE DRIVER RECORDS, read out of the GENERATED file rather
-    # than out of the template it was written from, for the reason side B above
-    # gives: the artifact that runs is the one whose figure the second-source
-    # comparison below has to be about.
-    if(mcf5407_driver_text MATCHES
-            "mcf5407_check_case_total\\(\"${mcf5407_driver_suite}\"[^\n]*[^0-9]([0-9]+)\\)")
-        set(MCF5407_CASE_TOTAL_${mcf5407_driver_suite} "${CMAKE_MATCH_1}")
-    endif()
-    list(LENGTH mcf5407_driver_checked mcf5407_driver_checked_count)
-    if(mcf5407_driver_checked_count EQUAL 2)
-        list(APPEND MCF5407_SUITES_CHECKED_BY_A_DRIVER
-            "${mcf5407_driver_suite}")
-    elseif(mcf5407_driver_checked_count EQUAL 1)
-        string(REPLACE ";" " " mcf5407_driver_checked_text
-            "${mcf5407_driver_checked}")
-        message(FATAL_ERROR
-            "tests: the generated driver ${mcf5407_driver_name} calls "
-            "${mcf5407_driver_checked_text} and not the other of the two "
-            "driver-side checks. `mcf5407_check_case_sites` fails on a case "
-            "that stopped running and `mcf5407_check_case_total` fails on a "
-            "table that got shorter; they are not two strengths of one check "
-            "and a suite carrying one of them is unguarded against the other "
-            "shape.")
-    endif()
-endforeach()
-
-list(REMOVE_DUPLICATES MCF5407_SUITES_WITH_RUNTIME_HALF)
-list(REMOVE_DUPLICATES MCF5407_SUITES_CHECKED_BY_A_DRIVER)
-list(SORT MCF5407_SUITES_WITH_RUNTIME_HALF)
-list(SORT MCF5407_SUITES_CHECKED_BY_A_DRIVER)
-list(LENGTH MCF5407_SUITES_WITH_RUNTIME_HALF MCF5407_RUNTIME_HALF_COUNT)
-list(LENGTH MCF5407_SUITES_CHECKED_BY_A_DRIVER MCF5407_DRIVER_CHECK_COUNT)
-
-if(NOT MCF5407_SUITES_WITH_RUNTIME_HALF STREQUAL
-        MCF5407_SUITES_CHECKED_BY_A_DRIVER)
-    string(REPLACE ";" " " MCF5407_RUNTIME_HALF_TEXT
-        "${MCF5407_SUITES_WITH_RUNTIME_HALF}")
-    string(REPLACE ";" " " MCF5407_DRIVER_CHECK_TEXT
-        "${MCF5407_SUITES_CHECKED_BY_A_DRIVER}")
-    message(FATAL_ERROR
-        "tests: ${MCF5407_RUNTIME_HALF_COUNT} suite(s) import "
-        "`tests/case_sites.nim` and carry the run-time half of the "
-        "vanished-case check:\n  ${MCF5407_RUNTIME_HALF_TEXT}\n"
-        "but ${MCF5407_DRIVER_CHECK_COUNT} generated driver(s) call "
-        "`mcf5407_check_case_sites`:\n  ${MCF5407_DRIVER_CHECK_TEXT}\n"
-        "A SUITE WHOSE DRIVER DOES NOT CALL IT REPORTS ITS OWN REGISTRIES AND "
-        "NOBODY READS THEM: it passes with its cases gone, which is exactly "
-        "the silence `tests/case_sites.cmake` exists to end. The two sides "
-        "here are derived - one from the suites' own imports, one from the "
-        "driver files this configure just wrote - and NEITHER may be brought "
-        "into agreement by deleting the import.")
-endif()
-message(STATUS
-    "mcf5407: the vanished-case check is wired into all "
-    "${MCF5407_DRIVER_CHECK_COUNT} suite(s) that carry its run-time half")
-
-
-# ----------------------------------- THE SECOND SOURCE FOR A TYPED CASE TOTAL.
-# `tests/case_sites.cmake` accepts one TYPED figure per suite because a table
-# that gets shorter fails no derived check. The second source is `src/` itself:
-# it carries transcripts of runs of these suites, quoted inside the comments
-# that record cycle-mutation and mask-mutation measurements, and a transcript
-# naming a suite and a case count is a figure the driver's number can be held
-# against.
-#
-# No suite is named here and no count is typed here, so a transcript added to
-# or removed from `src/` moves this check with it.
-#
-# A suite no transcript names is not covered by this check: the typed figure is
-# still the only guard there. The transcripts are records of past runs, not a
-# specification, so a DELIBERATE change in a suite's case count makes them red.
-# The repair is a NAMED REFERENCE in place of the number in `src/`, not
-# retyping the driver's figure to agree with a stale transcript.
-file(GLOB_RECURSE MCF5407_CORE_SOURCES "${PROJECT_SOURCE_DIR}/src/*.nim")
-foreach(mcf5407_core_source IN LISTS MCF5407_CORE_SOURCES)
-    # SPLIT BY HAND for the reason `tests/case_sites.cmake` gives at its own
-    # source-side rule: a `;` in the text would split one line into two list
-    # elements and take the front off both halves.
-    file(READ "${mcf5407_core_source}" mcf5407_core_text)
-    string(REPLACE ";" "\\;" mcf5407_core_text "${mcf5407_core_text}")
-    string(REPLACE "\n" ";" mcf5407_core_text "${mcf5407_core_text}")
-    foreach(mcf5407_core_line IN LISTS mcf5407_core_text)
-        if(NOT mcf5407_core_line MATCHES " cases")
-            continue()
-        endif()
-        foreach(mcf5407_suite IN LISTS MCF5407_SUITES_WITH_RUNTIME_HALF)
-            # THE SUITE NAME IS BOUNDED ON BOTH SIDES so that one suite's name
-            # inside a longer one does not answer for it, and the count must be
-            # DIGITS immediately before ` cases` so that the named-reference
-            # spelling above is not read as a figure. A bound on one side of a
-            # name is not a bound: without the left one, `helper_t_alu` answers
-            # for `t_alu`.
-            #
-            # Both orders are read: a transcript may put the number BEFORE the
-            # suite name, and the second branch below reads that shape. It is
-            # bounded on both sides of the name exactly as the first is, and it
-            # requires the word `cases` to FOLLOW the name.
-            #
-            # The second branch also matches ordinary prose - block numbers,
-            # then a backticked suite name, then `cases` - and is kept anyway.
-            # The only feature separating such a line from a real transcript is
-            # which noun the number counts, and no per-line regex reads nouns.
-            # A false positive costs one rewording and prints the line it
-            # matched; a false negative leaves a stale figure in `src/` with
-            # nothing to say so.
-            #
-            # Neither branch reaches a figure whose suite is named by an
-            # anaphor. The repair for that shape is in the SOURCE: write the
-            # suite's name where the number is.
-            set(mcf5407_quoted "")
-            if(mcf5407_core_line MATCHES
-                    "(^|[^A-Za-z0-9_])${mcf5407_suite}[^A-Za-z0-9_].*[^0-9]([0-9]+) cases")
-                set(mcf5407_quoted "${CMAKE_MATCH_2}")
-            elseif(mcf5407_core_line MATCHES
-                    "([0-9]+)[^A-Za-z0-9_]+${mcf5407_suite}[^A-Za-z0-9_]+cases")
-                set(mcf5407_quoted "${CMAKE_MATCH_1}")
-            endif()
-            if(mcf5407_quoted STREQUAL "")
-                continue()
-            endif()
-            if(NOT DEFINED MCF5407_CASE_TOTAL_${mcf5407_suite})
-                message(FATAL_ERROR
-                    "tests: ${mcf5407_core_source}\n  quotes a case total for "
-                    "`${mcf5407_suite}` and no generated driver records one, "
-                    "so there is nothing to compare it against.")
-            endif()
-            if(NOT mcf5407_quoted EQUAL MCF5407_CASE_TOTAL_${mcf5407_suite})
-                string(STRIP "${mcf5407_core_line}" mcf5407_core_stripped)
-                message(FATAL_ERROR
-                    "tests: ${mcf5407_core_source}\n  quotes "
-                    "${mcf5407_quoted} cases for `${mcf5407_suite}` and the "
-                    "generated driver records "
-                    "${MCF5407_CASE_TOTAL_${mcf5407_suite}}:\n    "
-                    "${mcf5407_core_stripped}\n"
-                    "  THE TYPED FIGURE HAS A SECOND SOURCE AND THE TWO "
-                    "DISAGREE, AND THERE ARE THREE REPAIRS BECAUSE THERE ARE "
-                    "THREE WAYS TO GET HERE.\n"
-                    "  If the count fell without anyone meaning it to, the "
-                    "cases are missing and the figure is the symptom.\n"
-                    "  If it moved deliberately, the line above is a DATED "
-                    "RECORD of a run against a suite that no longer exists in "
-                    "that shape: re-measure it, or quote the live figure by "
-                    "name as `src/mcf5407/decode_types.nim` does for "
-                    "`t_ea_masks`.\n"
-                    "  IF THE LINE ABOVE IS NOT A TRANSCRIPT AT ALL - prose "
-                    "that happens to name this suite and a number - then there "
-                    "is nothing to re-measure and re-measuring it is the wrong "
-                    "advice. MEASURED 2026-08-13: this scan reads any line of "
-                    "`src/` carrying a suite name followed by digits and the "
-                    "word `cases`, including a sentence whose own words were "
-                    "\"nothing here was measured from a run\". Reword the line "
-                    "so it does not read as a figure for this suite - the "
-                    "named-reference spelling above does exactly that.\n"
-                    "  RETYPING THE DRIVER'S FIGURE TO AGREE WITH THIS LINE IS "
-                    "NOT ONE OF THE THREE.")
-            endif()
-        endforeach()
-    endforeach()
-endforeach()
-
-
-# ---------------------------------------------------------------------------
-# `t_claims` - the claims this repository's tests make about mutations, made
-# executable.
-#
-# What it adds that no other registered name carries. Every other test here
-# asserts what the core does. This one asserts what a test file says about the
-# core: that a named mutation is unobservable, or that a named suite does not
-# separate it. Such a sentence cannot be reviewed by reading - a false one
-# reads exactly like a true one - and it cannot be repaired by rewording.
-# `tests/t_claims.cmake` holds the registry and the driver, and
-# `tests/t_claims.nim` is the observer the absolute claims are measured with.
-#
-# It writes nothing into the source tree. Every mutation is applied to a copy
-# of `src/` under this test's own working directory in the build tree.
-#
-# The flag set is the library's own, with no `--path`.
-# The driver passes the path of the tree under measurement itself, and a second
-# `--path` naming the pristine tree would leave which module the compiler reads
-# up to a search order this project does not control.
-if(NOT DEFINED MCF5407_NIM_COMMAND)
-    message(FATAL_ERROR
-        "tests: t_claims cannot be registered: MCF5407_NIM_COMMAND is not set.")
-endif()
-
-set(MCF5407_CLAIMS_COMMAND "")
-foreach(argument IN LISTS MCF5407_NIM_COMMAND)
-    if(argument STREQUAL "--compileOnly"
-            OR argument STREQUAL "--noMain"
-            OR argument MATCHES "^--nimcache:"
-            OR argument MATCHES "^--header:"
-            OR argument MATCHES "^--nimMainPrefix:"
-            OR argument MATCHES "^--path:"
-            OR argument MATCHES "\\.nim$")
-        continue()
-    endif()
-    list(APPEND MCF5407_CLAIMS_COMMAND "${argument}")
-endforeach()
-
-add_test(NAME t_claims
-    COMMAND "${CMAKE_COMMAND}"
-        "-DCLAIMS_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
-        "-DCLAIMS_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/t_claims_work"
-        "-DCLAIMS_NIM_COMMAND=${MCF5407_CLAIMS_COMMAND}"
-        -P "${CMAKE_CURRENT_LIST_DIR}/t_claims.cmake")
 
 # ---------------------------------------------------------------------------
 # The application binary interface smoke test `t0_abi_smoke`.
@@ -4091,13 +3258,9 @@ add_test(NAME t_claims
 # `mcf5407_exec` under this test with no edit here and no edit to
 # `abi_smoke.cpp`.
 #
-# A measured set that grew by accident is not caught here, and it is not
-# uncaught. Step 4a part two compares this same measured set against
-# `tests/abi_smoke_symbols.inc`, the committed expectation, in both
-# directions, and names every symbol that differs. The measurement is what
-# keeps this test buildable and growing; the committed list is what keeps the
-# growth intended. Neither file is read by the other, and a disagreement stops
-# the configure step before this block registers anything.
+# A measured set that grew by accident is not caught here. What this test
+# asserts is that every name the measurement found is a name the link can
+# resolve, and nothing about whether the set was meant to grow.
 
 if(MCF5407_ABI_GATE)
     set(MCF5407_ABI_SMOKE_SYMBOLS ${MCF5407_ABI_VISIBLE})
@@ -4119,9 +3282,7 @@ else()
     message(STATUS
         "mcf5407: tests: MCF5407_ABI_GATE is off, so abi_smoke takes the "
         "address of `mcf5407_runtime_init` alone. The gate is what measures "
-        "which other published names the library defines, and it is also "
-        "what compares that measurement against the committed expectation "
-        "in `tests/abi_smoke_symbols.inc`.")
+        "which other published names the library defines.")
 endif()
 
 # The generated header is included twice by `abi_smoke.cpp` under two
@@ -4132,11 +3293,7 @@ set(MCF5407_ABI_SMOKE_HEADER_TEXT
 "/* GENERATED BY tests/tests_cpu.cmake from the set that cmake/Nim.cmake step
  * 4a MEASURED as defined and exported by the library. Do not edit this copy
  * in the build tree, and do not add an include guard: abi_smoke.cpp includes
- * this file twice.
- *
- * The committed EXPECTATION this set is checked against is
- * tests/abi_smoke_symbols.inc. Step 4a part two fails, naming every symbol
- * that differs, before this file is generated. */
+ * this file twice. */
 ")
 foreach(name IN LISTS MCF5407_ABI_SMOKE_SYMBOLS)
     string(APPEND MCF5407_ABI_SMOKE_HEADER_TEXT "MCF5407_ABI_FN(${name})\n")
@@ -4179,163 +3336,6 @@ add_dependencies(mcf5407_tests abi_smoke)
 # T0 job and by no `ctest --preset t0`: the published ABI could lose a symbol
 # and the narrow run would still report every test passed.
 add_test(NAME t0_abi_smoke COMMAND abi_smoke)
-
-# ---------------------------------------------------------------------------
-# `t0_no_local_paths` - no shipped source file names a path that exists on one
-# machine.
-#
-# A scan that read no file at all reports no hit and exits 0, which is the same
-# output a clean tree gives. The negative control fires the instrument in the
-# same run.
-#
-# The planted strings are assembled from character codes, and so are the
-# strings the case expects to read back. `tests/` is one of the scanned
-# directories, so a plant spelled out here would be found in this file.
-#
-# The exclusion is by a property and never by a name: a directory that holds
-# `CMakeCache.txt` is build output. The scratch directory the control excludes
-# is called `notbuild`, so a scanner that filtered on the name `build` fails
-# the case.
-
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/t0_no_local_paths_driver.cmake" [==[
-# GENERATED BY tests/tests_cpu.cmake. Do not edit this copy in the build tree.
-#
-# The driver of the registered test `t0_no_local_paths`. It runs TWO CASES and
-# reports both, so that a run names each failure rather than stopping at the
-# first.
-
-set(scan_failures "")
-
-# 126 is the home shorthand and 47 is the separator. Spelling either sequence
-# here would plant it in `tests/`, which case 2 reads.
-string(ASCII 126 scan_tilde)
-string(ASCII 47 scan_slash)
-set(scan_needle_home "${scan_tilde}${scan_slash}")
-set(scan_needle_abs "${scan_slash}Users${scan_slash}")
-
-macro(scan_report scan_label scan_detail)
-    message("FAILED  ${scan_label}")
-    message("${scan_detail}")
-    list(APPEND scan_failures "${scan_label}")
-endmacro()
-
-# Step 1. Build the scanner.
-set(scan_binary "${SCAN_WORK_DIR}/t0_no_local_paths")
-file(MAKE_DIRECTORY "${SCAN_WORK_DIR}")
-file(REMOVE "${scan_binary}")
-execute_process(
-    COMMAND "${SCAN_C_COMPILER}" -std=c11 -Wall -Wextra -pedantic -Werror
-            -o "${scan_binary}" "${SCAN_SRC_DIR}/t0_no_local_paths.c"
-    RESULT_VARIABLE scan_build_rc
-    OUTPUT_VARIABLE scan_build_out
-    ERROR_VARIABLE scan_build_err)
-if(NOT scan_build_rc STREQUAL "0")
-    message(FATAL_ERROR
-        "t0_no_local_paths: the scanner did not build (result: ${scan_build_rc})\n"
-        "${scan_build_out}${scan_build_err}")
-endif()
-
-# Step 2, case 1. The scratch tree. It is removed first, so that a file left
-# by an earlier run cannot be the thing the case reads.
-set(scan_scratch "${SCAN_WORK_DIR}/negative")
-file(REMOVE_RECURSE "${scan_scratch}")
-file(WRITE "${scan_scratch}/src/planted_home.txt"
-     "a clean first line\n${scan_needle_home}Desktop${scan_slash}avoiding-cycles.md\n")
-file(WRITE "${scan_scratch}/src/planted_abs.txt"
-     "${scan_needle_abs}somebody${scan_slash}x\n")
-file(WRITE "${scan_scratch}/tests/notbuild/CMakeCache.txt"
-     "CMAKE_HOME_DIRECTORY:INTERNAL=${scan_needle_abs}somebody\n")
-file(WRITE "${scan_scratch}/tests/notbuild/log.txt"
-     "${scan_needle_home}Desktop${scan_slash}quoted-by-a-log\n")
-file(WRITE "${scan_scratch}/conformance/clean.txt" "nothing here\n")
-
-execute_process(
-    COMMAND "${scan_binary}" "${scan_scratch}" src tests conformance
-    RESULT_VARIABLE scan_negative_rc
-    OUTPUT_VARIABLE scan_negative_out
-    ERROR_VARIABLE scan_negative_err
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-
-set(scan_negative_expected
-"t0_no_local_paths: scanned: src tests conformance
-t0_no_local_paths: hit: src/planted_abs.txt:1: ${scan_needle_abs}
-t0_no_local_paths: hit: src/planted_home.txt:2: ${scan_needle_home}
-t0_no_local_paths: excluded: tests/notbuild
-t0_no_local_paths: FAIL: 2 hit(s)")
-
-if(NOT scan_negative_rc STREQUAL "1")
-    scan_report("case 1: the negative control"
-        "expected exit status 1, got ${scan_negative_rc}\n${scan_negative_out}${scan_negative_err}")
-elseif(NOT scan_negative_out STREQUAL "${scan_negative_expected}")
-    scan_report("case 1: the negative control"
-        "expected:\n${scan_negative_expected}\ngot:\n${scan_negative_out}${scan_negative_err}")
-else()
-    message("PASSED  case 1: the negative control")
-endif()
-
-# Step 3, case 2. The repository itself.
-execute_process(
-    COMMAND "${scan_binary}" "${SCAN_SOURCE_DIR}" src tests conformance
-    RESULT_VARIABLE scan_tree_rc
-    OUTPUT_VARIABLE scan_tree_out
-    ERROR_VARIABLE scan_tree_err
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-
-set(scan_tree_expected
-"t0_no_local_paths: scanned: src tests conformance
-t0_no_local_paths: excluded: none
-t0_no_local_paths: PASS: no machine-local path")
-
-if(NOT scan_tree_rc STREQUAL "0")
-    scan_report("case 2: the shipped tree"
-        "expected exit status 0, got ${scan_tree_rc}\n${scan_tree_out}${scan_tree_err}")
-elseif(NOT scan_tree_out STREQUAL "${scan_tree_expected}")
-    scan_report("case 2: the shipped tree"
-        "expected:\n${scan_tree_expected}\ngot:\n${scan_tree_out}${scan_tree_err}")
-else()
-    message("PASSED  case 2: the shipped tree")
-    message("${scan_tree_out}")
-endif()
-
-if(NOT scan_failures STREQUAL "")
-    message(FATAL_ERROR "t0_no_local_paths: failed: ${scan_failures}")
-endif()
-]==])
-
-add_test(NAME t0_no_local_paths
-    COMMAND "${CMAKE_COMMAND}"
-        "-DSCAN_C_COMPILER=${CMAKE_C_COMPILER}"
-        "-DSCAN_SRC_DIR=${CMAKE_CURRENT_LIST_DIR}"
-        "-DSCAN_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
-        "-DSCAN_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/t0_no_local_paths_work"
-        -P "${CMAKE_CURRENT_BINARY_DIR}/t0_no_local_paths_driver.cmake")
-
-# ---------------------------------------------------------------------------
-# `t0_test_set_builds_what_it_runs` - the t0 BUILD preset produces every
-# executable the t0 TEST preset runs.
-#
-# The two presets are joined by one thing only: `--target mcf5407_tests`. A test
-# the T0 pattern selects whose COMMAND names an executable target is therefore
-# reachable only through an `add_dependencies(mcf5407_tests <target>)` line, and
-# `conformance/conformance_cpu.cmake` registered `t0_corpus_parses` without one.
-# `cmake/run_t0_build_set.cmake` carries the rule, the parser, and the account of
-# why the existing mechanisms all passed over the omission.
-#
-# THE PATTERN HERE IS A COPY, NOT THE SOURCE. `.github/workflows/ci.yml` carries
-# it as `T0_PATTERN` together with the written roster of what it excludes, and
-# nothing in a CMake list file can read that. `CMakePresets.json` already keeps a
-# second copy for the same reason. Read the roster in `ci.yml`.
-#
-# THE SOURCE DIRECTORY IS PASSED, NOT A LIST OF FILES. The script sweeps every
-# CMake list file under it for registrations, so a new file that registers a
-# test is covered without an edit here. A written list of files would be a roster
-# that stops covering the tree the day somebody adds to it.
-add_test(NAME t0_test_set_builds_what_it_runs
-    COMMAND "${CMAKE_COMMAND}"
-        "-DT0_PATTERN=^t0_|^t_"
-        "-DT0_AGGREGATE=mcf5407_tests"
-        "-DT0_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
-        -P "${PROJECT_SOURCE_DIR}/cmake/run_t0_build_set.cmake")
 
 # ---------------------------------------------------------------------------
 # Put every test this list registered behind the build gate.

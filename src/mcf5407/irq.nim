@@ -143,14 +143,12 @@ proc resetInterruptEdge*(ctx: MCF5407Ctx) =
   ## the reset - the exact thing the clear exists to prevent, arriving by the
   ## other door.
   ##
-  ## The two halves are separately load-bearing and the registry measures each.
-  ## `tests/t_claims.cmake` applies them one at a time to a copy of `src/`: a
-  ## reset that clears without re-observing reds three cases of `t_irq`
-  ## (`reset_edge_resample_suite_t_irq`), and a reset that re-observes without
-  ## clearing reds exactly one (`reset_edge_clear_suite_t_irq`). The counts
-  ## differ because the two halves fail different pins - dropping the clear is
-  ## invisible to every case whose pin is still asserted, and only the released
-  ## pin separates it - so one entry could not have stood for both.
+  ## The two halves are separately load-bearing, and applying them one at a
+  ## time to a copy of `src/` measures each: a reset that clears without
+  ## re-observing reds three cases of `t_irq`, and a reset that re-observes
+  ## without clearing reds one. The counts differ because the two halves fail
+  ## different pins - dropping the clear is invisible to every case whose pin
+  ## is still asserted, and only the released pin separates it.
   ##
   ## Levels 1 to 6 need nothing here. Section 18.7, folio 18-18, NOTE:
   ## "Interrupt levels 1-7 are level-sensitive", and only level 7 is named as
@@ -161,10 +159,10 @@ proc resetInterruptEdge*(ctx: MCF5407Ctx) =
   let level = ctx.irqLevel
   let vector = ctx.irqVector
   let autovector: cint = (if ctx.irqAutovector: 1 else: 0)
-  # The clear is spelled without a literal so that a mutation registered in
-  # `tests/t_claims.cmake` can retype this field as a counter and still
-  # compile. A `false` here would be the one assignment that mutation cannot
-  # retype, and it would stop measuring the latch.
+  # The clear is spelled without a literal so that a mutation retyping this
+  # field as a counter still compiles. A `false` here would be the one
+  # assignment such a mutation cannot retype, and it would stop measuring the
+  # latch.
   ctx.irq7Armed = default(typeof(ctx.irq7Armed))
   ctx.irqLevel = 0
   mcf5407_set_irq(ctx, level, vector, autovector)

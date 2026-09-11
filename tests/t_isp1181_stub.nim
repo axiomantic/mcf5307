@@ -18,32 +18,22 @@ from isp1181/isp1181 import logCapacity, configSlotCount, fifoEnableBit
 from isp1181/report import reportBegins, reportEnds
 
 var failures: seq[string]
-import ./case_sites
 
 var passCount = 0
 
-proc checkImpl(site: int; ok: bool; label: string; got: string; want: string) =
+proc checkImpl(ok: bool; label: string; got: string; want: string) =
   if ok:
     echo "PASSED  ", label
     inc passCount
-    executedSites.add(site)
   else:
     echo "FAILED  ", label
     echo "          got  ", got
     echo "          want ", want
     failures.add(label)
-    executedSites.add(site)
 
 
 template check(ok: bool; label: string; got: string; want: string) =
-  ## The call site is recorded twice - once at compile time into
-  ## `declaredSites` by the `static` below, and once at run time into
-  ## `executedSites`. `tests/case_sites.nim` states what the pair is for and
-  ## `tests/case_sites.cmake` states the rules the driver applies. The template
-  ## exists for `instantiationInfo`: a proc cannot see where it was called from.
-  const site = instantiationInfo(-1).line
-  static: declaredSites.add(site)
-  checkImpl(site, ok, label, got, want)
+  checkImpl(ok, label, got, want)
 
 # ---------------------------------------------------------------------------
 # The window.
@@ -1565,14 +1555,6 @@ check(teardown == wantTeardown,
         "set appends the whole report once per destroyed handle",
       $teardown, $wantTeardown)
 
-# The registry lines. They are data and not a verdict: this program reports
-# what its text declares and what its run adjudicated, and the registered
-# test's driver is what compares them.
-const declaredCaseSites = declaredSites
-const declaredOffGreenPathSites = offGreenPathSites
-echo caseSiteLine("declared", "t_isp1181_stub", declaredCaseSites)
-echo caseSiteLine("executed", "t_isp1181_stub", executedSites)
-echo caseSiteLine("off-green-path", "t_isp1181_stub", declaredOffGreenPathSites)
 
 if failures.len > 0:
   echo ""

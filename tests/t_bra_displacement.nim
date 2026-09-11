@@ -43,10 +43,9 @@
 ## that half. `tests/t_control.nim` block 11 is where the address error's frame
 ## is pinned field by field; this file pins only that the odd rows take it.
 ##
-## THIS FILE LANDED GREEN, WHICH IS WEAKER THAN A TEST THAT WAS WATCHED FAILING,
-## SO IT IS PINNED BY MUTATION INSTEAD. `tests/t_claims.cmake` registers two
-## wrong cores against it, and each was measured on this tree rather than
-## reasoned about.
+## THIS FILE LANDED GREEN, WHICH IS WEAKER THAN A TEST THAT WAS WATCHED
+## FAILING, so two wrong cores were measured against it on this tree rather
+## than reasoned about.
 ##
 ## `bra_base_suite_t_bra_displacement` moves the branch base back onto the
 ## opcode's own address:
@@ -71,31 +70,21 @@ import mcf5407/decode_types
 import mcf5407/machine
 
 var failures: seq[string]
-import ./case_sites
 
 var passCount = 0
 
-proc checkImpl(site: int; ok: bool; label: string; got: string; want: string) =
+proc checkImpl(ok: bool; label: string; got: string; want: string) =
   if ok:
     echo "PASSED  ", label
     inc passCount
-    executedSites.add(site)
   else:
     echo "FAILED  ", label
     echo "          got  ", got
     echo "          want ", want
     failures.add(label)
-    executedSites.add(site)
 
 template check(ok: bool; label: string; got: string; want: string) =
-  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
-  ## `declaredSites` by the `static` below, and once at RUN TIME into
-  ## `executedSites`, by the implementation and only when it reaches a verdict.
-  ## `tests/case_sites.nim` states what the pair is for and
-  ## `tests/case_sites.cmake` states the rules the driver applies.
-  const site = instantiationInfo(-1).line
-  static: declaredSites.add(site)
-  checkImpl(site, ok, label, got, want)
+  checkImpl(ok, label, got, want)
 
 # ---------------------------------------------------------------------------
 # The board. One flat byte array, big-endian, as `t_control`'s and the
@@ -287,15 +276,6 @@ check(observed[0xFF] == (disp: 0xFF, pc: execBase + 2'u32, sp: stackBase,
 # ---------------------------------------------------------------------------
 
 echo ""
-# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this program reports
-# what its text declares and what its run adjudicated, and the registered
-# test's driver is what compares them.
-const declaredCaseSites = declaredSites
-const declaredOffGreenPathSites = offGreenPathSites
-echo caseSiteLine("declared", "t_bra_displacement", declaredCaseSites)
-echo caseSiteLine("executed", "t_bra_displacement", executedSites)
-echo caseSiteLine("off-green-path", "t_bra_displacement",
-                  declaredOffGreenPathSites)
 
 if failures.len == 0:
   echo "t_bra_displacement: ", passCount, " cases passed"

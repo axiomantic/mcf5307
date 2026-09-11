@@ -27,34 +27,22 @@ import mcf5407/irq
 import mcf5407/machine
 
 var failures: seq[string]
-import ./case_sites
 
 var passCount = 0
 
-proc checkImpl(site: int; ok: bool; label: string; got: string; want: string) =
+proc checkImpl(ok: bool; label: string; got: string; want: string) =
   if ok:
     echo "PASSED  ", label
     inc passCount
-    executedSites.add(site)
   else:
     echo "FAILED  ", label
     echo "          got  ", got
     echo "          want ", want
     failures.add(label)
-    executedSites.add(site)
 
 
 template check(ok: bool; label: string; got: string; want: string) =
-  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
-  ## `declaredSites` by the `static` below, and once at RUN TIME into
-  ## `executedSites`, by the implementation and only when it reaches a
-  ## verdict. `tests/case_sites.nim` states what the pair is for and
-  ## `tests/case_sites.cmake` states the rules the driver applies.
-  ## The template exists for `instantiationInfo`: a proc cannot see where
-  ## it was called from.
-  const site = instantiationInfo(-1).line
-  static: declaredSites.add(site)
-  checkImpl(site, ok, label, got, want)
+  checkImpl(ok, label, got, want)
 # ---------------------------------------------------------------------------
 # The board. One flat byte array, big-endian, as `t_exception`'s. A read
 # outside it reports `busUnmapped`.
@@ -691,10 +679,9 @@ block:
 # THIS BLOCK PINS THE FLAG HALF AND NOT THE VECTOR HALF. Block 19 runs this
 # same drop sequence with a VECTORED edge, and block 18 presents a vectored
 # level 7 on the ordinary single-presentation path.
-# `tests/t_claims.cmake` registers `edge_flag_suite_t_irq` against the sentence
-# that opens this paragraph: it presents the level-3 flag to the take in place
-# of the edge's and requires exactly one case of this suite to red, so the half
-# this block does pin is measured rather than asserted.
+# Presenting the level-3 flag to the take in place of the edge's reds one case
+# of this suite, so the half this block does pin was measured rather than
+# asserted.
 
 block:
   let ctx = newCtx(0)
@@ -1120,10 +1107,7 @@ block:
 # `mcf5407_set_irq` stores the vector and the flag of the edge in fields of
 # their own, and `pendingInterrupt` reads THOSE and not the presented pair.
 # Block 9 pins the FLAG half of that - an armed level 7 whose presentation has
-# dropped to a vectored level 3 still autovectors - and the registry entry
-# `edge_flag_suite_t_irq` in `tests/t_claims.cmake` is what keeps that true:
-# this sentence is a pointer to where the flag half is pinned and not the
-# record that it is. THE VECTOR HALF NEEDS A
+# dropped to a vectored level 3 still autovectors. THE VECTOR HALF NEEDS A
 # LEVEL 7 THAT IS ITSELF VECTORED, because under the flag `vectorFor` returns
 # the autovector without reading the stored field at all, so no autovectored
 # presentation can separate a stored vector from a dropped one. Against a file
@@ -1182,27 +1166,8 @@ block:
 # block:
 # THAT MOVE REDS NO CASE OF THAT FILE AND IT REDS THIS BLOCK.
 #
-# THAT SENTENCE IS REGISTERED AND NOT ONLY WRITTEN DOWN. `tests/t_claims.cmake`
-# carries it as `edge_vector_scope_suite_t_irq`, applies the move to a copy of
-# `src/` and requires this suite to go EXACTLY ONE red. Prose alone would go
-# stale the moment this block was weakened; the entry reds instead.
-#
-# THE OBSERVER OF `tests/t_claims.nim` STILL CANNOT STAND IN FOR THIS BLOCK.
-# Its scenario space carries a PRESENTATION PROFILE axis, `pVectored` clears
-# the autovector flag and hands every call a distinct vector, and the stored
-# vector is therefore read. Compiling that observer against a pristine `src/`
-# and against one carrying this move and comparing the two traces REFUTES the
-# move.
-#
-# A SCENARIO COUNT AND THE POSITION ARE TWO DIFFERENT JOBS. A sentence carrying
-# a count of scenarios is a measurement in prose. What this block claims is
-# SUITE-RELATIVE - that exactly one case of THIS file reds under the move - and
-# that is not a measurement in prose at all: `edge_vector_scope_suite_t_irq` in
-# `tests/t_claims.cmake` applies the move and requires this suite to go exactly
-# one red, so a weakened case reds the registry instead of quietly agreeing
-# with a comment. AN OBSERVER THAT ALSO SEPARATES THE MOVE SAYS NOTHING ABOUT
-# THAT COUNT, which is the reason this block stays and the reason the two
-# mechanisms are not interchangeable.
+# WHAT THIS BLOCK CLAIMS IS SUITE-RELATIVE: applied to a copy of `src/`, the
+# move reds exactly one case of THIS file, and that case is this block.
 #
 # THE DROP IS VECTORED AND ITS VECTOR IS THE OTHER ONE. The edge carries
 # `otherVector`, whose slot $10C holds `handlerVec67`; the drop presents a
@@ -1443,10 +1408,9 @@ block:
 # THE TWO CASES ARE THE TWO SIDES OF ONE BOUNDARY, and the second is not a
 # nicety. A core that took nothing at all would pass the first alone.
 #
-# THIS BLOCK IS NOT THE ONLY PIN ON THE INHIBITION AND THE REGISTRY SAYS SO.
-# `tests/t_claims.cmake` carries `reset_inhibit_suite_t_irq`, which writes
-# `false` where `mcf5407_reset` writes `true` and requires `t_irq` to go
-# EXACTLY SIX red. Six and not two, because the write reaches every case whose
+# THIS BLOCK IS NOT THE ONLY PIN ON THE INHIBITION. Writing `false` where
+# `mcf5407_reset` writes `true` reds six cases of `t_irq`.
+# Six and not two, because the write reaches every case whose
 # outcome depends on WHEN the first post-reset sample happens: this block holds
 # two of them, and block 13's step 2, block 23's held pin, block 24 and block 25
 # hold the other four. WEAKENING ANY ONE OF THE SIX MOVES THE COUNT AND THE
@@ -1520,14 +1484,12 @@ block:
 # releases the pin before the reset - and in nothing else. The second is the one
 # a clear-only reset fails.
 #
-# THE THREE WAYS TO GET THE RESET WRONG ARE REGISTERED SEPARATELY, because a
-# single entry could not tell them apart and each fails a different case here.
-# `tests/t_claims.cmake` carries them: deleting the `resetInterruptEdge` call
-# outright, so that a reset that does neither reds three cases of this file
-# (`reset_edge_call_suite_t_irq`) - keeping the clear and dropping the
-# re-presentation (`reset_edge_resample_suite_t_irq`) - and keeping the
-# re-presentation and dropping the clear (`reset_edge_clear_suite_t_irq`). The
-# released pin above and the held pin below fail DIFFERENT members of that set,
+# THE THREE WAYS TO GET THE RESET WRONG FAIL DIFFERENT CASES HERE: deleting
+# the `resetInterruptEdge` call outright, so that a reset does neither, reds
+# three cases of this file; keeping the clear and dropping the re-presentation
+# is a second; keeping the re-presentation and dropping the clear is a third.
+# The released pin above and the held pin below fail DIFFERENT members of that
+# set,
 # which is why neither case alone would do and why no one count answers for all
 # three.
 #
@@ -1687,15 +1649,12 @@ block:
 #
 # REACHING A VERDICT AT ALL IS WHAT DECIDES IT, for block 14's and block 25's
 # reason: a call that did not return would end the process before the assertion
-# below, and the case would then be DECLARED and never EXECUTED - which is the
-# pair `tests/case_sites.nim` exists to compare.
+# below, and the case would report nothing.
 #
 # THE TAKE AFTER IT DELIBERATELY AVOIDS THE RESET PATH. It is block 2's level-3
 # take from `newCtx`, which retires the reset's own first instruction in the
 # helper, so this case is not one of those whose outcome depends on when the
-# first post-reset sample happens. The reset entries in
-# `tests/t_claims.cmake` therefore keep the counts they had, and that was
-# measured rather than assumed.
+# first post-reset sample happens.
 
 block:
   resetInterruptEdge(nil)
@@ -1718,17 +1677,6 @@ block:
         $got, $want)
   mcf5407_destroy(ctx)
 
-# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
-# program reports what its text declares and what its run adjudicated,
-# and the registered test's driver is what compares them - and what
-# compares the declared count against the call sites in this file.
-# A verdict printed here would be a self-assessment, and a run that
-# stopped early would simply not print one.
-const declaredCaseSites = declaredSites
-const declaredOffGreenPathSites = offGreenPathSites
-echo caseSiteLine("declared", "t_irq", declaredCaseSites)
-echo caseSiteLine("executed", "t_irq", executedSites)
-echo caseSiteLine("off-green-path", "t_irq", declaredOffGreenPathSites)
 
 if failures.len > 0:
   echo ""

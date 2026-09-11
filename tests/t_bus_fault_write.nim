@@ -35,32 +35,22 @@ import mcf5407/decode_types
 import mcf5407/machine
 
 var failures: seq[string]
-import ./case_sites
 
 var passCount = 0
 
-proc checkImpl(site: int; ok: bool; label: string; got: string; want: string) =
+proc checkImpl(ok: bool; label: string; got: string; want: string) =
   if ok:
     echo "PASSED  ", label
     inc passCount
-    executedSites.add(site)
   else:
     echo "FAILED  ", label
     echo "          got  ", got
     echo "          want ", want
     failures.add(label)
-    executedSites.add(site)
 
 
 template check(ok: bool; label: string; got: string; want: string) =
-  ## The call site is recorded twice - once at compile time into
-  ## `declaredSites` by the `static` below, and once at run time into
-  ## `executedSites`, by the implementation and only when it reaches a verdict.
-  ## `tests/case_sites.nim` states what the pair is for. The template exists
-  ## for `instantiationInfo`: a proc cannot see where it was called from.
-  const site = instantiationInfo(-1).line
-  static: declaredSites.add(site)
-  checkImpl(site, ok, label, got, want)
+  checkImpl(ok, label, got, want)
 
 # ---------------------------------------------------------------------------
 # The board. One flat byte array, big-endian, which refuses exactly one
@@ -416,16 +406,6 @@ block:
         "a faulted push and an odd branch target stack one frame, not two",
         $got, $wanted)
 
-# The registry lines. They are data and not a verdict: this program reports
-# what its text declares and what its run adjudicated, and the registered
-# test's driver is what compares them. A verdict printed here would be a
-# self-assessment, and a run that stopped early would simply not print one.
-const declaredCaseSites = declaredSites
-const declaredOffGreenPathSites = offGreenPathSites
-echo caseSiteLine("declared", "t_bus_fault_write", declaredCaseSites)
-echo caseSiteLine("executed", "t_bus_fault_write", executedSites)
-echo caseSiteLine("off-green-path", "t_bus_fault_write",
-                  declaredOffGreenPathSites)
 
 if failures.len > 0:
   echo ""

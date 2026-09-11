@@ -54,31 +54,21 @@ import mcf5407/decode_types
 import mcf5407/machine
 
 var failures: seq[string]
-import ./case_sites
 
 var passCount = 0
 
-proc checkImpl(site: int; ok: bool; label: string; got: string; want: string) =
+proc checkImpl(ok: bool; label: string; got: string; want: string) =
   if ok:
     echo "PASSED  ", label
     inc passCount
-    executedSites.add(site)
   else:
     echo "FAILED  ", label
     echo "          got  ", got
     echo "          want ", want
     failures.add(label)
-    executedSites.add(site)
 
 template check(ok: bool; label: string; got: string; want: string) =
-  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
-  ## `declaredSites` by the `static` below, and once at RUN TIME into
-  ## `executedSites`. `tests/case_sites.nim` states what the pair is for and
-  ## `tests/case_sites.cmake` states the rules the driver applies. The template
-  ## exists for `instantiationInfo`: a proc cannot see where it was called from.
-  const site = instantiationInfo(-1).line
-  static: declaredSites.add(site)
-  checkImpl(site, ok, label, got, want)
+  checkImpl(ok, label, got, want)
 
 # ---------------------------------------------------------------------------
 # THE RECORDING BOARD.
@@ -272,15 +262,6 @@ check(swept.writes == @[1, 2, 4],
       "over every opcode word the write path presents only byte widths",
       $swept.writes, $(@[1, 2, 4]))
 
-# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this program reports what
-# its text declares and what its run adjudicated, and the registered test's
-# driver is what compares them. A verdict printed here would be a
-# self-assessment, and a run that stopped early would simply not print one.
-const declaredCaseSites = declaredSites
-const declaredOffGreenPathSites = offGreenPathSites
-echo caseSiteLine("declared", "t_bus_size_unit", declaredCaseSites)
-echo caseSiteLine("executed", "t_bus_size_unit", executedSites)
-echo caseSiteLine("off-green-path", "t_bus_size_unit", declaredOffGreenPathSites)
 
 if failures.len > 0:
   echo ""

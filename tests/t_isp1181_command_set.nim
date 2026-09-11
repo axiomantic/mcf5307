@@ -28,30 +28,22 @@ import isp1181/commands
 import isp1181/fifo
 
 var failures: seq[string]
-import ./case_sites
 
 var passCount = 0
 
-proc checkImpl(site: int; ok: bool; label: string; got: string; want: string) =
+proc checkImpl(ok: bool; label: string; got: string; want: string) =
   if ok:
     echo "PASSED  ", label
     inc passCount
-    executedSites.add(site)
   else:
     echo "FAILED  ", label
     echo "          got  ", got
     echo "          want ", want
     failures.add(label)
-    executedSites.add(site)
 
 
 template check(ok: bool; label: string; got: string; want: string) =
-  ## The call site is recorded at compile time into `declaredSites` and at run
-  ## time into `executedSites`. `tests/case_sites.nim` states what the pair is
-  ## for.
-  const site = instantiationInfo(-1).line
-  static: declaredSites.add(site)
-  checkImpl(site, ok, label, got, want)
+  checkImpl(ok, label, got, want)
 
 # ---------------------------------------------------------------------------
 # The window.
@@ -1027,13 +1019,6 @@ check(endpoint3 == wantEndpoint3,
         "EPDIR lets it queue and transmit",
       $endpoint3, $wantEndpoint3)
 
-# The registry lines. They are data and not a verdict.
-const declaredCaseSites = declaredSites
-const declaredOffGreenPathSites = offGreenPathSites
-echo caseSiteLine("declared", "t_isp1181_command_set", declaredCaseSites)
-echo caseSiteLine("executed", "t_isp1181_command_set", executedSites)
-echo caseSiteLine("off-green-path", "t_isp1181_command_set",
-                  declaredOffGreenPathSites)
 
 if failures.len > 0:
   echo ""

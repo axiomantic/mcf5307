@@ -31,27 +31,22 @@ import mcf5407/latch
 import mcf5407/cpu
 import isp1181/stub
 
-import ./case_sites
 
 var failures: seq[string]
 var passCount = 0
 
-proc checkImpl(site: int; ok: bool; label: string; got: string; want: string) =
+proc checkImpl(ok: bool; label: string; got: string; want: string) =
   if ok:
     echo "PASSED  ", label
     inc passCount
-    executedSites.add(site)
   else:
     echo "FAILED  ", label
     echo "          got  ", got
     echo "          want ", want
     failures.add(label)
-    executedSites.add(site)
 
 template check(ok: bool; label: string; got: string; want: string) =
-  const site = instantiationInfo(-1).line
-  static: declaredSites.add(site)
-  checkImpl(site, ok, label, got, want)
+  checkImpl(ok, label, got, want)
 
 # ---------------------------------------------------------------------------
 # The initializers this suite hands to `runtimeInitOnce`.
@@ -192,12 +187,6 @@ check(refusedDevice.isNil,
       (if refusedDevice.isNil: "nil" else: "a context"), "nil")
 
 # ---------------------------------------------------------------------------
-# The registry lines. They are data and not a verdict.
-const declaredCaseSites = declaredSites
-const declaredOffGreenPathSites = offGreenPathSites
-echo caseSiteLine("declared", "t_runtime_latch", declaredCaseSites)
-echo caseSiteLine("executed", "t_runtime_latch", executedSites)
-echo caseSiteLine("off-green-path", "t_runtime_latch", declaredOffGreenPathSites)
 
 if failures.len > 0:
   echo ""

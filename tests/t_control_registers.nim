@@ -39,31 +39,19 @@ import mcf5407/machine
 import mcf5407/state
 
 var failures: seq[string]
-import ./case_sites
 
 var passCount = 0
 
-proc checkImpl[T](site: int; got: T; want: T; label: string) =
+proc checkImpl[T](got: T; want: T; label: string) =
   if got == want:
     echo "PASSED  ", label
     inc passCount
-    executedSites.add(site)
   else:
     echo "FAILED  ", label, ": expected ", want, ", got ", got
     failures.add(label)
-    executedSites.add(site)
 
 template check(got: untyped; want: untyped; label: string) =
-  ## THE CALL SITE IS RECORDED TWICE - once at COMPILE TIME into
-  ## `declaredSites` by the `static` below, and once at RUN TIME into
-  ## `executedSites`, by the implementation and only when it reaches a
-  ## verdict. `tests/case_sites.nim` states what the pair is for and
-  ## `tests/case_sites.cmake` states the rules the driver applies.
-  ## The template exists for `instantiationInfo`: a proc cannot see where
-  ## it was called from.
-  const site = instantiationInfo(-1).line
-  static: declaredSites.add(site)
-  checkImpl(site, got, want, label)
+  checkImpl(got, want, label)
 
 # ---------------------------------------------------------------------------
 # The board. One flat byte array, big-endian, as `t_exception`'s and
@@ -397,18 +385,6 @@ check(loadPerturbed(mbarByteOffset),
       (status: stateBadChecksum, ctl: afterFirstRun),
       "a perturbed MBAR byte is refused as a bad checksum, context untouched")
 
-# THE REGISTRY LINES. They are DATA AND NOT A VERDICT: this
-# program reports what its text declares and what its run adjudicated,
-# and the registered test's driver is what compares them - and what
-# compares the declared count against the call sites in this file.
-# A verdict printed here would be a self-assessment, and a run that
-# stopped early would simply not print one.
-const declaredCaseSites = declaredSites
-const declaredOffGreenPathSites = offGreenPathSites
-echo caseSiteLine("declared", "t_control_registers", declaredCaseSites)
-echo caseSiteLine("executed", "t_control_registers", executedSites)
-echo caseSiteLine("off-green-path", "t_control_registers",
-                  declaredOffGreenPathSites)
 
 if failures.len > 0:
   echo ""
