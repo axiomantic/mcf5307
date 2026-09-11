@@ -164,6 +164,46 @@ set(MCF5407_NIM_HEADER "mcf5407_nim.h")
 # different set proves nothing about the library the set governs.
 set(MCF5407_NIM_FLAGS --mm:arc --panics:on -d:release)
 
+# The C compiler family Nim writes its output FOR.
+#
+# Nim does not emit one dialect of C. It selects atomic builtins, calling
+# convention spellings and inline assembly by its own `cc` setting, and that
+# setting defaults to the host's usual compiler and not to the one this project
+# was configured with. Measured on windows-2022 with Nim 2.2.10: left at the
+# default, `system.nim.c` comes out carrying `__ATOMIC_RELAXED` and a
+# `<stdatomic.h>` include, which MSVC answers with `error C2065:
+# '__ATOMIC_RELAXED': undeclared identifier` and `error C1189: "C atomic
+# support is not enabled"`. The C is not wrong; it was written for a compiler
+# that is not the one compiling it.
+#
+# So the family is derived from `CMAKE_C_COMPILER_ID` and handed to Nim. A
+# compiler id with no Nim counterpart leaves Nim's own default in place and
+# says so in the log, because that is the behaviour this project had before the
+# mapping existed and a host it already served must keep working.
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+    set(MCF5407_NIM_CC vcc)
+elseif(CMAKE_C_COMPILER_ID MATCHES "^(Clang|AppleClang|IntelLLVM|ARMClang)$")
+    set(MCF5407_NIM_CC clang)
+elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    set(MCF5407_NIM_CC gcc)
+else()
+    set(MCF5407_NIM_CC "")
+endif()
+
+if(MCF5407_NIM_CC STREQUAL "")
+    message(STATUS
+        "mcf5407: step 2 no Nim `--cc` counterpart is known for "
+        "${CMAKE_C_COMPILER_ID}, so Nim selects its own default. The "
+        "generated C is then written for whichever compiler Nim assumes, and "
+        "step 4 compiles it with ${CMAKE_C_COMPILER}.")
+else()
+    list(APPEND MCF5407_NIM_FLAGS "--cc:${MCF5407_NIM_CC}")
+    message(STATUS
+        "mcf5407: step 2 the generated C is written for `--cc:"
+        "${MCF5407_NIM_CC}`, from CMAKE_C_COMPILER_ID "
+        "${CMAKE_C_COMPILER_ID}")
+endif()
+
 # The Nim entry modules of this project. A second Nim library appends its name
 # here and writes its own command below, with its own `--nimMainPrefix:` value.
 # Two Nim projects in one binary that keep the default names collide on
